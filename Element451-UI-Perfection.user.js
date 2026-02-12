@@ -16,6 +16,7 @@
     const AUTO_NAVIGATE_AFTER_MERGE = true; // Set to false to disable auto-navigation to next duplicate after merge
     const CONFLICT_ROW_THRESHOLD = 2; // Number of conflicting rows before warning about possible twins/different people (0 = disabled)
     const SHOW_MERGE_COUNTER = true; // Set to false to hide the merge counter in the navbar
+    const ALLOWED_DEPARTMENT = "UnderGrad"; // Options: "UnderGrad", "Grad", "IA" (case-insensitive)
     const AUTO_SKIP_BLOCKED = true; // Set to false to disable auto-skipping blocked entries (forbidden, wrong dept, student ID mismatch, ignored)
     // =========================================================
     // PART 1: CSS
@@ -1209,6 +1210,7 @@
     setTimeout(attemptAutoClickFAB, 3500);
     // --- HELPER: CHECK IF WRONG DEPARTMENT ---
     function isWrongDepartment() {
+        const dept = ALLOWED_DEPARTMENT.toLowerCase();
         const allRows = Array.from(document.querySelectorAll('elm-merge-row'));
         for (const row of allRows) {
             const text = row.textContent;
@@ -1219,17 +1221,23 @@
                 text.includes('status:') ||
                 text.includes('Outreach_');
             if (!isRelevantRow) continue;
-            if (text.includes('GRAD_')) {
-                return { wrongDept: true, row: row, reason: 'GRAD_' };
-            }
-            if (/grad student/i.test(text)) {
-                return { wrongDept: true, row: row, reason: 'Grad Student' };
-            }
-            if (text.includes('IA_') || text.includes('_IA_') || text.includes('_IA ')) {
-                return { wrongDept: true, row: row, reason: 'IA_' };
-            }
-            if (text.includes('Outreach_') && !text.includes('UGRD')) {
-                return { wrongDept: true, row: row, reason: 'non-UGRD Outreach' };
+
+            const isGrad = text.includes('GRAD_') || /grad student/i.test(text);
+            const isIA = text.includes('IA_') || text.includes('_IA_') || text.includes('_IA ');
+            const isUGRD = text.includes('UGRD');
+
+            if (dept === 'undergrad') {
+                if (isGrad) return { wrongDept: true, row, reason: 'GRAD' };
+                if (isIA) return { wrongDept: true, row, reason: 'IA' };
+                if (text.includes('Outreach_') && !isUGRD) return { wrongDept: true, row, reason: 'GRAD' };
+            } else if (dept === 'grad') {
+                if (isIA) return { wrongDept: true, row, reason: 'IA' };
+                if (isUGRD) return { wrongDept: true, row, reason: 'UGRD' };
+                if (text.includes('Outreach_') && !isGrad) return { wrongDept: true, row, reason: 'UGRD' };
+            } else if (dept === 'ia') {
+                if (isGrad) return { wrongDept: true, row, reason: 'GRAD' };
+                if (isUGRD) return { wrongDept: true, row, reason: 'UGRD' };
+                if (text.includes('Outreach_') && !isIA) return { wrongDept: true, row, reason: 'UGRD' };
             }
         }
         return { wrongDept: false };
@@ -2188,8 +2196,7 @@
                     e.stopPropagation();
                     e.stopImmediatePropagation();
                     const deptInfo = isWrongDepartment();
-                    const deptName = (deptInfo.reason === 'IA_') ? 'IA' : 'GRAD';
-                    alert("For other department: " + deptName);
+                    alert("For other department: " + deptInfo.reason);
                     return;
                 }
                 // Then check student ID mismatch

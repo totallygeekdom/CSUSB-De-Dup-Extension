@@ -5,7 +5,6 @@
 // @description  Merge workflow with auto-selection, smart links, and UI enhancements (manual FAB click required)
 // @author       You
 // @match        https://*.element451.io/*
-// @require      https://cdn.jsdelivr.net/npm/parse-address@1.1.2/parse-address.min.js
 // @grant        GM_addStyle
 // ==/UserScript==
 (function () {
@@ -498,15 +497,80 @@
         parseAddress(addressStr) {
             const cleaned = this.cleanAddress(addressStr);
             let parsed = {};
-            // Use parse-address library if available (loaded via @require)
-            if (typeof parseAddress !== 'undefined' && parseAddress.parseLocation) {
-                try {
-                    parsed = parseAddress.parseLocation(cleaned) || {};
-                } catch (e) {
-                    console.warn('parse-address failed:', e);
+            // Built-in US address parser (no external library needed)
+            const parts = cleaned.split(',').map(p => p.trim()).filter(p => p);
+            if (parts.length >= 2) {
+                // Extract state + zip from the last part(s)
+                // Try last part first: "CA 92407" or "CA 92407-1234"
+                const lastPart = parts[parts.length - 1];
+                const stateZipMatch = lastPart.match(/^\s*([A-Za-z]{2})\s+(\d{5}(?:-\d{4})?)\s*$/);
+                if (stateZipMatch) {
+                    parsed.state = stateZipMatch[1];
+                    parsed.zip = stateZipMatch[2];
+                    if (parts.length >= 3) {
+                        parsed.city = parts[parts.length - 2];
+                    }
+                } else {
+                    // Try "City, ST ZIP" combined in last part or "City ST ZIP"
+                    const combinedMatch = lastPart.match(/^(.+?)\s+([A-Za-z]{2})\s+(\d{5}(?:-\d{4})?)$/);
+                    if (combinedMatch) {
+                        parsed.city = combinedMatch[1];
+                        parsed.state = combinedMatch[2];
+                        parsed.zip = combinedMatch[3];
+                    } else {
+                        // Last part might just be city (no state/zip), or state only
+                        const stateOnly = lastPart.match(/^\s*([A-Za-z]{2})\s*$/);
+                        if (stateOnly && parts.length >= 3) {
+                            parsed.state = stateOnly[1];
+                            parsed.city = parts[parts.length - 2];
+                        } else if (parts.length >= 2 && !/\d/.test(lastPart)) {
+                            parsed.city = lastPart;
+                        }
+                    }
+                }
+                // Parse the street part (first comma-separated segment)
+                let streetPart = parts[0];
+                // Strip unit info from street part before parsing
+                const unitPatterns = [
+                    /\s+(?:apt|apartment|unit|ste|suite|spc|space)\.?\s*#?\s*[a-z0-9-]+$/i,
+                    /\s+#\s*[a-z0-9-]+$/i
+                ];
+                for (const up of unitPatterns) {
+                    streetPart = streetPart.replace(up, '');
+                }
+                // Extract street number, optional prefix direction, street name, and street type
+                const streetMatch = streetPart.match(/^(\d+[A-Za-z]?)\s+(.+)/);
+                if (streetMatch) {
+                    parsed.number = streetMatch[1];
+                    let remainder = streetMatch[2].trim();
+                    // Check for prefix direction (N, S, E, W, etc.)
+                    const prefixMatch = remainder.match(/^(N|S|E|W|NE|NW|SE|SW|North|South|East|West|Northeast|Northwest|Southeast|Southwest)\.?\s+(.+)/i);
+                    if (prefixMatch) {
+                        parsed.prefix = prefixMatch[1];
+                        remainder = prefixMatch[2];
+                    }
+                    // Extract street type from end of remainder
+                    const typePattern = /\b(st|street|ave|avenue|blvd|boulevard|dr|drive|rd|road|ln|lane|ct|court|cir|circle|trl|trail|way|pl|place|pkwy|parkway|hwy|highway|ter|terrace)\.?\s*$/i;
+                    const typeMatch = remainder.match(typePattern);
+                    if (typeMatch) {
+                        parsed.type = typeMatch[1];
+                        parsed.street = remainder.substring(0, remainder.lastIndexOf(typeMatch[0])).trim();
+                        // Check for suffix direction after type was already stripped
+                    } else {
+                        // No recognized type — check for type + suffix direction like "St N"
+                        const typeSuffixPattern = /\b(st|street|ave|avenue|blvd|boulevard|dr|drive|rd|road|ln|lane|ct|court|cir|circle|trl|trail|way|pl|place|pkwy|parkway|hwy|highway|ter|terrace)\.?\s+(N|S|E|W|NE|NW|SE|SW)\s*$/i;
+                        const typeSuffixMatch = remainder.match(typeSuffixPattern);
+                        if (typeSuffixMatch) {
+                            parsed.type = typeSuffixMatch[1];
+                            parsed.suffix = typeSuffixMatch[2];
+                            parsed.street = remainder.substring(0, remainder.lastIndexOf(typeSuffixMatch[0])).trim();
+                        } else {
+                            parsed.street = remainder;
+                        }
+                    }
                 }
             }
-            // Fallback unit extraction
+            // Unit extraction
             if (!parsed.sec_unit_num) {
                 const unit = this.extractUnit(cleaned);
                 if (unit) parsed.sec_unit_num = unit;
@@ -519,7 +583,7 @@
             const parts = [];
             if (parsed.number) parts.push(parsed.number.toLowerCase());
             if (parsed.street) parts.push(this.normalizeStreet(parsed.street));
-            if (parsed.type) parts.push(parsed.type.toLowerCase());
+            if (parsed.type) parts.push(this.normalizeStreet(parsed.type));
             if (parsed.city) parts.push(parsed.city.toLowerCase().replace(/\s+/g, ''));
             if (parsed.state) parts.push(parsed.state.toLowerCase());
             return parts.join('|');
@@ -588,6 +652,21 @@
             const leftKey = this.createComparisonKey(leftParsed);
             const rightKey = this.createComparisonKey(rightParsed);
             result.areSame = leftKey === rightKey && leftKey.length > 5;
+            // Fallback: if structured keys are too short or didn't match,
+            // compare fully normalized address strings (handles edge cases where
+            // parsing didn't extract enough fields but addresses are clearly the same)
+            if (!result.areSame) {
+                const normalizeFullAddress = (addr) => {
+                    let s = this.cleanAddress(addr);
+                    s = this.normalizeStreet(s);
+                    return s.replace(/[^a-z0-9]/g, '');
+                };
+                const leftNorm = normalizeFullAddress(leftAddr);
+                const rightNorm = normalizeFullAddress(rightAddr);
+                if (leftNorm === rightNorm && leftNorm.length > 5) {
+                    result.areSame = true;
+                }
+            }
             result.leftScore = this.calculateCompleteness(leftParsed, leftAddr);
             result.rightScore = this.calculateCompleteness(rightParsed, rightAddr);
 

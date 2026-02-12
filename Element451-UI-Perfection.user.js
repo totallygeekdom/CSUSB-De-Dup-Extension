@@ -5,7 +5,6 @@
 // @description  Merge workflow with auto-selection, smart links, and UI enhancements (manual FAB click required)
 // @author       You
 // @match        https://*.element451.io/*
-// @require      https://cdn.jsdelivr.net/npm/parse-address@1.1.2/parse-address.min.js
 // @grant        GM_addStyle
 // ==/UserScript==
 (function () {
@@ -17,6 +16,7 @@
     const AUTO_NAVIGATE_AFTER_MERGE = true; // Set to false to disable auto-navigation to next duplicate after merge
     const CONFLICT_ROW_THRESHOLD = 2; // Number of conflicting rows before warning about possible twins/different people (0 = disabled)
     const SHOW_MERGE_COUNTER = true; // Set to false to hide the merge counter in the navbar
+    const ALLOWED_DEPARTMENT = "UnderGrad"; // Options: "UnderGrad", "Grad", "IA" (case-insensitive)
     const AUTO_SKIP_BLOCKED = true; // Set to false to disable auto-skipping blocked entries (forbidden, wrong dept, student ID mismatch, ignored)
     // =========================================================
     // PART 1: CSS
@@ -380,20 +380,34 @@
                 .replace(/[^a-z0-9]/g, '') // Remove non-alphanumeric
                 .trim();
         },
-        // Calculate similarity between two strings (0-1)
+        // Levenshtein edit distance (for reliable fuzzy comparison)
+        editDistance(a, b) {
+            if (a === b) return 0;
+            if (!a.length) return b.length;
+            if (!b.length) return a.length;
+            const matrix = [];
+            for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+            for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+            for (let i = 1; i <= b.length; i++) {
+                for (let j = 1; j <= a.length; j++) {
+                    const cost = a[j - 1] === b[i - 1] ? 0 : 1;
+                    matrix[i][j] = Math.min(
+                        matrix[i - 1][j] + 1,
+                        matrix[i][j - 1] + 1,
+                        matrix[i - 1][j - 1] + cost
+                    );
+                }
+            }
+            return matrix[b.length][a.length];
+        },
+        // Calculate similarity between two strings (0-1) using edit distance
         stringSimilarity(str1, str2) {
             const s1 = this.normalizeForFuzzy(str1);
             const s2 = this.normalizeForFuzzy(str2);
             if (s1 === s2) return 1;
             if (!s1 || !s2) return 0;
-            // Simple character overlap similarity
-            const longer = s1.length > s2.length ? s1 : s2;
-            const shorter = s1.length > s2.length ? s2 : s1;
-            let matches = 0;
-            for (let i = 0; i < shorter.length; i++) {
-                if (longer.includes(shorter[i])) matches++;
-            }
-            return matches / longer.length;
+            const maxLen = Math.max(s1.length, s2.length);
+            return 1 - (this.editDistance(s1, s2) / maxLen);
         },
         extractUnit(addressStr) {
             if (!addressStr) return null;
@@ -438,26 +452,46 @@
         hasDuplicateComponents(addressStr) {
             if (!addressStr) return false;
             const cleaned = this.cleanAddress(addressStr);
-            const parts = cleaned.split(',').map(p => p.trim().toLowerCase()).filter(p => p);
-
-            // Check for exact duplicate parts
-            const seen = new Set();
-            for (const part of parts) {
-                if (seen.has(part) && part.length > 3) {
-                    console.log('🔴 Duplicate component:', part);
-                    return true;
+            // Normalize the whole string so "Street"/"St", "Avenue"/"Ave" etc. collapse
+            const normalized = this.normalizeStreet(cleaned);
+            // Split on commas if present; otherwise tokenize into segments heuristically
+            let parts;
+            if (cleaned.includes(',')) {
+                parts = normalized.split(',').map(p => p.trim().toLowerCase()).filter(p => p);
+            } else {
+                // No commas — split around the street type to get logical segments
+                // e.g. "1234 main st san bernardino ca 92407" -> ["1234 main st", "san bernardino ca 92407"]
+                const typeBreak = normalized.match(/^(.+?\b(?:st|ave|blvd|dr|rd|ln|ct|cir|trl|way|pl|pkwy|hwy|ter)\b\.?)(\s+.+)?$/i);
+                if (typeBreak && typeBreak[2]) {
+                    parts = [typeBreak[1].trim().toLowerCase(), typeBreak[2].trim().toLowerCase()];
+                } else {
+                    parts = [normalized.toLowerCase()];
                 }
-                seen.add(part);
             }
 
-            // Check for duplicate street patterns (with fuzzy matching for typos)
-            const streetPattern = /(\d+[a-z]?\s+[a-z]+\s+[a-z]+)/gi;
-            const streetMatches = cleaned.match(streetPattern) || [];
+            // Check for duplicate parts (exact or fuzzy, catches typos like "Bernardino" vs "Bernadino")
+            const seenParts = [];
+            for (const part of parts) {
+                if (part.length <= 3) { seenParts.push(part); continue; }
+                for (const prev of seenParts) {
+                    if (prev.length <= 3) continue;
+                    if (part === prev || this.stringSimilarity(part, prev) > 0.8) {
+                        console.log('🔴 Duplicate component:', prev, 'vs', part);
+                        return true;
+                    }
+                }
+                seenParts.push(part);
+            }
+
+            // Check for duplicate street patterns (number + one or more words)
+            // Broader regex: captures "1234 n main st", "1234 san antonio blvd", etc.
+            const streetPattern = /(\d+[a-z]?\s+(?:[a-z]+\.?\s+)*[a-z]+)/gi;
+            const streetMatches = normalized.match(streetPattern) || [];
             if (streetMatches.length >= 2) {
                 for (let i = 0; i < streetMatches.length; i++) {
                     for (let j = i + 1; j < streetMatches.length; j++) {
                         const sim = this.stringSimilarity(streetMatches[i], streetMatches[j]);
-                        if (sim > 0.8) { // 80% similarity = likely duplicate with typo
+                        if (sim > 0.75) {
                             console.log('🔴 Duplicate street (fuzzy):', streetMatches[i], 'vs', streetMatches[j], 'similarity:', sim);
                             return true;
                         }
@@ -465,15 +499,24 @@
                 }
             }
 
-            // Check for city name appearing multiple times
+            // Check for city appearing multiple times (works with or without commas)
+            // Fuzzy: catches typos like "Bernardino" vs "Bernadino" and spacing variants
             const city = this.extractCity(addressStr);
             if (city && city.length > 3) {
+                const cityNorm = this.normalizeForFuzzy(city);
                 let cityCount = 0;
                 for (const part of parts) {
-                    // Check if this part contains the city name
-                    if (part.includes(city) || city.includes(part)) {
+                    const partNorm = this.normalizeForFuzzy(part);
+                    if (partNorm.includes(cityNorm) || cityNorm.includes(partNorm) ||
+                        this.stringSimilarity(partNorm, cityNorm) > 0.8) {
                         cityCount++;
                     }
+                }
+                // Also scan the full string for repeated city name even without parts
+                if (cityCount < 2) {
+                    const cityRegex = new RegExp(city.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+                    const fullMatches = normalized.match(cityRegex);
+                    if (fullMatches && fullMatches.length >= 2) cityCount = fullMatches.length;
                 }
                 if (cityCount >= 2) {
                     console.log('🔴 Duplicate city:', city, 'appears', cityCount, 'times');
@@ -482,10 +525,10 @@
             }
 
             // Check for duplicate unit numbers
-            const unitPattern = /(?:apt|unit|spc|space|ste|suite|#)\s*#?\s*([a-z0-9]+)/gi;
+            const unitPattern = /(?:apt|apartment|unit|spc|space|ste|suite|#)\s*#?\s*([a-z0-9]+)/gi;
             const unitMatches = [];
             let match;
-            while ((match = unitPattern.exec(cleaned)) !== null) {
+            while ((match = unitPattern.exec(normalized)) !== null) {
                 unitMatches.push(match[1].toLowerCase());
             }
             if (unitMatches.length >= 2 && new Set(unitMatches).size < unitMatches.length) {
@@ -498,15 +541,105 @@
         parseAddress(addressStr) {
             const cleaned = this.cleanAddress(addressStr);
             let parsed = {};
-            // Use parse-address library if available (loaded via @require)
-            if (typeof parseAddress !== 'undefined' && parseAddress.parseLocation) {
-                try {
-                    parsed = parseAddress.parseLocation(cleaned) || {};
-                } catch (e) {
-                    console.warn('parse-address failed:', e);
+            // Built-in US address parser (no external library needed)
+            // Handles both comma-separated and non-comma-separated addresses
+            const parts = cleaned.split(',').map(p => p.trim()).filter(p => p);
+            // Helper: parse the street portion (number, prefix, street name, type, suffix)
+            const parseStreetPart = (streetPart) => {
+                // Strip unit info before parsing
+                const unitPatterns = [
+                    /\s+(?:apt|apartment|unit|ste|suite|spc|space)\.?\s*#?\s*[a-z0-9-]+$/i,
+                    /\s+#\s*[a-z0-9-]+$/i
+                ];
+                for (const up of unitPatterns) {
+                    streetPart = streetPart.replace(up, '');
+                }
+                const streetMatch = streetPart.match(/^(\d+[A-Za-z]?)\s+(.+)/);
+                if (streetMatch) {
+                    parsed.number = streetMatch[1];
+                    let remainder = streetMatch[2].trim();
+                    // Check for prefix direction (N, S, E, W, etc.)
+                    const prefixMatch = remainder.match(/^(N|S|E|W|NE|NW|SE|SW|North|South|East|West|Northeast|Northwest|Southeast|Southwest)\.?\s+(.+)/i);
+                    if (prefixMatch) {
+                        parsed.prefix = prefixMatch[1];
+                        remainder = prefixMatch[2];
+                    }
+                    // Extract street type from end of remainder
+                    const typePattern = /\b(st|street|ave|avenue|blvd|boulevard|dr|drive|rd|road|ln|lane|ct|court|cir|circle|trl|trail|way|pl|place|pkwy|parkway|hwy|highway|ter|terrace)\.?\s*$/i;
+                    const typeMatch = remainder.match(typePattern);
+                    if (typeMatch) {
+                        parsed.type = typeMatch[1];
+                        parsed.street = remainder.substring(0, remainder.lastIndexOf(typeMatch[0])).trim();
+                    } else {
+                        // Check for type + suffix direction like "St N"
+                        const typeSuffixPattern = /\b(st|street|ave|avenue|blvd|boulevard|dr|drive|rd|road|ln|lane|ct|court|cir|circle|trl|trail|way|pl|place|pkwy|parkway|hwy|highway|ter|terrace)\.?\s+(N|S|E|W|NE|NW|SE|SW)\s*$/i;
+                        const typeSuffixMatch = remainder.match(typeSuffixPattern);
+                        if (typeSuffixMatch) {
+                            parsed.type = typeSuffixMatch[1];
+                            parsed.suffix = typeSuffixMatch[2];
+                            parsed.street = remainder.substring(0, remainder.lastIndexOf(typeSuffixMatch[0])).trim();
+                        } else {
+                            parsed.street = remainder;
+                        }
+                    }
+                }
+            };
+            if (parts.length >= 2) {
+                // Comma-separated: extract state/zip/city from trailing parts
+                const lastPart = parts[parts.length - 1];
+                const stateZipMatch = lastPart.match(/^\s*([A-Za-z]{2})\s+(\d{5}(?:-\d{4})?)\s*$/);
+                if (stateZipMatch) {
+                    parsed.state = stateZipMatch[1];
+                    parsed.zip = stateZipMatch[2];
+                    if (parts.length >= 3) {
+                        parsed.city = parts[parts.length - 2];
+                    }
+                } else {
+                    const combinedMatch = lastPart.match(/^(.+?)\s+([A-Za-z]{2})\s+(\d{5}(?:-\d{4})?)$/);
+                    if (combinedMatch) {
+                        parsed.city = combinedMatch[1];
+                        parsed.state = combinedMatch[2];
+                        parsed.zip = combinedMatch[3];
+                    } else {
+                        const stateOnly = lastPart.match(/^\s*([A-Za-z]{2})\s*$/);
+                        if (stateOnly && parts.length >= 3) {
+                            parsed.state = stateOnly[1];
+                            parsed.city = parts[parts.length - 2];
+                        } else if (parts.length >= 2 && !/\d/.test(lastPart)) {
+                            parsed.city = lastPart;
+                        }
+                    }
+                }
+                parseStreetPart(parts[0]);
+            } else {
+                // No commas (or single segment) — parse the whole string
+                // Try to extract state + zip from the end first
+                let remainder = cleaned;
+                const szMatch = remainder.match(/\s+([A-Za-z]{2})\s+(\d{5}(?:-\d{4})?)\s*$/);
+                if (szMatch) {
+                    parsed.state = szMatch[1];
+                    parsed.zip = szMatch[2];
+                    remainder = remainder.substring(0, szMatch.index).trim();
+                }
+                // Try to extract city: text between street type and state
+                // e.g. "1234 Main St San Bernardino" -> city = "San Bernardino"
+                const streetTypeInLine = /\b(st|street|ave|avenue|blvd|boulevard|dr|drive|rd|road|ln|lane|ct|court|cir|circle|trl|trail|way|pl|place|pkwy|parkway|hwy|highway|ter|terrace)\.?\s+/i;
+                const stMatch = remainder.match(streetTypeInLine);
+                if (stMatch) {
+                    const afterType = remainder.substring(stMatch.index + stMatch[0].length).trim();
+                    // Everything after the street type (minus state/zip already stripped) is city
+                    if (afterType && !/^\d/.test(afterType)) {
+                        parsed.city = afterType;
+                        // Pass only up through street type to street parser
+                        parseStreetPart(remainder.substring(0, stMatch.index + stMatch[0].length).trim());
+                    } else {
+                        parseStreetPart(remainder);
+                    }
+                } else {
+                    parseStreetPart(remainder);
                 }
             }
-            // Fallback unit extraction
+            // Unit extraction
             if (!parsed.sec_unit_num) {
                 const unit = this.extractUnit(cleaned);
                 if (unit) parsed.sec_unit_num = unit;
@@ -516,12 +649,11 @@
             return parsed;
         },
         createComparisonKey(parsed) {
+            // Only house number + street name determine "same address"
+            // (type/city/state differ too often between duplicate entries for the same person)
             const parts = [];
             if (parsed.number) parts.push(parsed.number.toLowerCase());
             if (parsed.street) parts.push(this.normalizeStreet(parsed.street));
-            if (parsed.type) parts.push(parsed.type.toLowerCase());
-            if (parsed.city) parts.push(parsed.city.toLowerCase().replace(/\s+/g, ''));
-            if (parsed.state) parts.push(parsed.state.toLowerCase());
             return parts.join('|');
         },
         calculateCompleteness(parsed, originalStr) {
@@ -587,7 +719,25 @@
             const rightParsed = this.parseAddress(rightAddr);
             const leftKey = this.createComparisonKey(leftParsed);
             const rightKey = this.createComparisonKey(rightParsed);
-            result.areSame = leftKey === rightKey && leftKey.length > 5;
+            result.areSame = leftKey === rightKey && leftKey.length > 0;
+            // Fallback: if structured keys didn't match or were empty,
+            // extract and compare just the leading "number + street name" from
+            // the cleaned address strings (handles missing commas, odd formatting)
+            if (!result.areSame) {
+                const extractNumberAndStreet = (addr) => {
+                    let s = this.cleanAddress(addr);
+                    s = this.normalizeStreet(s);
+                    // Grab leading "number streetname" before any comma, city, state, zip
+                    const m = s.match(/^(\d+[a-z]?)\s+(.+?)(?:\s*,|\s+\d{5}|\s+[a-z]{2}\s+\d{5}|$)/i);
+                    if (!m) return '';
+                    return (m[1] + ' ' + m[2]).replace(/[^a-z0-9]/g, '');
+                };
+                const leftNorm = extractNumberAndStreet(leftAddr);
+                const rightNorm = extractNumberAndStreet(rightAddr);
+                if (leftNorm && rightNorm && leftNorm === rightNorm && leftNorm.length > 3) {
+                    result.areSame = true;
+                }
+            }
             result.leftScore = this.calculateCompleteness(leftParsed, leftAddr);
             result.rightScore = this.calculateCompleteness(rightParsed, rightAddr);
 
@@ -1060,7 +1210,10 @@
     setTimeout(attemptAutoClickFAB, 3500);
     // --- HELPER: CHECK IF WRONG DEPARTMENT ---
     function isWrongDepartment() {
+        const dept = ALLOWED_DEPARTMENT.toLowerCase();
         const allRows = Array.from(document.querySelectorAll('elm-merge-row'));
+        const isGradText = (t) => t.includes('GRAD_') || /grad student/i.test(t);
+        const isIAText = (t) => t.includes('IA_') || t.includes('_IA_') || t.includes('_IA ');
         for (const row of allRows) {
             const text = row.textContent;
             const isRelevantRow = text.includes('Workflows') ||
@@ -1070,14 +1223,20 @@
                 text.includes('status:') ||
                 text.includes('Outreach_');
             if (!isRelevantRow) continue;
-            if (text.includes('GRAD_')) {
-                return { wrongDept: true, row: row, reason: 'GRAD_' };
-            }
-            if (text.includes('IA_') || text.includes('_IA_') || text.includes('_IA ')) {
-                return { wrongDept: true, row: row, reason: 'IA_' };
-            }
-            if (text.includes('Outreach_') && !text.includes('UGRD')) {
-                return { wrongDept: true, row: row, reason: 'non-UGRD Outreach' };
+
+            if (dept === 'undergrad') {
+                // Block GRAD and IA, allow everything else
+                if (isGradText(text)) return { wrongDept: true, row, reason: 'GRAD' };
+                if (isIAText(text)) return { wrongDept: true, row, reason: 'IA' };
+                if (text.includes('Outreach_') && !text.includes('UGRD')) {
+                    return { wrongDept: true, row, reason: 'GRAD' };
+                }
+            } else if (dept === 'grad') {
+                // Only GRAD allowed - block IA
+                if (isIAText(text)) return { wrongDept: true, row, reason: 'IA' };
+            } else if (dept === 'ia') {
+                // Only IA allowed - block GRAD
+                if (isGradText(text)) return { wrongDept: true, row, reason: 'GRAD' };
             }
         }
         return { wrongDept: false };
@@ -2035,7 +2194,8 @@
                     e.preventDefault();
                     e.stopPropagation();
                     e.stopImmediatePropagation();
-                    alert("For other Department");
+                    const deptInfo = isWrongDepartment();
+                    alert("For other department: " + deptInfo.reason);
                     return;
                 }
                 // Then check student ID mismatch

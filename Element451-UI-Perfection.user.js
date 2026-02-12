@@ -379,20 +379,34 @@
                 .replace(/[^a-z0-9]/g, '') // Remove non-alphanumeric
                 .trim();
         },
-        // Calculate similarity between two strings (0-1)
+        // Levenshtein edit distance (for reliable fuzzy comparison)
+        editDistance(a, b) {
+            if (a === b) return 0;
+            if (!a.length) return b.length;
+            if (!b.length) return a.length;
+            const matrix = [];
+            for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+            for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+            for (let i = 1; i <= b.length; i++) {
+                for (let j = 1; j <= a.length; j++) {
+                    const cost = a[j - 1] === b[i - 1] ? 0 : 1;
+                    matrix[i][j] = Math.min(
+                        matrix[i - 1][j] + 1,
+                        matrix[i][j - 1] + 1,
+                        matrix[i - 1][j - 1] + cost
+                    );
+                }
+            }
+            return matrix[b.length][a.length];
+        },
+        // Calculate similarity between two strings (0-1) using edit distance
         stringSimilarity(str1, str2) {
             const s1 = this.normalizeForFuzzy(str1);
             const s2 = this.normalizeForFuzzy(str2);
             if (s1 === s2) return 1;
             if (!s1 || !s2) return 0;
-            // Simple character overlap similarity
-            const longer = s1.length > s2.length ? s1 : s2;
-            const shorter = s1.length > s2.length ? s2 : s1;
-            let matches = 0;
-            for (let i = 0; i < shorter.length; i++) {
-                if (longer.includes(shorter[i])) matches++;
-            }
-            return matches / longer.length;
+            const maxLen = Math.max(s1.length, s2.length);
+            return 1 - (this.editDistance(s1, s2) / maxLen);
         },
         extractUnit(addressStr) {
             if (!addressStr) return null;
@@ -437,9 +451,24 @@
         hasDuplicateComponents(addressStr) {
             if (!addressStr) return false;
             const cleaned = this.cleanAddress(addressStr);
-            const parts = cleaned.split(',').map(p => p.trim().toLowerCase()).filter(p => p);
+            // Normalize the whole string so "Street"/"St", "Avenue"/"Ave" etc. collapse
+            const normalized = this.normalizeStreet(cleaned);
+            // Split on commas if present; otherwise tokenize into segments heuristically
+            let parts;
+            if (cleaned.includes(',')) {
+                parts = normalized.split(',').map(p => p.trim().toLowerCase()).filter(p => p);
+            } else {
+                // No commas — split around the street type to get logical segments
+                // e.g. "1234 main st san bernardino ca 92407" -> ["1234 main st", "san bernardino ca 92407"]
+                const typeBreak = normalized.match(/^(.+?\b(?:st|ave|blvd|dr|rd|ln|ct|cir|trl|way|pl|pkwy|hwy|ter)\b\.?)(\s+.+)?$/i);
+                if (typeBreak && typeBreak[2]) {
+                    parts = [typeBreak[1].trim().toLowerCase(), typeBreak[2].trim().toLowerCase()];
+                } else {
+                    parts = [normalized.toLowerCase()];
+                }
+            }
 
-            // Check for exact duplicate parts
+            // Check for exact duplicate parts (after normalization)
             const seen = new Set();
             for (const part of parts) {
                 if (seen.has(part) && part.length > 3) {
@@ -449,14 +478,15 @@
                 seen.add(part);
             }
 
-            // Check for duplicate street patterns (with fuzzy matching for typos)
-            const streetPattern = /(\d+[a-z]?\s+[a-z]+\s+[a-z]+)/gi;
-            const streetMatches = cleaned.match(streetPattern) || [];
+            // Check for duplicate street patterns (number + one or more words)
+            // Broader regex: captures "1234 n main st", "1234 san antonio blvd", etc.
+            const streetPattern = /(\d+[a-z]?\s+(?:[a-z]+\.?\s+)*[a-z]+)/gi;
+            const streetMatches = normalized.match(streetPattern) || [];
             if (streetMatches.length >= 2) {
                 for (let i = 0; i < streetMatches.length; i++) {
                     for (let j = i + 1; j < streetMatches.length; j++) {
                         const sim = this.stringSimilarity(streetMatches[i], streetMatches[j]);
-                        if (sim > 0.8) { // 80% similarity = likely duplicate with typo
+                        if (sim > 0.75) {
                             console.log('🔴 Duplicate street (fuzzy):', streetMatches[i], 'vs', streetMatches[j], 'similarity:', sim);
                             return true;
                         }
@@ -464,15 +494,22 @@
                 }
             }
 
-            // Check for city name appearing multiple times
+            // Check for city appearing multiple times (works with or without commas)
             const city = this.extractCity(addressStr);
             if (city && city.length > 3) {
+                const cityNorm = this.normalizeForFuzzy(city);
                 let cityCount = 0;
                 for (const part of parts) {
-                    // Check if this part contains the city name
-                    if (part.includes(city) || city.includes(part)) {
+                    const partNorm = this.normalizeForFuzzy(part);
+                    if (partNorm.includes(cityNorm) || cityNorm.includes(partNorm)) {
                         cityCount++;
                     }
+                }
+                // Also scan the full string for repeated city name even without parts
+                if (cityCount < 2) {
+                    const cityRegex = new RegExp(city.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+                    const fullMatches = normalized.match(cityRegex);
+                    if (fullMatches && fullMatches.length >= 2) cityCount = fullMatches.length;
                 }
                 if (cityCount >= 2) {
                     console.log('🔴 Duplicate city:', city, 'appears', cityCount, 'times');
@@ -481,10 +518,10 @@
             }
 
             // Check for duplicate unit numbers
-            const unitPattern = /(?:apt|unit|spc|space|ste|suite|#)\s*#?\s*([a-z0-9]+)/gi;
+            const unitPattern = /(?:apt|apartment|unit|spc|space|ste|suite|#)\s*#?\s*([a-z0-9]+)/gi;
             const unitMatches = [];
             let match;
-            while ((match = unitPattern.exec(cleaned)) !== null) {
+            while ((match = unitPattern.exec(normalized)) !== null) {
                 unitMatches.push(match[1].toLowerCase());
             }
             if (unitMatches.length >= 2 && new Set(unitMatches).size < unitMatches.length) {

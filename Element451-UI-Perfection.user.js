@@ -1073,6 +1073,9 @@
             if (text.includes('GRAD_')) {
                 return { wrongDept: true, row: row, reason: 'GRAD_' };
             }
+            if (/grad student/i.test(text)) {
+                return { wrongDept: true, row: row, reason: 'Grad Student' };
+            }
             if (text.includes('IA_') || text.includes('_IA_') || text.includes('_IA ')) {
                 return { wrongDept: true, row: row, reason: 'IA_' };
             }

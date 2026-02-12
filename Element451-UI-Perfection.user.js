@@ -1212,6 +1212,8 @@
     function isWrongDepartment() {
         const dept = ALLOWED_DEPARTMENT.toLowerCase();
         const allRows = Array.from(document.querySelectorAll('elm-merge-row'));
+        const isGradText = (t) => t.includes('GRAD_') || /grad student/i.test(t);
+        const isIAText = (t) => t.includes('IA_') || t.includes('_IA_') || t.includes('_IA ');
         for (const row of allRows) {
             const text = row.textContent;
             const isRelevantRow = text.includes('Workflows') ||
@@ -1222,26 +1224,23 @@
                 text.includes('Outreach_');
             if (!isRelevantRow) continue;
 
-            // GRAD detection - blocked unless allowed dept is Grad
-            if (dept !== 'grad') {
-                if (text.includes('GRAD_')) {
+            if (dept === 'undergrad') {
+                // Block GRAD and IA, allow everything else
+                if (isGradText(text)) return { wrongDept: true, row, reason: 'GRAD' };
+                if (isIAText(text)) return { wrongDept: true, row, reason: 'IA' };
+                if (text.includes('Outreach_') && !text.includes('UGRD')) {
                     return { wrongDept: true, row, reason: 'GRAD' };
                 }
-                if (/grad student/i.test(text)) {
-                    return { wrongDept: true, row, reason: 'GRAD' };
-                }
-            }
-
-            // IA detection - blocked unless allowed dept is IA
-            if (dept !== 'ia') {
-                if (text.includes('IA_') || text.includes('_IA_') || text.includes('_IA ')) {
+            } else if (dept === 'grad') {
+                // Only GRAD allowed - block everything else
+                if (isIAText(text)) return { wrongDept: true, row, reason: 'IA' };
+                if (text.includes('Outreach_') && !isGradText(text)) {
                     return { wrongDept: true, row, reason: 'IA' };
                 }
-            }
-
-            // Non-UGRD Outreach catch-all - only in UnderGrad mode
-            if (dept === 'undergrad') {
-                if (text.includes('Outreach_') && !text.includes('UGRD')) {
+            } else if (dept === 'ia') {
+                // Only IA allowed - block everything else
+                if (isGradText(text)) return { wrongDept: true, row, reason: 'GRAD' };
+                if (text.includes('Outreach_') && !isIAText(text)) {
                     return { wrongDept: true, row, reason: 'GRAD' };
                 }
             }

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database
 // @namespace    http://tampermonkey.net/
-// @version      1
+// @version      2
 // @description  Tracks duplicate entries in a CSV database stored in browser localStorage
 // @author       You
 // @match        https://*.element451.io/*
@@ -13,99 +13,27 @@
 // Stores: Firstname, Lastname, Dept., Row Contents, Unique ID
 // Storage key: 'elm_csv_database' in localStorage
 //
-// Integration: This script exposes window.elmCsvDatabase
-// The main UI Perfection script calls recordEntry() during
-// its page load cycle to capture each duplicate entry.
+// Department detection is handled by the main UI Perfection
+// script, which passes the dept string to recordEntry().
+// Row contents are read from the deep red highlighted row
+// (.blocked-row / .blocked-row-critical) set by the main script.
 // =========================================================
 (function () {
     'use strict';
 
     const STORAGE_KEY = 'elm_csv_database';
 
-    // --- DEPARTMENT DETECTION ---
-    // Detects the ACTUAL department of an entry, independent of ALLOWED_DEPARTMENT.
-    // Priority: Forbidden > Ignored > Grad > IA > UnderGrad
-    function detectDepartment() {
-        const allRows = Array.from(document.querySelectorAll('elm-merge-row'));
-
-        // --- Check Forbidden (test names / forbidden name combos) ---
-        let firstNameLeft = '', firstNameRight = '';
-        let lastNameLeft = '', lastNameRight = '';
-        let firstNameRow = null, lastNameRow = null;
-
-        allRows.forEach(row => {
-            const text = row.textContent;
-            const values = row.querySelectorAll('elm-merge-value');
-            if (text.includes('First Name') && values.length >= 2) {
-                firstNameLeft = values[0].textContent.trim();
-                firstNameRight = values[1].textContent.trim();
-                firstNameRow = row;
-            }
-            if (text.includes('Last Name') && values.length >= 2) {
-                lastNameLeft = values[0].textContent.trim();
-                lastNameRight = values[1].textContent.trim();
-                lastNameRow = row;
-            }
-        });
-
-        // Check for "test" in name fields
-        if (firstNameLeft.toLowerCase().includes('test')) {
-            return { dept: 'Forbidden', rowText: firstNameRow ? firstNameRow.textContent.trim().replace(/\s+/g, ' ') : 'test in first name' };
+    // --- READ BLOCKED ROW FROM DOM ---
+    // The main script highlights the triggering row with .blocked-row
+    // or .blocked-row-critical classes (deep red). This reads that row's text.
+    function getBlockedRowText(dept) {
+        const blockedRow = document.querySelector('.blocked-row, .blocked-row-critical');
+        if (blockedRow) {
+            return blockedRow.textContent.trim().replace(/\s+/g, ' ');
         }
-        if (lastNameLeft.toLowerCase().includes('test')) {
-            return { dept: 'Forbidden', rowText: lastNameRow ? lastNameRow.textContent.trim().replace(/\s+/g, ' ') : 'test in last name' };
-        }
-        if (firstNameRight.toLowerCase().includes('test')) {
-            return { dept: 'Forbidden', rowText: firstNameRow ? firstNameRow.textContent.trim().replace(/\s+/g, ' ') : 'test in first name' };
-        }
-        if (lastNameRight.toLowerCase().includes('test')) {
-            return { dept: 'Forbidden', rowText: lastNameRow ? lastNameRow.textContent.trim().replace(/\s+/g, ' ') : 'test in last name' };
-        }
-
-        // Check for forbidden name combinations
-        const forbiddenNames = ['angela armstrong', 'gillespie armstrong', 'mariah armstrong'];
-        const fullNameLeft = `${firstNameLeft} ${lastNameLeft}`.toLowerCase().trim();
-        const fullNameRight = `${firstNameRight} ${lastNameRight}`.toLowerCase().trim();
-        if (forbiddenNames.includes(fullNameLeft)) {
-            return { dept: 'Forbidden', rowText: firstNameRow ? firstNameRow.textContent.trim().replace(/\s+/g, ' ') : `forbidden name: ${fullNameLeft}` };
-        }
-        if (forbiddenNames.includes(fullNameRight)) {
-            return { dept: 'Forbidden', rowText: firstNameRow ? firstNameRow.textContent.trim().replace(/\s+/g, ' ') : `forbidden name: ${fullNameRight}` };
-        }
-
-        // --- Check Ignored (elm-chip with "ignored" label) ---
-        const chips = document.querySelectorAll('elm-chip');
-        for (const chip of chips) {
-            const label = chip.querySelector('.elm-chip-label');
-            if (label && label.textContent.trim().toLowerCase() === 'ignored') {
-                return { dept: 'Ignored', rowText: 'Student has Ignored chip' };
-            }
-        }
-
-        // --- Check Grad and IA patterns in relevant rows ---
-        const isGradText = (t) => t.includes('GRAD_') || /grad student/i.test(t);
-        const isIAText = (t) => t.includes('IA_') || t.includes('_IA_') || t.includes('_IA ');
-
-        for (const row of allRows) {
-            const text = row.textContent;
-            const isRelevantRow = text.includes('Workflows') ||
-                text.includes('Application') ||
-                text.includes('Program') ||
-                text.includes('type:') ||
-                text.includes('status:') ||
-                text.includes('Outreach_');
-            if (!isRelevantRow) continue;
-
-            if (isGradText(text)) {
-                return { dept: 'Grad', rowText: text.trim().replace(/\s+/g, ' ') };
-            }
-            if (isIAText(text)) {
-                return { dept: 'IA', rowText: text.trim().replace(/\s+/g, ' ') };
-            }
-        }
-
-        // --- Default: UnderGrad ---
-        return { dept: 'UnderGrad', rowText: 'No IA or Grad rows detected' };
+        // No blocked row in DOM — provide context based on dept
+        if (dept === 'Ignored') return 'Student has Ignored chip';
+        return 'No IA or Grad rows detected';
     }
 
     // --- NAME EXTRACTION ---
@@ -155,9 +83,12 @@
     }
 
     // --- RECORD ENTRY ---
-    // Called by the main script during page load cycle.
+    // Called by the main script with the detected department.
+    // Reads the blocked row from DOM for row contents.
     // Deduplicates by unique ID so revisiting an entry won't create duplicates.
-    function recordEntry() {
+    function recordEntry(dept) {
+        if (!dept) return; // Main script must provide dept
+
         const uniqueId = extractUniqueId();
         if (!uniqueId) return; // Not on a duplicates page
 
@@ -175,13 +106,14 @@
             return; // Already recorded
         }
 
-        const { dept, rowText } = detectDepartment();
+        // Read the deep red highlighted row from DOM
+        const rowContents = getBlockedRowText(dept);
 
         const entry = {
             firstName,
             lastName,
             dept,
-            rowContents: rowText,
+            rowContents,
             uniqueId
         };
 

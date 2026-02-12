@@ -1038,7 +1038,13 @@
     // --- HELPER: ATTEMPT AUTO-CLICK FAB ---
     function attemptAutoClickFAB() {
         // Record entry in CSV database (deduplicates internally by unique ID)
-        if (window.elmCsvDatabase) window.elmCsvDatabase.recordEntry();
+        if (window.elmCsvDatabase) {
+            let dept;
+            if (isForbiddenEntry().forbidden) dept = 'Forbidden';
+            else if (isStudentIgnored()) dept = 'Ignored';
+            else dept = detectActualDepartment(); // 'Grad', 'IA', or 'UnderGrad'
+            window.elmCsvDatabase.recordEntry(dept);
+        }
 
         if (!shouldAutoClickFAB()) {
             // If blocked, attempt auto-skip to next entry
@@ -1212,6 +1218,27 @@
     setTimeout(attemptAutoClickFAB, 1000);
     setTimeout(attemptAutoClickFAB, 2000);
     setTimeout(attemptAutoClickFAB, 3500);
+    // --- HELPER: DETECT ACTUAL DEPARTMENT ---
+    // Returns the actual department of the entry: 'Grad', 'IA', or 'UnderGrad'
+    // Independent of ALLOWED_DEPARTMENT - always scans for patterns.
+    function detectActualDepartment() {
+        const allRows = Array.from(document.querySelectorAll('elm-merge-row'));
+        const isGradText = (t) => t.includes('GRAD_') || /grad student/i.test(t);
+        const isIAText = (t) => t.includes('IA_') || t.includes('_IA_') || t.includes('_IA ');
+        for (const row of allRows) {
+            const text = row.textContent;
+            const isRelevantRow = text.includes('Workflows') ||
+                text.includes('Application') ||
+                text.includes('Program') ||
+                text.includes('type:') ||
+                text.includes('status:') ||
+                text.includes('Outreach_');
+            if (!isRelevantRow) continue;
+            if (isGradText(text)) return 'Grad';
+            if (isIAText(text)) return 'IA';
+        }
+        return 'UnderGrad';
+    }
     // --- HELPER: CHECK IF WRONG DEPARTMENT ---
     function isWrongDepartment() {
         const dept = ALLOWED_DEPARTMENT.toLowerCase();

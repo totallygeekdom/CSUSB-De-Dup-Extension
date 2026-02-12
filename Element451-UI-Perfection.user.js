@@ -468,14 +468,18 @@
                 }
             }
 
-            // Check for exact duplicate parts (after normalization)
-            const seen = new Set();
+            // Check for duplicate parts (exact or fuzzy, catches typos like "Bernardino" vs "Bernadino")
+            const seenParts = [];
             for (const part of parts) {
-                if (seen.has(part) && part.length > 3) {
-                    console.log('🔴 Duplicate component:', part);
-                    return true;
+                if (part.length <= 3) { seenParts.push(part); continue; }
+                for (const prev of seenParts) {
+                    if (prev.length <= 3) continue;
+                    if (part === prev || this.stringSimilarity(part, prev) > 0.8) {
+                        console.log('🔴 Duplicate component:', prev, 'vs', part);
+                        return true;
+                    }
                 }
-                seen.add(part);
+                seenParts.push(part);
             }
 
             // Check for duplicate street patterns (number + one or more words)
@@ -495,13 +499,15 @@
             }
 
             // Check for city appearing multiple times (works with or without commas)
+            // Fuzzy: catches typos like "Bernardino" vs "Bernadino" and spacing variants
             const city = this.extractCity(addressStr);
             if (city && city.length > 3) {
                 const cityNorm = this.normalizeForFuzzy(city);
                 let cityCount = 0;
                 for (const part of parts) {
                     const partNorm = this.normalizeForFuzzy(part);
-                    if (partNorm.includes(cityNorm) || cityNorm.includes(partNorm)) {
+                    if (partNorm.includes(cityNorm) || cityNorm.includes(partNorm) ||
+                        this.stringSimilarity(partNorm, cityNorm) > 0.8) {
                         cityCount++;
                     }
                 }

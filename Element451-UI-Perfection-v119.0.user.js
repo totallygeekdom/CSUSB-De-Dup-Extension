@@ -1067,11 +1067,12 @@
                 text.includes('Application') ||
                 text.includes('Program') ||
                 text.includes('type:') ||
+                text.includes('title:') ||
                 text.includes('status:') ||
                 text.includes('Outreach_');
             if (!isRelevantRow) continue;
-            if (text.includes('GRAD_')) {
-                return { wrongDept: true, row: row, reason: 'GRAD_' };
+            if (text.includes('GRAD_') || text.toLowerCase().includes('grad student')) {
+                return { wrongDept: true, row: row, reason: text.includes('GRAD_') ? 'GRAD_' : 'Grad Student event' };
             }
             if (text.includes('IA_') || text.includes('_IA_') || text.includes('_IA ')) {
                 return { wrongDept: true, row: row, reason: 'IA_' };

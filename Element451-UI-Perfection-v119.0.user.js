@@ -17,6 +17,7 @@
     const AUTO_NAVIGATE_AFTER_MERGE = true; // Set to false to disable auto-navigation to next duplicate after merge
     const CONFLICT_ROW_THRESHOLD = 2; // Number of conflicting rows before warning about possible twins/different people (0 = disabled)
     const SHOW_MERGE_COUNTER = true; // Set to false to hide the merge counter in the navbar
+    const AUTO_SKIP_BLOCKED = true; // Set to false to disable auto-skipping blocked entries (forbidden, wrong dept, student ID mismatch, ignored)
     // =========================================================
     // PART 1: CSS
     // =========================================================
@@ -636,6 +637,8 @@
     let awaitingMergeSuccess = false; // Track if we're waiting for merge success (green FAB was clicked)
     // NEW: Conflict warning tracking
     let conflictWarningShown = false; // Track if we've shown the conflict warning for this page
+    // NEW: Auto-skip blocked tracking
+    let autoSkipAttempted = false; // Track if we've attempted auto-skip for this page
     // --- HELPER: EXTRACT DUPLICATE ID FROM URL ---
     function extractDuplicateId(url) {
         const match = url.match(/\/duplicates\/([a-f0-9]{24})/i);
@@ -883,7 +886,11 @@
     }
     // --- HELPER: ATTEMPT AUTO-CLICK FAB ---
     function attemptAutoClickFAB() {
-        if (!shouldAutoClickFAB()) return;
+        if (!shouldAutoClickFAB()) {
+            // If blocked, attempt auto-skip to next entry
+            attemptAutoSkipBlocked();
+            return;
+        }
         // Check for conflicting records before auto-clicking (possible twins/different people)
         if (!conflictWarningShown && CONFLICT_ROW_THRESHOLD > 0) {
             const { conflictCount, shouldWarn, conflicts } = checkForConflictingRecords();
@@ -901,6 +908,34 @@
         } else {
             console.log('⚠️ Auto-click failed: FAB button not found');
         }
+    }
+    // --- AUTO-SKIP BLOCKED ENTRIES ---
+    function attemptAutoSkipBlocked() {
+        // Check if feature is enabled
+        if (!AUTO_SKIP_BLOCKED) return;
+        // Check if already attempted this page
+        if (autoSkipAttempted) return;
+        // Only skip if auto-click was attempted and blocked (not just waiting for page load)
+        if (!autoClickAttempted) return;
+        // Verify the entry is actually blocked
+        const isBlocked = isForbiddenEntry().forbidden ||
+                          isWrongDepartment().wrongDept ||
+                          isStudentIdMismatch().mismatch ||
+                          isStudentIgnored();
+        if (!isBlocked) return;
+        autoSkipAttempted = true;
+        console.log('⏭️ Auto-skip: Blocked entry detected, skipping to next...');
+        // Brief delay so the blocked state is visible before skipping
+        setTimeout(() => {
+            const nextBtn = document.querySelector('button[mattooltip="Next"]:not([disabled])') ||
+                            document.querySelector('.mat-mdc-paginator-navigation-next:not([disabled])');
+            if (nextBtn) {
+                console.log('⏭️ Auto-skip: Navigating to next duplicate...');
+                nextBtn.click();
+            } else {
+                console.log('⚠️ Auto-skip: No next page available - end of list or button disabled');
+            }
+        }, 1500);
     }
     // --- MERGE SUCCESS DETECTION ---
     function checkForMergeSuccess() {
@@ -973,6 +1008,7 @@
                 mergeSuccessProcessed = false; // Reset merge success flag for new page
                 awaitingMergeSuccess = false; // Reset awaiting merge flag for new page
                 conflictWarningShown = false; // Reset conflict warning flag for new page
+                autoSkipAttempted = false; // Reset auto-skip flag for new page
                 lastKnownUrl = currentUrl;
                 runLogic();
                 // Auto-click will be triggered by mutation observer when Spark IDs change

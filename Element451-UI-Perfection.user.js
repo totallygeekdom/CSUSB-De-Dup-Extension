@@ -6,6 +6,7 @@
 // @author       You
 // @match        https://*.element451.io/*
 // @grant        GM_addStyle
+// @require      file:///path/to/csv-database.js
 // ==/UserScript==
 (function () {
     'use strict';
@@ -1036,6 +1037,9 @@
     }
     // --- HELPER: ATTEMPT AUTO-CLICK FAB ---
     function attemptAutoClickFAB() {
+        // Record entry in CSV database (deduplicates internally by unique ID)
+        if (window.elmCsvDatabase) window.elmCsvDatabase.recordEntry();
+
         if (!shouldAutoClickFAB()) {
             // If blocked, attempt auto-skip to next entry
             attemptAutoSkipBlocked();

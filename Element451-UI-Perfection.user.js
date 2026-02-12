@@ -2187,7 +2187,8 @@
                     e.preventDefault();
                     e.stopPropagation();
                     e.stopImmediatePropagation();
-                    alert("For other Department");
+                    const deptInfo = isWrongDepartment();
+                    alert("For other department: " + (deptInfo.reason || 'unknown'));
                     return;
                 }
                 // Then check student ID mismatch

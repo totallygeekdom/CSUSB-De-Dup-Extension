@@ -66,7 +66,7 @@
 
 **Forbidden Entry Lockdown:** If the record contains "test" in First Name or Last Name (either side), or if the full name matches Angela Armstrong, Gillespie Armstrong, or Mariah Armstrong (exact match, either side), then the FAB turns red with a ∅ symbol and clicking it shows "Forbidden entry" alert. This is checked BEFORE department lockdown and has highest priority. The detected name row is highlighted in red.
 
-**Department Lockdown:** If the record contains GRAD\_, IA\_, *IA*, *IA , or Outreach* (without UGRD) in relevant rows (Workflows, Application, Program, type:, status:, Outreach\_) then the FAB turns red with a ∅ symbol and clicking it shows "For other Department" alert. This prevents accidentally merging Graduate or International Admissions records. The detected row is highlighted in red.
+**Department Lockdown:** If the record contains *GRAD*, IA\_, *IA*, *IA , or Outreach* (without UGRD) in relevant rows (Workflows, Application, Program, type:, status:, Outreach\_) then the FAB turns red with a ∅ symbol and clicking it shows "For other Department" alert. This prevents accidentally merging Graduate or International Admissions records. The detected row is highlighted in red.
 
 **Student ID Mismatch Lockdown:** If the "School Id:" values in the Identities section differ between left and right sides (e.g., "School Id: 008545544" vs "School Id: 009238137"), these are two different students and cannot be merged. FAB turns red with ∅ symbol. Clicking shows "Student IDs do not match. Entries are two different people." alert. The School ID row is highlighted with a deep red border and shadow. This is a complete block with no way to proceed.
 

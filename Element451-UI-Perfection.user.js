@@ -1222,22 +1222,28 @@
                 text.includes('Outreach_');
             if (!isRelevantRow) continue;
 
-            const isGrad = text.includes('GRAD_') || /grad student/i.test(text);
-            const isIA = text.includes('IA_') || text.includes('_IA_') || text.includes('_IA ');
-            const isUGRD = text.includes('UGRD');
+            // GRAD detection - blocked unless allowed dept is Grad
+            if (dept !== 'grad') {
+                if (text.includes('GRAD_')) {
+                    return { wrongDept: true, row, reason: 'GRAD' };
+                }
+                if (/grad student/i.test(text)) {
+                    return { wrongDept: true, row, reason: 'GRAD' };
+                }
+            }
 
+            // IA detection - blocked unless allowed dept is IA
+            if (dept !== 'ia') {
+                if (text.includes('IA_') || text.includes('_IA_') || text.includes('_IA ')) {
+                    return { wrongDept: true, row, reason: 'IA' };
+                }
+            }
+
+            // Non-UGRD Outreach catch-all - only in UnderGrad mode
             if (dept === 'undergrad') {
-                if (isGrad) return { wrongDept: true, row, reason: 'GRAD' };
-                if (isIA) return { wrongDept: true, row, reason: 'IA' };
-                if (text.includes('Outreach_') && !isUGRD) return { wrongDept: true, row, reason: 'GRAD' };
-            } else if (dept === 'grad') {
-                if (isIA) return { wrongDept: true, row, reason: 'IA' };
-                if (isUGRD) return { wrongDept: true, row, reason: 'UGRD' };
-                if (text.includes('Outreach_') && !isGrad) return { wrongDept: true, row, reason: 'UGRD' };
-            } else if (dept === 'ia') {
-                if (isGrad) return { wrongDept: true, row, reason: 'GRAD' };
-                if (isUGRD) return { wrongDept: true, row, reason: 'UGRD' };
-                if (text.includes('Outreach_') && !isIA) return { wrongDept: true, row, reason: 'UGRD' };
+                if (text.includes('Outreach_') && !text.includes('UGRD')) {
+                    return { wrongDept: true, row, reason: 'GRAD' };
+                }
             }
         }
         return { wrongDept: false };

@@ -2188,7 +2188,8 @@
                     e.stopPropagation();
                     e.stopImmediatePropagation();
                     const deptInfo = isWrongDepartment();
-                    alert("For other department: " + (deptInfo.reason || 'unknown'));
+                    const deptName = (deptInfo.reason === 'IA_') ? 'IA' : 'GRAD';
+                    alert("For other department: " + deptName);
                     return;
                 }
                 // Then check student ID mismatch

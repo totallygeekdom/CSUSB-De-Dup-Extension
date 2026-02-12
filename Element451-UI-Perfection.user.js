@@ -1232,17 +1232,11 @@
                     return { wrongDept: true, row, reason: 'GRAD' };
                 }
             } else if (dept === 'grad') {
-                // Only GRAD allowed - block everything else
+                // Only GRAD allowed - block IA
                 if (isIAText(text)) return { wrongDept: true, row, reason: 'IA' };
-                if (text.includes('Outreach_') && !isGradText(text)) {
-                    return { wrongDept: true, row, reason: 'IA' };
-                }
             } else if (dept === 'ia') {
-                // Only IA allowed - block everything else
+                // Only IA allowed - block GRAD
                 if (isGradText(text)) return { wrongDept: true, row, reason: 'GRAD' };
-                if (text.includes('Outreach_') && !isIAText(text)) {
-                    return { wrongDept: true, row, reason: 'GRAD' };
-                }
             }
         }
         return { wrongDept: false };

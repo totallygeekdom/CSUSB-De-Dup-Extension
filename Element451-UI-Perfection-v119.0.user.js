@@ -1072,7 +1072,7 @@
                 text.includes('Outreach_');
             if (!isRelevantRow) continue;
             if (text.includes('GRAD_') || text.toLowerCase().includes('grad student')) {
-                return { wrongDept: true, row: row, reason: text.includes('GRAD_') ? 'GRAD_' : 'Grad Student event' };
+                return { wrongDept: true, row: row, reason: text.includes('GRAD_') ? 'GRAD_' : 'Grad Student' };
             }
             if (text.includes('IA_') || text.includes('_IA_') || text.includes('_IA ')) {
                 return { wrongDept: true, row: row, reason: 'IA_' };

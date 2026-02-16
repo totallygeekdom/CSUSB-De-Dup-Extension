@@ -2215,9 +2215,9 @@
                     document.body.removeChild(a);
                     URL.revokeObjectURL(url);
                 };
+                counterWrapper.appendChild(downloadBtn);
                 counterWrapper.appendChild(resetBtn);
                 counterWrapper.appendChild(counterText);
-                counterWrapper.appendChild(downloadBtn);
                 controlsWrapper.appendChild(counterWrapper);
             }
             controlsWrapper.appendChild(contrastWrapper);

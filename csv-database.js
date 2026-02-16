@@ -148,21 +148,36 @@
             this.addEventListener('load', function () {
                 try {
                     if (!this._csvDbUrl || typeof this.responseText !== 'string') return;
+
+                    // Log ALL XHR URLs so we can see what endpoints Element451 hits
+                    console.log('CSV Database [XHR]:', this._csvDbUrl);
+
                     // Match duplicates list endpoint (not individual detail pages)
                     if (!this._csvDbUrl.includes('duplicate')) return;
-                    if (this._csvDbUrl.match(/\/[a-f0-9]{24}($|\?|\/)/i)) return;
+                    if (this._csvDbUrl.match(/\/[a-f0-9]{24}($|\?|\/)/i)) {
+                        console.log('CSV Database [XHR]: Skipped — looks like a detail endpoint');
+                        return;
+                    }
 
+                    console.log('CSV Database [XHR]: Matched duplicates list endpoint');
                     const data = JSON.parse(this.responseText);
+                    console.log('CSV Database [XHR]: Response top-level keys:', Object.keys(data));
+
                     // Try common response shapes for the array of entries
                     const entries = data.data || data.items || data.results ||
                                     (Array.isArray(data) ? data : null);
-                    if (!entries || !Array.isArray(entries) || entries.length === 0) return;
+                    if (!entries || !Array.isArray(entries) || entries.length === 0) {
+                        console.log('CSV Database [XHR]: No entries array found in response');
+                        return;
+                    }
 
                     // Verify entries have an ID field
                     const sample = entries[0];
+                    console.log('CSV Database [XHR]: Sample entry keys:', Object.keys(sample));
+                    console.log('CSV Database [XHR]: Sample entry:', JSON.stringify(sample).slice(0, 500));
                     const idField = sample._id ? '_id' : sample.id ? 'id' : null;
                     if (!idField) {
-                        console.log('CSV Database: API entries found but no _id/id field. Keys:', Object.keys(sample));
+                        console.log('CSV Database [XHR]: No _id or id field found!');
                         return;
                     }
 
@@ -171,12 +186,12 @@
                         name: e.name || e.full_name || '',
                         duplicateName: e.duplicate_name || ''
                     }));
-                    console.log('CSV Database: Captured', apiDuplicatesList.length, 'entries from API');
+                    console.log('CSV Database [XHR]: Captured', apiDuplicatesList.length, 'entries. First 3:', apiDuplicatesList.slice(0, 3));
                     // Re-annotate now that we have fresh API data
-                    clearBadges();
+                    document.querySelectorAll('elm-row[data-csv-dept-done]').forEach(r => delete r.dataset.csvDeptDone);
                     annotateDuplicatesList();
                 } catch (e) {
-                    // Not the response we're looking for, ignore
+                    console.log('CSV Database [XHR]: Parse error for', this._csvDbUrl, e.message);
                 }
             });
             return origSend.apply(this, arguments);
@@ -200,114 +215,87 @@
         Ignored:    { bg: '#f5f5f5', fg: '#616161' }
     };
 
-    // --- LIST PAGE: CREATE DEPT BADGE ---
-    function createDeptBadge(dept) {
-        const badge = document.createElement('span');
-        badge.className = 'csv-dept-badge';
-        badge.textContent = DEPT_LABELS[dept] || dept;
-        const colors = DEPT_COLORS[dept] || { bg: '#f5f5f5', fg: '#333' };
-        badge.style.cssText = `
-            display: inline-block;
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-size: 11px;
-            font-weight: 600;
-            margin-left: 8px;
-            vertical-align: middle;
-            background-color: ${colors.bg};
-            color: ${colors.fg};
-        `;
-        return badge;
-    }
-
-    // --- LIST PAGE: CLEAR EXISTING BADGES ---
-    // Called when new API data arrives so badges can be re-applied with fresh data.
-    function clearBadges() {
-        document.querySelectorAll('.csv-dept-badge').forEach(b => b.remove());
-    }
-
-    // --- LIST PAGE: ANNOTATE ROWS WITH DEPT BADGES ---
+    // --- LIST PAGE: REWRITE elm-chip IN EACH ROW TO SHOW DEPT ---
     // Uses the intercepted API data to match each row to its unique ID,
-    // then looks up that ID in the CSV database for the dept.
+    // then looks up that ID in the CSV database and rewrites the existing
+    // elm-chip (the orange "Unresolved" chip) to show department + color.
+    let _annotateLogOnce = false;
     function annotateDuplicatesList() {
         // Only run on list page — skip if on detail page (has elm-merge-row)
         if (document.querySelector('elm-merge-row')) return;
         // Only run if we have API data with unique IDs
-        if (!apiDuplicatesList) return;
+        if (!apiDuplicatesList) {
+            if (!_annotateLogOnce) { console.log('CSV Database [Annotate]: Waiting for API data...'); _annotateLogOnce = true; }
+            return;
+        }
 
         const rows = document.querySelectorAll('elm-row');
         if (rows.length === 0) return;
 
         const db = getDatabase();
 
-        rows.forEach(row => {
-            const nameCell = row.querySelector('.elm-column-name');
-            if (!nameCell) return;
-
+        rows.forEach((row, rowIdx) => {
             // Skip if already annotated
-            if (nameCell.querySelector('.csv-dept-badge')) return;
+            if (row.dataset.csvDeptDone) return;
 
             // Match by unique ID from intercepted API data
-            // Use the row's index cell (e.g., "1.", "26.") to find the right API entry
             const indexCell = row.querySelector('.elm-column-index');
-            if (!indexCell) return;
+            if (!indexCell) {
+                console.log(`CSV Database [Annotate]: Row ${rowIdx} — no .elm-column-index found`);
+                return;
+            }
 
             const indexNum = parseInt(indexCell.textContent.trim().replace('.', ''));
-            if (isNaN(indexNum) || !apiDuplicatesList[indexNum - 1]) return;
+            if (isNaN(indexNum) || !apiDuplicatesList[indexNum - 1]) {
+                console.log(`CSV Database [Annotate]: Row ${rowIdx} — index "${indexCell.textContent.trim()}" → parsed ${indexNum}, API entry: ${!!apiDuplicatesList[indexNum - 1]}`);
+                return;
+            }
 
             const apiEntry = apiDuplicatesList[indexNum - 1];
-            if (!apiEntry.uniqueId) return;
+            if (!apiEntry.uniqueId) {
+                console.log(`CSV Database [Annotate]: Row ${rowIdx} — API entry has no uniqueId`);
+                return;
+            }
 
             const dbEntry = db.find(e => e.uniqueId === apiEntry.uniqueId);
-            if (dbEntry) {
-                nameCell.appendChild(createDeptBadge(dbEntry.dept));
+            if (!dbEntry) {
+                console.log(`CSV Database [Annotate]: Row ${rowIdx} — ID ${apiEntry.uniqueId} not in DB (${db.length} entries)`);
+                return;
             }
+
+            // Find the elm-chip in this row and rewrite it
+            const chip = row.querySelector('elm-chip');
+            if (!chip) {
+                console.log(`CSV Database [Annotate]: Row ${rowIdx} — no elm-chip found. Row HTML:`, row.innerHTML.slice(0, 300));
+                return;
+            }
+
+            const desiredLabel = DEPT_LABELS[dbEntry.dept] || dbEntry.dept;
+            const colors = DEPT_COLORS[dbEntry.dept] || { bg: '#f5f5f5', fg: '#333' };
+
+            // Rewrite the chip label text
+            const label = chip.querySelector('.elm-chip-label');
+            if (label) {
+                label.textContent = ` ${desiredLabel} `;
+                console.log(`CSV Database [Annotate]: Row ${rowIdx} — chip label → "${desiredLabel}"`);
+            } else {
+                console.log(`CSV Database [Annotate]: Row ${rowIdx} — elm-chip found but no .elm-chip-label. Chip HTML:`, chip.innerHTML.slice(0, 300));
+            }
+
+            // Rewrite the chip background color
+            const colorDiv = chip.querySelector('.bg-color');
+            if (colorDiv) {
+                colorDiv.style.backgroundColor = colors.fg;
+            } else {
+                console.log(`CSV Database [Annotate]: Row ${rowIdx} — elm-chip found but no .bg-color. Chip HTML:`, chip.innerHTML.slice(0, 300));
+            }
+
+            row.dataset.csvDeptDone = '1';
         });
     }
 
-    // --- DETAIL PAGE: REWRITE elm-chip TO SHOW DEPT ---
-    // On a detail page (has elm-merge-row), find the elm-chip "Unresolved" chip
-    // and replace its label and color with the department from the CSV database.
-    function annotateDetailChip() {
-        // Only run on detail page
-        if (!document.querySelector('elm-merge-row')) return;
-
-        const uniqueId = extractUniqueId();
-        if (!uniqueId) return;
-
-        const db = getDatabase();
-        const dbEntry = db.find(e => e.uniqueId === uniqueId);
-        if (!dbEntry) return;
-
-        const chips = document.querySelectorAll('elm-chip');
-        for (const chip of chips) {
-            const label = chip.querySelector('.elm-chip-label');
-            if (!label) continue;
-            const text = label.textContent.trim().toLowerCase();
-            if (text === 'unresolved' || text === 'graduate' || text === 'international') {
-                // Already rewritten — skip if matching current dept
-                const desiredLabel = DEPT_LABELS[dbEntry.dept] || dbEntry.dept;
-                if (label.textContent.trim() === desiredLabel) return;
-
-                // Update label
-                label.textContent = ` ${desiredLabel} `;
-
-                // Update background color on the inner div
-                const colorDiv = chip.querySelector('.bg-color');
-                const colors = DEPT_COLORS[dbEntry.dept];
-                if (colorDiv && colors) {
-                    colorDiv.style.backgroundColor = colors.fg;
-                }
-                return; // Only modify the first matching chip
-            }
-        }
-    }
-
-    // Run annotation periodically on the list page and detail page
-    setInterval(() => {
-        annotateDuplicatesList();
-        annotateDetailChip();
-    }, 1000);
+    // Run annotation periodically on the list page
+    setInterval(annotateDuplicatesList, 1000);
 
     // --- PUBLIC API ---
     // Exposed on window for main script integration

@@ -184,9 +184,17 @@
     })();
 
     // --- LIST PAGE: DEPT BADGE COLORS ---
+    const DEPT_LABELS = {
+        Grad:      'Graduate',
+        IA:        'International',
+        UnderGrad: 'UnderGrad',
+        Forbidden: 'Forbidden',
+        Ignored:   'Ignored'
+    };
+
     const DEPT_COLORS = {
         Grad:       { bg: '#e3f2fd', fg: '#1565c0' },
-        IA:         { bg: '#fff3e0', fg: '#e65100' },
+        IA:         { bg: '#fce4ec', fg: '#c2185b' },
         UnderGrad:  { bg: '#e8f5e9', fg: '#2e7d32' },
         Forbidden:  { bg: '#ffebee', fg: '#c62828' },
         Ignored:    { bg: '#f5f5f5', fg: '#616161' }
@@ -196,7 +204,7 @@
     function createDeptBadge(dept) {
         const badge = document.createElement('span');
         badge.className = 'csv-dept-badge';
-        badge.textContent = dept;
+        badge.textContent = DEPT_LABELS[dept] || dept;
         const colors = DEPT_COLORS[dept] || { bg: '#f5f5f5', fg: '#333' };
         badge.style.cssText = `
             display: inline-block;

@@ -183,16 +183,6 @@
         };
     })();
 
-    // --- LIST PAGE: LOOKUP BY NAME (FALLBACK) ---
-    function lookupByName(fullName) {
-        const db = getDatabase();
-        const normalized = fullName.trim().toLowerCase();
-        return db.find(entry => {
-            const dbName = `${entry.firstName} ${entry.lastName}`.trim().toLowerCase();
-            return dbName === normalized;
-        });
-    }
-
     // --- LIST PAGE: DEPT BADGE COLORS ---
     const DEPT_COLORS = {
         Grad:       { bg: '#e3f2fd', fg: '#1565c0' },
@@ -231,10 +221,11 @@
     // --- LIST PAGE: ANNOTATE ROWS WITH DEPT BADGES ---
     // Uses the intercepted API data to match each row to its unique ID,
     // then looks up that ID in the CSV database for the dept.
-    // Falls back to name matching if API data is unavailable.
     function annotateDuplicatesList() {
         // Only run on list page — skip if on detail page (has elm-merge-row)
         if (document.querySelector('elm-merge-row')) return;
+        // Only run if we have API data with unique IDs
+        if (!apiDuplicatesList) return;
 
         const rows = document.querySelectorAll('elm-row');
         if (rows.length === 0) return;
@@ -248,29 +239,18 @@
             // Skip if already annotated
             if (nameCell.querySelector('.csv-dept-badge')) return;
 
-            let dbEntry = null;
-
-            // Primary: Match by unique ID from intercepted API data
+            // Match by unique ID from intercepted API data
             // Use the row's index cell (e.g., "1.", "26.") to find the right API entry
-            if (apiDuplicatesList) {
-                const indexCell = row.querySelector('.elm-column-index');
-                if (indexCell) {
-                    const indexNum = parseInt(indexCell.textContent.trim().replace('.', ''));
-                    if (!isNaN(indexNum) && apiDuplicatesList[indexNum - 1]) {
-                        const apiEntry = apiDuplicatesList[indexNum - 1];
-                        if (apiEntry.uniqueId) {
-                            dbEntry = db.find(e => e.uniqueId === apiEntry.uniqueId);
-                        }
-                    }
-                }
-            }
+            const indexCell = row.querySelector('.elm-column-index');
+            if (!indexCell) return;
 
-            // Fallback: Match by name (less reliable but works without API data)
-            if (!dbEntry) {
-                const fullName = nameCell.textContent.trim();
-                if (fullName) dbEntry = lookupByName(fullName);
-            }
+            const indexNum = parseInt(indexCell.textContent.trim().replace('.', ''));
+            if (isNaN(indexNum) || !apiDuplicatesList[indexNum - 1]) return;
 
+            const apiEntry = apiDuplicatesList[indexNum - 1];
+            if (!apiEntry.uniqueId) return;
+
+            const dbEntry = db.find(e => e.uniqueId === apiEntry.uniqueId);
             if (dbEntry) {
                 nameCell.appendChild(createDeptBadge(dbEntry.dept));
             }

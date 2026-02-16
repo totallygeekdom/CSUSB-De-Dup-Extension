@@ -252,9 +252,24 @@
             transition: all 0.2s; 
             line-height: 1; 
         }
-        #elm-reset-btn:hover { 
-            color: #d32f2f; 
-            background-color: rgba(211, 47, 47, 0.1); 
+        #elm-reset-btn:hover {
+            color: #d32f2f;
+            background-color: rgba(211, 47, 47, 0.1);
+        }
+        #elm-download-db-btn {
+            background: transparent;
+            border: none;
+            color: #999;
+            cursor: pointer;
+            font-size: 14px;
+            padding: 4px 8px;
+            border-radius: 50%;
+            transition: all 0.2s;
+            line-height: 1;
+        }
+        #elm-download-db-btn:hover {
+            color: #1565c0;
+            background-color: rgba(21, 101, 192, 0.1);
         }
         #elm-merge-counter { 
             font-weight: 600; 
@@ -2182,8 +2197,27 @@
                 const counterText = document.createElement('span');
                 counterText.id = 'elm-merge-counter';
                 counterText.innerText = `Merges: ${count}`;
+                const downloadBtn = document.createElement('button');
+                downloadBtn.id = 'elm-download-db-btn';
+                downloadBtn.innerHTML = '⬇';
+                downloadBtn.title = 'Download CSV Database (for troubleshooting)';
+                downloadBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    const raw = localStorage.getItem('elm_csv_database');
+                    const db = raw ? JSON.parse(raw) : [];
+                    const blob = new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `elm_csv_database_${new Date().toISOString().slice(0,10)}.json`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                };
                 counterWrapper.appendChild(resetBtn);
                 counterWrapper.appendChild(counterText);
+                counterWrapper.appendChild(downloadBtn);
                 controlsWrapper.appendChild(counterWrapper);
             }
             controlsWrapper.appendChild(contrastWrapper);

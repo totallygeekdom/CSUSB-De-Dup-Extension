@@ -122,11 +122,82 @@
         console.log('CSV Database: Recorded entry', entry);
     }
 
+    // --- LIST PAGE: LOOKUP BY NAME ---
+    // Searches the database for an entry matching the full name shown on the list page.
+    function lookupByName(fullName) {
+        const db = getDatabase();
+        const normalized = fullName.trim().toLowerCase();
+        return db.find(entry => {
+            const dbName = `${entry.firstName} ${entry.lastName}`.trim().toLowerCase();
+            return dbName === normalized;
+        });
+    }
+
+    // --- LIST PAGE: DEPT BADGE COLORS ---
+    const DEPT_COLORS = {
+        Grad:       { bg: '#e3f2fd', fg: '#1565c0' },
+        IA:         { bg: '#fff3e0', fg: '#e65100' },
+        UnderGrad:  { bg: '#e8f5e9', fg: '#2e7d32' },
+        Forbidden:  { bg: '#ffebee', fg: '#c62828' },
+        Ignored:    { bg: '#f5f5f5', fg: '#616161' }
+    };
+
+    // --- LIST PAGE: CREATE DEPT BADGE ---
+    function createDeptBadge(dept) {
+        const badge = document.createElement('span');
+        badge.className = 'csv-dept-badge';
+        badge.textContent = dept;
+        const colors = DEPT_COLORS[dept] || { bg: '#f5f5f5', fg: '#333' };
+        badge.style.cssText = `
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-left: 8px;
+            vertical-align: middle;
+            background-color: ${colors.bg};
+            color: ${colors.fg};
+        `;
+        return badge;
+    }
+
+    // --- LIST PAGE: ANNOTATE ROWS WITH DEPT BADGES ---
+    // Scans elm-row elements on the duplicates list page and adds dept badges
+    // to names that have been previously recorded in the database.
+    function annotateDuplicatesList() {
+        // Only run on list page — skip if on detail page (has elm-merge-row)
+        if (document.querySelector('elm-merge-row')) return;
+
+        const rows = document.querySelectorAll('elm-row');
+        if (rows.length === 0) return;
+
+        rows.forEach(row => {
+            const nameCell = row.querySelector('.elm-column-name');
+            if (!nameCell) return;
+
+            // Skip if already annotated
+            if (nameCell.querySelector('.csv-dept-badge')) return;
+
+            const fullName = nameCell.textContent.trim();
+            if (!fullName) return;
+
+            const entry = lookupByName(fullName);
+            if (entry) {
+                nameCell.appendChild(createDeptBadge(entry.dept));
+            }
+        });
+    }
+
+    // Run annotation periodically on the list page
+    setInterval(annotateDuplicatesList, 1000);
+
     // --- PUBLIC API ---
     // Exposed on window for main script integration
     window.elmCsvDatabase = {
         recordEntry,
         getDatabase,
+        annotateDuplicatesList,
         clearDatabase() {
             localStorage.removeItem(STORAGE_KEY);
             console.log('CSV Database: Cleared');

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database
 // @namespace    http://tampermonkey.net/
-// @version      2
+// @version      3
 // @description  Tracks duplicate entries in a CSV database stored in browser localStorage
 // @author       You
 // @match        https://*.element451.io/*
@@ -17,6 +17,10 @@
 // script, which passes the dept string to recordEntry().
 // Row contents are read from the deep red highlighted row
 // (.blocked-row / .blocked-row-critical) set by the main script.
+//
+// List page annotation: Intercepts the API response that loads
+// the duplicates list to get unique IDs for each row, then
+// matches those IDs against the database to show dept badges.
 // =========================================================
 (function () {
     'use strict';
@@ -122,8 +126,64 @@
         console.log('CSV Database: Recorded entry', entry);
     }
 
-    // --- LIST PAGE: LOOKUP BY NAME ---
-    // Searches the database for an entry matching the full name shown on the list page.
+    // =========================================================
+    // LIST PAGE: API INTERCEPTION & ANNOTATION
+    // =========================================================
+
+    // Captured duplicate entries from the API response (includes unique IDs)
+    let apiDuplicatesList = null;
+
+    // --- INTERCEPT XHR TO CAPTURE DUPLICATES LIST DATA ---
+    // When the list page loads, Element451 fetches the duplicate entries via API.
+    // We intercept that response to get the unique ID for each row.
+    (function interceptXHR() {
+        const origOpen = XMLHttpRequest.prototype.open;
+        XMLHttpRequest.prototype.open = function (method, url) {
+            this._csvDbUrl = url;
+            return origOpen.apply(this, arguments);
+        };
+
+        const origSend = XMLHttpRequest.prototype.send;
+        XMLHttpRequest.prototype.send = function () {
+            this.addEventListener('load', function () {
+                try {
+                    if (!this._csvDbUrl || typeof this.responseText !== 'string') return;
+                    // Match duplicates list endpoint (not individual detail pages)
+                    if (!this._csvDbUrl.includes('duplicate')) return;
+                    if (this._csvDbUrl.match(/\/[a-f0-9]{24}($|\?|\/)/i)) return;
+
+                    const data = JSON.parse(this.responseText);
+                    // Try common response shapes for the array of entries
+                    const entries = data.data || data.items || data.results ||
+                                    (Array.isArray(data) ? data : null);
+                    if (!entries || !Array.isArray(entries) || entries.length === 0) return;
+
+                    // Verify entries have an ID field
+                    const sample = entries[0];
+                    const idField = sample._id ? '_id' : sample.id ? 'id' : null;
+                    if (!idField) {
+                        console.log('CSV Database: API entries found but no _id/id field. Keys:', Object.keys(sample));
+                        return;
+                    }
+
+                    apiDuplicatesList = entries.map(e => ({
+                        uniqueId: (e[idField] || '').toLowerCase(),
+                        name: e.name || e.full_name || '',
+                        duplicateName: e.duplicate_name || ''
+                    }));
+                    console.log('CSV Database: Captured', apiDuplicatesList.length, 'entries from API');
+                    // Re-annotate now that we have fresh API data
+                    clearBadges();
+                    annotateDuplicatesList();
+                } catch (e) {
+                    // Not the response we're looking for, ignore
+                }
+            });
+            return origSend.apply(this, arguments);
+        };
+    })();
+
+    // --- LIST PAGE: LOOKUP BY NAME (FALLBACK) ---
     function lookupByName(fullName) {
         const db = getDatabase();
         const normalized = fullName.trim().toLowerCase();
@@ -162,15 +222,24 @@
         return badge;
     }
 
+    // --- LIST PAGE: CLEAR EXISTING BADGES ---
+    // Called when new API data arrives so badges can be re-applied with fresh data.
+    function clearBadges() {
+        document.querySelectorAll('.csv-dept-badge').forEach(b => b.remove());
+    }
+
     // --- LIST PAGE: ANNOTATE ROWS WITH DEPT BADGES ---
-    // Scans elm-row elements on the duplicates list page and adds dept badges
-    // to names that have been previously recorded in the database.
+    // Uses the intercepted API data to match each row to its unique ID,
+    // then looks up that ID in the CSV database for the dept.
+    // Falls back to name matching if API data is unavailable.
     function annotateDuplicatesList() {
         // Only run on list page — skip if on detail page (has elm-merge-row)
         if (document.querySelector('elm-merge-row')) return;
 
         const rows = document.querySelectorAll('elm-row');
         if (rows.length === 0) return;
+
+        const db = getDatabase();
 
         rows.forEach(row => {
             const nameCell = row.querySelector('.elm-column-name');
@@ -179,12 +248,31 @@
             // Skip if already annotated
             if (nameCell.querySelector('.csv-dept-badge')) return;
 
-            const fullName = nameCell.textContent.trim();
-            if (!fullName) return;
+            let dbEntry = null;
 
-            const entry = lookupByName(fullName);
-            if (entry) {
-                nameCell.appendChild(createDeptBadge(entry.dept));
+            // Primary: Match by unique ID from intercepted API data
+            // Use the row's index cell (e.g., "1.", "26.") to find the right API entry
+            if (apiDuplicatesList) {
+                const indexCell = row.querySelector('.elm-column-index');
+                if (indexCell) {
+                    const indexNum = parseInt(indexCell.textContent.trim().replace('.', ''));
+                    if (!isNaN(indexNum) && apiDuplicatesList[indexNum - 1]) {
+                        const apiEntry = apiDuplicatesList[indexNum - 1];
+                        if (apiEntry.uniqueId) {
+                            dbEntry = db.find(e => e.uniqueId === apiEntry.uniqueId);
+                        }
+                    }
+                }
+            }
+
+            // Fallback: Match by name (less reliable but works without API data)
+            if (!dbEntry) {
+                const fullName = nameCell.textContent.trim();
+                if (fullName) dbEntry = lookupByName(fullName);
+            }
+
+            if (dbEntry) {
+                nameCell.appendChild(createDeptBadge(dbEntry.dept));
             }
         });
     }

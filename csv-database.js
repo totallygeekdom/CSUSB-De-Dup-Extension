@@ -265,8 +265,49 @@
         });
     }
 
-    // Run annotation periodically on the list page
-    setInterval(annotateDuplicatesList, 1000);
+    // --- DETAIL PAGE: REWRITE elm-chip TO SHOW DEPT ---
+    // On a detail page (has elm-merge-row), find the elm-chip "Unresolved" chip
+    // and replace its label and color with the department from the CSV database.
+    function annotateDetailChip() {
+        // Only run on detail page
+        if (!document.querySelector('elm-merge-row')) return;
+
+        const uniqueId = extractUniqueId();
+        if (!uniqueId) return;
+
+        const db = getDatabase();
+        const dbEntry = db.find(e => e.uniqueId === uniqueId);
+        if (!dbEntry) return;
+
+        const chips = document.querySelectorAll('elm-chip');
+        for (const chip of chips) {
+            const label = chip.querySelector('.elm-chip-label');
+            if (!label) continue;
+            const text = label.textContent.trim().toLowerCase();
+            if (text === 'unresolved' || text === 'graduate' || text === 'international') {
+                // Already rewritten — skip if matching current dept
+                const desiredLabel = DEPT_LABELS[dbEntry.dept] || dbEntry.dept;
+                if (label.textContent.trim() === desiredLabel) return;
+
+                // Update label
+                label.textContent = ` ${desiredLabel} `;
+
+                // Update background color on the inner div
+                const colorDiv = chip.querySelector('.bg-color');
+                const colors = DEPT_COLORS[dbEntry.dept];
+                if (colorDiv && colors) {
+                    colorDiv.style.backgroundColor = colors.fg;
+                }
+                return; // Only modify the first matching chip
+            }
+        }
+    }
+
+    // Run annotation periodically on the list page and detail page
+    setInterval(() => {
+        annotateDuplicatesList();
+        annotateDetailChip();
+    }, 1000);
 
     // --- PUBLIC API ---
     // Exposed on window for main script integration

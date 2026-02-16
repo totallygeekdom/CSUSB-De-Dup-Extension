@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection
 // @namespace    http://tampermonkey.net/
-// @version      122
+// @version      123
 // @description  Merge workflow with auto-selection, smart links, and UI enhancements (manual FAB click required)
 // @author       You
 // @match        https://*.element451.io/*

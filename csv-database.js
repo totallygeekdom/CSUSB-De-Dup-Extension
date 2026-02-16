@@ -173,7 +173,7 @@
                     }));
                     console.log('CSV Database: Captured', apiDuplicatesList.length, 'entries from API');
                     // Re-annotate now that we have fresh API data
-                    clearBadges();
+                    document.querySelectorAll('elm-row[data-csv-dept-done]').forEach(r => delete r.dataset.csvDeptDone);
                     annotateDuplicatesList();
                 } catch (e) {
                     // Not the response we're looking for, ignore
@@ -200,35 +200,10 @@
         Ignored:    { bg: '#f5f5f5', fg: '#616161' }
     };
 
-    // --- LIST PAGE: CREATE DEPT BADGE ---
-    function createDeptBadge(dept) {
-        const badge = document.createElement('span');
-        badge.className = 'csv-dept-badge';
-        badge.textContent = DEPT_LABELS[dept] || dept;
-        const colors = DEPT_COLORS[dept] || { bg: '#f5f5f5', fg: '#333' };
-        badge.style.cssText = `
-            display: inline-block;
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-size: 11px;
-            font-weight: 600;
-            margin-left: 8px;
-            vertical-align: middle;
-            background-color: ${colors.bg};
-            color: ${colors.fg};
-        `;
-        return badge;
-    }
-
-    // --- LIST PAGE: CLEAR EXISTING BADGES ---
-    // Called when new API data arrives so badges can be re-applied with fresh data.
-    function clearBadges() {
-        document.querySelectorAll('.csv-dept-badge').forEach(b => b.remove());
-    }
-
-    // --- LIST PAGE: ANNOTATE ROWS WITH DEPT BADGES ---
+    // --- LIST PAGE: REWRITE elm-chip IN EACH ROW TO SHOW DEPT ---
     // Uses the intercepted API data to match each row to its unique ID,
-    // then looks up that ID in the CSV database for the dept.
+    // then looks up that ID in the CSV database and rewrites the existing
+    // elm-chip (the orange "Unresolved" chip) to show department + color.
     function annotateDuplicatesList() {
         // Only run on list page — skip if on detail page (has elm-merge-row)
         if (document.querySelector('elm-merge-row')) return;
@@ -241,14 +216,10 @@
         const db = getDatabase();
 
         rows.forEach(row => {
-            const nameCell = row.querySelector('.elm-column-name');
-            if (!nameCell) return;
-
             // Skip if already annotated
-            if (nameCell.querySelector('.csv-dept-badge')) return;
+            if (row.dataset.csvDeptDone) return;
 
             // Match by unique ID from intercepted API data
-            // Use the row's index cell (e.g., "1.", "26.") to find the right API entry
             const indexCell = row.querySelector('.elm-column-index');
             if (!indexCell) return;
 
@@ -259,55 +230,33 @@
             if (!apiEntry.uniqueId) return;
 
             const dbEntry = db.find(e => e.uniqueId === apiEntry.uniqueId);
-            if (dbEntry) {
-                nameCell.appendChild(createDeptBadge(dbEntry.dept));
+            if (!dbEntry) return;
+
+            // Find the elm-chip in this row and rewrite it
+            const chip = row.querySelector('elm-chip');
+            if (!chip) return;
+
+            const desiredLabel = DEPT_LABELS[dbEntry.dept] || dbEntry.dept;
+            const colors = DEPT_COLORS[dbEntry.dept] || { bg: '#f5f5f5', fg: '#333' };
+
+            // Rewrite the chip label text
+            const label = chip.querySelector('.elm-chip-label');
+            if (label) {
+                label.textContent = ` ${desiredLabel} `;
             }
+
+            // Rewrite the chip background color
+            const colorDiv = chip.querySelector('.bg-color');
+            if (colorDiv) {
+                colorDiv.style.backgroundColor = colors.fg;
+            }
+
+            row.dataset.csvDeptDone = '1';
         });
     }
 
-    // --- DETAIL PAGE: REWRITE elm-chip TO SHOW DEPT ---
-    // On a detail page (has elm-merge-row), find the elm-chip "Unresolved" chip
-    // and replace its label and color with the department from the CSV database.
-    function annotateDetailChip() {
-        // Only run on detail page
-        if (!document.querySelector('elm-merge-row')) return;
-
-        const uniqueId = extractUniqueId();
-        if (!uniqueId) return;
-
-        const db = getDatabase();
-        const dbEntry = db.find(e => e.uniqueId === uniqueId);
-        if (!dbEntry) return;
-
-        const chips = document.querySelectorAll('elm-chip');
-        for (const chip of chips) {
-            const label = chip.querySelector('.elm-chip-label');
-            if (!label) continue;
-            const text = label.textContent.trim().toLowerCase();
-            if (text === 'unresolved' || text === 'graduate' || text === 'international') {
-                // Already rewritten — skip if matching current dept
-                const desiredLabel = DEPT_LABELS[dbEntry.dept] || dbEntry.dept;
-                if (label.textContent.trim() === desiredLabel) return;
-
-                // Update label
-                label.textContent = ` ${desiredLabel} `;
-
-                // Update background color on the inner div
-                const colorDiv = chip.querySelector('.bg-color');
-                const colors = DEPT_COLORS[dbEntry.dept];
-                if (colorDiv && colors) {
-                    colorDiv.style.backgroundColor = colors.fg;
-                }
-                return; // Only modify the first matching chip
-            }
-        }
-    }
-
-    // Run annotation periodically on the list page and detail page
-    setInterval(() => {
-        annotateDuplicatesList();
-        annotateDetailChip();
-    }, 1000);
+    // Run annotation periodically on the list page
+    setInterval(annotateDuplicatesList, 1000);
 
     // --- PUBLIC API ---
     // Exposed on window for main script integration

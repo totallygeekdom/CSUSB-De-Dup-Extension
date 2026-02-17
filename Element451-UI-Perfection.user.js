@@ -1,12 +1,11 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection
 // @namespace    http://tampermonkey.net/
-// @version      123
+// @version      124
 // @description  Merge workflow with auto-selection, smart links, and UI enhancements (manual FAB click required)
 // @author       You
 // @match        https://*.element451.io/*
 // @grant        GM_addStyle
-// @require      file:///path/to/csv-database.js
 // ==/UserScript==
 (function () {
     'use strict';
@@ -19,6 +18,36 @@
     const SHOW_MERGE_COUNTER = true; // Set to false to hide the merge counter in the navbar
     const ALLOWED_DEPARTMENT = "UnderGrad"; // Options: "UnderGrad", "Grad", "IA" (case-insensitive)
     const AUTO_SKIP_BLOCKED = true; // Set to false to disable auto-skipping blocked entries (forbidden, wrong dept, student ID mismatch, ignored)
+    // =========================================================
+    // CSV DATABASE BRIDGE
+    // Delegates to the standalone csv-database.js UserScript
+    // via the window.elmCsvDatabase API. All database logic,
+    // XHR interception, and list annotation live in that script.
+    // =========================================================
+    function csvRecordEntry(dept) {
+        if (window.elmCsvDatabase) {
+            window.elmCsvDatabase.recordEntry(dept);
+            // Update the download button count
+            const dlBtn = document.getElementById('elm-download-db-btn');
+            if (dlBtn) {
+                const count = window.elmCsvDatabase.getEntryCount();
+                dlBtn.innerHTML = `\u2B07 ${count}`;
+                dlBtn.title = `Download CSV Database (${count} entries recorded)`;
+            }
+        } else {
+            console.warn('CSV Database: csv-database.js not loaded — recordEntry skipped');
+        }
+    }
+
+    function csvGetEntryCount() {
+        return window.elmCsvDatabase ? window.elmCsvDatabase.getEntryCount() : 0;
+    }
+
+    function csvToCSV() {
+        return window.elmCsvDatabase ? window.elmCsvDatabase.toCSV() : '';
+    }
+
+    console.log('CSV Database: Bridge ready (delegates to csv-database.js)');
     // =========================================================
     // PART 1: CSS
     // =========================================================
@@ -1053,14 +1082,12 @@
     // --- HELPER: ATTEMPT AUTO-CLICK FAB ---
     function attemptAutoClickFAB() {
         // Record entry in CSV database (deduplicates internally by unique ID)
-        if (window.elmCsvDatabase) {
+        {
             let dept;
             if (isForbiddenEntry().forbidden) dept = 'Forbidden';
             else if (isStudentIgnored()) dept = 'Ignored';
             else dept = detectActualDepartment(); // 'Grad', 'IA', or 'UnderGrad'
-            window.elmCsvDatabase.recordEntry(dept);
-        } else {
-            console.warn('CSV Database: window.elmCsvDatabase not available — csv-database.js may not be installed or loaded yet');
+            csvRecordEntry(dept);
         }
 
         if (!shouldAutoClickFAB()) {
@@ -2201,30 +2228,16 @@
                 counterText.innerText = `Merges: ${count}`;
                 const downloadBtn = document.createElement('button');
                 downloadBtn.id = 'elm-download-db-btn';
-                const dbCount = window.elmCsvDatabase ? window.elmCsvDatabase.getEntryCount() : 0;
+                const dbCount = csvGetEntryCount();
                 downloadBtn.innerHTML = `⬇ ${dbCount}`;
                 downloadBtn.title = `Download CSV Database (${dbCount} entries recorded)`;
                 downloadBtn.onclick = (e) => {
                     e.stopPropagation();
-                    let csvContent = '';
-                    if (window.elmCsvDatabase) {
-                        csvContent = window.elmCsvDatabase.toCSV();
-                    } else {
-                        // Fallback: build CSV directly from localStorage
-                        const raw = localStorage.getItem('elm_csv_database');
-                        const db = raw ? JSON.parse(raw) : [];
-                        if (db.length > 0) {
-                            const headers = ['Firstname', 'Lastname', 'Dept.', 'Row Contents', 'Unique ID'];
-                            const rows = db.map(entry => [
-                                entry.firstName,
-                                entry.lastName,
-                                entry.dept,
-                                entry.rowContents,
-                                entry.uniqueId
-                            ].map(v => `"${(v || '').replace(/"/g, '""')}"`).join(','));
-                            csvContent = [headers.join(','), ...rows].join('\n');
-                        }
+                    if (!window.elmCsvDatabase) {
+                        alert('CSV Database script is not loaded.\n\nMake sure the "Element451 - CSV Database" UserScript is installed and enabled in Tampermonkey.');
+                        return;
                     }
+                    const csvContent = csvToCSV();
                     if (!csvContent) {
                         alert('CSV Database is empty — no entries have been recorded yet.\n\nCheck the browser console (F12) for "CSV Database:" messages to diagnose.');
                         return;

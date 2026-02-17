@@ -11,13 +11,23 @@
     'use strict';
     // CONFIGURATION
     const HEADER_OFFSET = 64;
-    const REQUIRE_SCROLL_TO_BOTTOM = true; // Set to false to disable scroll-to-review requirement
-    const AUTO_CLICK_FAB = true; // Set to false to disable auto-click on page load
-    const AUTO_NAVIGATE_AFTER_MERGE = true; // Set to false to disable auto-navigation to next duplicate after merge
+    // Settings are stored in localStorage and configurable via the Settings pane.
+    // Each getter reads the live value so changes take effect without a full reload.
+    function getBoolSetting(key, defaultValue) {
+        const val = localStorage.getItem(key);
+        if (val === null) return defaultValue;
+        return val === 'true';
+    }
     const CONFLICT_ROW_THRESHOLD = 2; // Number of conflicting rows before warning about possible twins/different people (0 = disabled)
-    const SHOW_MERGE_COUNTER = true; // Set to false to hide the merge counter in the navbar
-    const ALLOWED_DEPARTMENT = "UnderGrad"; // Options: "UnderGrad", "Grad", "IA" (case-insensitive)
-    const AUTO_SKIP_BLOCKED = true; // Set to false to disable auto-skipping blocked entries (forbidden, wrong dept, student ID mismatch, ignored)
+    // Settings object with live getters (defaults match original hardcoded values)
+    const CFG = Object.defineProperties({}, {
+        REQUIRE_SCROLL_TO_BOTTOM: { get() { return getBoolSetting('elm_require_scroll_to_bottom', true); } },
+        AUTO_CLICK_FAB:           { get() { return getBoolSetting('elm_auto_click_fab', true); } },
+        AUTO_NAVIGATE_AFTER_MERGE:{ get() { return getBoolSetting('elm_auto_navigate_after_merge', true); } },
+        SHOW_MERGE_COUNTER:       { get() { return getBoolSetting('elm_show_merge_counter', true); } },
+        AUTO_SKIP_BLOCKED:        { get() { return getBoolSetting('elm_auto_skip_blocked', true); } },
+        ALLOWED_DEPARTMENT:       { get() { return localStorage.getItem('elm_allowed_department') || 'UnderGrad'; } },
+    });
     // =========================================================
     // PART 1: CSS
     // =========================================================
@@ -389,7 +399,21 @@
             box-shadow: 0 1px 3px rgba(0,0,0,0.2);
         }
         .elm-toggle.active::after { transform: translateX(18px); }
-        
+        /* Settings Select Dropdown */
+        .elm-select {
+            padding: 4px 8px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 13px;
+            color: #333;
+            background: white;
+            cursor: pointer;
+            outline: none;
+            transition: border-color 0.2s;
+            flex-shrink: 0;
+        }
+        .elm-select:focus { border-color: #3f51b5; }
+
         .counter-pop { animation: subtlePop 0.3s ease-in-out; }
         .counter-pop #elm-merge-counter { color: #2e7d32; }
         @keyframes subtlePop {
@@ -986,7 +1010,7 @@
     // --- HELPER: CHECK IF AUTO-CLICK FAB SHOULD HAPPEN ---
     function shouldAutoClickFAB() {
         // Check if feature is enabled
-        if (!AUTO_CLICK_FAB) return false;
+        if (!CFG.AUTO_CLICK_FAB) return false;
         // Check if already attempted this page
         if (autoClickAttempted) return false;
         // Check if already clicked this page (manual or auto)
@@ -1150,7 +1174,7 @@
     // --- AUTO-SKIP BLOCKED ENTRIES ---
     function attemptAutoSkipBlocked() {
         // Check if feature is enabled
-        if (!AUTO_SKIP_BLOCKED) return;
+        if (!CFG.AUTO_SKIP_BLOCKED) return;
         // Check if already attempted this page
         if (autoSkipAttempted) return;
         // Only skip if auto-click was attempted and blocked (not just waiting for page load)
@@ -1241,12 +1265,12 @@
         mergeSuccessProcessed = true;
         awaitingMergeSuccess = false; // No longer waiting
         // Increment merge counter
-        if (SHOW_MERGE_COUNTER) {
+        if (CFG.SHOW_MERGE_COUNTER) {
             incrementMergeCount();
             console.log('✅ Merge successful - counter incremented');
         }
         // Auto-navigate to next duplicate if enabled
-        if (AUTO_NAVIGATE_AFTER_MERGE) {
+        if (CFG.AUTO_NAVIGATE_AFTER_MERGE) {
             setTimeout(() => {
                 // Try multiple selectors for the next button
                 const nextBtn = document.querySelector('button[mattooltip="Next"]:not([disabled])') ||
@@ -1344,7 +1368,7 @@
     setTimeout(attemptAutoClickFAB, 3500);
     // --- HELPER: DETECT ACTUAL DEPARTMENT ---
     // Returns the actual department of the entry: 'Grad', 'IA', or 'UnderGrad'
-    // Independent of ALLOWED_DEPARTMENT - always scans for patterns.
+    // Independent of CFG.ALLOWED_DEPARTMENT - always scans for patterns.
     function detectActualDepartment() {
         const allRows = Array.from(document.querySelectorAll('elm-merge-row'));
         const isGradText = (t) => t.includes('GRAD_') || /grad student/i.test(t);
@@ -1365,7 +1389,14 @@
     }
     // --- HELPER: CHECK IF WRONG DEPARTMENT ---
     function isWrongDepartment() {
-        const dept = ALLOWED_DEPARTMENT.toLowerCase();
+        const dept = CFG.ALLOWED_DEPARTMENT.toLowerCase();
+        // "All" = no department filtering, allow everything
+        if (dept === 'all') return { wrongDept: false };
+        // "None" = block all departments
+        if (dept === 'none') {
+            const actualDept = detectActualDepartment();
+            return { wrongDept: true, row: null, reason: actualDept };
+        }
         const allRows = Array.from(document.querySelectorAll('elm-merge-row'));
         const isGradText = (t) => t.includes('GRAD_') || /grad student/i.test(t);
         const isIAText = (t) => t.includes('IA_') || t.includes('_IA_') || t.includes('_IA ');
@@ -2289,7 +2320,7 @@
             controlsWrapper.appendChild(settingsBtn);
 
             // Merge Counter (conditionally shown)
-            if (SHOW_MERGE_COUNTER) {
+            if (CFG.SHOW_MERGE_COUNTER) {
                 const count = localStorage.getItem('elm_merge_count') || 0;
                 const counterWrapper = document.createElement('div');
                 counterWrapper.id = 'elm-counter-wrapper';
@@ -2325,6 +2356,14 @@
     function injectSettingsPane(highContrastEnabled) {
         if (document.getElementById('elm-settings-pane')) return;
 
+        // Load saved settings (defaults match original hardcoded values)
+        const scrollToBottomEnabled = localStorage.getItem('elm_require_scroll_to_bottom') !== 'false';
+        const autoClickFabEnabled = localStorage.getItem('elm_auto_click_fab') !== 'false';
+        const autoNavEnabled = localStorage.getItem('elm_auto_navigate_after_merge') !== 'false';
+        const mergeCounterEnabled = localStorage.getItem('elm_show_merge_counter') !== 'false';
+        const autoSkipEnabled = localStorage.getItem('elm_auto_skip_blocked') !== 'false';
+        const allowedDept = localStorage.getItem('elm_allowed_department') || 'UnderGrad';
+
         // Overlay (click to close)
         const overlay = document.createElement('div');
         overlay.id = 'elm-settings-overlay';
@@ -2345,6 +2384,60 @@
                             <div class="settings-row-desc">Show colored borders on conflict rows</div>
                         </div>
                         <div id="elm-settings-contrast-toggle" class="elm-toggle ${highContrastEnabled ? 'active' : ''}"></div>
+                    </div>
+                    <div class="settings-row">
+                        <div>
+                            <div class="settings-row-label">Merge Counter</div>
+                            <div class="settings-row-desc">Show merge counter in the navbar</div>
+                        </div>
+                        <div id="elm-settings-merge-counter-toggle" class="elm-toggle ${mergeCounterEnabled ? 'active' : ''}"></div>
+                    </div>
+                </div>
+                <div class="settings-section">
+                    <div class="settings-section-title">Automation</div>
+                    <div class="settings-row">
+                        <div>
+                            <div class="settings-row-label">Auto-Click FAB</div>
+                            <div class="settings-row-desc">Auto-click merge button on page load</div>
+                        </div>
+                        <div id="elm-settings-auto-click-toggle" class="elm-toggle ${autoClickFabEnabled ? 'active' : ''}"></div>
+                    </div>
+                    <div class="settings-row">
+                        <div>
+                            <div class="settings-row-label">Auto-Navigate</div>
+                            <div class="settings-row-desc">Go to next duplicate after merge</div>
+                        </div>
+                        <div id="elm-settings-auto-nav-toggle" class="elm-toggle ${autoNavEnabled ? 'active' : ''}"></div>
+                    </div>
+                    <div class="settings-row">
+                        <div>
+                            <div class="settings-row-label">Auto-Skip Blocked</div>
+                            <div class="settings-row-desc">Skip forbidden/wrong dept entries</div>
+                        </div>
+                        <div id="elm-settings-auto-skip-toggle" class="elm-toggle ${autoSkipEnabled ? 'active' : ''}"></div>
+                    </div>
+                    <div class="settings-row">
+                        <div>
+                            <div class="settings-row-label">Scroll to Review</div>
+                            <div class="settings-row-desc">Require scrolling to bottom before merge</div>
+                        </div>
+                        <div id="elm-settings-scroll-toggle" class="elm-toggle ${scrollToBottomEnabled ? 'active' : ''}"></div>
+                    </div>
+                </div>
+                <div class="settings-section">
+                    <div class="settings-section-title">Department</div>
+                    <div class="settings-row">
+                        <div>
+                            <div class="settings-row-label">Allowed Department</div>
+                            <div class="settings-row-desc">Filter entries by department</div>
+                        </div>
+                        <select id="elm-settings-dept-select" class="elm-select">
+                            <option value="All" ${allowedDept === 'All' ? 'selected' : ''}>All</option>
+                            <option value="UnderGrad" ${allowedDept === 'UnderGrad' ? 'selected' : ''}>UnderGrad</option>
+                            <option value="Grad" ${allowedDept === 'Grad' ? 'selected' : ''}>Grad</option>
+                            <option value="IA" ${allowedDept === 'IA' ? 'selected' : ''}>IA</option>
+                            <option value="None" ${allowedDept === 'None' ? 'selected' : ''}>None</option>
+                        </select>
                     </div>
                 </div>
             </div>
@@ -2371,6 +2464,26 @@
                 document.body.classList.add('no-highlight-borders');
                 localStorage.setItem('elm_high_contrast', 'false');
             }
+        };
+
+        // --- Helper for simple boolean toggles ---
+        function setupToggle(elementId, storageKey) {
+            const toggle = document.getElementById(elementId);
+            toggle.onclick = () => {
+                toggle.classList.toggle('active');
+                localStorage.setItem(storageKey, toggle.classList.contains('active') ? 'true' : 'false');
+            };
+        }
+
+        setupToggle('elm-settings-merge-counter-toggle', 'elm_show_merge_counter');
+        setupToggle('elm-settings-auto-click-toggle', 'elm_auto_click_fab');
+        setupToggle('elm-settings-auto-nav-toggle', 'elm_auto_navigate_after_merge');
+        setupToggle('elm-settings-auto-skip-toggle', 'elm_auto_skip_blocked');
+        setupToggle('elm-settings-scroll-toggle', 'elm_require_scroll_to_bottom');
+
+        // --- Department Select ---
+        document.getElementById('elm-settings-dept-select').onchange = (e) => {
+            localStorage.setItem('elm_allowed_department', e.target.value);
         };
     }
 
@@ -2647,7 +2760,7 @@
     setInterval(suppressToasts, 100);
     // --- FEATURE: SCROLL TO BOTTOM DETECTION ---
     function setupScrollDetection() {
-        if (!REQUIRE_SCROLL_TO_BOTTOM) {
+        if (!CFG.REQUIRE_SCROLL_TO_BOTTOM) {
             console.log('⚠️ Scroll-to-bottom disabled');
             return; // Feature disabled
         }
@@ -2756,7 +2869,7 @@
         // All conflicts resolved
         if (totalErrorRows > 0 && unresolvedErrors === 0) {
             // Check if scroll-to-bottom is required and hasn't been completed
-            if (REQUIRE_SCROLL_TO_BOTTOM && !hasScrolledToBottom) {
+            if (CFG.REQUIRE_SCROLL_TO_BOTTOM && !hasScrolledToBottom) {
                 document.body.classList.add('review-required');
                 document.body.classList.remove('ready-to-merge');
             } else {

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection
 // @namespace    http://tampermonkey.net/
-// @version      124
+// @version      125
 // @description  Merge workflow with auto-selection, smart links, and UI enhancements (manual FAB click required)
 // @author       You
 // @match        https://*.element451.io/*
@@ -1387,6 +1387,9 @@
             if (!isRelevantRow) continue;
             if (isGradText(text)) return 'Grad';
             if (isIAText(text)) return 'IA';
+            // Outreach_ codes without UGRD are grad outreach — must match
+            // the same logic used in isWrongDepartment() for consistency
+            if (text.includes('Outreach_') && !text.includes('UGRD')) return 'Grad';
         }
         return 'UnderGrad';
     }

@@ -275,15 +275,11 @@
         const dbMap = {};
         db.forEach(entry => { dbMap[entry.uniqueId] = entry; });
 
-        rows.forEach(row => {
-            // Extract unique ID directly from a link in the row
-            let uniqueId = null;
-            const link = row.querySelector('a[href*="/duplicates/"]');
-            if (link) {
-                const hrefMatch = link.getAttribute('href').match(/\/duplicates\/([a-f0-9]{24})/i);
-                if (hrefMatch) uniqueId = hrefMatch[1].toLowerCase();
-            }
-
+        rows.forEach((row, rowIndex) => {
+            // Match row to its unique ID via the intercepted API data.
+            // The API returns entries in the same order as the rows on screen.
+            if (!apiDuplicatesList || !apiDuplicatesList[rowIndex]) return;
+            const uniqueId = apiDuplicatesList[rowIndex].uniqueId;
             if (!uniqueId) return;
 
             const dbEntry = dbMap[uniqueId];

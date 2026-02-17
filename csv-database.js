@@ -13,10 +13,16 @@
 // Stores: Firstname, Lastname, Dept., Row Contents, Unique ID
 // Storage key: 'elm_csv_database' in localStorage
 //
-// Department detection is handled by the main UI Perfection
-// script, which passes the dept string to recordEntry().
-// Row contents are read from the deep red highlighted row
+// Department detection: The main UI Perfection script sets
+// document.body.dataset.csvDept ('Grad', 'IA', 'UnderGrad',
+// 'Forbidden', 'Ignored'). This script polls for that attribute
+// and auto-records when it appears.
+//
+// Row contents are read from the highlighted row
 // (.blocked-row / .blocked-row-critical) set by the main script.
+//
+// Download button: Owned entirely by this script. Injects into
+// #elm-counter-wrapper created by the main script's merge counter.
 //
 // List page annotation: Intercepts the API response that loads
 // the duplicates list to get unique IDs for each row, then
@@ -87,9 +93,9 @@
     }
 
     // --- RECORD ENTRY ---
-    // Called by the main script with the detected department.
+    // Called by the polling loop when data-csv-dept is set on body.
     // Reads the blocked row from DOM for row contents.
-    // Deduplicates by unique ID so revisiting an entry won't create duplicates.
+    // Deduplicates by unique ID so repeated calls are harmless.
     function recordEntry(dept) {
         if (!dept) return; // Main script must provide dept
 
@@ -258,33 +264,82 @@
     // Run annotation periodically on the list page
     setInterval(annotateDuplicatesList, 1000);
 
-    // --- PUBLIC API ---
-    // Exposed on window for main script integration
-    window.elmCsvDatabase = {
-        recordEntry,
-        getDatabase,
-        annotateDuplicatesList,
-        clearDatabase() {
-            localStorage.removeItem(STORAGE_KEY);
-            console.log('CSV Database: Cleared');
-        },
-        getEntryCount() {
-            return getDatabase().length;
-        },
-        toCSV() {
-            const db = getDatabase();
-            if (db.length === 0) return '';
-            const headers = ['Firstname', 'Lastname', 'Dept.', 'Row Contents', 'Unique ID'];
-            const rows = db.map(e => [
-                e.firstName,
-                e.lastName,
-                e.dept,
-                e.rowContents,
-                e.uniqueId
-            ].map(v => `"${(v || '').replace(/"/g, '""')}"`).join(','));
-            return [headers.join(','), ...rows].join('\n');
-        }
-    };
+    // =========================================================
+    // CSV EXPORT
+    // =========================================================
+    function toCSV() {
+        const db = getDatabase();
+        if (db.length === 0) return '';
+        const headers = ['Firstname', 'Lastname', 'Dept.', 'Row Contents', 'Unique ID'];
+        const rows = db.map(e => [
+            e.firstName,
+            e.lastName,
+            e.dept,
+            e.rowContents,
+            e.uniqueId
+        ].map(v => `"${(v || '').replace(/"/g, '""')}"`).join(','));
+        return [headers.join(','), ...rows].join('\n');
+    }
 
-    console.log('CSV Database: Module loaded');
+    // =========================================================
+    // DOWNLOAD BUTTON
+    // Injected into #elm-counter-wrapper (created by main script).
+    // =========================================================
+    function updateDownloadButton() {
+        const btn = document.getElementById('elm-download-db-btn');
+        if (!btn) return;
+        const count = getDatabase().length;
+        btn.innerHTML = `\u2B07 ${count}`;
+        btn.title = `Download CSV Database (${count} entries recorded)`;
+    }
+
+    function injectDownloadButton() {
+        if (document.getElementById('elm-download-db-btn')) return;
+        const wrapper = document.getElementById('elm-counter-wrapper');
+        if (!wrapper) return;
+
+        const btn = document.createElement('button');
+        btn.id = 'elm-download-db-btn';
+        const count = getDatabase().length;
+        btn.innerHTML = `\u2B07 ${count}`;
+        btn.title = `Download CSV Database (${count} entries recorded)`;
+        btn.onclick = (e) => {
+            e.stopPropagation();
+            const csvContent = toCSV();
+            if (!csvContent) {
+                alert('CSV Database is empty \u2014 no entries have been recorded yet.\n\nCheck the browser console (F12) for "CSV Database:" messages to diagnose.');
+                return;
+            }
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `elm_csv_database_${new Date().toISOString().slice(0,10)}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        };
+        wrapper.prepend(btn);
+    }
+
+    // Poll for download button injection (wrapper may not exist yet)
+    setInterval(injectDownloadButton, 1000);
+
+    // =========================================================
+    // AUTO-RECORD: POLL FOR data-csv-dept ON BODY
+    // Main script sets document.body.dataset.csvDept in
+    // checkMergeStatus(). We poll for it and auto-record.
+    // recordEntry() deduplicates by uniqueId, so repeated
+    // calls for the same entry are harmless no-ops.
+    // =========================================================
+    setInterval(() => {
+        const dept = document.body.dataset.csvDept;
+        if (dept) {
+            recordEntry(dept);
+            updateDownloadButton();
+        }
+    }, 1000);
+
+    console.log('CSV Database: Module loaded (polls body[data-csv-dept])');
 })();

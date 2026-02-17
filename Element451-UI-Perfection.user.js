@@ -19,36 +19,6 @@
     const ALLOWED_DEPARTMENT = "UnderGrad"; // Options: "UnderGrad", "Grad", "IA" (case-insensitive)
     const AUTO_SKIP_BLOCKED = true; // Set to false to disable auto-skipping blocked entries (forbidden, wrong dept, student ID mismatch, ignored)
     // =========================================================
-    // CSV DATABASE BRIDGE
-    // Delegates to the standalone csv-database.js UserScript
-    // via the window.elmCsvDatabase API. All database logic,
-    // XHR interception, and list annotation live in that script.
-    // =========================================================
-    function csvRecordEntry(dept) {
-        if (window.elmCsvDatabase) {
-            window.elmCsvDatabase.recordEntry(dept);
-            // Update the download button count
-            const dlBtn = document.getElementById('elm-download-db-btn');
-            if (dlBtn) {
-                const count = window.elmCsvDatabase.getEntryCount();
-                dlBtn.innerHTML = `\u2B07 ${count}`;
-                dlBtn.title = `Download CSV Database (${count} entries recorded)`;
-            }
-        } else {
-            console.warn('CSV Database: csv-database.js not loaded — recordEntry skipped');
-        }
-    }
-
-    function csvGetEntryCount() {
-        return window.elmCsvDatabase ? window.elmCsvDatabase.getEntryCount() : 0;
-    }
-
-    function csvToCSV() {
-        return window.elmCsvDatabase ? window.elmCsvDatabase.toCSV() : '';
-    }
-
-    console.log('CSV Database: Bridge ready (delegates to csv-database.js)');
-    // =========================================================
     // PART 1: CSS
     // =========================================================
     const css = `
@@ -1081,15 +1051,6 @@
     }
     // --- HELPER: ATTEMPT AUTO-CLICK FAB ---
     function attemptAutoClickFAB() {
-        // Record entry in CSV database (deduplicates internally by unique ID)
-        {
-            let dept;
-            if (isForbiddenEntry().forbidden) dept = 'Forbidden';
-            else if (isStudentIgnored()) dept = 'Ignored';
-            else dept = detectActualDepartment(); // 'Grad', 'IA', or 'UnderGrad'
-            csvRecordEntry(dept);
-        }
-
         if (!shouldAutoClickFAB()) {
             // If blocked, attempt auto-skip to next entry
             attemptAutoSkipBlocked();
@@ -2226,33 +2187,6 @@
                 const counterText = document.createElement('span');
                 counterText.id = 'elm-merge-counter';
                 counterText.innerText = `Merges: ${count}`;
-                const downloadBtn = document.createElement('button');
-                downloadBtn.id = 'elm-download-db-btn';
-                const dbCount = csvGetEntryCount();
-                downloadBtn.innerHTML = `⬇ ${dbCount}`;
-                downloadBtn.title = `Download CSV Database (${dbCount} entries recorded)`;
-                downloadBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    if (!window.elmCsvDatabase) {
-                        alert('CSV Database script is not loaded.\n\nMake sure the "Element451 - CSV Database" UserScript is installed and enabled in Tampermonkey.');
-                        return;
-                    }
-                    const csvContent = csvToCSV();
-                    if (!csvContent) {
-                        alert('CSV Database is empty — no entries have been recorded yet.\n\nCheck the browser console (F12) for "CSV Database:" messages to diagnose.');
-                        return;
-                    }
-                    const blob = new Blob([csvContent], { type: 'text/csv' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `elm_csv_database_${new Date().toISOString().slice(0,10)}.csv`;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
-                };
-                counterWrapper.appendChild(downloadBtn);
                 counterWrapper.appendChild(resetBtn);
                 counterWrapper.appendChild(counterText);
                 controlsWrapper.appendChild(counterWrapper);
@@ -2575,8 +2509,12 @@
         document.querySelectorAll('.blocked-row, .blocked-row-critical').forEach(row => {
             row.classList.remove('blocked-row', 'blocked-row-critical');
         });
-        // Check forbidden entry FIRST (highest priority)
+        // Signal department to csv-database.js via body attribute
         const forbiddenResult = isForbiddenEntry();
+        if (forbiddenResult.forbidden) document.body.dataset.csvDept = 'Forbidden';
+        else if (isStudentIgnored()) document.body.dataset.csvDept = 'Ignored';
+        else document.body.dataset.csvDept = detectActualDepartment();
+        // Check forbidden entry FIRST (highest priority)
         if (forbiddenResult.forbidden) {
             document.body.classList.add('forbidden-entry');
             document.body.classList.remove('ready-to-merge', 'review-required', 'wrong-department', 'student-id-mismatch');

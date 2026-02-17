@@ -1089,6 +1089,16 @@
                           isStudentIgnored();
         if (!isBlocked) return;
         autoSkipAttempted = true;
+        // Check if csv-database.js is installed by looking for its localStorage key.
+        // The database script creates this key on first record. If it has never been
+        // created, the script is not installed — skip immediately without waiting.
+        const dbInstalled = localStorage.getItem('elm_csv_database') !== null;
+        if (!dbInstalled) {
+            console.log('⏭️ Auto-skip: Blocked entry detected (database script not installed), skipping to next...');
+            // Brief delay so the blocked state is visible before skipping
+            setTimeout(navigateToNext, 1500);
+            return;
+        }
         console.log('⏭️ Auto-skip: Blocked entry detected, waiting for database to record before skipping...');
         // Wait for csv-database.js to record this entry before navigating.
         // The database script polls body[data-csv-dept] every 1s and writes to localStorage.

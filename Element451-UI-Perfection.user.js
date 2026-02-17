@@ -293,10 +293,7 @@
         #elm-settings-overlay.open { display: block; }
         #elm-settings-pane {
             display: none;
-            position: absolute;
-            top: 100%;
-            right: 0;
-            margin-top: 6px;
+            position: fixed;
             width: 320px;
             background: white;
             border-radius: 12px;
@@ -2354,13 +2351,7 @@
         `;
 
         document.body.appendChild(overlay);
-        // Append pane to controls wrapper so it drops down from the cog
-        const controlsWrapper = document.getElementById('elm-controls-wrapper');
-        if (controlsWrapper) {
-            controlsWrapper.appendChild(pane);
-        } else {
-            document.body.appendChild(pane);
-        }
+        document.body.appendChild(pane);
 
         // --- Close Button ---
         document.getElementById('elm-settings-close-btn').onclick = (e) => {
@@ -2389,6 +2380,13 @@
         if (!overlay || !pane) return;
         const shouldOpen = forceState !== undefined ? forceState : !pane.classList.contains('open');
         if (shouldOpen) {
+            // Position pane below the settings button
+            const settingsBtn = document.getElementById('elm-settings-btn');
+            if (settingsBtn) {
+                const rect = settingsBtn.getBoundingClientRect();
+                pane.style.top = (rect.bottom + 6) + 'px';
+                pane.style.right = (window.innerWidth - rect.right) + 'px';
+            }
             overlay.classList.add('open');
             pane.classList.add('open');
         } else {

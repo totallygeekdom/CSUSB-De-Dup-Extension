@@ -19,194 +19,35 @@
     const ALLOWED_DEPARTMENT = "UnderGrad"; // Options: "UnderGrad", "Grad", "IA" (case-insensitive)
     const AUTO_SKIP_BLOCKED = true; // Set to false to disable auto-skipping blocked entries (forbidden, wrong dept, student ID mismatch, ignored)
     // =========================================================
-    // CSV DATABASE MODULE (embedded)
-    // Stores: Firstname, Lastname, Dept., Row Contents, Unique ID
-    // Storage key: 'elm_csv_database' in localStorage
+    // CSV DATABASE BRIDGE
+    // Delegates to the standalone csv-database.js UserScript
+    // via the window.elmCsvDatabase API. All database logic,
+    // XHR interception, and list annotation live in that script.
     // =========================================================
-    const CSV_STORAGE_KEY = 'elm_csv_database';
-
-    function csvGetBlockedRowText(dept) {
-        const blockedRow = document.querySelector('.blocked-row, .blocked-row-critical');
-        if (blockedRow) return blockedRow.textContent.trim().replace(/\s+/g, ' ');
-        if (dept === 'Ignored') return 'Student has Ignored chip';
-        return 'No IA or Grad rows detected';
-    }
-
-    function csvExtractNames() {
-        const allRows = Array.from(document.querySelectorAll('elm-merge-row'));
-        let firstName = '', lastName = '';
-        allRows.forEach(row => {
-            const text = row.textContent;
-            const values = row.querySelectorAll('elm-merge-value');
-            if (text.includes('First Name') && values.length >= 2) {
-                firstName = values[0].textContent.trim() || values[1].textContent.trim();
-            }
-            if (text.includes('Last Name') && values.length >= 2) {
-                lastName = values[0].textContent.trim() || values[1].textContent.trim();
-            }
-        });
-        return { firstName, lastName };
-    }
-
-    function csvExtractUniqueId() {
-        const match = window.location.href.match(/\/duplicates\/([a-f0-9]{24})/i);
-        return match ? match[1].toLowerCase() : null;
-    }
-
-    function csvGetDatabase() {
-        try {
-            const data = localStorage.getItem(CSV_STORAGE_KEY);
-            return data ? JSON.parse(data) : [];
-        } catch (e) {
-            console.error('CSV Database: Error reading database', e);
-            return [];
-        }
-    }
-
-    function csvSaveDatabase(db) {
-        try {
-            localStorage.setItem(CSV_STORAGE_KEY, JSON.stringify(db));
-        } catch (e) {
-            console.error('CSV Database: Error saving database', e);
-        }
-    }
-
     function csvRecordEntry(dept) {
-        if (!dept) {
-            console.warn('CSV Database: recordEntry called with no dept — skipping');
-            return;
-        }
-        const uniqueId = csvExtractUniqueId();
-        if (!uniqueId) {
-            console.log('CSV Database: URL does not match /duplicates/<id> — not recording (URL:', window.location.href, ')');
-            return;
-        }
-        const { firstName, lastName } = csvExtractNames();
-        if (!firstName && !lastName) {
-            console.log('CSV Database: No names found yet (elm-merge-row/elm-merge-value not in DOM) — skipping');
-            return;
-        }
-        const db = csvGetDatabase();
-        if (db.some(entry => entry.uniqueId === uniqueId)) {
-            console.log('CSV Database: Entry already recorded for', uniqueId, '— skipping (db has', db.length, 'entries)');
-            return;
-        }
-        const rowContents = csvGetBlockedRowText(dept);
-        const entry = { firstName, lastName, dept, rowContents, uniqueId };
-        db.push(entry);
-        csvSaveDatabase(db);
-        console.log('CSV Database: Recorded entry', entry, '(total:', db.length, ')');
-        const dlBtn = document.getElementById('elm-download-db-btn');
-        if (dlBtn) {
-            dlBtn.innerHTML = `⬇ ${db.length}`;
-            dlBtn.title = `Download CSV Database (${db.length} entries recorded)`;
+        if (window.elmCsvDatabase) {
+            window.elmCsvDatabase.recordEntry(dept);
+            // Update the download button count
+            const dlBtn = document.getElementById('elm-download-db-btn');
+            if (dlBtn) {
+                const count = window.elmCsvDatabase.getEntryCount();
+                dlBtn.innerHTML = `\u2B07 ${count}`;
+                dlBtn.title = `Download CSV Database (${count} entries recorded)`;
+            }
+        } else {
+            console.warn('CSV Database: csv-database.js not loaded — recordEntry skipped');
         }
     }
 
     function csvGetEntryCount() {
-        return csvGetDatabase().length;
+        return window.elmCsvDatabase ? window.elmCsvDatabase.getEntryCount() : 0;
     }
 
     function csvToCSV() {
-        const db = csvGetDatabase();
-        if (db.length === 0) return '';
-        const headers = ['Firstname', 'Lastname', 'Dept.', 'Row Contents', 'Unique ID'];
-        const rows = db.map(e => [
-            e.firstName, e.lastName, e.dept, e.rowContents, e.uniqueId
-        ].map(v => `"${(v || '').replace(/"/g, '""')}"`).join(','));
-        return [headers.join(','), ...rows].join('\n');
+        return window.elmCsvDatabase ? window.elmCsvDatabase.toCSV() : '';
     }
 
-    function csvClearDatabase() {
-        localStorage.removeItem(CSV_STORAGE_KEY);
-        console.log('CSV Database: Cleared');
-    }
-
-    // --- LIST PAGE: API INTERCEPTION & ANNOTATION ---
-    let apiDuplicatesList = null;
-
-    const DEPT_LABELS = {
-        Grad: 'Graduate', IA: 'International', UnderGrad: 'UnderGrad',
-        Forbidden: 'Forbidden', Ignored: 'Ignored'
-    };
-    const DEPT_COLORS = {
-        Grad: { bg: '#e3f2fd', fg: '#1565c0' }, IA: { bg: '#fce4ec', fg: '#c2185b' },
-        UnderGrad: { bg: '#e8f5e9', fg: '#2e7d32' }, Forbidden: { bg: '#ffebee', fg: '#c62828' },
-        Ignored: { bg: '#f5f5f5', fg: '#616161' }
-    };
-
-    // Intercept XHR to capture duplicates list data
-    (function interceptXHR() {
-        const origOpen = XMLHttpRequest.prototype.open;
-        XMLHttpRequest.prototype.open = function (method, url) {
-            this._csvDbUrl = url;
-            return origOpen.apply(this, arguments);
-        };
-        const origSend = XMLHttpRequest.prototype.send;
-        XMLHttpRequest.prototype.send = function () {
-            this.addEventListener('load', function () {
-                try {
-                    if (!this._csvDbUrl || typeof this.responseText !== 'string') return;
-                    console.log('CSV Database [XHR]:', this._csvDbUrl);
-                    if (!this._csvDbUrl.includes('duplicate')) return;
-                    if (this._csvDbUrl.match(/\/[a-f0-9]{24}($|\?|\/)/i)) return;
-                    console.log('CSV Database [XHR]: Matched duplicates list endpoint');
-                    const data = JSON.parse(this.responseText);
-                    const entries = data.data || data.items || data.results || (Array.isArray(data) ? data : null);
-                    if (!entries || !Array.isArray(entries) || entries.length === 0) return;
-                    const sample = entries[0];
-                    const idField = sample._id ? '_id' : sample.id ? 'id' : null;
-                    if (!idField) return;
-                    apiDuplicatesList = entries.map(e => ({
-                        uniqueId: (e[idField] || '').toLowerCase(),
-                        name: e.name || e.full_name || '',
-                        duplicateName: e.duplicate_name || ''
-                    }));
-                    console.log('CSV Database [XHR]: Captured', apiDuplicatesList.length, 'entries');
-                    document.querySelectorAll('elm-row[data-csv-dept-done]').forEach(r => delete r.dataset.csvDeptDone);
-                    csvAnnotateDuplicatesList();
-                } catch (e) {
-                    console.log('CSV Database [XHR]: Parse error for', this._csvDbUrl, e.message);
-                }
-            });
-            return origSend.apply(this, arguments);
-        };
-    })();
-
-    let _annotateLogOnce = false;
-    function csvAnnotateDuplicatesList() {
-        if (document.querySelector('elm-merge-row')) return;
-        if (!apiDuplicatesList) {
-            if (!_annotateLogOnce) { console.log('CSV Database [Annotate]: Waiting for API data...'); _annotateLogOnce = true; }
-            return;
-        }
-        const rows = document.querySelectorAll('elm-row');
-        if (rows.length === 0) return;
-        const db = csvGetDatabase();
-        rows.forEach((row, rowIdx) => {
-            if (row.dataset.csvDeptDone) return;
-            const indexCell = row.querySelector('.elm-column-index');
-            if (!indexCell) return;
-            const indexNum = parseInt(indexCell.textContent.trim().replace('.', ''));
-            if (isNaN(indexNum) || !apiDuplicatesList[indexNum - 1]) return;
-            const apiEntry = apiDuplicatesList[indexNum - 1];
-            if (!apiEntry.uniqueId) return;
-            const dbEntry = db.find(e => e.uniqueId === apiEntry.uniqueId);
-            if (!dbEntry) return;
-            const chip = row.querySelector('elm-chip');
-            if (!chip) return;
-            const desiredLabel = DEPT_LABELS[dbEntry.dept] || dbEntry.dept;
-            const colors = DEPT_COLORS[dbEntry.dept] || { bg: '#f5f5f5', fg: '#333' };
-            const label = chip.querySelector('.elm-chip-label');
-            if (label) label.textContent = ` ${desiredLabel} `;
-            const colorDiv = chip.querySelector('.bg-color');
-            if (colorDiv) colorDiv.style.backgroundColor = colors.fg;
-            row.dataset.csvDeptDone = '1';
-        });
-    }
-    setInterval(csvAnnotateDuplicatesList, 1000);
-
-    console.log('CSV Database: Module loaded (embedded)');
+    console.log('CSV Database: Bridge ready (delegates to csv-database.js)');
     // =========================================================
     // PART 1: CSS
     // =========================================================
@@ -2392,6 +2233,10 @@
                 downloadBtn.title = `Download CSV Database (${dbCount} entries recorded)`;
                 downloadBtn.onclick = (e) => {
                     e.stopPropagation();
+                    if (!window.elmCsvDatabase) {
+                        alert('CSV Database script is not loaded.\n\nMake sure the "Element451 - CSV Database" UserScript is installed and enabled in Tampermonkey.');
+                        return;
+                    }
                     const csvContent = csvToCSV();
                     if (!csvContent) {
                         alert('CSV Database is empty — no entries have been recorded yet.\n\nCheck the browser console (F12) for "CSV Database:" messages to diagnose.');

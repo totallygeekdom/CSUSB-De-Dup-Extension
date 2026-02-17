@@ -2,10 +2,12 @@
 // @name         Element451 - UI Perfection
 // @namespace    http://tampermonkey.net/
 // @version      125
-// @description  Merge workflow with auto-selection, smart links, and UI enhancements (manual FAB click required)
+// @description  Merge workflow with auto-selection, smart links, and UI enhancements
 // @author       You
 // @match        https://*.element451.io/*
 // @grant        GM_addStyle
+// @updateURL    https://raw.githubusercontent.com/totallygeekdom/csusb-de-dup-extension/main/Element451-UI-Perfection.user.js
+// @downloadURL  https://raw.githubusercontent.com/totallygeekdom/csusb-de-dup-extension/main/Element451-UI-Perfection.user.js
 // ==/UserScript==
 (function () {
     'use strict';

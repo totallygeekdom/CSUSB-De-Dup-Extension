@@ -392,41 +392,10 @@
         const genStr = String(apiGeneration);
 
         rows.forEach((row, rowIndex) => {
-            let uniqueId = null;
-
-            // Method 1: Extract ID directly from row link (most reliable).
-            // Each list row links to the detail page — the URL contains the ID.
-            // This works regardless of API data ordering or pagination state.
-            const link = row.querySelector('a[href*="duplicates"]');
-            if (link) {
-                const href = link.getAttribute('href') || '';
-                const idMatch = href.match(/\/duplicates\/([a-f0-9]{24})/i);
-                if (idMatch) uniqueId = idMatch[1].toLowerCase();
-            }
-
-            // Method 2: Name-based matching against API data (position-independent).
-            // Compares the visible text in each row against API entry names.
-            // More reliable than index matching when Angular re-orders rows.
-            if (!uniqueId && apiDuplicatesList) {
-                const rowText = row.textContent.toLowerCase();
-                for (const apiEntry of apiDuplicatesList) {
-                    const name = (apiEntry.name || '').toLowerCase().trim();
-                    const dupName = (apiEntry.duplicateName || '').toLowerCase().trim();
-                    // Require both names in the row text for a confident match
-                    if (name && dupName && name.length > 2 && dupName.length > 2 &&
-                        rowText.includes(name) && rowText.includes(dupName)) {
-                        uniqueId = apiEntry.uniqueId;
-                        break;
-                    }
-                }
-            }
-
-            // Method 3: Index-based matching against API data (last resort).
-            // Assumes the API returns entries in the same order as the rows on screen.
-            if (!uniqueId && apiDuplicatesList && apiDuplicatesList[rowIndex]) {
-                uniqueId = apiDuplicatesList[rowIndex].uniqueId;
-            }
-
+            // Match row to its unique ID via the intercepted API data.
+            // The API returns entries in the same order as the rows on screen.
+            if (!apiDuplicatesList || !apiDuplicatesList[rowIndex]) return;
+            const uniqueId = apiDuplicatesList[rowIndex].uniqueId;
             if (!uniqueId) return;
 
             // Find the elm-chip in this row

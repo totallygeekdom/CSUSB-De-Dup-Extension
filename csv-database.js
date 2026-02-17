@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database
 // @namespace    http://tampermonkey.net/
-// @version      4
+// @version      5
 // @description  Tracks duplicate entries in a CSV database stored in browser localStorage
 // @author       You
 // @match        https://*.element451.io/*
@@ -214,6 +214,18 @@
     let apiCapturedPageKey = null; // Tracks which page the API data belongs to
     let apiGeneration = 0;         // Increments on each fresh API capture
 
+    // Page-keyed cache of API data.
+    // Element451 caches previously viewed list pages and may serve them
+    // without making a fresh API call. When that happens, our XHR/fetch
+    // interceptors never fire and apiDuplicatesList stays null. This cache
+    // stores intercepted data per page key so we can restore it when the
+    // user navigates back to a previously-viewed page.
+    const apiPageCache = new Map();
+    const MAX_CACHED_PAGES = 20;
+
+    // Track last known URL for SPA navigation detection on list pages
+    let lastKnownListUrl = window.location.href;
+
     // --- HELPER: PAGE KEY FOR STALENESS DETECTION ---
     // Returns a string representing the current list page (path + pagination params).
     // Used to detect when the user navigates to a different page so we can
@@ -228,7 +240,21 @@
         apiDuplicatesList = entries;
         apiCapturedPageKey = getPageKey();
         apiGeneration++;
-        console.log('CSV Database: Captured', entries.length, 'entries from', source, '(gen ' + apiGeneration + ')');
+
+        // Cache this data so we can restore it when the user navigates back
+        // to this page and Element serves it from its internal cache without
+        // making a new API call.
+        apiPageCache.set(apiCapturedPageKey, {
+            entries: entries,
+            generation: apiGeneration
+        });
+        // Evict oldest entries if cache grows too large
+        if (apiPageCache.size > MAX_CACHED_PAGES) {
+            const oldestKey = apiPageCache.keys().next().value;
+            apiPageCache.delete(oldestKey);
+        }
+
+        console.log('CSV Database: Captured', entries.length, 'entries from', source, '(gen ' + apiGeneration + ', page cached: ' + apiCapturedPageKey + ')');
         // Clear stale annotations from previous page/data before re-annotating
         clearStaleAnnotations();
         annotateDuplicatesList();
@@ -349,6 +375,34 @@
         Ignored:    { bg: '#f5f5f5', fg: '#616161' }
     };
 
+    // --- HELPER: CONTENT-BASED ROW-TO-API MATCHING ---
+    // Matches a DOM row to an API entry by comparing the visible name text
+    // in the row against the API's name/duplicate_name fields. This is more
+    // reliable than index-based matching because it survives Angular
+    // re-ordering and DOM caching.
+    //
+    // usedIndices tracks which API entries have already been claimed by
+    // other rows, preventing two rows from matching the same entry.
+    function matchRowToApiEntry(row, apiEntries, usedIndices) {
+        const rowText = row.textContent.trim().toLowerCase();
+        for (let i = 0; i < apiEntries.length; i++) {
+            if (usedIndices.has(i)) continue;
+            const entry = apiEntries[i];
+            const name = (entry.name || '').trim().toLowerCase();
+            const dupName = (entry.duplicateName || '').trim().toLowerCase();
+            // Require minimum length to avoid false matches on short/empty names
+            if (name.length > 3 && rowText.includes(name)) {
+                usedIndices.add(i);
+                return entry;
+            }
+            if (dupName.length > 3 && rowText.includes(dupName)) {
+                usedIndices.add(i);
+                return entry;
+            }
+        }
+        return null;
+    }
+
     // --- LIST PAGE: REWRITE elm-chip IN EACH ROW TO SHOW DEPT ---
     // Uses the intercepted API data to match each row to its unique ID,
     // then looks up that ID in the CSV database and rewrites the existing
@@ -362,24 +416,53 @@
     // can fire before the new API response arrives, causing stale page 1 data
     // to be applied to page 2 rows (wrong labels). We prevent this by:
     // 1. Tracking which page the API data was captured for (apiCapturedPageKey)
-    // 2. Invalidating stale data when the page URL changes
+    // 2. Checking the page cache before invalidating stale data
     // 3. Tracking the API generation on each chip to force re-evaluation
     // 4. Cleaning up stale annotations when an entry isn't in the database
+    //
+    // CACHE RESTORATION: Element451 caches previously viewed list pages and
+    // may serve them without making a new API call. When that happens, the
+    // XHR/fetch interceptors never fire and apiDuplicatesList stays null.
+    // We restore from our page-keyed cache to re-annotate cached pages.
     function annotateDuplicatesList() {
         // Only run on list page — skip if on detail page (has elm-merge-row)
         if (document.querySelector('elm-merge-row')) return;
-        // Only run if we have API data with unique IDs
-        if (!apiDuplicatesList) return;
 
-        // Invalidate stale API data when the page has changed (e.g., pagination).
-        // This prevents page 1 data from being applied to page 2 rows.
         const currentPageKey = getPageKey();
+
+        // If we have no API data, try to restore from cache for this page
+        if (!apiDuplicatesList) {
+            const cached = apiPageCache.get(currentPageKey);
+            if (cached) {
+                console.log('CSV Database: No API data — restoring from cache for', currentPageKey);
+                apiDuplicatesList = cached.entries;
+                apiCapturedPageKey = currentPageKey;
+                apiGeneration++;
+                clearStaleAnnotations();
+                // Fall through to annotate with restored data
+            } else {
+                return; // No data available at all
+            }
+        }
+
+        // Handle page change: API data belongs to a different page
         if (apiCapturedPageKey && apiCapturedPageKey !== currentPageKey) {
-            console.log('CSV Database: Page changed (' + apiCapturedPageKey + ' → ' + currentPageKey + '), invalidating stale API data');
-            apiDuplicatesList = null;
-            apiCapturedPageKey = null;
-            clearStaleAnnotations();
-            return;
+            // Try to restore from cache for the new page
+            const cached = apiPageCache.get(currentPageKey);
+            if (cached) {
+                console.log('CSV Database: Page changed (' + apiCapturedPageKey + ' → ' + currentPageKey + '), restoring from cache');
+                apiDuplicatesList = cached.entries;
+                apiCapturedPageKey = currentPageKey;
+                apiGeneration++;
+                clearStaleAnnotations();
+                // Fall through to annotate with restored data
+            } else {
+                console.log('CSV Database: Page changed (' + apiCapturedPageKey + ' → ' + currentPageKey + '), no cache — clearing');
+                apiDuplicatesList = null;
+                apiCapturedPageKey = null;
+                clearStaleAnnotations();
+                return;
+            }
         }
 
         const rows = document.querySelectorAll('elm-row');
@@ -392,14 +475,25 @@
         db.forEach(entry => { dbMap[entry.uniqueId] = entry; });
 
         const genStr = String(apiGeneration);
+        const usedApiIndices = new Set(); // Track which API entries have been claimed
 
         rows.forEach((row, rowIndex) => {
-            // Get the unique ID for this row. First check if we've already
-            // stamped it from a previous annotation pass (survives Angular
-            // re-ordering). Fall back to index-based matching from API data.
+            // Get the unique ID for this row. Priority order:
+            // 1. Previously stamped data-csv-uid (survives Angular re-renders)
+            // 2. Content-based matching (name text in row vs API names)
+            // 3. Index-based fallback (fragile — only if content match fails)
             let uniqueId = row.getAttribute('data-csv-uid');
-            if (!uniqueId && apiDuplicatesList && apiDuplicatesList[rowIndex]) {
-                uniqueId = apiDuplicatesList[rowIndex].uniqueId;
+            if (!uniqueId && apiDuplicatesList) {
+                // Primary: match by visible name text in the row
+                const matched = matchRowToApiEntry(row, apiDuplicatesList, usedApiIndices);
+                if (matched) {
+                    uniqueId = matched.uniqueId;
+                }
+                // Fallback: index-based matching (may be wrong if rows are reordered)
+                else if (apiDuplicatesList[rowIndex] && !usedApiIndices.has(rowIndex)) {
+                    uniqueId = apiDuplicatesList[rowIndex].uniqueId;
+                    usedApiIndices.add(rowIndex);
+                }
                 if (uniqueId) row.setAttribute('data-csv-uid', uniqueId);
             }
             if (!uniqueId) return;
@@ -471,6 +565,10 @@
         if (listAnnotationTimer) clearTimeout(listAnnotationTimer);
         listAnnotationTimer = setTimeout(annotateDuplicatesList, 50);
     });
+    // Track current observer target to detect when the container changes
+    // (e.g., Angular replaces .elm-table-body during navigation).
+    // Without this, the observer would be watching a detached node.
+    let currentObserverTarget = null;
     // Start observing once we're on a page with elm-row elements
     function startListObserver() {
         // Only observe on list pages, not detail pages
@@ -478,7 +576,37 @@
         const container = document.querySelector('.elm-table-body') ||
                           document.querySelector('elm-duplicates') ||
                           document.body;
-        listObserver.observe(container, { childList: true, subtree: true, characterData: true });
+        // Only reconnect if the container has changed (avoids accumulating
+        // dead observations on detached nodes)
+        if (container !== currentObserverTarget) {
+            listObserver.disconnect();
+            listObserver.observe(container, { childList: true, subtree: true, characterData: true });
+            currentObserverTarget = container;
+        }
+    }
+
+    // --- LIST PAGE: URL CHANGE DETECTION ---
+    // Element451 is an SPA — page navigation changes the URL without a full
+    // reload. When the user navigates away from the list page and back, or
+    // paginates, Element may serve the cached DOM without making a new API
+    // call. We detect URL changes and trigger re-annotation from our cache.
+    function checkListUrlChange() {
+        const currentUrl = window.location.href;
+        if (currentUrl !== lastKnownListUrl) {
+            lastKnownListUrl = currentUrl;
+            console.log('CSV Database: List URL changed to', currentUrl);
+            // URL changed — trigger re-annotation (will use page cache if
+            // no fresh API data is available for this page)
+            if (listAnnotationTimer) clearTimeout(listAnnotationTimer);
+            listAnnotationTimer = setTimeout(() => {
+                annotateDuplicatesList();
+                // Reconnect observer to new container (Angular may have
+                // replaced the DOM element)
+                listObserver.disconnect();
+                currentObserverTarget = null;
+                startListObserver();
+            }, 150); // Slightly longer delay to let Angular finish rendering
+        }
     }
 
     // Run annotation periodically on the list page (fallback for observer)
@@ -486,6 +614,9 @@
         annotateDuplicatesList();
         startListObserver();
     }, 1000);
+
+    // Poll for SPA navigation (URL changes without full reload)
+    setInterval(checkListUrlChange, 500);
 
     // =========================================================
     // CSV EXPORT

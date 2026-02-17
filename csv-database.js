@@ -111,15 +111,10 @@
 
         const db = getDatabase();
 
-        // Deduplicate by unique ID
-        if (db.some(entry => entry.uniqueId === uniqueId)) {
-            return; // Already recorded
-        }
-
         // Read the deep red highlighted row from DOM
         const rowContents = getBlockedRowText(dept);
 
-        const entry = {
+        const newEntry = {
             firstName,
             lastName,
             dept,
@@ -127,9 +122,23 @@
             uniqueId
         };
 
-        db.push(entry);
+        // Check if this unique ID already exists in the database
+        const existingIdx = db.findIndex(entry => entry.uniqueId === uniqueId);
+        if (existingIdx !== -1) {
+            // Update the existing entry with current data instead of adding a duplicate
+            const old = db[existingIdx];
+            if (old.dept === dept && old.firstName === firstName && old.lastName === lastName && old.rowContents === rowContents) {
+                return; // Nothing changed, skip the write
+            }
+            db[existingIdx] = newEntry;
+            saveDatabase(db);
+            console.log('CSV Database: Updated existing entry', newEntry);
+            return;
+        }
+
+        db.push(newEntry);
         saveDatabase(db);
-        console.log('CSV Database: Recorded entry', entry);
+        console.log('CSV Database: Recorded new entry', newEntry);
     }
 
     // =========================================================
@@ -250,7 +259,7 @@
     //
     // Angular re-renders can overwrite our chip modifications at any time.
     // Instead of relying on a flag, we check the chip's actual label text
-    // each time and re-apply if Angular has reverted it.
+    // AND color each time and re-apply if Angular has reverted anything.
     function annotateDuplicatesList() {
         // Only run on list page — skip if on detail page (has elm-merge-row)
         if (document.querySelector('elm-merge-row')) return;
@@ -262,18 +271,50 @@
 
         const db = getDatabase();
 
+        // Build a quick lookup map from uniqueId -> dbEntry
+        const dbMap = {};
+        db.forEach(entry => { dbMap[entry.uniqueId] = entry; });
+
+        // Compute the index offset for pagination support.
+        // On page 2 the first row might show index "26." but the API array
+        // only holds entries for the current page (indices 0..N-1).
+        let indexOffset = 0;
+        const firstRow = rows[0];
+        if (firstRow) {
+            const firstIdxCell = firstRow.querySelector('.elm-column-index');
+            if (firstIdxCell) {
+                const firstIdx = parseInt(firstIdxCell.textContent.trim().replace('.', ''));
+                if (!isNaN(firstIdx)) indexOffset = firstIdx - 1;
+            }
+        }
+
         rows.forEach(row => {
-            // Match by unique ID from intercepted API data
-            const indexCell = row.querySelector('.elm-column-index');
-            if (!indexCell) return;
+            // --- Strategy 1: Extract unique ID directly from a link in the row ---
+            let uniqueId = null;
+            const link = row.querySelector('a[href*="/duplicates/"]');
+            if (link) {
+                const hrefMatch = link.getAttribute('href').match(/\/duplicates\/([a-f0-9]{24})/i);
+                if (hrefMatch) uniqueId = hrefMatch[1].toLowerCase();
+            }
 
-            const indexNum = parseInt(indexCell.textContent.trim().replace('.', ''));
-            if (isNaN(indexNum) || !apiDuplicatesList[indexNum - 1]) return;
+            // --- Strategy 2: Fall back to index-based matching with offset ---
+            if (!uniqueId) {
+                const indexCell = row.querySelector('.elm-column-index');
+                if (!indexCell) return;
 
-            const apiEntry = apiDuplicatesList[indexNum - 1];
-            if (!apiEntry.uniqueId) return;
+                const indexNum = parseInt(indexCell.textContent.trim().replace('.', ''));
+                if (isNaN(indexNum)) return;
 
-            const dbEntry = db.find(e => e.uniqueId === apiEntry.uniqueId);
+                const arrayIdx = indexNum - 1 - indexOffset;
+                if (arrayIdx < 0 || arrayIdx >= apiDuplicatesList.length) return;
+
+                const apiEntry = apiDuplicatesList[arrayIdx];
+                if (apiEntry) uniqueId = apiEntry.uniqueId;
+            }
+
+            if (!uniqueId) return;
+
+            const dbEntry = dbMap[uniqueId];
             if (!dbEntry) return;
 
             // Find the elm-chip in this row and rewrite it
@@ -283,22 +324,31 @@
             const desiredLabel = DEPT_LABELS[dbEntry.dept] || dbEntry.dept;
             const colors = DEPT_COLORS[dbEntry.dept] || { bg: '#f5f5f5', fg: '#333' };
 
-            // Check if chip already shows our desired label — skip if so.
-            // This handles Angular re-renders: if Angular reverted the chip,
-            // the label won't match and we'll re-apply.
+            // Check if chip already has our desired label AND color — skip only
+            // if both match. This handles partial Angular re-renders that may
+            // reset the color but leave the label (or vice versa).
             const label = chip.querySelector('.elm-chip-label');
-            if (label && label.textContent.trim() === desiredLabel) return;
+            const colorDiv = chip.querySelector('.bg-color');
+            const labelOk = label && label.textContent.trim() === desiredLabel;
+            const colorOk = colorDiv && colorDiv.style.backgroundColor &&
+                            colorDiv.getAttribute('data-csv-dept') === dbEntry.dept;
+            if (labelOk && colorOk) return;
 
             // Apply or re-apply annotation
             if (label) {
                 label.textContent = ` ${desiredLabel} `;
+                label.style.color = colors.fg;
             }
 
             // Rewrite the chip background color
-            const colorDiv = chip.querySelector('.bg-color');
             if (colorDiv) {
-                colorDiv.style.backgroundColor = colors.fg;
+                colorDiv.style.cssText = `background-color: ${colors.bg} !important`;
+                colorDiv.setAttribute('data-csv-dept', dbEntry.dept);
             }
+
+            // Also set chip-level styles as a fallback in case .bg-color
+            // is missing or gets replaced by Angular
+            chip.style.cssText = `background-color: ${colors.bg} !important; color: ${colors.fg} !important`;
         });
     }
 

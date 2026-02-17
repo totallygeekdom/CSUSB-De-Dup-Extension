@@ -1416,7 +1416,18 @@
         // "None" = block all departments
         if (dept === 'none') {
             const actualDept = detectActualDepartment();
-            return { wrongDept: true, row: null, reason: actualDept };
+            // Find a relevant row to highlight (same scan as other dept checks)
+            const allRows = Array.from(document.querySelectorAll('elm-merge-row'));
+            let relevantRow = null;
+            for (const row of allRows) {
+                const text = row.textContent;
+                if (text.includes('Workflows') || text.includes('Application') ||
+                    text.includes('Program') || text.includes('type:') ||
+                    text.includes('status:') || text.includes('Outreach_')) {
+                    relevantRow = row;
+                }
+            }
+            return { wrongDept: true, row: relevantRow, reason: actualDept };
         }
         const allRows = Array.from(document.querySelectorAll('elm-merge-row'));
         const isGradText = (t) => t.includes('GRAD_') || /grad student/i.test(t);

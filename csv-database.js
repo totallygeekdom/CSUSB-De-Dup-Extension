@@ -358,6 +358,49 @@
         };
     })();
 
+    // --- FIRST PAGE BOOTSTRAP ---
+    // Both userscripts run at document-idle (the default). By that time,
+    // Angular has already made the initial API call for page 1 and our
+    // XHR/fetch interceptors missed it. Use the Performance Resource
+    // Timing API to find the already-completed duplicates API URL and
+    // re-fetch it so the first page gets annotated too.
+    let firstPageFetchAttempted = false;
+    function attemptFirstPageFetch() {
+        if (firstPageFetchAttempted) return;
+        if (apiDuplicatesList) return; // Already have data
+        if (document.querySelector('elm-merge-row')) return; // Detail page, not list
+        const rows = document.querySelectorAll('elm-row');
+        if (rows.length === 0) return; // No rows visible yet
+
+        firstPageFetchAttempted = true;
+
+        // Search performance entries for the duplicates API call that already completed
+        const perfEntries = performance.getEntriesByType('resource');
+        // Find the most recent matching entry (last one wins)
+        let apiUrl = null;
+        for (let i = perfEntries.length - 1; i >= 0; i--) {
+            const entry = perfEntries[i];
+            if (entry.name.includes('duplicate') &&
+                !entry.name.match(/\/duplicates\/[a-f0-9]{24}/i)) {
+                apiUrl = entry.name;
+                break;
+            }
+        }
+
+        if (!apiUrl) return;
+        console.log('CSV Database: Re-fetching first page data from', apiUrl);
+        fetch(apiUrl)
+            .then(r => r.json())
+            .then(data => {
+                const entries = data.data || data.items || data.results ||
+                                (Array.isArray(data) ? data : null);
+                if (!entries || !Array.isArray(entries) || entries.length === 0) return;
+                const parsed = parseApiEntries(entries);
+                if (parsed) onFreshApiData(parsed, 'first-page-bootstrap');
+            })
+            .catch(() => {}); // Silently fail — interceptors will catch future pages
+    }
+
     // --- LIST PAGE: DEPT BADGE COLORS ---
     const DEPT_LABELS = {
         Grad:      'Graduate',
@@ -611,6 +654,7 @@
 
     // Run annotation periodically on the list page (fallback for observer)
     setInterval(() => {
+        attemptFirstPageFetch();
         annotateDuplicatesList();
         startListObserver();
     }, 1000);

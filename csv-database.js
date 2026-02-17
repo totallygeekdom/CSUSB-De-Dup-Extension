@@ -38,16 +38,23 @@
     // CSS (database-owned styles)
     // =========================================================
     const dbCss = `
-        /* --- Database Size Badge --- */
+        /* --- Database Size Badge (matches merge counter pill) --- */
         #elm-db-size-badge {
-            font-size: 13px;
-            font-weight: 600;
-            color: white;
-            background: rgba(255,255,255,0.15);
-            padding: 4px 10px;
-            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            background: #f5f5f5;
+            border-radius: 20px;
+            border: 1px solid #ddd;
+            padding: 2px;
             white-space: nowrap;
             cursor: default;
+        }
+        #elm-db-size-label {
+            font-weight: 600;
+            font-size: 14px;
+            color: #555;
+            padding: 4px 12px 4px 8px;
+            white-space: nowrap;
         }
         /* --- Settings Action Buttons (database section) --- */
         .settings-action-btn {
@@ -455,11 +462,12 @@
     // database section into the settings pane (#elm-settings-pane).
     // =========================================================
     function updateDbSizeBadge() {
-        const badge = document.getElementById('elm-db-size-badge');
-        if (!badge) return;
+        const label = document.getElementById('elm-db-size-label');
+        if (!label) return;
         const count = getDatabase().length;
-        badge.textContent = `\u2B07 ${count}`;
-        badge.title = `Database: ${count} entries recorded`;
+        label.textContent = `DB: ${count}`;
+        const badge = document.getElementById('elm-db-size-badge');
+        if (badge) badge.title = `Database: ${count} entries recorded`;
     }
 
     function injectDbBadge() {
@@ -467,10 +475,14 @@
         const controlsWrapper = document.getElementById('elm-controls-wrapper');
         if (!controlsWrapper) return;
 
-        const badge = document.createElement('span');
+        const badge = document.createElement('div');
         badge.id = 'elm-db-size-badge';
         badge.title = 'Database entries recorded';
-        badge.textContent = '\u2B07 0';
+
+        const label = document.createElement('span');
+        label.id = 'elm-db-size-label';
+        label.textContent = 'DB: 0';
+        badge.appendChild(label);
 
         // Insert after the settings button (first child)
         const settingsBtn = document.getElementById('elm-settings-btn');
@@ -582,8 +594,8 @@
             }
             if (confirm(`Are you sure you want to delete all ${db.length} entries from the database? This cannot be undone.`)) {
                 saveDatabase([]);
-                updateDbSizeBadge();
                 alert('Database cleared.');
+                location.reload();
             }
         };
     }

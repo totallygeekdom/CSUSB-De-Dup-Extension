@@ -177,15 +177,52 @@
                         name: e.name || e.full_name || '',
                         duplicateName: e.duplicate_name || ''
                     }));
-                    console.log('CSV Database: Captured', apiDuplicatesList.length, 'entries from API');
+                    console.log('CSV Database: Captured', apiDuplicatesList.length, 'entries from XHR');
                     // Re-annotate now that we have fresh API data
-                    document.querySelectorAll('elm-row[data-csv-dept-done]').forEach(r => delete r.dataset.csvDeptDone);
                     annotateDuplicatesList();
                 } catch (e) {
                     // Not the response we're looking for, ignore
                 }
             });
             return origSend.apply(this, arguments);
+        };
+    })();
+
+    // --- INTERCEPT FETCH TO CAPTURE DUPLICATES LIST DATA ---
+    // Angular may use fetch instead of XHR. This mirrors the XHR
+    // interceptor above so we capture the API data either way.
+    (function interceptFetch() {
+        const origFetch = window.fetch;
+        window.fetch = function (input, init) {
+            const url = typeof input === 'string' ? input : (input instanceof Request ? input.url : '');
+            return origFetch.apply(this, arguments).then(response => {
+                try {
+                    if (!url || !url.includes('duplicate')) return response;
+                    if (url.match(/\/[a-f0-9]{24}($|\?|\/)/i)) return response;
+
+                    // Clone so the original response body is still consumable
+                    response.clone().json().then(data => {
+                        const entries = data.data || data.items || data.results ||
+                                        (Array.isArray(data) ? data : null);
+                        if (!entries || !Array.isArray(entries) || entries.length === 0) return;
+
+                        const sample = entries[0];
+                        const idField = sample._id ? '_id' : sample.id ? 'id' : null;
+                        if (!idField) return;
+
+                        apiDuplicatesList = entries.map(e => ({
+                            uniqueId: (e[idField] || '').toLowerCase(),
+                            name: e.name || e.full_name || '',
+                            duplicateName: e.duplicate_name || ''
+                        }));
+                        console.log('CSV Database: Captured', apiDuplicatesList.length, 'entries from fetch');
+                        annotateDuplicatesList();
+                    }).catch(() => {}); // Not JSON or not the response we want
+                } catch (e) {
+                    // Ignore errors in interception
+                }
+                return response;
+            });
         };
     })();
 
@@ -210,6 +247,10 @@
     // Uses the intercepted API data to match each row to its unique ID,
     // then looks up that ID in the CSV database and rewrites the existing
     // elm-chip (the orange "Unresolved" chip) to show department + color.
+    //
+    // Angular re-renders can overwrite our chip modifications at any time.
+    // Instead of relying on a flag, we check the chip's actual label text
+    // each time and re-apply if Angular has reverted it.
     function annotateDuplicatesList() {
         // Only run on list page — skip if on detail page (has elm-merge-row)
         if (document.querySelector('elm-merge-row')) return;
@@ -222,9 +263,6 @@
         const db = getDatabase();
 
         rows.forEach(row => {
-            // Skip if already annotated
-            if (row.dataset.csvDeptDone) return;
-
             // Match by unique ID from intercepted API data
             const indexCell = row.querySelector('.elm-column-index');
             if (!indexCell) return;
@@ -245,8 +283,13 @@
             const desiredLabel = DEPT_LABELS[dbEntry.dept] || dbEntry.dept;
             const colors = DEPT_COLORS[dbEntry.dept] || { bg: '#f5f5f5', fg: '#333' };
 
-            // Rewrite the chip label text
+            // Check if chip already shows our desired label — skip if so.
+            // This handles Angular re-renders: if Angular reverted the chip,
+            // the label won't match and we'll re-apply.
             const label = chip.querySelector('.elm-chip-label');
+            if (label && label.textContent.trim() === desiredLabel) return;
+
+            // Apply or re-apply annotation
             if (label) {
                 label.textContent = ` ${desiredLabel} `;
             }
@@ -256,13 +299,34 @@
             if (colorDiv) {
                 colorDiv.style.backgroundColor = colors.fg;
             }
-
-            row.dataset.csvDeptDone = '1';
         });
     }
 
-    // Run annotation periodically on the list page
-    setInterval(annotateDuplicatesList, 1000);
+    // --- LIST PAGE: MUTATION OBSERVER ---
+    // Angular re-renders can overwrite our chip modifications at any time.
+    // A MutationObserver reacts immediately to DOM changes so we can
+    // re-annotate before the user sees the revert.
+    let listAnnotationTimer = null;
+    const listObserver = new MutationObserver(() => {
+        // Debounce: Angular may fire many mutations in a single render cycle
+        if (listAnnotationTimer) clearTimeout(listAnnotationTimer);
+        listAnnotationTimer = setTimeout(annotateDuplicatesList, 50);
+    });
+    // Start observing once we're on a page with elm-row elements
+    function startListObserver() {
+        // Only observe on list pages, not detail pages
+        if (document.querySelector('elm-merge-row')) return;
+        const container = document.querySelector('.elm-table-body') ||
+                          document.querySelector('elm-duplicates') ||
+                          document.body;
+        listObserver.observe(container, { childList: true, subtree: true, characterData: true });
+    }
+
+    // Run annotation periodically on the list page (fallback for observer)
+    setInterval(() => {
+        annotateDuplicatesList();
+        startListObserver();
+    }, 1000);
 
     // =========================================================
     // CSV EXPORT

@@ -1059,6 +1059,8 @@
             else if (isStudentIgnored()) dept = 'Ignored';
             else dept = detectActualDepartment(); // 'Grad', 'IA', or 'UnderGrad'
             window.elmCsvDatabase.recordEntry(dept);
+        } else {
+            console.warn('CSV Database: window.elmCsvDatabase not available — csv-database.js may not be installed or loaded yet');
         }
 
         if (!shouldAutoClickFAB()) {
@@ -2199,17 +2201,39 @@
                 counterText.innerText = `Merges: ${count}`;
                 const downloadBtn = document.createElement('button');
                 downloadBtn.id = 'elm-download-db-btn';
-                downloadBtn.innerHTML = '⬇';
-                downloadBtn.title = 'Download CSV Database (for troubleshooting)';
+                const dbCount = window.elmCsvDatabase ? window.elmCsvDatabase.getEntryCount() : 0;
+                downloadBtn.innerHTML = `⬇ ${dbCount}`;
+                downloadBtn.title = `Download CSV Database (${dbCount} entries recorded)`;
                 downloadBtn.onclick = (e) => {
                     e.stopPropagation();
-                    const raw = localStorage.getItem('elm_csv_database');
-                    const db = raw ? JSON.parse(raw) : [];
-                    const blob = new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' });
+                    let csvContent = '';
+                    if (window.elmCsvDatabase) {
+                        csvContent = window.elmCsvDatabase.toCSV();
+                    } else {
+                        // Fallback: build CSV directly from localStorage
+                        const raw = localStorage.getItem('elm_csv_database');
+                        const db = raw ? JSON.parse(raw) : [];
+                        if (db.length > 0) {
+                            const headers = ['Firstname', 'Lastname', 'Dept.', 'Row Contents', 'Unique ID'];
+                            const rows = db.map(entry => [
+                                entry.firstName,
+                                entry.lastName,
+                                entry.dept,
+                                entry.rowContents,
+                                entry.uniqueId
+                            ].map(v => `"${(v || '').replace(/"/g, '""')}"`).join(','));
+                            csvContent = [headers.join(','), ...rows].join('\n');
+                        }
+                    }
+                    if (!csvContent) {
+                        alert('CSV Database is empty — no entries have been recorded yet.\n\nCheck the browser console (F12) for "CSV Database:" messages to diagnose.');
+                        return;
+                    }
+                    const blob = new Blob([csvContent], { type: 'text/csv' });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = `elm_csv_database_${new Date().toISOString().slice(0,10)}.json`;
+                    a.download = `elm_csv_database_${new Date().toISOString().slice(0,10)}.csv`;
                     document.body.appendChild(a);
                     a.click();
                     document.body.removeChild(a);

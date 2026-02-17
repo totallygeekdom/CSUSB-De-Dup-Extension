@@ -1210,6 +1210,22 @@
         const pollInterval = 500;
         function waitForDatabaseThenSkip() {
             pollCount++;
+            // Re-check if entry is still actually blocked. New merge rows may have
+            // loaded since the initial check (e.g., grad rows appearing after Spark IDs),
+            // which changes the department detection result. Without this re-check,
+            // a grad entry would be permanently skipped when allowed dept is Grad
+            // because the initial scan (before grad rows loaded) defaulted to UnderGrad.
+            const stillBlocked = isForbiddenEntry().forbidden ||
+                                 isWrongDepartment().wrongDept ||
+                                 isStudentIdMismatch().mismatch ||
+                                 isStudentIgnored();
+            if (!stillBlocked) {
+                console.log('⏭️ Auto-skip aborted: Entry is no longer blocked (new rows changed detection)');
+                autoClickAttempted = false;
+                autoSkipAttempted = false;
+                attemptAutoClickFAB();
+                return;
+            }
             // Check if the database has recorded this entry
             let recorded = false;
             if (currentUniqueId) {

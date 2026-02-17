@@ -6,7 +6,6 @@
 // @author       You
 // @match        https://*.element451.io/*
 // @grant        GM_addStyle
-// @require      file:///path/to/csv-database.js
 // ==/UserScript==
 (function () {
     'use strict';
@@ -256,12 +255,27 @@
             color: #d32f2f; 
             background-color: rgba(211, 47, 47, 0.1); 
         }
-        #elm-merge-counter { 
-            font-weight: 600; 
-            font-size: 14px; 
-            color: #555; 
-            padding: 4px 12px 4px 4px; 
-            white-space: nowrap; 
+        #elm-merge-counter {
+            font-weight: 600;
+            font-size: 14px;
+            color: #555;
+            padding: 4px 12px 4px 4px;
+            white-space: nowrap;
+        }
+        #elm-download-db-btn {
+            background: transparent;
+            border: none;
+            color: #999;
+            cursor: pointer;
+            font-size: 13px;
+            padding: 4px 8px;
+            border-radius: 50%;
+            transition: all 0.2s;
+            line-height: 1;
+        }
+        #elm-download-db-btn:hover {
+            color: #1565c0;
+            background-color: rgba(21, 101, 192, 0.1);
         }
         /* High Contrast Toggle - Simple checkbox style */
         #elm-contrast-wrapper {
@@ -2182,8 +2196,37 @@
                 const counterText = document.createElement('span');
                 counterText.id = 'elm-merge-counter';
                 counterText.innerText = `Merges: ${count}`;
+                const downloadBtn = document.createElement('button');
+                downloadBtn.id = 'elm-download-db-btn';
+                const dbApi = window.elmCsvDatabase;
+                const dbCount = dbApi ? dbApi.getEntryCount() : 0;
+                downloadBtn.innerHTML = `⬇ ${dbCount}`;
+                downloadBtn.title = `Download CSV Database (${dbCount} entries recorded)`;
+                downloadBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    const api = window.elmCsvDatabase;
+                    if (!api) {
+                        alert('CSV Database script is not loaded.\n\nMake sure the "Element451 - CSV Database" UserScript is installed and enabled in Tampermonkey.');
+                        return;
+                    }
+                    const csvContent = api.toCSV();
+                    if (!csvContent) {
+                        alert('CSV Database is empty — no entries have been recorded yet.\n\nCheck the browser console (F12) for "CSV Database:" messages to diagnose.');
+                        return;
+                    }
+                    const blob = new Blob([csvContent], { type: 'text/csv' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `elm_csv_database_${new Date().toISOString().slice(0, 10)}.csv`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                };
                 counterWrapper.appendChild(resetBtn);
                 counterWrapper.appendChild(counterText);
+                counterWrapper.appendChild(downloadBtn);
                 controlsWrapper.appendChild(counterWrapper);
             }
             controlsWrapper.appendChild(contrastWrapper);

@@ -425,6 +425,10 @@
                 return;
             }
 
+            // Non-Undergrad entries are ambiguous — keep the default orange
+            // "Unresolved" chip instead of rewriting it
+            if (dbEntry.dept === 'Non-Undergrad') return;
+
             const desiredLabel = DEPT_LABELS[dbEntry.dept] || dbEntry.dept;
             const colors = DEPT_COLORS[dbEntry.dept] || { bg: '#f5f5f5', fg: '#333' };
 

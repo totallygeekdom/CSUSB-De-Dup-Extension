@@ -1403,9 +1403,8 @@
             if (!isRelevantRow) continue;
             if (isGradText(text)) return 'Grad';
             if (isIAText(text)) return 'IA';
-            // Outreach_ codes without UGRD are grad outreach — must match
-            // the same logic used in isWrongDepartment() for consistency
-            if (text.includes('Outreach_') && !text.includes('UGRD')) return 'Grad';
+            // Outreach_ without UGRD is ambiguous — not clearly Grad or UnderGrad
+            if (text.includes('Outreach_') && !text.includes('UGRD')) return 'Non-Undergrad';
         }
         return 'UnderGrad';
     }
@@ -1434,13 +1433,15 @@
             if (!isRelevantRow) continue;
             lastRelevantRow = row;
 
+            // Outreach_ without UGRD is ambiguous — block for ALL specific departments
+            if (text.includes('Outreach_') && !text.includes('UGRD')) {
+                return { wrongDept: true, row, reason: 'Non-Undergrad' };
+            }
+
             if (dept === 'undergrad') {
                 // Block GRAD and IA, allow everything else
                 if (isGradText(text)) return { wrongDept: true, row, reason: 'GRAD' };
                 if (isIAText(text)) return { wrongDept: true, row, reason: 'IA' };
-                if (text.includes('Outreach_') && !text.includes('UGRD')) {
-                    return { wrongDept: true, row, reason: 'GRAD' };
-                }
             } else if (dept === 'grad') {
                 // GRAD allowed - block IA and UnderGrad
                 if (isIAText(text)) return { wrongDept: true, row, reason: 'IA' };

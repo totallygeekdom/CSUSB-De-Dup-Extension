@@ -91,15 +91,21 @@
     // Reads the blocked row from DOM for row contents.
     // Deduplicates by unique ID so revisiting an entry won't create duplicates.
     function recordEntry(dept) {
-        if (!dept) return; // Main script must provide dept
+        if (!dept) {
+            console.warn('CSV Database: recordEntry called with no dept — skipping');
+            return;
+        }
 
         const uniqueId = extractUniqueId();
-        if (!uniqueId) return; // Not on a duplicates page
+        if (!uniqueId) {
+            console.log('CSV Database: URL does not match /duplicates/<id> — not recording (URL:', window.location.href, ')');
+            return;
+        }
 
         // Check if names are available (page content loaded)
         const { firstName, lastName } = extractNames();
         if (!firstName && !lastName) {
-            console.log('CSV Database: Page content not ready yet, skipping');
+            console.log('CSV Database: No names found yet (elm-merge-row/elm-merge-value not in DOM) — skipping');
             return;
         }
 
@@ -107,7 +113,8 @@
 
         // Deduplicate by unique ID
         if (db.some(entry => entry.uniqueId === uniqueId)) {
-            return; // Already recorded
+            console.log('CSV Database: Entry already recorded for', uniqueId, '— skipping (db has', db.length, 'entries)');
+            return;
         }
 
         // Read the deep red highlighted row from DOM
@@ -123,7 +130,13 @@
 
         db.push(entry);
         saveDatabase(db);
-        console.log('CSV Database: Recorded entry', entry);
+        console.log('CSV Database: Recorded entry', entry, '(total:', db.length, ')');
+        // Update the download button count if it exists
+        const dlBtn = document.getElementById('elm-download-db-btn');
+        if (dlBtn) {
+            dlBtn.innerHTML = `⬇ ${db.length}`;
+            dlBtn.title = `Download CSV Database (${db.length} entries recorded)`;
+        }
     }
 
     // =========================================================

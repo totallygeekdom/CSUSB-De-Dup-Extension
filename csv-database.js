@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database
 // @namespace    http://tampermonkey.net/
-// @version      3
+// @version      4
 // @description  Tracks duplicate entries in a CSV database stored in browser localStorage
 // @author       You
 // @match        https://*.element451.io/*
@@ -211,6 +211,60 @@
 
     // Captured duplicate entries from the API response (includes unique IDs)
     let apiDuplicatesList = null;
+    let apiCapturedPageKey = null; // Tracks which page the API data belongs to
+    let apiGeneration = 0;         // Increments on each fresh API capture
+
+    // --- HELPER: PAGE KEY FOR STALENESS DETECTION ---
+    // Returns a string representing the current list page (path + pagination params).
+    // Used to detect when the user navigates to a different page so we can
+    // invalidate stale API data and prevent wrong chip annotations.
+    function getPageKey() {
+        return window.location.pathname + window.location.search;
+    }
+
+    // --- HELPER: PROCESS INTERCEPTED API DATA ---
+    // Called by both XHR and fetch interceptors when fresh duplicates list data arrives.
+    function onFreshApiData(entries, source) {
+        apiDuplicatesList = entries;
+        apiCapturedPageKey = getPageKey();
+        apiGeneration++;
+        console.log('CSV Database: Captured', entries.length, 'entries from', source, '(gen ' + apiGeneration + ')');
+        // Clear stale annotations from previous page/data before re-annotating
+        clearStaleAnnotations();
+        annotateDuplicatesList();
+    }
+
+    // --- HELPER: CLEAR STALE CHIP ANNOTATIONS ---
+    // Removes all chip annotations so they can be re-applied with correct data.
+    // Called when fresh API data arrives to prevent wrong labels from persisting.
+    function clearStaleAnnotations() {
+        document.querySelectorAll('elm-row').forEach(row => {
+            const chip = row.querySelector('elm-chip');
+            if (!chip) return;
+            const colorDiv = chip.querySelector('.bg-color');
+            if (colorDiv && colorDiv.hasAttribute('data-csv-dept')) {
+                colorDiv.removeAttribute('data-csv-dept');
+                colorDiv.removeAttribute('data-csv-gen');
+                colorDiv.style.cssText = '';
+            }
+            chip.style.cssText = '';
+        });
+    }
+
+    // --- HELPER: PARSE API ENTRIES INTO STANDARD FORMAT ---
+    function parseApiEntries(entries) {
+        const sample = entries[0];
+        const idField = sample._id ? '_id' : sample.id ? 'id' : null;
+        if (!idField) {
+            console.log('CSV Database: API entries found but no _id/id field. Keys:', Object.keys(sample));
+            return null;
+        }
+        return entries.map(e => ({
+            uniqueId: (e[idField] || '').toLowerCase(),
+            name: e.name || e.full_name || '',
+            duplicateName: e.duplicate_name || ''
+        }));
+    }
 
     // --- INTERCEPT XHR TO CAPTURE DUPLICATES LIST DATA ---
     // When the list page loads, Element451 fetches the duplicate entries via API.
@@ -227,32 +281,18 @@
             this.addEventListener('load', function () {
                 try {
                     if (!this._csvDbUrl || typeof this.responseText !== 'string') return;
-                    // Match duplicates list endpoint (not individual detail pages)
+                    // Match duplicates list endpoint — only skip detail pages
+                    // where the ID comes right after /duplicates/ in the path
                     if (!this._csvDbUrl.includes('duplicate')) return;
-                    if (this._csvDbUrl.match(/\/[a-f0-9]{24}($|\?|\/)/i)) return;
+                    if (this._csvDbUrl.match(/\/duplicates\/[a-f0-9]{24}/i)) return;
 
                     const data = JSON.parse(this.responseText);
-                    // Try common response shapes for the array of entries
                     const entries = data.data || data.items || data.results ||
                                     (Array.isArray(data) ? data : null);
                     if (!entries || !Array.isArray(entries) || entries.length === 0) return;
 
-                    // Verify entries have an ID field
-                    const sample = entries[0];
-                    const idField = sample._id ? '_id' : sample.id ? 'id' : null;
-                    if (!idField) {
-                        console.log('CSV Database: API entries found but no _id/id field. Keys:', Object.keys(sample));
-                        return;
-                    }
-
-                    apiDuplicatesList = entries.map(e => ({
-                        uniqueId: (e[idField] || '').toLowerCase(),
-                        name: e.name || e.full_name || '',
-                        duplicateName: e.duplicate_name || ''
-                    }));
-                    console.log('CSV Database: Captured', apiDuplicatesList.length, 'entries from XHR');
-                    // Re-annotate now that we have fresh API data
-                    annotateDuplicatesList();
+                    const parsed = parseApiEntries(entries);
+                    if (parsed) onFreshApiData(parsed, 'XHR');
                 } catch (e) {
                     // Not the response we're looking for, ignore
                 }
@@ -271,7 +311,7 @@
             return origFetch.apply(this, arguments).then(response => {
                 try {
                     if (!url || !url.includes('duplicate')) return response;
-                    if (url.match(/\/[a-f0-9]{24}($|\?|\/)/i)) return response;
+                    if (url.match(/\/duplicates\/[a-f0-9]{24}/i)) return response;
 
                     // Clone so the original response body is still consumable
                     response.clone().json().then(data => {
@@ -279,17 +319,8 @@
                                         (Array.isArray(data) ? data : null);
                         if (!entries || !Array.isArray(entries) || entries.length === 0) return;
 
-                        const sample = entries[0];
-                        const idField = sample._id ? '_id' : sample.id ? 'id' : null;
-                        if (!idField) return;
-
-                        apiDuplicatesList = entries.map(e => ({
-                            uniqueId: (e[idField] || '').toLowerCase(),
-                            name: e.name || e.full_name || '',
-                            duplicateName: e.duplicate_name || ''
-                        }));
-                        console.log('CSV Database: Captured', apiDuplicatesList.length, 'entries from fetch');
-                        annotateDuplicatesList();
+                        const parsed = parseApiEntries(entries);
+                        if (parsed) onFreshApiData(parsed, 'fetch');
                     }).catch(() => {}); // Not JSON or not the response we want
                 } catch (e) {
                     // Ignore errors in interception
@@ -324,11 +355,30 @@
     // Angular re-renders can overwrite our chip modifications at any time.
     // Instead of relying on a flag, we check the chip's actual label text
     // AND color each time and re-apply if Angular has reverted anything.
+    //
+    // STALENESS PROTECTION: When navigating between pages, the MutationObserver
+    // can fire before the new API response arrives, causing stale page 1 data
+    // to be applied to page 2 rows (wrong labels). We prevent this by:
+    // 1. Tracking which page the API data was captured for (apiCapturedPageKey)
+    // 2. Invalidating stale data when the page URL changes
+    // 3. Tracking the API generation on each chip to force re-evaluation
+    // 4. Cleaning up stale annotations when an entry isn't in the database
     function annotateDuplicatesList() {
         // Only run on list page — skip if on detail page (has elm-merge-row)
         if (document.querySelector('elm-merge-row')) return;
         // Only run if we have API data with unique IDs
         if (!apiDuplicatesList) return;
+
+        // Invalidate stale API data when the page has changed (e.g., pagination).
+        // This prevents page 1 data from being applied to page 2 rows.
+        const currentPageKey = getPageKey();
+        if (apiCapturedPageKey && apiCapturedPageKey !== currentPageKey) {
+            console.log('CSV Database: Page changed (' + apiCapturedPageKey + ' → ' + currentPageKey + '), invalidating stale API data');
+            apiDuplicatesList = null;
+            apiCapturedPageKey = null;
+            clearStaleAnnotations();
+            return;
+        }
 
         const rows = document.querySelectorAll('elm-row');
         if (rows.length === 0) return;
@@ -339,32 +389,79 @@
         const dbMap = {};
         db.forEach(entry => { dbMap[entry.uniqueId] = entry; });
 
+        const genStr = String(apiGeneration);
+
         rows.forEach((row, rowIndex) => {
-            // Match row to its unique ID via the intercepted API data.
-            // The API returns entries in the same order as the rows on screen.
-            if (!apiDuplicatesList || !apiDuplicatesList[rowIndex]) return;
-            const uniqueId = apiDuplicatesList[rowIndex].uniqueId;
+            let uniqueId = null;
+
+            // Method 1: Extract ID directly from row link (most reliable).
+            // Each list row links to the detail page — the URL contains the ID.
+            // This works regardless of API data ordering or pagination state.
+            const link = row.querySelector('a[href*="duplicates"]');
+            if (link) {
+                const href = link.getAttribute('href') || '';
+                const idMatch = href.match(/\/duplicates\/([a-f0-9]{24})/i);
+                if (idMatch) uniqueId = idMatch[1].toLowerCase();
+            }
+
+            // Method 2: Name-based matching against API data (position-independent).
+            // Compares the visible text in each row against API entry names.
+            // More reliable than index matching when Angular re-orders rows.
+            if (!uniqueId && apiDuplicatesList) {
+                const rowText = row.textContent.toLowerCase();
+                for (const apiEntry of apiDuplicatesList) {
+                    const name = (apiEntry.name || '').toLowerCase().trim();
+                    const dupName = (apiEntry.duplicateName || '').toLowerCase().trim();
+                    // Require both names in the row text for a confident match
+                    if (name && dupName && name.length > 2 && dupName.length > 2 &&
+                        rowText.includes(name) && rowText.includes(dupName)) {
+                        uniqueId = apiEntry.uniqueId;
+                        break;
+                    }
+                }
+            }
+
+            // Method 3: Index-based matching against API data (last resort).
+            // Assumes the API returns entries in the same order as the rows on screen.
+            if (!uniqueId && apiDuplicatesList && apiDuplicatesList[rowIndex]) {
+                uniqueId = apiDuplicatesList[rowIndex].uniqueId;
+            }
+
             if (!uniqueId) return;
 
-            const dbEntry = dbMap[uniqueId];
-            if (!dbEntry) return;
-
-            // Find the elm-chip in this row and rewrite it
+            // Find the elm-chip in this row
             const chip = row.querySelector('elm-chip');
             if (!chip) return;
+
+            const colorDiv = chip.querySelector('.bg-color');
+            const label = chip.querySelector('.elm-chip-label');
+
+            const dbEntry = dbMap[uniqueId];
+
+            // If entry is NOT in database, clean up any stale annotation
+            // that may have been applied by previous (wrong) API data
+            if (!dbEntry) {
+                if (colorDiv && colorDiv.hasAttribute('data-csv-dept')) {
+                    colorDiv.removeAttribute('data-csv-dept');
+                    colorDiv.removeAttribute('data-csv-gen');
+                    colorDiv.style.cssText = '';
+                    chip.style.cssText = '';
+                }
+                return;
+            }
 
             const desiredLabel = DEPT_LABELS[dbEntry.dept] || dbEntry.dept;
             const colors = DEPT_COLORS[dbEntry.dept] || { bg: '#f5f5f5', fg: '#333' };
 
-            // Check if chip already has our desired label AND color — skip only
-            // if both match. This handles partial Angular re-renders that may
-            // reset the color but leave the label (or vice versa).
-            const label = chip.querySelector('.elm-chip-label');
-            const colorDiv = chip.querySelector('.bg-color');
+            // Check if chip already has our desired label AND color from the
+            // CURRENT API generation — skip only if everything matches.
+            // The generation check ensures re-evaluation when fresh API data
+            // arrives, even if the label/color happen to match by coincidence.
+            const currentGen = colorDiv ? colorDiv.getAttribute('data-csv-gen') : null;
             const labelOk = label && label.textContent.trim() === desiredLabel;
             const colorOk = colorDiv && colorDiv.style.backgroundColor &&
                             colorDiv.getAttribute('data-csv-dept') === dbEntry.dept;
-            if (labelOk && colorOk) return;
+            if (labelOk && colorOk && currentGen === genStr) return;
 
             // Apply or re-apply annotation
             if (label) {
@@ -376,6 +473,7 @@
             if (colorDiv) {
                 colorDiv.style.cssText = `background-color: ${colors.bg} !important`;
                 colorDiv.setAttribute('data-csv-dept', dbEntry.dept);
+                colorDiv.setAttribute('data-csv-gen', genStr);
             }
 
             // Also set chip-level styles as a fallback in case .bg-color

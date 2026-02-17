@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection
 // @namespace    http://tampermonkey.net/
-// @version      124
+// @version      125
 // @description  Merge workflow with auto-selection, smart links, and UI enhancements (manual FAB click required)
 // @author       You
 // @match        https://*.element451.io/*
@@ -1210,6 +1210,22 @@
         const pollInterval = 500;
         function waitForDatabaseThenSkip() {
             pollCount++;
+            // Re-check if entry is still actually blocked. New merge rows may have
+            // loaded since the initial check (e.g., grad rows appearing after Spark IDs),
+            // which changes the department detection result. Without this re-check,
+            // a grad entry would be permanently skipped when allowed dept is Grad
+            // because the initial scan (before grad rows loaded) defaulted to UnderGrad.
+            const stillBlocked = isForbiddenEntry().forbidden ||
+                                 isWrongDepartment().wrongDept ||
+                                 isStudentIdMismatch().mismatch ||
+                                 isStudentIgnored();
+            if (!stillBlocked) {
+                console.log('⏭️ Auto-skip aborted: Entry is no longer blocked (new rows changed detection)');
+                autoClickAttempted = false;
+                autoSkipAttempted = false;
+                attemptAutoClickFAB();
+                return;
+            }
             // Check if the database has recorded this entry
             let recorded = false;
             if (currentUniqueId) {
@@ -1387,6 +1403,8 @@
             if (!isRelevantRow) continue;
             if (isGradText(text)) return 'Grad';
             if (isIAText(text)) return 'IA';
+            // Outreach_ without UGRD is ambiguous — not clearly Grad or UnderGrad
+            if (text.includes('Outreach_') && !text.includes('UGRD')) return 'Non-Undergrad';
         }
         return 'UnderGrad';
     }
@@ -1415,13 +1433,15 @@
             if (!isRelevantRow) continue;
             lastRelevantRow = row;
 
+            // Outreach_ without UGRD is ambiguous — block for ALL specific departments
+            if (text.includes('Outreach_') && !text.includes('UGRD')) {
+                return { wrongDept: true, row, reason: 'Non-Undergrad' };
+            }
+
             if (dept === 'undergrad') {
                 // Block GRAD and IA, allow everything else
                 if (isGradText(text)) return { wrongDept: true, row, reason: 'GRAD' };
                 if (isIAText(text)) return { wrongDept: true, row, reason: 'IA' };
-                if (text.includes('Outreach_') && !text.includes('UGRD')) {
-                    return { wrongDept: true, row, reason: 'GRAD' };
-                }
             } else if (dept === 'grad') {
                 // GRAD allowed - block IA and UnderGrad
                 if (isIAText(text)) return { wrongDept: true, row, reason: 'IA' };

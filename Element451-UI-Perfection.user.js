@@ -229,6 +229,7 @@
             align-items: center;
             gap: 12px;
             margin-right: 16px;
+            position: relative;
         }
         
         #elm-counter-wrapper { 
@@ -292,9 +293,10 @@
         #elm-settings-overlay.open { display: block; }
         #elm-settings-pane {
             display: none;
-            position: fixed;
-            top: 56px;
-            right: 16px;
+            position: absolute;
+            top: 100%;
+            right: 0;
+            margin-top: 6px;
             width: 320px;
             background: white;
             border-radius: 12px;
@@ -313,6 +315,21 @@
             display: flex;
             align-items: center;
             gap: 8px;
+        }
+        #elm-settings-close-btn {
+            margin-left: auto;
+            background: transparent;
+            border: none;
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 0 4px;
+            line-height: 1;
+            opacity: 0.7;
+            transition: opacity 0.2s;
+        }
+        #elm-settings-close-btn:hover {
+            opacity: 1;
         }
         #elm-settings-pane .settings-body {
             padding: 12px 16px;
@@ -2321,7 +2338,7 @@
         pane.id = 'elm-settings-pane';
 
         pane.innerHTML = `
-            <div class="settings-header">\u2699 Settings</div>
+            <div class="settings-header">\u2699 Settings<button id="elm-settings-close-btn" title="Close">\u2715</button></div>
             <div class="settings-body">
                 <div class="settings-section">
                     <div class="settings-section-title">Display</div>
@@ -2337,7 +2354,19 @@
         `;
 
         document.body.appendChild(overlay);
-        document.body.appendChild(pane);
+        // Append pane to controls wrapper so it drops down from the cog
+        const controlsWrapper = document.getElementById('elm-controls-wrapper');
+        if (controlsWrapper) {
+            controlsWrapper.appendChild(pane);
+        } else {
+            document.body.appendChild(pane);
+        }
+
+        // --- Close Button ---
+        document.getElementById('elm-settings-close-btn').onclick = (e) => {
+            e.stopPropagation();
+            toggleSettingsPane(false);
+        };
 
         // --- High Contrast Toggle ---
         const contrastToggle = document.getElementById('elm-settings-contrast-toggle');

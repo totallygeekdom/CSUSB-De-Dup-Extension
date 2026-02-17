@@ -246,9 +246,9 @@
 
     const DEPT_COLORS = {
         Grad:       { bg: '#e3f2fd', fg: '#1565c0' },
-        IA:         { bg: '#fce4ec', fg: '#c2185b' },
-        UnderGrad:  { bg: '#e8f5e9', fg: '#2e7d32' },
-        Forbidden:  { bg: '#ffebee', fg: '#c62828' },
+        IA:         { bg: '#fff9c4', fg: '#f57f17' },
+        UnderGrad:  { bg: '#f3e5f5', fg: '#6a1b9a' },
+        Forbidden:  { bg: '#fce4ec', fg: '#c2185b' },
         Ignored:    { bg: '#f5f5f5', fg: '#616161' }
     };
 
@@ -275,41 +275,13 @@
         const dbMap = {};
         db.forEach(entry => { dbMap[entry.uniqueId] = entry; });
 
-        // Compute the index offset for pagination support.
-        // On page 2 the first row might show index "26." but the API array
-        // only holds entries for the current page (indices 0..N-1).
-        let indexOffset = 0;
-        const firstRow = rows[0];
-        if (firstRow) {
-            const firstIdxCell = firstRow.querySelector('.elm-column-index');
-            if (firstIdxCell) {
-                const firstIdx = parseInt(firstIdxCell.textContent.trim().replace('.', ''));
-                if (!isNaN(firstIdx)) indexOffset = firstIdx - 1;
-            }
-        }
-
         rows.forEach(row => {
-            // --- Strategy 1: Extract unique ID directly from a link in the row ---
+            // Extract unique ID directly from a link in the row
             let uniqueId = null;
             const link = row.querySelector('a[href*="/duplicates/"]');
             if (link) {
                 const hrefMatch = link.getAttribute('href').match(/\/duplicates\/([a-f0-9]{24})/i);
                 if (hrefMatch) uniqueId = hrefMatch[1].toLowerCase();
-            }
-
-            // --- Strategy 2: Fall back to index-based matching with offset ---
-            if (!uniqueId) {
-                const indexCell = row.querySelector('.elm-column-index');
-                if (!indexCell) return;
-
-                const indexNum = parseInt(indexCell.textContent.trim().replace('.', ''));
-                if (isNaN(indexNum)) return;
-
-                const arrayIdx = indexNum - 1 - indexOffset;
-                if (arrayIdx < 0 || arrayIdx >= apiDuplicatesList.length) return;
-
-                const apiEntry = apiDuplicatesList[arrayIdx];
-                if (apiEntry) uniqueId = apiEntry.uniqueId;
             }
 
             if (!uniqueId) return;

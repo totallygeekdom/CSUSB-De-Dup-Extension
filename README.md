@@ -1,85 +1,257 @@
-# CSUSB-De-Dup-Extension
+# CSUSB De-Dup Extension
 
-## **Short Documentation v.121.5:**
-
-### **Configuration**
-
-**AUTO\_CLICK\_FAB:** Set to `true` (default) to automatically click FAB on page load. Set to `false` to require manual FAB clicking. Auto-click is blocked for forbidden entries, wrong departments, and ignored students.
-
-**REQUIRE\_SCROLL\_TO\_BOTTOM:** Set to `true` (default) to require scrolling to bottom before merging. Set to `false` to disable scroll-to-review requirement.
-
-**AUTO\_NAVIGATE\_AFTER\_MERGE:** Set to `true` (default) to automatically navigate to the next duplicate after a successful merge. Set to `false` to stay on the success page.
-
-**CONFLICT\_ROW\_THRESHOLD:** Set to number of conflicting rows before warning about possible twins/different people (default: 2). Set to `0` to disable.
-
-**SHOW\_MERGE\_COUNTER:** Set to `true` (default) to show the merge counter in the navbar. Set to `false` to hide it.
-
-**HEADER\_OFFSET:** Pixels from top when scrolling to conflicts (default: 64).
+Two Tampermonkey userscripts that streamline the Element451 duplicate-contact merge workflow at CSUSB. **UI Perfection** handles the merge page (auto-resolution, lockdowns, navigation), while **CSV Database** tracks blocked entries and annotates the list page.
 
 ---
 
-### **Contacts List Page**
+## Element451 - UI Perfection (v125)
 
-**Custom Pagination:** Injects page number input and page size (limit) input into the paginator. GO button or Enter key navigates to the specified page with specified limit. Updates URL parameters offset and limit. Works correctly for both top and bottom paginators (each operates independently).
+### Configuration
+
+All settings are accessible through the **gear icon** in the navbar (no reload needed). They persist in `localStorage`.
+
+| Setting | Default | Description |
+|---|---|---|
+| **Auto-Click FAB** | `true` | Automatically clicks the FAB after page loads and Spark IDs are detected. Blocked for forbidden entries, wrong departments, student ID mismatches, and ignored students. |
+| **Auto-Navigate After Merge** | `true` | Navigates to the next duplicate 1 second after a successful merge. |
+| **Auto-Skip Blocked** | `true` | Automatically skips blocked entries by clicking "Next" after the CSV database records them. |
+| **Require Scroll to Bottom** | `true` | Requires scrolling to the bottom of all merge fields before the merge button activates. |
+| **Show Merge Counter** | `true` | Displays the merge counter pill in the navbar. |
+| **Allowed Department** | `UnderGrad` | Department filter. Options: `All` (no filtering), `UnderGrad`, `Grad`, `IA`, `None` (block everything). |
+| **Conflict Row Threshold** | `2` | Number of identity conflicts before a twin/different-person warning. `0` to disable. |
+| **Header Offset** | `64` | Pixels from top when scrolling to conflict rows. |
 
 ---
 
-### **Contacts Merge Page**
+### Contacts List Page
 
-**Auto-Click FAB:** When enabled (default), automatically clicks the FAB button once after page loads and Spark IDs are detected. Waits 200ms after navigation to ensure page is ready. Auto-click is blocked if forbidden entry, wrong department, or ignored student is detected. Can be disabled by setting AUTO\_CLICK\_FAB \= false at top of script. Includes console logging for debugging (🤖 for successful auto-click, ⛔ for blocked, ⏳ for waiting).
+**Custom Pagination:** Injects a page number input and page size (limit) input into the paginator. GO button or Enter navigates to the specified page. Updates URL `offset` and `limit` parameters. Works independently for top and bottom paginators.
 
-**Tooltips & Toasts:** Removes all tooltips for buttons in the center column and pagination buttons to prevent ghost tooltips blocking clicks. FAB tooltip is not removed. Suppresses "Please resolve all items" toast that appears after FAB click \- runs every 100ms to catch and remove toasts immediately.
+---
 
-**Auto Selection:** Auto selection logic triggers when user clicks FAB. Only applies to rows marked with "has-error" class. Rows are marked with data attributes to track what has been processed.
+### Contacts Merge Page
 
-**Applicant:** If one column has the student as an applicant either in the Cal State Apply Application section or in application type entries (Application Start, Application Submit, Application Complete, Admit) then that side should be highlighted yellow and all conflict rows on that side should be selected. All other auto selection logic should be ignored. If both sides have applicant data, compare dates and pick the most recent one. If both sides have application entries, count them and pick the side with more (or most recent if tied).
+#### Entry Lockdowns
 
-**Milestone Type Matching:** When milestone rows (type: Prospect, type: Applicant, etc.) have the same type value, select left side. Only applies when no applicant context is found. Example: if both sides show "type: Prospect, Sep 29, 2025 \- 12:00 AM" and "type: Prospect, Dec 15, 2025 \- 12:00 AM", the left side is selected.
+Lockdowns are checked in priority order. When triggered, the FAB turns red with a null symbol and clicking it shows an alert explaining the block.
 
-**Email:** Tiered tiebreaker system: choose email that contains domain on whitelist (gmail.com, yahoo.com, icloud.com, hotmail.com, aol.com, me.com, outlook.com, live.com, msn.com, protonmail.com, proton.me). If both emails have a whitelisted domain, then choose email with the most opens from User Activity section. If emails have the same number of opens then check both emails against both first names (case insensitive) \- select the email that contains a first name. If both emails contain first names or neither do, then check both emails against both last names (case insensitive) \- select the email that contains a last name. If both emails contain last names or neither do, then check both emails against both birth years \- only valid years are checked (not starting with 0, \>= 1900). Birth year can match as 4 digits (2005), 3 digits (005), or 2 digits (05). If both emails have birth years or neither do, then let user manually decide the email.
+**1. Forbidden Entry Lockdown** (highest priority)
+Blocks entries where First Name or Last Name contains "test" (either side), or the full name exactly matches Angela Armstrong, Gillespie Armstrong, or Mariah Armstrong. The triggering row is highlighted red.
 
-**csusb.major Preference:** When only one side contains csusb.major designation, select that side. When both sides contain csusb.major, follow the selected email side. If no email is selected, leave for manual review. Only applies when no applicant context is found. Example: "Business Partner Import Major: Economics \- csusb.major.181410"
+**2. Department Lockdown**
+Blocks entries belonging to a department other than the configured `Allowed Department`. Detection scans rows containing Workflows, Application, Program, type:, status:, or Outreach_ for these patterns:
 
-**Encoura ID Preference:** When both sides have an Encoura Id, always select left side. Only applies when no applicant context is found. Example: "Encoura Id: 72226502" vs "Encoura Id: 71476216"
+| Pattern | Classification |
+|---|---|
+| `GRAD_` or `grad student` | Grad |
+| `IA_`, `_IA_`, or `_IA ` | IA |
+| `Outreach_` without `UGRD` | Non-Undergrad (ambiguous — blocked for all specific departments) |
+| None of the above | UnderGrad (default) |
 
-**College Board ID Preference:** When both sides have a College Board Id, always select left side. Only applies when no applicant context is found. Example: "College Board Id: 150521406" vs "College Board Id: 147901950"
+- **All**: no filtering, everything allowed.
+- **None**: blocks everything regardless of classification.
+- **UnderGrad / Grad / IA**: blocks anything that doesn't match.
+- **Non-Undergrad**: always blocked for UnderGrad, Grad, and IA. Kept as orange "Unresolved" on the list page since it can't be confidently classified.
 
-**csusb.school Preference:** For Student Type rows containing csusb.school.* pattern: if only one side has it, select that side; if neither side has it, leave for manual review; if both sides have it, follow the selected email side; if no email is selected, leave for manual review. Only applies when no applicant context is found. Example: "Student Type    Niche - csusb.school.27942"
+The triggering row is highlighted red.
 
-**Addresses:** Uses parse-address JavaScript library to parse addresses into a standard unified format. IMPORTANT: Only auto-selects when addresses are THE SAME - different addresses result in a tie and follow email selection or require manual review. When addresses are the same, picks the more complete one (ex. contains the apt# when the other does not, or has country info). Will not choose any address that has duplicate items like the street address listed twice, city name repeated, or similar street names with typos (fuzzy matching at 80% similarity). Scoring system gives points for completeness (street number, city, state, zip, unit number, country) and heavy penalty for duplicates. If the addresses are the same level of completeness then pick the address that is on the side of the chosen email.
+**3. Student ID Mismatch Lockdown**
+Blocks entries where the left and right sides have different School Id values — these are two different students and cannot be merged. The School ID row is highlighted with a deep red border and shadow. This is a complete block with no override.
 
-**Address Link:** Addresses starting with "Home, " should be turned into a link that goes to a Google Maps search ([https://www.google.com/maps/search/?api=1\\\&query=example+address](https://www.google.com/maps/search/?api=1\\&query=example+address)). Address text is prettified to title case with state abbreviations uppercased. Only appears after FAB is clicked.
+**4. Ignored Student Detection**
+Detects students with the "Ignored" chip. Auto-click and auto-skip treat ignored students as blocked entries.
 
-**Email Link:** Emails should be turned into a link that goes to Mail Meteor email verification ([https://mailmeteor.com/email-checker?email=example%40example.com](https://mailmeteor.com/email-checker?email=example%40example.com)). Only appears after FAB is clicked.
+#### Conflict / Possible Twins Warning
 
-**Phone Formatting:** Phone numbers are formatted as (xxx)-xxx-xxxx or \+x (xxx)-xxx-xxxx for international. Only appears after FAB is clicked.
+Before auto-click proceeds, compares First Name, Last Name, Date of Birth (valid years only), and Address between left and right sides. If the conflict count meets or exceeds the threshold (default 2), an alert lists which fields conflict. The user must acknowledge before auto-click continues.
 
-**Name Case:** If both sides have the same name (case-insensitive) but different casing, prefer Title Case over ALL CAPS or all lowercase. Only applies when no applicant context is found.
+#### Auto-Click FAB
 
-**Date of Birth:** If one side has an invalid birth year (starts with 0 or is before 1900\) then choose the other side.
+Waits for Spark IDs to appear (confirming page content has loaded), then clicks the FAB. Blocked if any lockdown or ignored student is detected. Retries at 1s, 2s, and 3.5s intervals. Includes console logging for debugging.
 
-**First Generation Student:** When one side has "Yes" and the other has "No", always select the side with "Yes". Only applies when no applicant context is found. Example: "First Generation Student: Yes" vs "First Generation Student: No" - the "Yes" side is selected.
+#### Auto-Skip Blocked Entries
 
-**Intended Term:** When both sides have different intended terms, always select the later term. Parses term codes from format like "Spring 2027 (2274)" or "Fall 2027 (2278)" where the 4-digit code indicates the term chronologically (higher code = later term). Only applies when no applicant context is found. Example: "Spring 2027 (2274)" vs "Fall 2027 (2278)" - Fall 2027 is selected because 2278 > 2274.
+After auto-click is blocked, waits for the CSV Database script to record the entry (polls `localStorage` every 500ms, up to 10 seconds), then clicks "Next". If the database script is not installed, skips after 1.5 seconds.
 
-**Extra Rows:** When no applicant context is found, certain row patterns default to left side: Spark Id, type: Created/name: Record Created, type: Custom, type: Web, \[ACUx\], and Outreach\_UGRD\_. These are ignored if an applicant side is detected.
+**Race condition protection:** Each poll iteration re-checks whether the entry is still actually blocked. If new merge rows loaded that changed the department detection (e.g., grad rows appearing after Spark IDs), the skip is aborted and auto-click is retried. This prevents grad entries from being incorrectly skipped when the allowed department is Grad.
 
-**Forbidden Entry Lockdown:** If the record contains "test" in First Name or Last Name (either side), or if the full name matches Angela Armstrong, Gillespie Armstrong, or Mariah Armstrong (exact match, either side), then the FAB turns red with a ∅ symbol and clicking it shows "Forbidden entry" alert. This is checked BEFORE department lockdown and has highest priority. The detected name row is highlighted in red.
+#### Auto-Resolution of Conflict Rows
 
-**Department Lockdown:** If the record contains *GRAD*, IA\_, *IA*, *IA , or Outreach* (without UGRD) in relevant rows (Workflows, Application, Program, type:, status:, Outreach\_) then the FAB turns red with a ∅ symbol and clicking it shows "For other Department" alert. This prevents accidentally merging Graduate or International Admissions records. The detected row is highlighted in red.
+Triggered when the FAB is clicked. Only applies to rows with the `has-error` class. Resolution follows a priority system (highest to lowest):
 
-**Student ID Mismatch Lockdown:** If the "School Id:" values in the Identities section differ between left and right sides (e.g., "School Id: 008545544" vs "School Id: 009238137"), these are two different students and cannot be merged. FAB turns red with ∅ symbol. Clicking shows "Student IDs do not match. Entries are two different people." alert. The School ID row is highlighted with a deep red border and shadow. This is a complete block with no way to proceed.
+**1. Cal State Apply Application side**
+If one side has "Cal State Apply Application" and the other doesn't, all conflicts follow that side (yellow highlight overlay applied). If both have it, the most recent date wins.
 
-**Ignored Students:** Script detects if a student has the "Ignored" chip (for future use).
+**2. Application type entries**
+Counts Application Start, Application Submit, Application Complete, and Admit entries. Side with more wins; if tied, most recent date wins.
 
-**Smart FAB Navigation:** First click triggers Element451's native conflict detection, runs auto-resolution, applies smart links and highlight, and scrolls to first unresolved row. Subsequent clicks cycle through unresolved red rows. When all conflicts are resolved, FAB turns grey with down arrow (↓) requiring user to scroll to bottom and review all fields. Once scrolled within 200px of bottom, FAB turns green and shows "Merge" text. This scroll-to-review requirement can be disabled by setting REQUIRE\_SCROLL\_TO\_BOTTOM \= false at the top of the script.
+**3. Milestone Type Matching**
+When both sides have the same milestone type (e.g., "type: Prospect"), selects left. Only applies when no applicant context is found.
 
-**Auto-Navigate After Merge:** When enabled (default), automatically navigates to the next duplicate after successful merge. Only activates after the green FAB is clicked (ready to merge state). Detects merge success by watching for elm-empty-state element with "Duplicate user is now merged with master" text. Waits 1 second to let user see success message, then clicks next pagination button (button[mattooltip="Next"]). Merge counter increments on merge success detection (more accurate than FAB click). Can be disabled by setting AUTO\_NAVIGATE\_AFTER\_MERGE \= false.
+**4. Email preference**
+Prefers personal email domains over institutional: gmail.com, yahoo.com, icloud.com, hotmail.com, aol.com, me.com, outlook.com, live.com, msn.com, protonmail.com, proton.me.
 
-**Twin/Different Person Detection:** Warns when records may belong to twins or different people. Runs before FAB auto-click. Checks for conflicts in First Name, Last Name, Date of Birth (valid years only), and Address. Names are compared case-insensitively with spaces and hyphens removed. Addresses use AddressComparer to check if they're the same. If conflict count >= CONFLICT\_ROW\_THRESHOLD (default 3), shows alert popup listing which fields conflict. User must click OK to acknowledge before auto-click proceeds. Set CONFLICT\_ROW\_THRESHOLD = 0 to disable.
+**5. Dual personal email tiebreaking** (when both sides have personal domains)
+Multi-tier system tried in order until one side wins:
+1. Email open count from the User Activity section
+2. First name appearing in the email address
+3. Last name appearing in the email address
+4. Birth year appearing in the email address (checks 4-digit, 3-digit, and 2-digit forms)
+5. Manual review if still tied
 
-**High Contrast Toggle:** Checkbox in navigation bar to toggle colored borders on conflict rows and yellow highlight on/off. Default is on. Stored in localStorage.
+**6. csusb.major preference**
+Side with `csusb.major.*` wins. If both have it, follows email selection. If no email selected, manual review.
 
-**Merge Counter:** Counter in the navigation bar tracks total merges completed. Stored in localStorage. Has reset button. Animates on increment. Can be hidden by setting SHOW\_MERGE\_COUNTER = false.
+**7. Encoura ID**
+If both sides have "Encoura Id:", selects left.
 
-**URL Change Detection with Smart Reload:** Monitors for SPA navigation changes and implements intelligent reload strategy. Extracts duplicate IDs from URLs (24-character hex after /duplicates/). Tracks seen IDs in session-scoped Set that persists across navigation but clears on page reload. Set is limited to 10 most recent IDs to prevent memory growth during long sessions. Only forces reload when revisiting a previously seen duplicate ID, allowing fast forward navigation through new duplicates. Includes extensive debug logging showing URL changes, extracted IDs, and session history. Initial page ID is added to Set on load to enable proper back-navigation detection. Spark ID tracking is maintained for future features.
+**8. College Board ID**
+If both sides have "College Board Id:", selects left.
+
+**9. csusb.school preference**
+For Student Type rows with `csusb.school.*`. If only one side has it, that side wins. If both, follows email selection.
+
+**10. Date of Birth**
+Rejects invalid birth years (starting with '0' or before 1900). Picks the valid side.
+
+**11. First Generation Student**
+Always prefers "Yes" over "No".
+
+**12. Intended Term**
+Prefers the later term code. Parses from format like "Spring 2027 (2274)" — higher 4-digit code = later term.
+
+**13. Name case preference**
+When names differ only in case, prefers Title Case over ALL CAPS or all lowercase.
+
+**14. Legacy / default patterns**
+Spark Id, Record Created, Custom type, Web type, ACUx, and Outreach_UGRD_ all default to left side. Skipped if an applicant side is detected.
+
+#### Address Resolution
+
+Uses a built-in `AddressComparer` module:
+- Parses US addresses into structured components (number, prefix, street, type, suffix, city, state, zip, unit)
+- Normalizes street types (Street -> St, Avenue -> Ave) and directions (North -> N)
+- Strips country variations (United States, USA, US)
+- Detects duplicate components via fuzzy matching (Levenshtein distance at 80% similarity threshold)
+- Calculates completeness scores (points for each component, heavy penalty for duplicates)
+- **Only auto-selects when addresses are the same.** Different addresses result in a tie and follow email selection or require manual review.
+- When addresses are the same, picks the more complete one (e.g., includes apt number, country info).
+
+#### Smart Links (appear after FAB click)
+
+- **Email links:** Turned into links to mailmeteor.com email verification.
+- **Address links:** "Home, [address]" turned into Google Maps links with prettified Title Case display.
+- **Phone formatting:** Reformatted as (xxx)-xxx-xxxx or +cc (xxx)-xxx-xxxx for international.
+
+#### FAB States and Navigation
+
+| State | FAB Appearance | Click Behavior |
+|---|---|---|
+| **Blocked** (forbidden/dept/ID mismatch) | Red with null symbol | Shows alert explaining the block |
+| **First click** (conflicts not visible) | Default | Triggers native conflict detection, runs auto-resolution, scrolls to first unresolved row |
+| **Unresolved conflicts** | Default | Scrolls to the next unresolved red row |
+| **Review required** (not scrolled to bottom) | Grey with down arrow | Shows scroll reminder alert |
+| **Ready to merge** (all resolved + scrolled) | Green, expanded with "Merge" text | Passes click through to trigger actual merge |
+
+#### Merge Success Detection
+
+After the green FAB is clicked, watches for `elm-empty-state` containing "Duplicate user is now merged with master". On detection: increments the merge counter and auto-navigates to the next duplicate (1-second delay).
+
+#### URL Change Detection with Smart Reload
+
+Monitors SPA navigation. Maintains a session-scoped Set of up to 10 recently-seen duplicate IDs. Revisiting a previously-seen ID forces a full page reload for clean state. New duplicates reset all per-page flags and re-run logic.
+
+#### UI Elements
+
+- **Merge Counter:** Pill badge in the navbar showing "Merges: N" with a reset button. Stored in `localStorage`. Animates on increment.
+- **High Contrast Toggle:** Checkbox in the navbar toggling colored borders on conflict rows (red/green) and the yellow applicant highlight.
+- **Settings Gear:** Opens a Material-design-inspired settings panel with Display, Automation, and Department sections.
+- **Ghost Tooltip Suppression:** Makes CDK overlay tooltips non-interactive to prevent them from blocking clicks.
+- **Toast Suppression:** Removes "resolve" snackbar toasts every 100ms to prevent them from covering the UI.
+
+---
+
+## Element451 - CSV Database (v4)
+
+A companion script that tracks blocked entries in a local database and annotates the duplicates list page with department badges.
+
+### How It Works
+
+1. Polls `document.body.dataset.csvDept` every 1 second (set by UI Perfection).
+2. When a department value appears, extracts first name, last name, department, blocked row content, and unique ID.
+3. Stores entries in `localStorage` as JSON. Deduplicates by unique ID; updates existing entries if any field changed.
+
+### Database Format
+
+JSON array in `localStorage` key `elm_csv_database`. Each entry:
+
+```json
+{ "firstName": "...", "lastName": "...", "dept": "...", "rowContents": "...", "uniqueId": "..." }
+```
+
+Possible `dept` values: `Grad`, `IA`, `UnderGrad`, `Non-Undergrad`, `Forbidden`, `Ignored`.
+
+### List Page Department Badges
+
+On the duplicates list page, rewrites the default orange "Unresolved" chip on each row to show the department with color-coding:
+
+| Department | Label | Background | Text Color |
+|---|---|---|---|
+| Grad | Graduate | Blue (#e3f2fd) | Blue (#1565c0) |
+| IA | International | Yellow (#fff9c4) | Amber (#f57f17) |
+| UnderGrad | UnderGrad | Purple (#f3e5f5) | Purple (#6a1b9a) |
+| Forbidden | Forbidden | Pink (#fce4ec) | Pink (#c2185b) |
+| Ignored | Ignored | Grey (#f5f5f5) | Grey (#616161) |
+| Non-Undergrad | *(kept as default "Unresolved")* | *(unchanged)* | *(unchanged)* |
+
+**Staleness protection:** Tracks which page the API data was captured for. When navigating between pages, stale data is invalidated and annotations are cleared before re-applying. Each annotation is stamped with an API generation counter to force re-evaluation when fresh data arrives. Row unique IDs are stamped as `data-csv-uid` attributes to survive Angular re-ordering.
+
+**API interception:** Hooks into both `XMLHttpRequest` and `fetch` to capture the duplicates list endpoint response and extract unique IDs for each row.
+
+### Settings (in the UI Perfection settings pane)
+
+Three action buttons in a "Database" section:
+
+- **Download Database:** Exports as CSV (`elm_csv_database_YYYY-MM-DD.csv`). Columns: Firstname, Lastname, Dept., Row Contents, Unique ID.
+- **Upload & Replace Database:** Imports a CSV file, validates structure, replaces the entire database after confirmation.
+- **Clear Database:** Deletes all entries after confirmation and reloads the page.
+
+### UI Elements
+
+- **DB Badge:** Pill badge in the navbar showing "DB: N" (entry count). Updates every 1 second.
+
+---
+
+## Inter-Script Communication
+
+| Channel | Direction | Mechanism |
+|---|---|---|
+| Department signal | UI Perfection -> CSV Database | `document.body.dataset.csvDept` attribute on `<body>` |
+| Blocked row content | UI Perfection -> CSV Database | `.blocked-row` / `.blocked-row-critical` CSS classes on `elm-merge-row` elements |
+| UI injection targets | UI Perfection -> CSV Database | `#elm-controls-wrapper` (badge), `#elm-settings-pane .settings-body` (settings section) |
+| Recording confirmation | CSV Database -> UI Perfection | `localStorage.getItem('elm_csv_database')` checked by auto-skip before navigating away |
+
+The CSV Database script depends on UI Perfection for DOM structure and signals. UI Perfection degrades gracefully if the CSV Database script is not installed (auto-skip proceeds after 1.5s instead of waiting for database confirmation).
+
+---
+
+## Installation
+
+1. Install [Tampermonkey](https://www.tampermonkey.net/) browser extension.
+2. Create a new userscript and paste the contents of `Element451-UI-Perfection.user.js`.
+3. (Optional) Create a second userscript and paste the contents of `csv-database.js` for entry tracking and list page annotations.
+4. Navigate to your Element451 duplicates page. The scripts activate automatically on `*.element451.io`.
+
+## localStorage Keys
+
+| Key | Used By | Purpose |
+|---|---|---|
+| `elm_require_scroll_to_bottom` | UI Perfection | Scroll-to-review setting |
+| `elm_auto_click_fab` | UI Perfection | Auto-click FAB setting |
+| `elm_auto_navigate_after_merge` | UI Perfection | Auto-navigate setting |
+| `elm_show_merge_counter` | UI Perfection | Show/hide merge counter |
+| `elm_auto_skip_blocked` | UI Perfection | Auto-skip blocked entries setting |
+| `elm_allowed_department` | UI Perfection | Department filter setting |
+| `elm_high_contrast` | UI Perfection | High contrast toggle state |
+| `elm_merge_count` | UI Perfection | Merge counter value |
+| `elm_csv_database` | CSV Database | JSON array of recorded entries |

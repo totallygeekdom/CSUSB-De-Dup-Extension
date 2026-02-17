@@ -239,6 +239,8 @@
     // Called when fresh API data arrives to prevent wrong labels from persisting.
     function clearStaleAnnotations() {
         document.querySelectorAll('elm-row').forEach(row => {
+            // Clear the stamped unique ID so stale page data doesn't persist
+            row.removeAttribute('data-csv-uid');
             const chip = row.querySelector('elm-chip');
             if (!chip) return;
             const colorDiv = chip.querySelector('.bg-color');
@@ -392,10 +394,14 @@
         const genStr = String(apiGeneration);
 
         rows.forEach((row, rowIndex) => {
-            // Match row to its unique ID via the intercepted API data.
-            // The API returns entries in the same order as the rows on screen.
-            if (!apiDuplicatesList || !apiDuplicatesList[rowIndex]) return;
-            const uniqueId = apiDuplicatesList[rowIndex].uniqueId;
+            // Get the unique ID for this row. First check if we've already
+            // stamped it from a previous annotation pass (survives Angular
+            // re-ordering). Fall back to index-based matching from API data.
+            let uniqueId = row.getAttribute('data-csv-uid');
+            if (!uniqueId && apiDuplicatesList && apiDuplicatesList[rowIndex]) {
+                uniqueId = apiDuplicatesList[rowIndex].uniqueId;
+                if (uniqueId) row.setAttribute('data-csv-uid', uniqueId);
+            }
             if (!uniqueId) return;
 
             // Find the elm-chip in this row

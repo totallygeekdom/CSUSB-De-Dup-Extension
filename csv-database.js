@@ -13,10 +13,16 @@
 // Stores: Firstname, Lastname, Dept., Row Contents, Unique ID
 // Storage key: 'elm_csv_database' in localStorage
 //
-// Department detection is handled by the main UI Perfection
-// script, which passes the dept string to recordEntry().
-// Row contents are read from the deep red highlighted row
+// Department detection: The main UI Perfection script sets
+// document.body.dataset.csvDept ('Grad', 'IA', 'UnderGrad',
+// 'Forbidden', 'Ignored'). This script polls for that attribute
+// and auto-records when it appears.
+//
+// Row contents are read from the highlighted row
 // (.blocked-row / .blocked-row-critical) set by the main script.
+//
+// Download button: Owned entirely by this script. Injects into
+// #elm-counter-wrapper created by the main script's merge counter.
 //
 // List page annotation: Intercepts the API response that loads
 // the duplicates list to get unique IDs for each row, then
@@ -87,25 +93,19 @@
     }
 
     // --- RECORD ENTRY ---
-    // Called by the main script with the detected department.
+    // Called by the polling loop when data-csv-dept is set on body.
     // Reads the blocked row from DOM for row contents.
-    // Deduplicates by unique ID so revisiting an entry won't create duplicates.
+    // Deduplicates by unique ID so repeated calls are harmless.
     function recordEntry(dept) {
-        if (!dept) {
-            console.warn('CSV Database: recordEntry called with no dept — skipping');
-            return;
-        }
+        if (!dept) return; // Main script must provide dept
 
         const uniqueId = extractUniqueId();
-        if (!uniqueId) {
-            console.log('CSV Database: URL does not match /duplicates/<id> — not recording (URL:', window.location.href, ')');
-            return;
-        }
+        if (!uniqueId) return; // Not on a duplicates page
 
         // Check if names are available (page content loaded)
         const { firstName, lastName } = extractNames();
         if (!firstName && !lastName) {
-            console.log('CSV Database: No names found yet (elm-merge-row/elm-merge-value not in DOM) — skipping');
+            console.log('CSV Database: Page content not ready yet, skipping');
             return;
         }
 
@@ -113,8 +113,7 @@
 
         // Deduplicate by unique ID
         if (db.some(entry => entry.uniqueId === uniqueId)) {
-            console.log('CSV Database: Entry already recorded for', uniqueId, '— skipping (db has', db.length, 'entries)');
-            return;
+            return; // Already recorded
         }
 
         // Read the deep red highlighted row from DOM
@@ -130,13 +129,7 @@
 
         db.push(entry);
         saveDatabase(db);
-        console.log('CSV Database: Recorded entry', entry, '(total:', db.length, ')');
-        // Update the download button count if it exists
-        const dlBtn = document.getElementById('elm-download-db-btn');
-        if (dlBtn) {
-            dlBtn.innerHTML = `⬇ ${db.length}`;
-            dlBtn.title = `Download CSV Database (${db.length} entries recorded)`;
-        }
+        console.log('CSV Database: Recorded entry', entry);
     }
 
     // =========================================================
@@ -161,36 +154,21 @@
             this.addEventListener('load', function () {
                 try {
                     if (!this._csvDbUrl || typeof this.responseText !== 'string') return;
-
-                    // Log ALL XHR URLs so we can see what endpoints Element451 hits
-                    console.log('CSV Database [XHR]:', this._csvDbUrl);
-
                     // Match duplicates list endpoint (not individual detail pages)
                     if (!this._csvDbUrl.includes('duplicate')) return;
-                    if (this._csvDbUrl.match(/\/[a-f0-9]{24}($|\?|\/)/i)) {
-                        console.log('CSV Database [XHR]: Skipped — looks like a detail endpoint');
-                        return;
-                    }
+                    if (this._csvDbUrl.match(/\/[a-f0-9]{24}($|\?|\/)/i)) return;
 
-                    console.log('CSV Database [XHR]: Matched duplicates list endpoint');
                     const data = JSON.parse(this.responseText);
-                    console.log('CSV Database [XHR]: Response top-level keys:', Object.keys(data));
-
                     // Try common response shapes for the array of entries
                     const entries = data.data || data.items || data.results ||
                                     (Array.isArray(data) ? data : null);
-                    if (!entries || !Array.isArray(entries) || entries.length === 0) {
-                        console.log('CSV Database [XHR]: No entries array found in response');
-                        return;
-                    }
+                    if (!entries || !Array.isArray(entries) || entries.length === 0) return;
 
                     // Verify entries have an ID field
                     const sample = entries[0];
-                    console.log('CSV Database [XHR]: Sample entry keys:', Object.keys(sample));
-                    console.log('CSV Database [XHR]: Sample entry:', JSON.stringify(sample).slice(0, 500));
                     const idField = sample._id ? '_id' : sample.id ? 'id' : null;
                     if (!idField) {
-                        console.log('CSV Database [XHR]: No _id or id field found!');
+                        console.log('CSV Database: API entries found but no _id/id field. Keys:', Object.keys(sample));
                         return;
                     }
 
@@ -199,12 +177,12 @@
                         name: e.name || e.full_name || '',
                         duplicateName: e.duplicate_name || ''
                     }));
-                    console.log('CSV Database [XHR]: Captured', apiDuplicatesList.length, 'entries. First 3:', apiDuplicatesList.slice(0, 3));
+                    console.log('CSV Database: Captured', apiDuplicatesList.length, 'entries from API');
                     // Re-annotate now that we have fresh API data
                     document.querySelectorAll('elm-row[data-csv-dept-done]').forEach(r => delete r.dataset.csvDeptDone);
                     annotateDuplicatesList();
                 } catch (e) {
-                    console.log('CSV Database [XHR]: Parse error for', this._csvDbUrl, e.message);
+                    // Not the response we're looking for, ignore
                 }
             });
             return origSend.apply(this, arguments);
@@ -232,56 +210,37 @@
     // Uses the intercepted API data to match each row to its unique ID,
     // then looks up that ID in the CSV database and rewrites the existing
     // elm-chip (the orange "Unresolved" chip) to show department + color.
-    let _annotateLogOnce = false;
     function annotateDuplicatesList() {
         // Only run on list page — skip if on detail page (has elm-merge-row)
         if (document.querySelector('elm-merge-row')) return;
         // Only run if we have API data with unique IDs
-        if (!apiDuplicatesList) {
-            if (!_annotateLogOnce) { console.log('CSV Database [Annotate]: Waiting for API data...'); _annotateLogOnce = true; }
-            return;
-        }
+        if (!apiDuplicatesList) return;
 
         const rows = document.querySelectorAll('elm-row');
         if (rows.length === 0) return;
 
         const db = getDatabase();
 
-        rows.forEach((row, rowIdx) => {
+        rows.forEach(row => {
             // Skip if already annotated
             if (row.dataset.csvDeptDone) return;
 
             // Match by unique ID from intercepted API data
             const indexCell = row.querySelector('.elm-column-index');
-            if (!indexCell) {
-                console.log(`CSV Database [Annotate]: Row ${rowIdx} — no .elm-column-index found`);
-                return;
-            }
+            if (!indexCell) return;
 
             const indexNum = parseInt(indexCell.textContent.trim().replace('.', ''));
-            if (isNaN(indexNum) || !apiDuplicatesList[indexNum - 1]) {
-                console.log(`CSV Database [Annotate]: Row ${rowIdx} — index "${indexCell.textContent.trim()}" → parsed ${indexNum}, API entry: ${!!apiDuplicatesList[indexNum - 1]}`);
-                return;
-            }
+            if (isNaN(indexNum) || !apiDuplicatesList[indexNum - 1]) return;
 
             const apiEntry = apiDuplicatesList[indexNum - 1];
-            if (!apiEntry.uniqueId) {
-                console.log(`CSV Database [Annotate]: Row ${rowIdx} — API entry has no uniqueId`);
-                return;
-            }
+            if (!apiEntry.uniqueId) return;
 
             const dbEntry = db.find(e => e.uniqueId === apiEntry.uniqueId);
-            if (!dbEntry) {
-                console.log(`CSV Database [Annotate]: Row ${rowIdx} — ID ${apiEntry.uniqueId} not in DB (${db.length} entries)`);
-                return;
-            }
+            if (!dbEntry) return;
 
             // Find the elm-chip in this row and rewrite it
             const chip = row.querySelector('elm-chip');
-            if (!chip) {
-                console.log(`CSV Database [Annotate]: Row ${rowIdx} — no elm-chip found. Row HTML:`, row.innerHTML.slice(0, 300));
-                return;
-            }
+            if (!chip) return;
 
             const desiredLabel = DEPT_LABELS[dbEntry.dept] || dbEntry.dept;
             const colors = DEPT_COLORS[dbEntry.dept] || { bg: '#f5f5f5', fg: '#333' };
@@ -290,17 +249,12 @@
             const label = chip.querySelector('.elm-chip-label');
             if (label) {
                 label.textContent = ` ${desiredLabel} `;
-                console.log(`CSV Database [Annotate]: Row ${rowIdx} — chip label → "${desiredLabel}"`);
-            } else {
-                console.log(`CSV Database [Annotate]: Row ${rowIdx} — elm-chip found but no .elm-chip-label. Chip HTML:`, chip.innerHTML.slice(0, 300));
             }
 
             // Rewrite the chip background color
             const colorDiv = chip.querySelector('.bg-color');
             if (colorDiv) {
                 colorDiv.style.backgroundColor = colors.fg;
-            } else {
-                console.log(`CSV Database [Annotate]: Row ${rowIdx} — elm-chip found but no .bg-color. Chip HTML:`, chip.innerHTML.slice(0, 300));
             }
 
             row.dataset.csvDeptDone = '1';
@@ -310,33 +264,82 @@
     // Run annotation periodically on the list page
     setInterval(annotateDuplicatesList, 1000);
 
-    // --- PUBLIC API ---
-    // Exposed on window for main script integration
-    window.elmCsvDatabase = {
-        recordEntry,
-        getDatabase,
-        annotateDuplicatesList,
-        clearDatabase() {
-            localStorage.removeItem(STORAGE_KEY);
-            console.log('CSV Database: Cleared');
-        },
-        getEntryCount() {
-            return getDatabase().length;
-        },
-        toCSV() {
-            const db = getDatabase();
-            if (db.length === 0) return '';
-            const headers = ['Firstname', 'Lastname', 'Dept.', 'Row Contents', 'Unique ID'];
-            const rows = db.map(e => [
-                e.firstName,
-                e.lastName,
-                e.dept,
-                e.rowContents,
-                e.uniqueId
-            ].map(v => `"${(v || '').replace(/"/g, '""')}"`).join(','));
-            return [headers.join(','), ...rows].join('\n');
-        }
-    };
+    // =========================================================
+    // CSV EXPORT
+    // =========================================================
+    function toCSV() {
+        const db = getDatabase();
+        if (db.length === 0) return '';
+        const headers = ['Firstname', 'Lastname', 'Dept.', 'Row Contents', 'Unique ID'];
+        const rows = db.map(e => [
+            e.firstName,
+            e.lastName,
+            e.dept,
+            e.rowContents,
+            e.uniqueId
+        ].map(v => `"${(v || '').replace(/"/g, '""')}"`).join(','));
+        return [headers.join(','), ...rows].join('\n');
+    }
 
-    console.log('CSV Database: Module loaded');
+    // =========================================================
+    // DOWNLOAD BUTTON
+    // Injected into #elm-counter-wrapper (created by main script).
+    // =========================================================
+    function updateDownloadButton() {
+        const btn = document.getElementById('elm-download-db-btn');
+        if (!btn) return;
+        const count = getDatabase().length;
+        btn.innerHTML = `\u2B07 ${count}`;
+        btn.title = `Download CSV Database (${count} entries recorded)`;
+    }
+
+    function injectDownloadButton() {
+        if (document.getElementById('elm-download-db-btn')) return;
+        const wrapper = document.getElementById('elm-counter-wrapper');
+        if (!wrapper) return;
+
+        const btn = document.createElement('button');
+        btn.id = 'elm-download-db-btn';
+        const count = getDatabase().length;
+        btn.innerHTML = `\u2B07 ${count}`;
+        btn.title = `Download CSV Database (${count} entries recorded)`;
+        btn.onclick = (e) => {
+            e.stopPropagation();
+            const csvContent = toCSV();
+            if (!csvContent) {
+                alert('CSV Database is empty \u2014 no entries have been recorded yet.\n\nCheck the browser console (F12) for "CSV Database:" messages to diagnose.');
+                return;
+            }
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `elm_csv_database_${new Date().toISOString().slice(0,10)}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        };
+        wrapper.prepend(btn);
+    }
+
+    // Poll for download button injection (wrapper may not exist yet)
+    setInterval(injectDownloadButton, 1000);
+
+    // =========================================================
+    // AUTO-RECORD: POLL FOR data-csv-dept ON BODY
+    // Main script sets document.body.dataset.csvDept in
+    // checkMergeStatus(). We poll for it and auto-record.
+    // recordEntry() deduplicates by uniqueId, so repeated
+    // calls for the same entry are harmless no-ops.
+    // =========================================================
+    setInterval(() => {
+        const dept = document.body.dataset.csvDept;
+        if (dept) {
+            recordEntry(dept);
+            updateDownloadButton();
+        }
+    }, 1000);
+
+    console.log('CSV Database: Module loaded (polls body[data-csv-dept])');
 })();

@@ -1,12 +1,11 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection
 // @namespace    http://tampermonkey.net/
-// @version      123
+// @version      124
 // @description  Merge workflow with auto-selection, smart links, and UI enhancements (manual FAB click required)
 // @author       You
 // @match        https://*.element451.io/*
 // @grant        GM_addStyle
-// @require      file:///path/to/csv-database.js
 // ==/UserScript==
 (function () {
     'use strict';
@@ -1052,17 +1051,6 @@
     }
     // --- HELPER: ATTEMPT AUTO-CLICK FAB ---
     function attemptAutoClickFAB() {
-        // Record entry in CSV database (deduplicates internally by unique ID)
-        if (window.elmCsvDatabase) {
-            let dept;
-            if (isForbiddenEntry().forbidden) dept = 'Forbidden';
-            else if (isStudentIgnored()) dept = 'Ignored';
-            else dept = detectActualDepartment(); // 'Grad', 'IA', or 'UnderGrad'
-            window.elmCsvDatabase.recordEntry(dept);
-        } else {
-            console.warn('CSV Database: window.elmCsvDatabase not available — csv-database.js may not be installed or loaded yet');
-        }
-
         if (!shouldAutoClickFAB()) {
             // If blocked, attempt auto-skip to next entry
             attemptAutoSkipBlocked();
@@ -2199,47 +2187,6 @@
                 const counterText = document.createElement('span');
                 counterText.id = 'elm-merge-counter';
                 counterText.innerText = `Merges: ${count}`;
-                const downloadBtn = document.createElement('button');
-                downloadBtn.id = 'elm-download-db-btn';
-                const dbCount = window.elmCsvDatabase ? window.elmCsvDatabase.getEntryCount() : 0;
-                downloadBtn.innerHTML = `⬇ ${dbCount}`;
-                downloadBtn.title = `Download CSV Database (${dbCount} entries recorded)`;
-                downloadBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    let csvContent = '';
-                    if (window.elmCsvDatabase) {
-                        csvContent = window.elmCsvDatabase.toCSV();
-                    } else {
-                        // Fallback: build CSV directly from localStorage
-                        const raw = localStorage.getItem('elm_csv_database');
-                        const db = raw ? JSON.parse(raw) : [];
-                        if (db.length > 0) {
-                            const headers = ['Firstname', 'Lastname', 'Dept.', 'Row Contents', 'Unique ID'];
-                            const rows = db.map(entry => [
-                                entry.firstName,
-                                entry.lastName,
-                                entry.dept,
-                                entry.rowContents,
-                                entry.uniqueId
-                            ].map(v => `"${(v || '').replace(/"/g, '""')}"`).join(','));
-                            csvContent = [headers.join(','), ...rows].join('\n');
-                        }
-                    }
-                    if (!csvContent) {
-                        alert('CSV Database is empty — no entries have been recorded yet.\n\nCheck the browser console (F12) for "CSV Database:" messages to diagnose.');
-                        return;
-                    }
-                    const blob = new Blob([csvContent], { type: 'text/csv' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `elm_csv_database_${new Date().toISOString().slice(0,10)}.csv`;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
-                };
-                counterWrapper.appendChild(downloadBtn);
                 counterWrapper.appendChild(resetBtn);
                 counterWrapper.appendChild(counterText);
                 controlsWrapper.appendChild(counterWrapper);
@@ -2562,8 +2509,12 @@
         document.querySelectorAll('.blocked-row, .blocked-row-critical').forEach(row => {
             row.classList.remove('blocked-row', 'blocked-row-critical');
         });
-        // Check forbidden entry FIRST (highest priority)
+        // Signal department to csv-database.js via body attribute
         const forbiddenResult = isForbiddenEntry();
+        if (forbiddenResult.forbidden) document.body.dataset.csvDept = 'Forbidden';
+        else if (isStudentIgnored()) document.body.dataset.csvDept = 'Ignored';
+        else document.body.dataset.csvDept = detectActualDepartment();
+        // Check forbidden entry FIRST (highest priority)
         if (forbiddenResult.forbidden) {
             document.body.classList.add('forbidden-entry');
             document.body.classList.remove('ready-to-merge', 'review-required', 'wrong-department', 'student-id-mismatch');

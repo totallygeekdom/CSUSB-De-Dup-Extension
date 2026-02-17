@@ -246,9 +246,9 @@
 
     const DEPT_COLORS = {
         Grad:       { bg: '#e3f2fd', fg: '#1565c0' },
-        IA:         { bg: '#fce4ec', fg: '#c2185b' },
-        UnderGrad:  { bg: '#e8f5e9', fg: '#2e7d32' },
-        Forbidden:  { bg: '#ffebee', fg: '#c62828' },
+        IA:         { bg: '#fff9c4', fg: '#f57f17' },
+        UnderGrad:  { bg: '#f3e5f5', fg: '#6a1b9a' },
+        Forbidden:  { bg: '#fce4ec', fg: '#c2185b' },
         Ignored:    { bg: '#f5f5f5', fg: '#616161' }
     };
 

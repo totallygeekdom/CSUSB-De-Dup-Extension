@@ -21,8 +21,9 @@
 // Row contents are read from the highlighted row
 // (.blocked-row / .blocked-row-critical) set by the main script.
 //
-// Download button: Owned entirely by this script. Injects into
-// #elm-counter-wrapper created by the main script's merge counter.
+// Database size badge: Updates #elm-db-size-badge in the header
+// (created by the main script). Download/upload/clear are in the
+// settings pane (also in the main script).
 //
 // List page annotation: Intercepts the API response that loads
 // the duplicates list to get unique IDs for each row, then
@@ -347,66 +348,18 @@
     }, 1000);
 
     // =========================================================
-    // CSV EXPORT
+    // DATABASE SIZE BADGE
+    // Updates #elm-db-size-badge (created by main script's
+    // settings pane). Download functionality is now in the
+    // settings pane in the main script.
     // =========================================================
-    function toCSV() {
-        const db = getDatabase();
-        if (db.length === 0) return '';
-        const headers = ['Firstname', 'Lastname', 'Dept.', 'Row Contents', 'Unique ID'];
-        const rows = db.map(e => [
-            e.firstName,
-            e.lastName,
-            e.dept,
-            e.rowContents,
-            e.uniqueId
-        ].map(v => `"${(v || '').replace(/"/g, '""')}"`).join(','));
-        return [headers.join(','), ...rows].join('\n');
-    }
-
-    // =========================================================
-    // DOWNLOAD BUTTON
-    // Injected into #elm-counter-wrapper (created by main script).
-    // =========================================================
-    function updateDownloadButton() {
-        const btn = document.getElementById('elm-download-db-btn');
-        if (!btn) return;
+    function updateDbSizeBadge() {
+        const badge = document.getElementById('elm-db-size-badge');
+        if (!badge) return;
         const count = getDatabase().length;
-        btn.innerHTML = `\u2B07 ${count}`;
-        btn.title = `Download CSV Database (${count} entries recorded)`;
+        badge.textContent = `\u2B07 ${count}`;
+        badge.title = `Database: ${count} entries recorded`;
     }
-
-    function injectDownloadButton() {
-        if (document.getElementById('elm-download-db-btn')) return;
-        const wrapper = document.getElementById('elm-counter-wrapper');
-        if (!wrapper) return;
-
-        const btn = document.createElement('button');
-        btn.id = 'elm-download-db-btn';
-        const count = getDatabase().length;
-        btn.innerHTML = `\u2B07 ${count}`;
-        btn.title = `Download CSV Database (${count} entries recorded)`;
-        btn.onclick = (e) => {
-            e.stopPropagation();
-            const csvContent = toCSV();
-            if (!csvContent) {
-                alert('CSV Database is empty \u2014 no entries have been recorded yet.\n\nCheck the browser console (F12) for "CSV Database:" messages to diagnose.');
-                return;
-            }
-            const blob = new Blob([csvContent], { type: 'text/csv' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `elm_csv_database_${new Date().toISOString().slice(0,10)}.csv`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-        };
-        wrapper.prepend(btn);
-    }
-
-    // Poll for download button injection (wrapper may not exist yet)
-    setInterval(injectDownloadButton, 1000);
 
     // =========================================================
     // AUTO-RECORD: POLL FOR data-csv-dept ON BODY
@@ -419,8 +372,8 @@
         const dept = document.body.dataset.csvDept;
         if (dept) {
             recordEntry(dept);
-            updateDownloadButton();
         }
+        updateDbSizeBadge();
     }, 1000);
 
     console.log('CSV Database: Module loaded (polls body[data-csv-dept])');

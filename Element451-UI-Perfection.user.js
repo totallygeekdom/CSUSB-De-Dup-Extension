@@ -1089,9 +1089,53 @@
                           isStudentIgnored();
         if (!isBlocked) return;
         autoSkipAttempted = true;
-        console.log('⏭️ Auto-skip: Blocked entry detected, skipping to next...');
-        // Brief delay so the blocked state is visible before skipping
-        setTimeout(() => {
+        // Check if csv-database.js is installed by looking for its localStorage key.
+        // The database script creates this key on first record. If it has never been
+        // created, the script is not installed — skip immediately without waiting.
+        const dbInstalled = localStorage.getItem('elm_csv_database') !== null;
+        if (!dbInstalled) {
+            console.log('⏭️ Auto-skip: Blocked entry detected (database script not installed), skipping to next...');
+            // Brief delay so the blocked state is visible before skipping
+            setTimeout(navigateToNext, 1500);
+            return;
+        }
+        console.log('⏭️ Auto-skip: Blocked entry detected, waiting for database to record before skipping...');
+        // Wait for csv-database.js to record this entry before navigating.
+        // The database script polls body[data-csv-dept] every 1s and writes to localStorage.
+        // We poll localStorage to confirm the current entry's unique ID has been recorded.
+        const uniqueIdMatch = window.location.href.match(/\/duplicates\/([a-f0-9]{24})/i);
+        const currentUniqueId = uniqueIdMatch ? uniqueIdMatch[1].toLowerCase() : null;
+        let pollCount = 0;
+        const maxPolls = 20; // Up to 10 seconds (20 × 500ms)
+        const pollInterval = 500;
+        function waitForDatabaseThenSkip() {
+            pollCount++;
+            // Check if the database has recorded this entry
+            let recorded = false;
+            if (currentUniqueId) {
+                try {
+                    const dbData = localStorage.getItem('elm_csv_database');
+                    const db = dbData ? JSON.parse(dbData) : [];
+                    recorded = db.some(entry => entry.uniqueId === currentUniqueId);
+                } catch (e) {
+                    console.warn('⏭️ Auto-skip: Error reading database', e);
+                }
+            }
+            if (recorded) {
+                console.log('⏭️ Auto-skip: Database confirmed entry recorded, navigating to next...');
+                navigateToNext();
+            } else if (pollCount >= maxPolls) {
+                // Safety fallback: skip anyway after max wait so we don't get stuck
+                console.warn('⏭️ Auto-skip: Database did not record entry after ' + (maxPolls * pollInterval / 1000) + 's, skipping anyway');
+                navigateToNext();
+            } else {
+                if (pollCount % 4 === 0) { // Log every 2 seconds
+                    console.log('⏭️ Auto-skip: Waiting for database to record entry... (poll ' + pollCount + '/' + maxPolls + ')');
+                }
+                setTimeout(waitForDatabaseThenSkip, pollInterval);
+            }
+        }
+        function navigateToNext() {
             const nextBtn = document.querySelector('button[mattooltip="Next"]:not([disabled])') ||
                             document.querySelector('.mat-mdc-paginator-navigation-next:not([disabled])');
             if (nextBtn) {
@@ -1100,7 +1144,9 @@
             } else {
                 console.log('⚠️ Auto-skip: No next page available - end of list or button disabled');
             }
-        }, 1500);
+        }
+        // Start polling after a brief delay so the blocked state is visible
+        setTimeout(waitForDatabaseThenSkip, 500);
     }
     // --- MERGE SUCCESS DETECTION ---
     function checkForMergeSuccess() {

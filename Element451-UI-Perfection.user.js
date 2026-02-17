@@ -262,17 +262,6 @@
             padding: 4px 12px 4px 4px;
             white-space: nowrap;
         }
-        /* --- Database Size Badge --- */
-        #elm-db-size-badge {
-            font-size: 13px;
-            font-weight: 600;
-            color: white;
-            background: rgba(255,255,255,0.15);
-            padding: 4px 10px;
-            border-radius: 12px;
-            white-space: nowrap;
-            cursor: default;
-        }
         /* --- Settings Button --- */
         #elm-settings-btn {
             background: transparent;
@@ -386,39 +375,6 @@
             box-shadow: 0 1px 3px rgba(0,0,0,0.2);
         }
         .elm-toggle.active::after { transform: translateX(18px); }
-        /* Settings Action Buttons */
-        .settings-action-btn {
-            background: #f5f5f5;
-            border: 1px solid #e0e0e0;
-            border-radius: 8px;
-            padding: 8px 14px;
-            font-size: 13px;
-            font-weight: 500;
-            color: #333;
-            cursor: pointer;
-            transition: all 0.15s;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            width: 100%;
-            margin-bottom: 6px;
-        }
-        .settings-action-btn:last-child { margin-bottom: 0; }
-        .settings-action-btn:hover {
-            background: #e8e8e8;
-            border-color: #ccc;
-        }
-        .settings-action-btn.danger {
-            color: #d32f2f;
-            border-color: #ffcdd2;
-            background: #fff5f5;
-        }
-        .settings-action-btn.danger:hover {
-            background: #ffebee;
-            border-color: #ef9a9a;
-        }
-        /* Hidden file input for upload */
-        #elm-db-upload-input { display: none; }
         
         .counter-pop { animation: subtlePop 0.3s ease-in-out; }
         .counter-pop #elm-merge-counter { color: #2e7d32; }
@@ -2318,13 +2274,6 @@
             };
             controlsWrapper.appendChild(settingsBtn);
 
-            // Database Size Badge
-            const dbBadge = document.createElement('span');
-            dbBadge.id = 'elm-db-size-badge';
-            dbBadge.title = 'Database entries recorded';
-            dbBadge.textContent = '\u2B07 0';
-            controlsWrapper.appendChild(dbBadge);
-
             // Merge Counter (conditionally shown)
             if (SHOW_MERGE_COUNTER) {
                 const count = localStorage.getItem('elm_merge_count') || 0;
@@ -2384,13 +2333,6 @@
                         <div id="elm-settings-contrast-toggle" class="elm-toggle ${highContrastEnabled ? 'active' : ''}"></div>
                     </div>
                 </div>
-                <div class="settings-section">
-                    <div class="settings-section-title">Database</div>
-                    <button id="elm-settings-download-btn" class="settings-action-btn">\u2B07 Download Database</button>
-                    <button id="elm-settings-upload-btn" class="settings-action-btn">\u2B06 Upload &amp; Replace Database</button>
-                    <input type="file" id="elm-db-upload-input" accept=".csv">
-                    <button id="elm-settings-clear-btn" class="settings-action-btn danger">\u2716 Clear Database</button>
-                </div>
             </div>
         `;
 
@@ -2410,100 +2352,6 @@
                 localStorage.setItem('elm_high_contrast', 'false');
             }
         };
-
-        // --- Download Database ---
-        document.getElementById('elm-settings-download-btn').onclick = () => {
-            const db = getSettingsDatabase();
-            if (db.length === 0) {
-                alert('CSV Database is empty \u2014 no entries have been recorded yet.');
-                return;
-            }
-            const headers = ['Firstname', 'Lastname', 'Dept.', 'Row Contents', 'Unique ID'];
-            const rows = db.map(e => [
-                e.firstName, e.lastName, e.dept, e.rowContents, e.uniqueId
-            ].map(v => `"${(v || '').replace(/"/g, '""')}"`).join(','));
-            const csvContent = [headers.join(','), ...rows].join('\n');
-            const blob = new Blob([csvContent], { type: 'text/csv' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `elm_csv_database_${new Date().toISOString().slice(0,10)}.csv`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-        };
-
-        // --- Upload & Replace Database ---
-        const uploadInput = document.getElementById('elm-db-upload-input');
-        document.getElementById('elm-settings-upload-btn').onclick = () => {
-            uploadInput.click();
-        };
-        uploadInput.onchange = (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            if (!file.name.endsWith('.csv')) {
-                alert('Please select a .csv file.');
-                uploadInput.value = '';
-                return;
-            }
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                try {
-                    const text = ev.target.result;
-                    const lines = text.trim().split('\n');
-                    if (lines.length < 2) {
-                        alert('CSV file is empty or has no data rows.');
-                        uploadInput.value = '';
-                        return;
-                    }
-                    // Parse CSV (skip header row)
-                    const entries = [];
-                    for (let i = 1; i < lines.length; i++) {
-                        const cols = parseCSVLine(lines[i]);
-                        if (cols.length >= 5) {
-                            entries.push({
-                                firstName: cols[0],
-                                lastName: cols[1],
-                                dept: cols[2],
-                                rowContents: cols[3],
-                                uniqueId: cols[4]
-                            });
-                        }
-                    }
-                    if (entries.length === 0) {
-                        alert('No valid entries found in CSV file.');
-                        uploadInput.value = '';
-                        return;
-                    }
-                    if (!confirm(`Replace current database with ${entries.length} entries from "${file.name}"?`)) {
-                        uploadInput.value = '';
-                        return;
-                    }
-                    localStorage.setItem('elm_csv_database', JSON.stringify(entries));
-                    updateDbSizeBadge();
-                    alert(`Database replaced with ${entries.length} entries.`);
-                } catch (err) {
-                    alert('Error parsing CSV file: ' + err.message);
-                }
-                uploadInput.value = '';
-            };
-            reader.readAsText(file);
-        };
-
-        // --- Clear Database ---
-        document.getElementById('elm-settings-clear-btn').onclick = () => {
-            const db = getSettingsDatabase();
-            if (db.length === 0) {
-                alert('Database is already empty.');
-                return;
-            }
-            if (confirm(`Are you sure you want to delete all ${db.length} entries from the database? This cannot be undone.`)) {
-                localStorage.setItem('elm_csv_database', JSON.stringify([]));
-                updateDbSizeBadge();
-                alert('Database cleared.');
-            }
-        };
     }
 
     function toggleSettingsPane(forceState) {
@@ -2518,56 +2366,6 @@
             overlay.classList.remove('open');
             pane.classList.remove('open');
         }
-    }
-
-    // Helper: read the CSV database from localStorage
-    function getSettingsDatabase() {
-        try {
-            const data = localStorage.getItem('elm_csv_database');
-            return data ? JSON.parse(data) : [];
-        } catch (e) { return []; }
-    }
-
-    // Helper: update the database size badge in the header
-    function updateDbSizeBadge() {
-        const badge = document.getElementById('elm-db-size-badge');
-        if (!badge) return;
-        const count = getSettingsDatabase().length;
-        badge.textContent = `\u2B07 ${count}`;
-        badge.title = `Database: ${count} entries recorded`;
-    }
-
-    // Helper: parse a single CSV line respecting quoted fields
-    function parseCSVLine(line) {
-        const result = [];
-        let current = '';
-        let inQuotes = false;
-        for (let i = 0; i < line.length; i++) {
-            const ch = line[i];
-            if (inQuotes) {
-                if (ch === '"') {
-                    if (i + 1 < line.length && line[i + 1] === '"') {
-                        current += '"';
-                        i++;
-                    } else {
-                        inQuotes = false;
-                    }
-                } else {
-                    current += ch;
-                }
-            } else {
-                if (ch === '"') {
-                    inQuotes = true;
-                } else if (ch === ',') {
-                    result.push(current);
-                    current = '';
-                } else {
-                    current += ch;
-                }
-            }
-        }
-        result.push(current);
-        return result;
     }
     function incrementMergeCount() {
         let count = parseInt(localStorage.getItem('elm_merge_count') || 0);

@@ -311,8 +311,9 @@
             z-index: 9999;
             overflow: hidden;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            flex-direction: column;
         }
-        #elm-settings-pane.open { display: block; }
+        #elm-settings-pane.open { display: flex; }
         #elm-settings-pane .settings-header {
             background: #3f51b5;
             color: white;
@@ -340,6 +341,8 @@
         }
         #elm-settings-pane .settings-body {
             padding: 12px 16px;
+            overflow-y: auto;
+            min-height: 0;
         }
         #elm-settings-pane .settings-section {
             margin-bottom: 16px;
@@ -2497,8 +2500,10 @@
             const settingsBtn = document.getElementById('elm-settings-btn');
             if (settingsBtn) {
                 const rect = settingsBtn.getBoundingClientRect();
-                pane.style.top = (rect.bottom + 6) + 'px';
+                const topPos = rect.bottom + 6;
+                pane.style.top = topPos + 'px';
                 pane.style.right = (window.innerWidth - rect.right) + 'px';
+                pane.style.maxHeight = (window.innerHeight - topPos - 16) + 'px';
             }
             overlay.classList.add('open');
             pane.classList.add('open');

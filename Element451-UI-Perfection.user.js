@@ -1296,6 +1296,7 @@
         const allRows = Array.from(document.querySelectorAll('elm-merge-row'));
         const isGradText = (t) => t.includes('GRAD_') || /grad student/i.test(t);
         const isIAText = (t) => t.includes('IA_') || t.includes('_IA_') || t.includes('_IA ');
+        let lastRelevantRow = null;
         for (const row of allRows) {
             const text = row.textContent;
             const isRelevantRow = text.includes('Workflows') ||
@@ -1305,6 +1306,7 @@
                 text.includes('status:') ||
                 text.includes('Outreach_');
             if (!isRelevantRow) continue;
+            lastRelevantRow = row;
 
             if (dept === 'undergrad') {
                 // Block GRAD and IA, allow everything else
@@ -1314,12 +1316,19 @@
                     return { wrongDept: true, row, reason: 'GRAD' };
                 }
             } else if (dept === 'grad') {
-                // Only GRAD allowed - block IA
+                // GRAD allowed - block IA and UnderGrad
                 if (isIAText(text)) return { wrongDept: true, row, reason: 'IA' };
             } else if (dept === 'ia') {
-                // Only IA allowed - block GRAD
+                // IA allowed - block GRAD and UnderGrad
                 if (isGradText(text)) return { wrongDept: true, row, reason: 'GRAD' };
             }
+        }
+        // Final check: compare detected actual department against allowed department.
+        // This catches entries that default to UnderGrad (no GRAD/IA markers) when
+        // the allowed department is Grad or IA, and vice versa.
+        const actualDept = detectActualDepartment();
+        if (actualDept.toLowerCase() !== dept) {
+            return { wrongDept: true, row: lastRelevantRow, reason: actualDept };
         }
         return { wrongDept: false };
     }

@@ -6,6 +6,8 @@
 // @author       You
 // @match        https://*.element451.io/*
 // @grant        none
+// @updateURL    https://raw.githubusercontent.com/totallygeekdom/csusb-de-dup-extension/main/csv-database.js
+// @downloadURL  https://raw.githubusercontent.com/totallygeekdom/csusb-de-dup-extension/main/csv-database.js
 // ==/UserScript==
 
 // =========================================================

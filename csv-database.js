@@ -469,10 +469,35 @@
     // reliable than index-based matching because it survives Angular
     // re-ordering and DOM caching.
     //
+    // Uses a two-pass strategy to handle duplicate names:
+    //   Pass 1 (precise): Require BOTH name AND duplicateName present in the
+    //           row text. This distinguishes "John Smith / Jane Doe" from
+    //           "John Smith / Bob Jones" even when they share the primary name.
+    //   Pass 2 (single): Fall back to matching on either name alone, for
+    //           entries where only one name field is available.
+    //
     // usedIndices tracks which API entries have already been claimed by
     // other rows, preventing two rows from matching the same entry.
     function matchRowToApiEntry(row, apiEntries, usedIndices) {
         const rowText = row.textContent.trim().toLowerCase();
+
+        // Pass 1: Precise match — require BOTH name and duplicateName
+        for (let i = 0; i < apiEntries.length; i++) {
+            if (usedIndices.has(i)) continue;
+            const entry = apiEntries[i];
+            const name = (entry.name || '').trim().toLowerCase();
+            const dupName = (entry.duplicateName || '').trim().toLowerCase();
+            // Only attempt dual match when both fields are meaningful
+            if (name.length > 3 && dupName.length > 3) {
+                if (rowText.includes(name) && rowText.includes(dupName)) {
+                    usedIndices.add(i);
+                    return entry;
+                }
+            }
+        }
+
+        // Pass 2: Single-name match — for entries with only one name field
+        // or where the dual match didn't find anything
         for (let i = 0; i < apiEntries.length; i++) {
             if (usedIndices.has(i)) continue;
             const entry = apiEntries[i];
@@ -565,18 +590,29 @@
         const genStr = String(apiGeneration);
         const usedApiIndices = new Set(); // Track which API entries have been claimed
 
+        // Check if row count matches API count — only allow index fallback
+        // when they match, indicating no filtering or reordering happened.
+        const indexFallbackSafe = apiDuplicatesList && rows.length === apiDuplicatesList.length;
+
         rows.forEach((row, rowIndex) => {
             // Get the unique ID for this row. Priority order:
             // 1. Previously stamped data-csv-uid (survives Angular re-renders)
-            // 2. Content-based matching (name text in row vs API names)
-            // Index-based fallback was removed — it caused wrong departments
-            // to flash briefly when rows were reordered or filtered.
+            // 2. Content-based matching (both names, then single name)
+            // 3. Index-based fallback (ONLY when row count matches API count,
+            //    meaning no filtering/reordering — safe to assume same order)
             let uniqueId = row.getAttribute('data-csv-uid');
             if (!uniqueId && apiDuplicatesList) {
                 // Primary: match by visible name text in the row
                 const matched = matchRowToApiEntry(row, apiDuplicatesList, usedApiIndices);
                 if (matched) {
                     uniqueId = matched.uniqueId;
+                }
+                // Index fallback: only when row count matches API count
+                // (no filtering/reordering) and this index hasn't been claimed
+                if (!uniqueId && indexFallbackSafe &&
+                    apiDuplicatesList[rowIndex] && !usedApiIndices.has(rowIndex)) {
+                    uniqueId = apiDuplicatesList[rowIndex].uniqueId;
+                    usedApiIndices.add(rowIndex);
                 }
                 if (uniqueId) row.setAttribute('data-csv-uid', uniqueId);
             }

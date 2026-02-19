@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database
 // @namespace    http://tampermonkey.net/
-// @version      7
+// @version      8
 // @description  Tracks duplicate entries in a CSV database stored in browser localStorage
 // @author       You
 // @match        https://*.element451.io/*

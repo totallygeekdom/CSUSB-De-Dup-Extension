@@ -454,6 +454,9 @@
             let addr = rawAddress.trim();
             addr = addr.replace(/^Home,\s*/i, '');
             addr = addr.replace(/^[,\s]+|[,\s]+$/g, '');
+            // Strip "with geo location" suffix (Element451 artifact on geocoded addresses)
+            addr = addr.replace(/,?\s*with\s+geo\s+location\s*$/i, '');
+            addr = addr.replace(/[,\s]+$/, '');
             // Strip country variations
             for (const country of this.countryVariations) {
                 const regex = new RegExp(',?\\s*' + country.replace(/\./g, '\\.') + '\\s*,?\\s*$', 'i');
@@ -1136,6 +1139,12 @@
             // Check Address conflicts (using existing AddressComparer)
             if (textLower.includes('home,') || /\d+\s+[A-Za-z]+\s+(St|Ave|Blvd|Dr|Rd|Ln|Ct|Cir|Trl|Way|Pl)\b/i.test(text)) {
                 const comparison = AddressComparer.compareAddresses(leftText, rightText);
+                console.log('📍 Address conflict check:', {
+                    left: leftText, right: rightText,
+                    leftCleaned: AddressComparer.cleanAddress(leftText),
+                    rightCleaned: AddressComparer.cleanAddress(rightText),
+                    areSame: comparison.areSame, reason: comparison.reason
+                });
                 // If addresses are NOT the same, it's a conflict
                 if (!comparison.areSame && leftText.length > 10 && rightText.length > 10) {
                     conflictCount++;

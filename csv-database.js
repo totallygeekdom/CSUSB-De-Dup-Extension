@@ -94,9 +94,7 @@
             gap: 10px;
             padding: 8px 16px 8px 12px;
             border-radius: 10px;
-            background: rgba(255, 255, 255, 0.85);
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
+            background: rgba(255, 255, 255, 0.75);
             font-size: 12px;
             font-weight: 500;
             color: #333;

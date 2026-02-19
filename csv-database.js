@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database
 // @namespace    http://tampermonkey.net/
-// @version      5
+// @version      6
 // @description  Tracks duplicate entries in a CSV database stored in browser localStorage
 // @author       You
 // @match        https://*.element451.io/*
@@ -40,6 +40,44 @@
     // CSS (database-owned styles)
     // =========================================================
     const dbCss = `
+        /* --- Chip annotation persistence via CSS ---
+         * These rules apply department colors based on data attributes
+         * so chips stay styled even when Angular re-renders inline styles.
+         * The inline styles set by annotateDuplicatesList() serve as the
+         * primary mechanism; these CSS rules act as a fallback so the user
+         * never sees the original orange "Unresolved" flash through. */
+        elm-chip .bg-color[data-csv-dept="Grad"] {
+            background-color: #e3f2fd !important;
+        }
+        elm-chip .bg-color[data-csv-dept="Grad"] ~ .elm-chip-label,
+        elm-chip .bg-color[data-csv-dept="Grad"] + .elm-chip-label,
+        elm-row[data-csv-dept="Grad"] elm-chip .elm-chip-label {
+            color: #1565c0 !important;
+        }
+        elm-chip .bg-color[data-csv-dept="IA"] {
+            background-color: #fff9c4 !important;
+        }
+        elm-chip .bg-color[data-csv-dept="IA"] ~ .elm-chip-label,
+        elm-chip .bg-color[data-csv-dept="IA"] + .elm-chip-label,
+        elm-row[data-csv-dept="IA"] elm-chip .elm-chip-label {
+            color: #f57f17 !important;
+        }
+        elm-chip .bg-color[data-csv-dept="UnderGrad"] {
+            background-color: #f3e5f5 !important;
+        }
+        elm-chip .bg-color[data-csv-dept="UnderGrad"] ~ .elm-chip-label,
+        elm-chip .bg-color[data-csv-dept="UnderGrad"] + .elm-chip-label,
+        elm-row[data-csv-dept="UnderGrad"] elm-chip .elm-chip-label {
+            color: #6a1b9a !important;
+        }
+        elm-chip .bg-color[data-csv-dept="Forbidden"] {
+            background-color: #fce4ec !important;
+        }
+        elm-chip .bg-color[data-csv-dept="Forbidden"] ~ .elm-chip-label,
+        elm-chip .bg-color[data-csv-dept="Forbidden"] + .elm-chip-label,
+        elm-row[data-csv-dept="Forbidden"] elm-chip .elm-chip-label {
+            color: #c2185b !important;
+        }
         /* --- Database Size Badge (matches merge counter pill) --- */
         #elm-db-size-badge {
             display: flex;
@@ -260,6 +298,10 @@
         // Clear stale annotations from previous page/data before re-annotating
         clearStaleAnnotations();
         annotateDuplicatesList();
+        // Follow-up passes to catch rows that Angular renders after the API
+        // response arrives (common with pagination and filter changes)
+        setTimeout(annotateDuplicatesList, 100);
+        setTimeout(annotateDuplicatesList, 500);
     }
 
     // --- HELPER: CLEAR STALE CHIP ANNOTATIONS ---
@@ -269,6 +311,7 @@
         document.querySelectorAll('elm-row').forEach(row => {
             // Clear the stamped unique ID so stale page data doesn't persist
             row.removeAttribute('data-csv-uid');
+            row.removeAttribute('data-csv-dept');
             const chip = row.querySelector('elm-chip');
             if (!chip) return;
             const colorDiv = chip.querySelector('.bg-color');
@@ -526,18 +569,14 @@
             // Get the unique ID for this row. Priority order:
             // 1. Previously stamped data-csv-uid (survives Angular re-renders)
             // 2. Content-based matching (name text in row vs API names)
-            // 3. Index-based fallback (fragile — only if content match fails)
+            // Index-based fallback was removed — it caused wrong departments
+            // to flash briefly when rows were reordered or filtered.
             let uniqueId = row.getAttribute('data-csv-uid');
             if (!uniqueId && apiDuplicatesList) {
                 // Primary: match by visible name text in the row
                 const matched = matchRowToApiEntry(row, apiDuplicatesList, usedApiIndices);
                 if (matched) {
                     uniqueId = matched.uniqueId;
-                }
-                // Fallback: index-based matching (may be wrong if rows are reordered)
-                else if (apiDuplicatesList[rowIndex] && !usedApiIndices.has(rowIndex)) {
-                    uniqueId = apiDuplicatesList[rowIndex].uniqueId;
-                    usedApiIndices.add(rowIndex);
                 }
                 if (uniqueId) row.setAttribute('data-csv-uid', uniqueId);
             }
@@ -561,12 +600,25 @@
                     colorDiv.style.cssText = '';
                     chip.style.cssText = '';
                 }
+                row.removeAttribute('data-csv-dept');
                 return;
             }
 
             // Non-Undergrad entries are ambiguous — keep the default orange
-            // "Unresolved" chip instead of rewriting it
-            if (dbEntry.dept === 'Non-Undergrad') return;
+            // "Unresolved" chip instead of rewriting it.
+            // Ignored entries should also keep their original chip unmodified
+            // per user request — they are still "Unresolved" in the system.
+            if (dbEntry.dept === 'Non-Undergrad' || dbEntry.dept === 'Ignored') {
+                // Clean up any stale annotation that may exist from before
+                if (colorDiv && colorDiv.hasAttribute('data-csv-dept')) {
+                    colorDiv.removeAttribute('data-csv-dept');
+                    colorDiv.removeAttribute('data-csv-gen');
+                    colorDiv.style.cssText = '';
+                    chip.style.cssText = '';
+                }
+                row.removeAttribute('data-csv-dept');
+                return;
+            }
 
             const desiredLabel = DEPT_LABELS[dbEntry.dept] || dbEntry.dept;
             const colors = DEPT_COLORS[dbEntry.dept] || { bg: '#f5f5f5', fg: '#333' };
@@ -575,6 +627,8 @@
             // CURRENT API generation — skip only if everything matches.
             // The generation check ensures re-evaluation when fresh API data
             // arrives, even if the label/color happen to match by coincidence.
+            // Also verify the DOM elements still have our attributes (Angular
+            // may have replaced the inner elements entirely).
             const currentGen = colorDiv ? colorDiv.getAttribute('data-csv-gen') : null;
             const labelOk = label && label.textContent.trim() === desiredLabel;
             const colorOk = colorDiv && colorDiv.style.backgroundColor &&
@@ -594,6 +648,10 @@
                 colorDiv.setAttribute('data-csv-gen', genStr);
             }
 
+            // Stamp dept on the row element so CSS rules can target labels
+            // even when Angular replaces inner chip elements
+            row.setAttribute('data-csv-dept', dbEntry.dept);
+
             // Also set chip-level styles as a fallback in case .bg-color
             // is missing or gets replaced by Angular
             chip.style.cssText = `background-color: ${colors.bg} !important; color: ${colors.fg} !important`;
@@ -604,11 +662,44 @@
     // Angular re-renders can overwrite our chip modifications at any time.
     // A MutationObserver reacts immediately to DOM changes so we can
     // re-annotate before the user sees the revert.
+    //
+    // Strategy: Use two debounce timers —
+    //   1. A short timer (20ms) that fires on EVERY batch of mutations to
+    //      quickly re-apply styles that Angular just wiped. This catches the
+    //      common case of Angular re-rendering a single row's chip.
+    //   2. A longer timer (200ms) that fires after Angular finishes a full
+    //      render cycle (pagination, filtering, etc.) to do a complete pass.
     let listAnnotationTimer = null;
-    const listObserver = new MutationObserver(() => {
-        // Debounce: Angular may fire many mutations in a single render cycle
+    let listAnnotationQuickTimer = null;
+    const listObserver = new MutationObserver((mutations) => {
+        // Quick pass: check if any mutation affected an elm-chip or elm-row.
+        // If so, re-annotate quickly to prevent visible flicker.
+        let chipAffected = false;
+        for (const m of mutations) {
+            if (m.target && (m.target.closest && (m.target.closest('elm-chip') || m.target.closest('elm-row')))) {
+                chipAffected = true;
+                break;
+            }
+            // Also check added/removed nodes
+            for (const node of m.addedNodes) {
+                if (node.nodeType === 1 && (node.tagName === 'ELM-CHIP' || node.tagName === 'ELM-ROW' ||
+                    node.querySelector && (node.querySelector('elm-chip') || node.querySelector('elm-row')))) {
+                    chipAffected = true;
+                    break;
+                }
+            }
+            if (chipAffected) break;
+        }
+
+        if (chipAffected) {
+            // Quick re-annotation for chip-specific mutations
+            if (listAnnotationQuickTimer) clearTimeout(listAnnotationQuickTimer);
+            listAnnotationQuickTimer = setTimeout(annotateDuplicatesList, 20);
+        }
+
+        // Full pass after Angular finishes its render cycle
         if (listAnnotationTimer) clearTimeout(listAnnotationTimer);
-        listAnnotationTimer = setTimeout(annotateDuplicatesList, 50);
+        listAnnotationTimer = setTimeout(annotateDuplicatesList, 200);
     });
     // Track current observer target to detect when the container changes
     // (e.g., Angular replaces .elm-table-body during navigation).
@@ -640,16 +731,25 @@
         if (currentUrl !== lastKnownListUrl) {
             lastKnownListUrl = currentUrl;
             console.log('CSV Database: List URL changed to', currentUrl);
+
+            // Reset first page bootstrap flag so navigating back to page 1
+            // (or changing filters which alter the URL) can re-fetch data
+            firstPageFetchAttempted = false;
+
             // URL changed — trigger re-annotation (will use page cache if
             // no fresh API data is available for this page)
             if (listAnnotationTimer) clearTimeout(listAnnotationTimer);
             listAnnotationTimer = setTimeout(() => {
+                attemptFirstPageFetch();
                 annotateDuplicatesList();
                 // Reconnect observer to new container (Angular may have
                 // replaced the DOM element)
                 listObserver.disconnect();
                 currentObserverTarget = null;
                 startListObserver();
+                // Second pass after Angular is fully settled — catches cases
+                // where the first pass ran before all rows were in the DOM
+                setTimeout(annotateDuplicatesList, 300);
             }, 150); // Slightly longer delay to let Angular finish rendering
         }
     }

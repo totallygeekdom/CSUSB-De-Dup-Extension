@@ -730,6 +730,19 @@
                 if (!dbEntry) return;
                 if (dbEntry.dept === 'Non-Undergrad' || dbEntry.dept === 'Ignored') return;
 
+                // If Element451 already shows this chip as "Ignored", don't overwrite it.
+                // The DB may have a stale dept from before the entry was ignored.
+                if (label && label.textContent.trim().toLowerCase() === 'ignored') {
+                    if (colorDiv && colorDiv.hasAttribute('data-csv-dept')) {
+                        colorDiv.removeAttribute('data-csv-dept');
+                        colorDiv.removeAttribute('data-csv-gen');
+                        colorDiv.style.cssText = '';
+                        chip.style.cssText = '';
+                    }
+                    row.removeAttribute('data-csv-dept');
+                    return;
+                }
+
                 const desiredLabel = DEPT_LABELS[dbEntry.dept] || dbEntry.dept;
                 const colors = DEPT_COLORS[dbEntry.dept] || { bg: '#f5f5f5', fg: '#333' };
 
@@ -825,6 +838,20 @@
             // per user request — they are still "Unresolved" in the system.
             if (dbEntry.dept === 'Non-Undergrad' || dbEntry.dept === 'Ignored') {
                 // Clean up any stale annotation that may exist from before
+                if (colorDiv && colorDiv.hasAttribute('data-csv-dept')) {
+                    colorDiv.removeAttribute('data-csv-dept');
+                    colorDiv.removeAttribute('data-csv-gen');
+                    colorDiv.style.cssText = '';
+                    chip.style.cssText = '';
+                }
+                row.removeAttribute('data-csv-dept');
+                return;
+            }
+
+            // If Element451 already shows this chip as "Ignored", don't overwrite it.
+            // The DB may have a stale dept from before the entry was ignored.
+            if (label && label.textContent.trim().toLowerCase() === 'ignored') {
+                // Clean up any stale annotation
                 if (colorDiv && colorDiv.hasAttribute('data-csv-dept')) {
                     colorDiv.removeAttribute('data-csv-dept');
                     colorDiv.removeAttribute('data-csv-gen');

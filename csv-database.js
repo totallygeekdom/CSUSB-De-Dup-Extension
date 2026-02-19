@@ -89,22 +89,60 @@
             position: fixed;
             bottom: 16px;
             left: 16px;
-            padding: 8px 14px;
-            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 16px 8px 12px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
             font-size: 12px;
             font-weight: 500;
-            color: #fff;
+            color: #333;
             z-index: 9999;
             opacity: 0;
-            transition: opacity 0.3s ease;
+            transition: opacity 0.35s ease;
             pointer-events: none;
-            max-width: 300px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            max-width: 340px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.1);
         }
         #csv-api-toast.visible { opacity: 1; }
-        #csv-api-toast.success { background: #2e7d32; }
-        #csv-api-toast.fallback { background: #e65100; }
-        #csv-api-toast.error { background: #c62828; }
+        /* Pulse dot container */
+        .csv-toast-dot {
+            position: relative;
+            width: 18px;
+            height: 18px;
+            flex-shrink: 0;
+        }
+        .csv-toast-dot-inner {
+            position: absolute;
+            top: 50%; left: 50%;
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+        }
+        .csv-toast-dot-outer {
+            position: absolute;
+            top: 50%; left: 50%;
+            width: 16px; height: 16px;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            animation: csvPulse 1.8s ease-in-out infinite;
+        }
+        /* Green (success) */
+        #csv-api-toast.success .csv-toast-dot-inner { background: #2e7d32; }
+        #csv-api-toast.success .csv-toast-dot-outer { background: rgba(46, 125, 50, 0.3); }
+        /* Orange (fallback) */
+        #csv-api-toast.fallback .csv-toast-dot-inner { background: #e65100; }
+        #csv-api-toast.fallback .csv-toast-dot-outer { background: rgba(230, 81, 0, 0.3); }
+        /* Red (error) */
+        #csv-api-toast.error .csv-toast-dot-inner { background: #c62828; }
+        #csv-api-toast.error .csv-toast-dot-outer { background: rgba(198, 40, 40, 0.3); }
+        @keyframes csvPulse {
+            0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.6; }
+            50%      { transform: translate(-50%, -50%) scale(1.5); opacity: 0.2; }
+        }
         /* --- Database Size Badge (matches merge counter pill) --- */
         #elm-db-size-badge {
             display: flex;
@@ -284,7 +322,13 @@
             toastEl.id = 'csv-api-toast';
             document.body.appendChild(toastEl);
         }
-        toastEl.textContent = message;
+        toastEl.innerHTML =
+            '<span class="csv-toast-dot">' +
+                '<span class="csv-toast-dot-outer"></span>' +
+                '<span class="csv-toast-dot-inner"></span>' +
+            '</span>' +
+            '<span class="csv-toast-text"></span>';
+        toastEl.querySelector('.csv-toast-text').textContent = message;
         toastEl.className = type + ' visible';
         if (toastTimer) clearTimeout(toastTimer);
         toastTimer = setTimeout(() => {
@@ -709,7 +753,7 @@
             });
             if (matched > 0 && lastAnnotationSource !== 'db-fallback') {
                 lastAnnotationSource = 'db-fallback';
-                showApiToast('API unavailable — using database fallback', 'fallback');
+                showApiToast('API: unavailable, using database fallback', 'fallback');
             }
             return;
         }
@@ -717,7 +761,7 @@
         // ---- PRIMARY PATH (API data available) ----
         if (lastAnnotationSource !== 'api') {
             lastAnnotationSource = 'api';
-            showApiToast('API data captured successfully', 'success');
+            showApiToast('API: data captured successfully', 'success');
         }
 
         // Build a quick lookup map from uniqueId -> dbEntry

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection
 // @namespace    http://tampermonkey.net/
-// @version      125
+// @version      126
 // @description  Merge workflow with auto-selection, smart links, and UI enhancements
 // @author       You
 // @match        https://*.element451.io/*
@@ -1429,6 +1429,10 @@
                     relevantRow = row;
                 }
             }
+            // Fallback: if no keyword-matched row found, highlight the first available row
+            if (!relevantRow && allRows.length > 0) {
+                relevantRow = allRows[0];
+            }
             return { wrongDept: true, row: relevantRow, reason: actualDept };
         }
         const allRows = Array.from(document.querySelectorAll('elm-merge-row'));
@@ -1468,7 +1472,9 @@
         // the allowed department is Grad or IA, and vice versa.
         const actualDept = detectActualDepartment();
         if (actualDept.toLowerCase() !== dept) {
-            return { wrongDept: true, row: lastRelevantRow, reason: actualDept };
+            // Fallback: if no keyword-matched row found, highlight the first available row
+            const rowToHighlight = lastRelevantRow || (allRows.length > 0 ? allRows[0] : null);
+            return { wrongDept: true, row: rowToHighlight, reason: actualDept };
         }
         return { wrongDept: false };
     }

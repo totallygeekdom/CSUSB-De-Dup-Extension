@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database
 // @namespace    http://tampermonkey.net/
-// @version      6
+// @version      7
 // @description  Tracks duplicate entries in a CSV database stored in browser localStorage
 // @author       You
 // @match        https://*.element451.io/*
@@ -35,6 +35,12 @@
     'use strict';
 
     const STORAGE_KEY = 'elm_csv_database';
+
+    // =========================================================
+    // FLAGS
+    // =========================================================
+    // Set to false to disable the small toast that shows API fetch status
+    const SHOW_API_STATUS_TOAST = true;
 
     // =========================================================
     // CSS (database-owned styles)
@@ -78,6 +84,27 @@
         elm-row[data-csv-dept="Forbidden"] elm-chip .elm-chip-label {
             color: #c2185b !important;
         }
+        /* --- API Status Toast --- */
+        #csv-api-toast {
+            position: fixed;
+            bottom: 16px;
+            left: 16px;
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 500;
+            color: #fff;
+            z-index: 9999;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            pointer-events: none;
+            max-width: 300px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+        #csv-api-toast.visible { opacity: 1; }
+        #csv-api-toast.success { background: #2e7d32; }
+        #csv-api-toast.fallback { background: #e65100; }
+        #csv-api-toast.error { background: #c62828; }
         /* --- Database Size Badge (matches merge counter pill) --- */
         #elm-db-size-badge {
             display: flex;
@@ -243,6 +270,64 @@
         db.push(newEntry);
         saveDatabase(db);
         console.log('CSV Database: Recorded new entry', newEntry);
+    }
+
+    // =========================================================
+    // API STATUS TOAST
+    // =========================================================
+    let toastEl = null;
+    let toastTimer = null;
+    function showApiToast(message, type) {
+        if (!SHOW_API_STATUS_TOAST) return;
+        if (!toastEl) {
+            toastEl = document.createElement('div');
+            toastEl.id = 'csv-api-toast';
+            document.body.appendChild(toastEl);
+        }
+        toastEl.textContent = message;
+        toastEl.className = type + ' visible';
+        if (toastTimer) clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => {
+            toastEl.classList.remove('visible');
+        }, 4000);
+    }
+
+    // Track whether API data was used or DB fallback for the current page
+    let lastAnnotationSource = null; // 'api' | 'db-fallback' | null
+
+    // =========================================================
+    // DB-DIRECT MATCHING (FALLBACK)
+    // When API data is unavailable, match DOM row names directly
+    // against the database's firstName/lastName fields to find
+    // department info without needing the unique ID from the API.
+    // =========================================================
+    function matchRowToDbEntry(row, db, usedDbIndices) {
+        const rowText = row.textContent.trim().toLowerCase();
+
+        // Pass 1: Precise — match on both firstName AND lastName
+        for (let i = 0; i < db.length; i++) {
+            if (usedDbIndices.has(i)) continue;
+            const entry = db[i];
+            const first = (entry.firstName || '').trim().toLowerCase();
+            const last = (entry.lastName || '').trim().toLowerCase();
+            if (first.length > 1 && last.length > 1 &&
+                rowText.includes(first) && rowText.includes(last)) {
+                usedDbIndices.add(i);
+                return entry;
+            }
+        }
+
+        // Pass 2: Single name — lastName only (more unique than firstName)
+        for (let i = 0; i < db.length; i++) {
+            if (usedDbIndices.has(i)) continue;
+            const entry = db[i];
+            const last = (entry.lastName || '').trim().toLowerCase();
+            if (last.length > 3 && rowText.includes(last)) {
+                usedDbIndices.add(i);
+                return entry;
+            }
+        }
+        return null;
     }
 
     // =========================================================
@@ -542,6 +627,7 @@
         if (document.querySelector('elm-merge-row')) return;
 
         const currentPageKey = getPageKey();
+        let useDbFallback = false;
 
         // If we have no API data, try to restore from cache for this page
         if (!apiDuplicatesList) {
@@ -554,12 +640,13 @@
                 clearStaleAnnotations();
                 // Fall through to annotate with restored data
             } else {
-                return; // No data available at all
+                // No API data at all — try DB-direct fallback
+                useDbFallback = true;
             }
         }
 
         // Handle page change: API data belongs to a different page
-        if (apiCapturedPageKey && apiCapturedPageKey !== currentPageKey) {
+        if (!useDbFallback && apiCapturedPageKey && apiCapturedPageKey !== currentPageKey) {
             // Try to restore from cache for the new page
             const cached = apiPageCache.get(currentPageKey);
             if (cached) {
@@ -570,11 +657,11 @@
                 clearStaleAnnotations();
                 // Fall through to annotate with restored data
             } else {
-                console.log('CSV Database: Page changed (' + apiCapturedPageKey + ' → ' + currentPageKey + '), no cache — clearing');
+                console.log('CSV Database: Page changed (' + apiCapturedPageKey + ' → ' + currentPageKey + '), no cache — using DB fallback');
                 apiDuplicatesList = null;
                 apiCapturedPageKey = null;
                 clearStaleAnnotations();
-                return;
+                useDbFallback = true;
             }
         }
 
@@ -582,6 +669,56 @@
         if (rows.length === 0) return;
 
         const db = getDatabase();
+        if (db.length === 0) return; // Nothing to annotate with
+
+        // ---- DB-DIRECT FALLBACK PATH ----
+        // When API data is unavailable, match DOM rows directly against
+        // database entries by firstName/lastName. Less precise (no unique ID
+        // confirmation) but ensures chips still show department colors.
+        if (useDbFallback) {
+            const usedDbIndices = new Set();
+            let matched = 0;
+            rows.forEach(row => {
+                const chip = row.querySelector('elm-chip');
+                if (!chip) return;
+                const colorDiv = chip.querySelector('.bg-color');
+                const label = chip.querySelector('.elm-chip-label');
+
+                const dbEntry = matchRowToDbEntry(row, db, usedDbIndices);
+                if (!dbEntry) return;
+                if (dbEntry.dept === 'Non-Undergrad' || dbEntry.dept === 'Ignored') return;
+
+                const desiredLabel = DEPT_LABELS[dbEntry.dept] || dbEntry.dept;
+                const colors = DEPT_COLORS[dbEntry.dept] || { bg: '#f5f5f5', fg: '#333' };
+
+                // Check if already annotated correctly
+                if (label && label.textContent.trim() === desiredLabel &&
+                    colorDiv && colorDiv.getAttribute('data-csv-dept') === dbEntry.dept) return;
+
+                if (label) {
+                    label.textContent = ` ${desiredLabel} `;
+                    label.style.color = colors.fg;
+                }
+                if (colorDiv) {
+                    colorDiv.style.cssText = `background-color: ${colors.bg} !important`;
+                    colorDiv.setAttribute('data-csv-dept', dbEntry.dept);
+                }
+                row.setAttribute('data-csv-dept', dbEntry.dept);
+                chip.style.cssText = `background-color: ${colors.bg} !important; color: ${colors.fg} !important`;
+                matched++;
+            });
+            if (matched > 0 && lastAnnotationSource !== 'db-fallback') {
+                lastAnnotationSource = 'db-fallback';
+                showApiToast('API unavailable — using database fallback', 'fallback');
+            }
+            return;
+        }
+
+        // ---- PRIMARY PATH (API data available) ----
+        if (lastAnnotationSource !== 'api') {
+            lastAnnotationSource = 'api';
+            showApiToast('API data captured successfully', 'success');
+        }
 
         // Build a quick lookup map from uniqueId -> dbEntry
         const dbMap = {};
@@ -771,6 +908,8 @@
             // Reset first page bootstrap flag so navigating back to page 1
             // (or changing filters which alter the URL) can re-fetch data
             firstPageFetchAttempted = false;
+            // Reset annotation source so toast shows for the new page
+            lastAnnotationSource = null;
 
             // URL changed — trigger re-annotation (will use page cache if
             // no fresh API data is available for this page)

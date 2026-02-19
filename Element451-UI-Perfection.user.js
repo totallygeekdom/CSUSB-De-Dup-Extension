@@ -1418,21 +1418,27 @@
         // "None" = block all departments
         if (dept === 'none') {
             const actualDept = detectActualDepartment();
-            // Find a relevant row to highlight (same scan as other dept checks)
+            // Find the row that matches the detected department to highlight it
             const allRows = Array.from(document.querySelectorAll('elm-merge-row'));
-            let relevantRow = null;
+            const isGradTextNone = (t) => t.includes('GRAD_') || /grad student/i.test(t);
+            const isIATextNone = (t) => t.includes('IA_') || t.includes('_IA_') || t.includes('_IA ');
+            let deptMatchRow = null;
+            let fallbackRow = null;
             for (const row of allRows) {
                 const text = row.textContent;
-                if (text.includes('Workflows') || text.includes('Application') ||
+                const isRelevantRow = text.includes('Workflows') || text.includes('Application') ||
                     text.includes('Program') || text.includes('type:') ||
-                    text.includes('status:') || text.includes('Outreach_')) {
-                    relevantRow = row;
+                    text.includes('status:') || text.includes('Outreach_');
+                if (!isRelevantRow) continue;
+                fallbackRow = row;
+                // Prefer the row that actually matches the detected department
+                if (!deptMatchRow) {
+                    if (actualDept === 'Grad' && isGradTextNone(text)) deptMatchRow = row;
+                    else if (actualDept === 'IA' && isIATextNone(text)) deptMatchRow = row;
+                    else if (actualDept === 'Non-Undergrad' && text.includes('Outreach_') && !text.includes('UGRD')) deptMatchRow = row;
                 }
             }
-            // Fallback: if no keyword-matched row found, highlight the first available row
-            if (!relevantRow && allRows.length > 0) {
-                relevantRow = allRows[0];
-            }
+            const relevantRow = deptMatchRow || fallbackRow || (allRows.length > 0 ? allRows[0] : null);
             return { wrongDept: true, row: relevantRow, reason: actualDept };
         }
         const allRows = Array.from(document.querySelectorAll('elm-merge-row'));

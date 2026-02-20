@@ -796,6 +796,10 @@
             if (this.hasCountry(originalStr)) {
                 score += 5;
             }
+            // Bonus for geo location (address has been geocoded/verified by Element451)
+            if (originalStr && /with\s+geo\s+location/i.test(originalStr)) {
+                score += 20;
+            }
             // Heavy penalty for duplicates
             if (this.hasDuplicateComponents(originalStr)) score -= 100;
             // Penalty for malformed (number not at start)
@@ -1078,6 +1082,7 @@
         const rows = document.querySelectorAll('elm-merge-row');
         let conflictCount = 0;
         const conflicts = [];
+        const addressPairs = []; // Collect address rows for cross-matching
         // Helper to normalize names (case-insensitive, remove spaces and hyphens)
         const normalizeName = (name) => {
             if (!name) return '';
@@ -1136,22 +1141,42 @@
                 }
                 continue;
             }
-            // Check Address conflicts (using existing AddressComparer)
+            // Collect address rows for cross-matching (addresses may appear in different order)
             if (textLower.includes('home,') || /\d+\s+[A-Za-z]+\s+(St|Ave|Blvd|Dr|Rd|Ln|Ct|Cir|Trl|Way|Pl)\b/i.test(text)) {
-                const comparison = AddressComparer.compareAddresses(leftText, rightText);
-                console.log('📍 Address conflict check:', {
-                    left: leftText, right: rightText,
-                    leftCleaned: AddressComparer.cleanAddress(leftText),
-                    rightCleaned: AddressComparer.cleanAddress(rightText),
-                    areSame: comparison.areSame, reason: comparison.reason
-                });
-                // If addresses are NOT the same, it's a conflict
-                if (!comparison.areSame && leftText.length > 10 && rightText.length > 10) {
-                    conflictCount++;
-                    conflicts.push('Address');
-                    console.log('⚠️ Conflict detected - Address:', leftText, 'vs', rightText);
+                if (leftText.length > 10 && rightText.length > 10) {
+                    addressPairs.push({ left: leftText, right: rightText });
                 }
                 continue;
+            }
+        }
+        // Cross-match address rows: check if every left address has a match
+        // among ANY right address (handles addresses listed in different order)
+        if (addressPairs.length > 0) {
+            const allLeftAddrs = addressPairs.map(p => p.left);
+            const allRightAddrs = addressPairs.map(p => p.right);
+            // For each left address, check if ANY right address matches
+            const unmatchedLeft = [];
+            const matchedRight = new Set();
+            for (const leftAddr of allLeftAddrs) {
+                let found = false;
+                for (let ri = 0; ri < allRightAddrs.length; ri++) {
+                    if (matchedRight.has(ri)) continue;
+                    const cmp = AddressComparer.compareAddresses(leftAddr, allRightAddrs[ri]);
+                    if (cmp.areSame) {
+                        found = true;
+                        matchedRight.add(ri);
+                        console.log('📍 Address match found:', leftAddr, '↔', allRightAddrs[ri]);
+                        break;
+                    }
+                }
+                if (!found) unmatchedLeft.push(leftAddr);
+            }
+            if (unmatchedLeft.length > 0) {
+                conflictCount++;
+                conflicts.push('Address');
+                console.log('⚠️ Address conflict: unmatched addresses -', unmatchedLeft);
+            } else {
+                console.log('✅ All addresses cross-matched successfully');
             }
         }
         const shouldWarn = conflictCount >= CONFLICT_ROW_THRESHOLD;

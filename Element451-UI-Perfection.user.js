@@ -454,6 +454,9 @@
             let addr = rawAddress.trim();
             addr = addr.replace(/^Home,\s*/i, '');
             addr = addr.replace(/^[,\s]+|[,\s]+$/g, '');
+            // Strip "with geo location" suffix (Element451 artifact on geocoded addresses)
+            addr = addr.replace(/,?\s*with\s+geo\s+location\s*$/i, '');
+            addr = addr.replace(/[,\s]+$/, '');
             // Strip country variations
             for (const country of this.countryVariations) {
                 const regex = new RegExp(',?\\s*' + country.replace(/\./g, '\\.') + '\\s*,?\\s*$', 'i');
@@ -793,6 +796,10 @@
             if (this.hasCountry(originalStr)) {
                 score += 5;
             }
+            // Bonus for geo location (address has been geocoded/verified by Element451)
+            if (originalStr && /with\s+geo\s+location/i.test(originalStr)) {
+                score += 20;
+            }
             // Heavy penalty for duplicates
             if (this.hasDuplicateComponents(originalStr)) score -= 100;
             // Penalty for malformed (number not at start)
@@ -1075,6 +1082,7 @@
         const rows = document.querySelectorAll('elm-merge-row');
         let conflictCount = 0;
         const conflicts = [];
+        const addressPairs = []; // Collect address rows for cross-matching
         // Helper to normalize names (case-insensitive, remove spaces and hyphens)
         const normalizeName = (name) => {
             if (!name) return '';
@@ -1133,16 +1141,42 @@
                 }
                 continue;
             }
-            // Check Address conflicts (using existing AddressComparer)
+            // Collect address rows for cross-matching (addresses may appear in different order)
             if (textLower.includes('home,') || /\d+\s+[A-Za-z]+\s+(St|Ave|Blvd|Dr|Rd|Ln|Ct|Cir|Trl|Way|Pl)\b/i.test(text)) {
-                const comparison = AddressComparer.compareAddresses(leftText, rightText);
-                // If addresses are NOT the same, it's a conflict
-                if (!comparison.areSame && leftText.length > 10 && rightText.length > 10) {
-                    conflictCount++;
-                    conflicts.push('Address');
-                    console.log('⚠️ Conflict detected - Address:', leftText, 'vs', rightText);
+                if (leftText.length > 10 && rightText.length > 10) {
+                    addressPairs.push({ left: leftText, right: rightText });
                 }
                 continue;
+            }
+        }
+        // Cross-match address rows: check if every left address has a match
+        // among ANY right address (handles addresses listed in different order)
+        if (addressPairs.length > 0) {
+            const allLeftAddrs = addressPairs.map(p => p.left);
+            const allRightAddrs = addressPairs.map(p => p.right);
+            // For each left address, check if ANY right address matches
+            const unmatchedLeft = [];
+            const matchedRight = new Set();
+            for (const leftAddr of allLeftAddrs) {
+                let found = false;
+                for (let ri = 0; ri < allRightAddrs.length; ri++) {
+                    if (matchedRight.has(ri)) continue;
+                    const cmp = AddressComparer.compareAddresses(leftAddr, allRightAddrs[ri]);
+                    if (cmp.areSame) {
+                        found = true;
+                        matchedRight.add(ri);
+                        console.log('📍 Address match found:', leftAddr, '↔', allRightAddrs[ri]);
+                        break;
+                    }
+                }
+                if (!found) unmatchedLeft.push(leftAddr);
+            }
+            if (unmatchedLeft.length > 0) {
+                conflictCount++;
+                conflicts.push('Address');
+                console.log('⚠️ Address conflict: unmatched addresses -', unmatchedLeft);
+            } else {
+                console.log('✅ All addresses cross-matched successfully');
             }
         }
         const shouldWarn = conflictCount >= CONFLICT_ROW_THRESHOLD;
@@ -1418,21 +1452,27 @@
         // "None" = block all departments
         if (dept === 'none') {
             const actualDept = detectActualDepartment();
-            // Find a relevant row to highlight (same scan as other dept checks)
+            // Find the row that matches the detected department to highlight it
             const allRows = Array.from(document.querySelectorAll('elm-merge-row'));
-            let relevantRow = null;
+            const isGradTextNone = (t) => t.includes('GRAD_') || /grad student/i.test(t);
+            const isIATextNone = (t) => t.includes('IA_') || t.includes('_IA_') || t.includes('_IA ');
+            let deptMatchRow = null;
+            let fallbackRow = null;
             for (const row of allRows) {
                 const text = row.textContent;
-                if (text.includes('Workflows') || text.includes('Application') ||
+                const isRelevantRow = text.includes('Workflows') || text.includes('Application') ||
                     text.includes('Program') || text.includes('type:') ||
-                    text.includes('status:') || text.includes('Outreach_')) {
-                    relevantRow = row;
+                    text.includes('status:') || text.includes('Outreach_');
+                if (!isRelevantRow) continue;
+                fallbackRow = row;
+                // Prefer the row that actually matches the detected department
+                if (!deptMatchRow) {
+                    if (actualDept === 'Grad' && isGradTextNone(text)) deptMatchRow = row;
+                    else if (actualDept === 'IA' && isIATextNone(text)) deptMatchRow = row;
+                    else if (actualDept === 'Non-Undergrad' && text.includes('Outreach_') && !text.includes('UGRD')) deptMatchRow = row;
                 }
             }
-            // Fallback: if no keyword-matched row found, highlight the first available row
-            if (!relevantRow && allRows.length > 0) {
-                relevantRow = allRows[0];
-            }
+            const relevantRow = deptMatchRow || fallbackRow || (allRows.length > 0 ? allRows[0] : null);
             return { wrongDept: true, row: relevantRow, reason: actualDept };
         }
         const allRows = Array.from(document.querySelectorAll('elm-merge-row'));

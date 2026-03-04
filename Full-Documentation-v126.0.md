@@ -49,7 +49,7 @@ Auto-click is **immediately blocked** and will not retry if any of these conditi
 **Forbidden Entry Detection:**
 
 - First Name or Last Name contains "test"  
-- Full name matches: Angela Armstrong, Gillespie Armstrong, Mariah Armstrong  
+- Full name matches a hardcoded forbidden names list (see script source)
 - Console: `⛔ Auto-click blocked: Forbidden entry detected`
 
 **Department Lockdown:**
@@ -544,7 +544,7 @@ All settings are accessible through the **gear icon (⚙)** in the navbar. Chang
 
 **Example Pattern:**
 
-* `College Board Id: 150521406` vs `College Board Id: 147901950`
+* `College Board Id: XXXXXXXXX` vs `College Board Id: YYYYYYYYY`
 
 **Data Attribute:** `row.dataset.collegeBoardIdSelection = "left"`
 
@@ -954,10 +954,8 @@ newOffset \= Math.max(0, newPage \- 1);
 
 - **Test Records:** First Name OR Last Name contains "test" (case-insensitive)  
   - Checked on BOTH left and right sides  
-- **Forbidden Names (exact full name match, case-insensitive):**  
-  - Angela Armstrong  
-  - Gillespie Armstrong  
-  - Mariah Armstrong  
+- **Forbidden Names (exact full name match, case-insensitive):**
+  - A hardcoded list of specific names maintained in the `FORBIDDEN_NAMES` array in the script source
   - Checked on BOTH left and right sides
 
 **Name Extraction:**
@@ -1595,7 +1593,7 @@ None. The script uses a built-in `AddressComparer` module for address parsing (t
   - Detection: Both sides contain `College Board Id:` (case-insensitive)
   - Data attribute: `row.dataset.collegeBoardIdSelection`
   - Only applies when no applicant context is found
-  - Example: "College Board Id: 150521406" vs "College Board Id: 147901950"
+  - Example: "College Board Id: XXXXXXXXX" vs "College Board Id: YYYYYYYYY"
 
 ---
 
@@ -1616,10 +1614,10 @@ None. The script uses a built-in `AddressComparer` module for address parsing (t
 
 **v121.2 Changes (Bug Fix - Email Name Matching):**
 
-- **Fixed: Multi-word and hyphenated last names not matching in emails** - Previously, a last name like "Hernandez Maravilla" would not match an email containing just "maravilla"
+- **Fixed: Multi-word and hyphenated last names not matching in emails** - Previously, multi-word last names would not match an email containing just one part of the name
 - Added `emailContainsName()` helper function that splits names by spaces and hyphens
 - Name parts must be at least 3 characters to be considered (avoids false positives with short strings)
-- Example: Last name "Hernandez-Maravilla" now matches email "maravilla.jose@gmail.com"
+- Example: A hyphenated last name like "Smith-Jones" now matches an email containing "jones"
 
 ---
 
@@ -1638,9 +1636,9 @@ None. The script uses a built-in `AddressComparer` module for address parsing (t
 
 - **Fixed: Address with country not being preferred** - Added `hasCountry()` check that gives +5 bonus to completeness score before stripping country from address.
 
-- **Fixed: Duplicate city detection** - Added `extractCity()` function and check for city name appearing multiple times in different formats (e.g., "Victorville CA 92394, Victorville, CA").
+- **Fixed: Duplicate city detection** - Added `extractCity()` function and check for city name appearing multiple times in different formats (e.g., "Anytown CA 92000, Anytown, CA").
 
-- **Fixed: Street duplicates with typos not detected** - Added fuzzy string matching with `stringSimilarity()` function. Streets with >80% similarity are now detected as duplicates (e.g., "Las Cruces St" vs "Las Cruses St").
+- **Fixed: Street duplicates with typos not detected** - Added fuzzy string matching with `stringSimilarity()` function. Streets with >80% similarity are now detected as duplicates (e.g., "Oak Grove St" vs "Oak Grve St").
 
 - **Fixed: Whitespace issues causing false mismatches** - More aggressive whitespace normalization in `cleanAddress()` - removes extra spaces, normalizes around commas and periods.
 
@@ -1760,7 +1758,7 @@ None. The script uses a built-in `AddressComparer` module for address parsing (t
 
 - Added Forbidden Entry Detection: Blocks merging of test records and specific forbidden names  
 - Test detection: Checks if "test" appears in First Name or Last Name on BOTH sides  
-- Forbidden names: Angela Armstrong, Gillespie Armstrong, Mariah Armstrong (exact match on BOTH sides)  
+- Forbidden names: Hardcoded list of specific names (exact match on BOTH sides)  
 - Forbidden entry check has HIGHEST PRIORITY (before department lockdown)  
 - FAB turns red with ∅ symbol and shows "Forbidden entry" alert  
 - New `isForbiddenEntry()` function scans both left and right values  

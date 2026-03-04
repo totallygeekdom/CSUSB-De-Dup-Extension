@@ -173,7 +173,7 @@ Monitors SPA navigation. Maintains a session-scoped Set of up to 10 recently-see
 
 ---
 
-## Element451 - CSV Database (v4)
+## Element451 - CSV Database (v7)
 
 A companion script that tracks blocked entries in a local database and annotates the duplicates list page with department badges.
 

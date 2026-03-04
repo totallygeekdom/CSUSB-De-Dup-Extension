@@ -1,21 +1,24 @@
 # **Element451 UI Perfection \- Full Documentation**
 
-**Version:** 121.4  
- **Purpose:** Automates merge conflict resolution for duplicate student records in Element451, handling an estimated 80% of cases while requiring human confirmation for complex decisions.
+**Version:** 126 (UI Perfection) / 7 (CSV Database)
+ **Purpose:** Two Tampermonkey userscripts that streamline the Element451 duplicate-contact merge workflow at CSUSB. UI Perfection handles the merge page (auto-resolution, lockdowns, navigation), while CSV Database tracks blocked entries and annotates the list page.
 
 ---
 
 ## **Table of Contents**
 
-1. [Configuration Constants](#configuration-constants)  
-2. [Automation Features](#automation-features)  
-3. [Auto-Resolution System](#auto-resolution-system)  
-4. [Visual Feedback System](#visual-feedback-system)  
-5. [Navigation & UI Enhancements](#navigation-&-ui-enhancements)  
-6. [Safety Features](#safety-features)  
-7. [Utility Features](#utility-features)  
-8. [State Management](#state-management)  
-9. [CSS Selectors Reference](#css-selectors-reference)
+1. [Configuration Constants](#configuration-constants)
+2. [Automation Features](#automation-features)
+3. [Auto-Resolution System](#auto-resolution-system)
+4. [Visual Feedback System](#visual-feedback-system)
+5. [Navigation & UI Enhancements](#navigation-&-ui-enhancements)
+6. [Safety Features](#safety-features)
+7. [Settings Pane](#settings-pane)
+8. [Utility Features](#utility-features)
+9. [State Management](#state-management)
+10. [CSV Database Module](#csv-database-module)
+11. [Inter-Script Communication](#inter-script-communication)
+12. [CSS Selectors Reference](#css-selectors-reference)
 
 ---
 
@@ -46,7 +49,7 @@ Auto-click is **immediately blocked** and will not retry if any of these conditi
 **Forbidden Entry Detection:**
 
 - First Name or Last Name contains "test"  
-- Full name matches: Angela Armstrong, Gillespie Armstrong, Mariah Armstrong  
+- Full name matches a hardcoded forbidden names list (see script source)
 - Console: `⛔ Auto-click blocked: Forbidden entry detected`
 
 **Department Lockdown:**
@@ -284,36 +287,49 @@ const CONFLICT\_ROW\_THRESHOLD \= 0;
 
 ---
 
+### **Auto-Skip Blocked Entries**
+
+**Purpose:** Automatically navigate past blocked entries (forbidden, wrong department, student ID mismatch, ignored) without manual intervention.
+
+**Enabled By Default:** `AUTO_SKIP_BLOCKED = true`
+
+#### **Behavior**
+
+1. After auto-click is blocked, waits for the CSV Database script to record the entry
+2. Polls `localStorage` for the `elm_csv_database` key every 500ms, up to 10 seconds
+3. Once the entry is recorded (or timeout), clicks the "Next" pagination button
+4. If the CSV Database script is not installed, skips after 1.5 seconds
+
+#### **Race Condition Protection**
+
+Each poll iteration re-checks whether the entry is still actually blocked. If new merge rows loaded that changed the department detection (e.g., grad rows appearing after Spark IDs), the skip is aborted and auto-click is retried. This prevents grad entries from being incorrectly skipped when the allowed department is Grad.
+
+#### **State Tracking**
+
+- `autoSkipAttempted` flag prevents repeated skip attempts on the same page
+- Flag resets on navigation to a new duplicate page
+
+---
+
 ## **Configuration Constants** {#configuration-constants}
 
-HEADER\_OFFSET \= 64  
-// Pixels from top when scrolling to conflicts
+All settings are accessible through the **gear icon (⚙)** in the navbar. Changes take effect immediately without a reload. Settings persist in `localStorage`.
 
-REQUIRE\_SCROLL\_TO\_BOTTOM \= true  
-// Set to false to disable scroll-to-review requirement before merging
+| Setting | localStorage Key | Default | Description |
+| :---- | :---- | :---- | :---- |
+| **Require Scroll to Bottom** | `elm_require_scroll_to_bottom` | `true` | Requires scrolling to the bottom of all merge fields before the merge button activates |
+| **Auto-Click FAB** | `elm_auto_click_fab` | `true` | Automatically clicks the FAB after page loads and Spark IDs are detected. Blocked for forbidden entries, wrong departments, student ID mismatches, and ignored students |
+| **Auto-Navigate After Merge** | `elm_auto_navigate_after_merge` | `true` | Navigates to the next duplicate 1 second after a successful merge |
+| **Show Merge Counter** | `elm_show_merge_counter` | `true` | Displays the merge counter pill in the navbar |
+| **Auto-Skip Blocked** | `elm_auto_skip_blocked` | `true` | Automatically skips blocked entries by clicking "Next" after the CSV database records them |
+| **Allowed Department** | `elm_allowed_department` | `UnderGrad` | Department filter. Options: `All` (no filtering), `UnderGrad`, `Grad`, `IA`, `None` (block everything) |
 
-**AUTO\_CLICK\_FAB** \= true *(NEW in v116.0)*
+**Hardcoded Constants:**
 
-// Set to false to disable automatic FAB clicking on page load
-// When enabled, automatically triggers merge workflow after page loads
-// Blocked for forbidden entries, wrong departments, and ignored students
-
-**AUTO\_NAVIGATE\_AFTER\_MERGE** \= true *(NEW in v118.0)*
-
-// Set to false to disable automatic navigation to next duplicate after merge
-// When enabled, automatically clicks the next pagination button after merge success is detected
-// 1 second delay after merge success to let user see the success message
-
-**CONFLICT\_ROW\_THRESHOLD** \= 2 *(NEW in v119.0)*
-
-// Number of conflicting rows before warning about possible twins/different people
-// Set to 0 to disable this feature
-// Checks: First Name, Last Name, Date of Birth (valid years only), Address
-
-**SHOW\_MERGE\_COUNTER** \= true *(NEW in v119.2)*
-
-// Set to false to hide the merge counter in the navbar
-// When disabled, the counter UI is not rendered and merge counts are not tracked
+| Constant | Value | Description |
+| :---- | :---- | :---- |
+| `CONFLICT_ROW_THRESHOLD` | `2` | Number of identity conflicts before a twin/different-person warning. `0` to disable |
+| `HEADER_OFFSET` | `64` | Pixels from top when scrolling to conflict rows |
 
 ---
 
@@ -528,7 +544,7 @@ REQUIRE\_SCROLL\_TO\_BOTTOM \= true
 
 **Example Pattern:**
 
-* `College Board Id: 150521406` vs `College Board Id: 147901950`
+* `College Board Id: XXXXXXXXX` vs `College Board Id: YYYYYYYYY`
 
 **Data Attribute:** `row.dataset.collegeBoardIdSelection = "left"`
 
@@ -621,6 +637,8 @@ Removes these variations from end of address:
 **Address Row Detection:**
 
 text.includes('Home,') || /\\d+\\s+\[A-Za-z\]+\\s+(St|Ave|Blvd|Dr|Rd|Ln|Ct|Cir|Trl|Way|Pl)\\b/i.test(text)
+
+**Geo-Location Suffix Stripping:** Element451 appends "with geo location" to geocoded addresses. The comparer strips this suffix before parsing to prevent false mismatches. Geocoded addresses receive a small completeness bonus.
 
 **Tie-breaker:** If scores are equal, follows the email selection side.
 
@@ -936,10 +954,8 @@ newOffset \= Math.max(0, newPage \- 1);
 
 - **Test Records:** First Name OR Last Name contains "test" (case-insensitive)  
   - Checked on BOTH left and right sides  
-- **Forbidden Names (exact full name match, case-insensitive):**  
-  - Angela Armstrong  
-  - Gillespie Armstrong  
-  - Mariah Armstrong  
+- **Forbidden Names (exact full name match, case-insensitive):**
+  - A hardcoded list of specific names maintained in the `FORBIDDEN_NAMES` array in the script source
   - Checked on BOTH left and right sides
 
 **Name Extraction:**
@@ -966,24 +982,29 @@ newOffset \= Math.max(0, newPage \- 1);
 
 **Purpose:** Prevent accidentally merging records belonging to other departments (Graduate, International Admissions).
 
-**Detection Patterns:**
+**Detection:** Scans **all** rows containing Workflows, Application, Program, type:, status:, or Outreach\_ and collects department flags before classifying. This ensures the result is consistent regardless of row order.
 
-// Row must contain one of these context words:  
-text.includes('Workflows') || text.includes('Application') ||   
-text.includes('Program') || text.includes('type:') ||   
-text.includes('status:') || text.includes('Outreach\_')
+| Pattern | Classification |
+| :---- | :---- |
+| `IA_`, `_IA_`, or `_IA ` | IA (highest priority) |
+| `GRAD_` or `grad student` | Grad |
+| `Outreach_` without `UGRD` | Non-Undergrad (ambiguous — blocked for all specific departments) |
+| None of the above | UnderGrad (default) |
 
-// AND contain one of these department indicators:  
-text.includes('GRAD\_')                           // Graduate Department  
-text.includes('IA\_') || text.includes('\_IA\_') || text.includes('\_IA ')  // International Admissions  
-text.includes('Outreach\_') && \!text.includes('UGRD')  // Graduate Outreach (not Undergrad)
+**Priority: IA > Grad > Non-Undergrad > UnderGrad.** A student with both Grad and IA markers is always classified as IA, because students can be both graduate and international. The entire page is scanned before a classification is made — early rows do not short-circuit detection.
+
+**Allowed Department Behavior:**
+- **All**: no filtering, everything allowed.
+- **None**: blocks everything regardless of classification.
+- **UnderGrad / Grad / IA**: blocks anything that doesn't match.
+- **Non-Undergrad**: always blocked for UnderGrad, Grad, and IA. Kept as orange "Unresolved" on the list page since it can't be confidently classified.
 
 **Effect:**
 
 * Adds `body.wrong-department` class
 * FAB turns red with "∅" symbol
-* Click is blocked with alert
-* Highlights the detected row with `.blocked-row` class (red border)
+* Click is blocked with alert showing detected department
+* Highlights the row containing the department indicator with `.blocked-row` class (red border)
 
 ---
 
@@ -1021,13 +1042,13 @@ These differ, so merge is blocked.
 
 ### **4\. Ignored Student Detection**
 
-**Purpose:** Detect if a student has the "Ignored" chip (for future use).
+**Purpose:** Detect students with the "Ignored" chip and treat them as blocked entries.
 
 **Detection:** Looks for `elm-chip` elements with `.elm-chip-label` text "Ignored"
 
 **Helper Function:** `isStudentIgnored()` returns `true` or `false`
 
-**Current Behavior:** Detection only, no action taken (reserved for future features)
+**Behavior:** Auto-click and auto-skip treat ignored students as blocked entries. The CSV Database records them with dept value `Ignored`.
 
 ---
 
@@ -1074,6 +1095,37 @@ These differ, so merge is blocked.
 * Removes class and enables merge when scroll requirement is met  
     
 * Can be completely disabled by setting `REQUIRE_SCROLL_TO_BOTTOM = false`
+
+---
+
+## **Settings Pane** {#settings-pane}
+
+**Purpose:** Centralized configuration UI accessible via the gear icon (⚙) in the navbar.
+
+### **Appearance**
+
+Material Design-inspired floating panel that appears below the gear button. Organized into three collapsible sections:
+
+| Section | Settings |
+| :---- | :---- |
+| **Display** | High Contrast, Show Merge Counter |
+| **Automation** | Auto-Click FAB, Auto-Navigate After Merge, Auto-Skip Blocked, Require Scroll to Bottom |
+| **Department** | Allowed Department dropdown (All, UnderGrad, Grad, IA, None) |
+
+### **Behavior**
+
+- Opens/closes with the gear icon button. Closes on clicking the X button or the overlay behind the panel.
+- All toggle changes are saved to `localStorage` immediately and take effect without a page reload.
+- The Department dropdown includes convenient **All** (no filtering) and **None** (block everything) options.
+- The settings panel has scroll overflow handling for short browser windows.
+
+### **Database Section** *(injected by CSV Database script)*
+
+When the CSV Database companion script is installed, it injects a "Database" section into the settings pane with three action buttons:
+
+- **Download Database:** Exports as CSV (`elm_csv_database_YYYY-MM-DD.csv`). Columns: Firstname, Lastname, Dept., Row Contents, Unique ID.
+- **Upload & Replace Database:** Imports a CSV file, validates structure, replaces the entire database after confirmation.
+- **Clear Database:** Deletes all entries after confirmation and reloads the page.
 
 ---
 
@@ -1230,15 +1282,102 @@ console.log('🔍 URL changed:', {
 | `data-csusb-school-follow-email` | Both have csusb.school, following email | `"true"` |
 | `data-address-resolved` | Address comparison completed | `"true"` |
 | `data-smart-nav-attached` | FAB click handler attached | `"true"` |
+| `data-csv-uid` | Unique ID stamped by CSV Database script | `"[24-char hex ID]"` |
+| `data-first-gen-selection` | First Gen Student preference | `"left"` \| `"right"` |
+| `data-intended-term-selection` | Later intended term selected | `"left"` \| `"right"` |
+| `data-college-board-id-selection` | Both sides have College Board Id | `"left"` |
 
-### ---
+---
 
 ### **LocalStorage Keys**
 
-| Key | Purpose | Default |
-| ----- | ----- | ----- |
-| `elm_merge_count` | Total merges completed | `0` |
-| `elm_high_contrast` | High contrast borders enabled | `'true'` |
+| Key | Used By | Purpose | Default |
+| :---- | :---- | :---- | :---- |
+| `elm_require_scroll_to_bottom` | UI Perfection | Scroll-to-review setting | `'true'` |
+| `elm_auto_click_fab` | UI Perfection | Auto-click FAB setting | `'true'` |
+| `elm_auto_navigate_after_merge` | UI Perfection | Auto-navigate setting | `'true'` |
+| `elm_show_merge_counter` | UI Perfection | Show/hide merge counter | `'true'` |
+| `elm_auto_skip_blocked` | UI Perfection | Auto-skip blocked entries setting | `'true'` |
+| `elm_allowed_department` | UI Perfection | Department filter setting | `'UnderGrad'` |
+| `elm_high_contrast` | UI Perfection | High contrast toggle state | `'true'` |
+| `elm_merge_count` | UI Perfection | Merge counter value | `'0'` |
+| `elm_csv_database` | CSV Database | JSON array of recorded entries | `'[]'` |
+
+---
+
+## **CSV Database Module** {#csv-database-module}
+
+**Script:** `csv-database.js` (v7) — A companion Tampermonkey userscript that tracks blocked entries in a local database and annotates the duplicates list page with department badges.
+
+### **How It Works**
+
+1. Polls `document.body.dataset.csvDept` every 1 second (set by UI Perfection).
+2. When a department value appears, extracts first name, last name, department, blocked row content, and unique ID.
+3. Stores entries in `localStorage` as JSON. Deduplicates by unique ID; updates existing entries if any field changed.
+
+### **Database Format**
+
+JSON array in `localStorage` key `elm_csv_database`. Each entry:
+
+```json
+{ "firstName": "...", "lastName": "...", "dept": "...", "rowContents": "...", "uniqueId": "..." }
+```
+
+Possible `dept` values: `Grad`, `IA`, `UnderGrad`, `Non-Undergrad`, `Forbidden`, `Ignored`.
+
+### **List Page Department Badges**
+
+On the duplicates list page, rewrites the default orange "Unresolved" chip on each row to show the department with color-coding:
+
+| Department | Label | Background | Text Color |
+| :---- | :---- | :---- | :---- |
+| Grad | Graduate | Blue (#e3f2fd) | Blue (#1565c0) |
+| IA | International | Yellow (#fff9c4) | Amber (#f57f17) |
+| UnderGrad | UnderGrad | Purple (#f3e5f5) | Purple (#6a1b9a) |
+| Forbidden | Forbidden | Pink (#fce4ec) | Pink (#c2185b) |
+| Ignored | Ignored | Grey (#f5f5f5) | Grey (#616161) |
+| Non-Undergrad | *(kept as default "Unresolved")* | *(unchanged)* | *(unchanged)* |
+
+### **API Interception**
+
+Hooks into both `XMLHttpRequest` and `fetch` to capture the duplicates list endpoint response and extract unique IDs for each row. This provides real-time data without relying on DOM scraping.
+
+- **XHR hook:** Intercepts `XMLHttpRequest.prototype.open` and `.send` to capture URL and response
+- **Fetch hook:** Clones responses and parses JSON for duplicate endpoint calls
+- Filters out detail page requests to avoid false positives
+
+### **Staleness Protection**
+
+Tracks which page the API data was captured for using an `apiGeneration` counter:
+- Counter increments on each fresh API capture and on page navigation
+- Annotations are cleared before re-applying when fresh data arrives
+- Row unique IDs stamped as `data-csv-uid` attributes survive Angular re-ordering
+
+### **DB-Direct Fallback Matching**
+
+When API interception data is unavailable (e.g., first page load from cache), falls back to matching list page rows against the local database by firstName + lastName + dept combination.
+
+### **API Status Toast**
+
+A small toast notification with a pulsating dot indicator appears when API data is successfully captured. Confirms that chip annotations are based on live data rather than database fallback.
+
+### **UI Elements**
+
+- **DB Badge:** Pill badge in the navbar showing "DB: N" (entry count). Updates every 1 second.
+- **Settings Section:** Three action buttons (Download, Upload, Clear) injected into the UI Perfection settings pane.
+
+---
+
+## **Inter-Script Communication** {#inter-script-communication}
+
+| Channel | Direction | Mechanism |
+| :---- | :---- | :---- |
+| Department signal | UI Perfection → CSV Database | `document.body.dataset.csvDept` attribute on `<body>` |
+| Blocked row content | UI Perfection → CSV Database | `.blocked-row` / `.blocked-row-critical` CSS classes on `elm-merge-row` elements |
+| UI injection targets | UI Perfection → CSV Database | `#elm-controls-wrapper` (badge), `#elm-settings-pane .settings-body` (settings section) |
+| Recording confirmation | CSV Database → UI Perfection | `localStorage.getItem('elm_csv_database')` checked by auto-skip before navigating away |
+
+The CSV Database script depends on UI Perfection for DOM structure and signals. UI Perfection degrades gracefully if the CSV Database script is not installed (auto-skip proceeds after 1.5s instead of waiting for database confirmation).
 
 ---
 
@@ -1277,14 +1416,16 @@ elm-universal-search             /\* Search box (injection reference point) \*/
 \#elm-limit-input                 /\* Page size input \*/  
 \#elm-go-btn                      /\* Navigation button \*/  
 .fab-merge-text                  /\* "Merge" label on FAB \*/
+\#elm-settings-btn                /\* Settings gear icon button \*/
+\#elm-settings-overlay            /\* Settings panel backdrop \*/
+\#elm-settings-pane               /\* Settings panel container \*/
+\#elm-db-size-badge               /\* Database entry count badge (injected by CSV Database) \*/
 
 ---
 
 ## **External Dependencies**
 
-* **parse-address** (v1.1.2): `@require https://cdn.jsdelivr.net/npm/parse-address@1.1.2/parse-address.min.js`  
-  * Used for structured address parsing  
-  * Fallback to manual extraction if unavailable
+None. The script uses a built-in `AddressComparer` module for address parsing (the external `parse-address` library was removed in v122).
 
 ---
 
@@ -1385,13 +1526,74 @@ elm-universal-search             /\* Search box (injection reference point) \*/
 
 ---
 
+**v126 Changes (UI Perfection):**
+
+- **FIX: IA > Grad department detection priority** — Students with both Grad and IA markers are now always classified as IA, because students can be both graduate and international
+- **Updated README** to document the priority change
+
+---
+
+**v125 Changes (UI Perfection — Major Feature + CSV Database v4-7):**
+
+- **NEW: Settings Pane** — Gear icon (⚙) in the navbar opens a Material Design-inspired settings panel with Display, Automation, and Department sections. All toggle changes saved to `localStorage` and take effect immediately without page reload
+- **NEW: Auto-Skip Blocked** — Automatically navigates past blocked entries after CSV database records them. Polls localStorage every 500ms up to 10 seconds. Falls back to 1.5s delay if CSV Database script is not installed
+- **NEW: Configuration flags in settings pane** — All/None department options added. Department dropdown lets you choose All (no filtering), UnderGrad, Grad, IA, or None (block everything)
+- **NEW: Department chips on list page** — Rewrites the default "Unresolved" chip on each row to show the detected department with color-coded badges (Graduate=blue, International=yellow, UnderGrad=purple, Forbidden=pink, Ignored=grey)
+- **NEW: API interception** — Hooks both XMLHttpRequest and fetch to capture the duplicates list endpoint response and extract unique IDs for each row, replacing unreliable DOM scraping
+- **NEW: Unique ID stamping** — Stamps `data-csv-uid` attributes on list page rows for position-independent matching that survives Angular re-renders
+- **NEW: DB-direct fallback matching** — When API data is unavailable (e.g., cached first page), falls back to matching rows against the local database by name + department
+- **NEW: API status toast** — Pulsating dot indicator toast notification confirms when API data is captured live
+- **NEW: CSV Database settings section** — Download (CSV export), Upload & Replace, and Clear Database buttons added to the settings pane
+- **NEW: DB badge** — "DB: N" pill badge in the navbar showing the current database entry count
+- **FIX: Auto-skip race condition** — Each poll iteration re-checks whether the entry is still blocked. If new merge rows changed department detection, skip is aborted and auto-click is retried. Prevents grad entries from being incorrectly skipped
+- **FIX: Chips disappearing** — Fixed chips disappearing/reclassifying on page navigation, idle, cached list pages, and Angular re-renders
+- **FIX: Chip visual bugs** — Fixed flickering, wrong labels, and ignored chip handling
+- **FIX: Blocked entry display** — Fixed for None dept and first page chip annotations
+- **FIX: Deep red rows** — Fixed not showing when allowed dept is None
+- **FIX: Ignored chips** — Fixed being overwritten with stale dept from database
+- **FIX: Settings pane overflow** — Fixed when browser window is short
+- **FIX: Settings overlay** — Fixed rendering over the settings panel
+- **REFACTOR: CSV Database architecture** — Decoupled csv-database.js from main script using `body[data-csv-dept]` attribute for cross-script communication. CSV Database script now owns all database-related UI
+
+---
+
+**v124 Changes (Address Resolution):**
+
+- **FIX: False address conflicts** — Fixed false conflicts caused by different address component ordering. Now prefers geocoded addresses
+- **NEW: Geo-location suffix stripping** — Strips "with geo location" suffix that Element451 appends to geocoded addresses. Adds conflict diagnostics for debugging
+
+---
+
+**v123 Changes (CSV Database Module):**
+
+- **NEW: CSV Database Module** (`csv-database.js`) — Companion Tampermonkey userscript that tracks blocked entries in a local database stored in `localStorage`
+- **NEW: Department badge annotation on list page** — Rewrites elm-chip on list and detail page rows to show department
+- **NEW: API interception for list page** — Uses XMLHttpRequest and fetch hooks instead of name-matching fallback for reliable department detection
+- **NEW: Download button** — Exports database as CSV for troubleshooting
+- **REFACTOR: Cross-script architecture** — Main script sets `document.body.dataset.csvDept`, CSV module polls for it. No direct function bridges
+- **FIX: Empty CSV download** — Fixed to use actual CSV format
+
+---
+
+**v122 Changes (Multi-Department Support + Auto-Skip):**
+
+- **NEW: ALLOWED_DEPARTMENT config flag** — Multi-department support with options: All, UnderGrad, Grad, IA, None
+- **NEW: AUTO_SKIP_BLOCKED** — Automatically skips blocked entries. Waits for database recording before navigating
+- **NEW: `grad student` pattern** — Added to department lockdown detection
+- **FIX: Address parser** — Replaced broken external `parse-address` library with built-in `AddressComparer` module
+- **FIX: Duplicate detection** — Made fully fuzzy with typo and spacing variant support
+- **FIX: Grad/IA modes** — Fixed to only allow their own department, removed Outreach catch-all
+- **REMOVED: External parse-address dependency** — All address parsing is now built-in
+
+---
+
 **v121.4 Changes (New Feature):**
 
 - **NEW: College Board ID Preference** - When both sides have a College Board Id, always selects left side
   - Detection: Both sides contain `College Board Id:` (case-insensitive)
   - Data attribute: `row.dataset.collegeBoardIdSelection`
   - Only applies when no applicant context is found
-  - Example: "College Board Id: 150521406" vs "College Board Id: 147901950"
+  - Example: "College Board Id: XXXXXXXXX" vs "College Board Id: YYYYYYYYY"
 
 ---
 
@@ -1412,10 +1614,10 @@ elm-universal-search             /\* Search box (injection reference point) \*/
 
 **v121.2 Changes (Bug Fix - Email Name Matching):**
 
-- **Fixed: Multi-word and hyphenated last names not matching in emails** - Previously, a last name like "Hernandez Maravilla" would not match an email containing just "maravilla"
+- **Fixed: Multi-word and hyphenated last names not matching in emails** - Previously, multi-word last names would not match an email containing just one part of the name
 - Added `emailContainsName()` helper function that splits names by spaces and hyphens
 - Name parts must be at least 3 characters to be considered (avoids false positives with short strings)
-- Example: Last name "Hernandez-Maravilla" now matches email "maravilla.jose@gmail.com"
+- Example: A hyphenated last name like "Smith-Jones" now matches an email containing "jones"
 
 ---
 
@@ -1434,9 +1636,9 @@ elm-universal-search             /\* Search box (injection reference point) \*/
 
 - **Fixed: Address with country not being preferred** - Added `hasCountry()` check that gives +5 bonus to completeness score before stripping country from address.
 
-- **Fixed: Duplicate city detection** - Added `extractCity()` function and check for city name appearing multiple times in different formats (e.g., "Victorville CA 92394, Victorville, CA").
+- **Fixed: Duplicate city detection** - Added `extractCity()` function and check for city name appearing multiple times in different formats (e.g., "Anytown CA 92000, Anytown, CA").
 
-- **Fixed: Street duplicates with typos not detected** - Added fuzzy string matching with `stringSimilarity()` function. Streets with >80% similarity are now detected as duplicates (e.g., "Las Cruces St" vs "Las Cruses St").
+- **Fixed: Street duplicates with typos not detected** - Added fuzzy string matching with `stringSimilarity()` function. Streets with >80% similarity are now detected as duplicates (e.g., "Oak Grove St" vs "Oak Grve St").
 
 - **Fixed: Whitespace issues causing false mismatches** - More aggressive whitespace normalization in `cleanAddress()` - removes extra spaces, normalizes around commas and periods.
 
@@ -1556,7 +1758,7 @@ elm-universal-search             /\* Search box (injection reference point) \*/
 
 - Added Forbidden Entry Detection: Blocks merging of test records and specific forbidden names  
 - Test detection: Checks if "test" appears in First Name or Last Name on BOTH sides  
-- Forbidden names: Angela Armstrong, Gillespie Armstrong, Mariah Armstrong (exact match on BOTH sides)  
+- Forbidden names: Hardcoded list of specific names (exact match on BOTH sides)  
 - Forbidden entry check has HIGHEST PRIORITY (before department lockdown)  
 - FAB turns red with ∅ symbol and shows "Forbidden entry" alert  
 - New `isForbiddenEntry()` function scans both left and right values  
@@ -1610,6 +1812,6 @@ elm-universal-search             /\* Search box (injection reference point) \*/
 
 ---
 
-*Last Updated: Version 119.0*
+*Last Updated: Version 126 (UI Perfection) / Version 7 (CSV Database) — March 2026*
 
 ---

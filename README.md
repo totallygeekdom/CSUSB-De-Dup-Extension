@@ -4,7 +4,7 @@ Two Tampermonkey userscripts that streamline the Element451 duplicate-contact me
 
 ---
 
-## Element451 - UI Perfection (v125)
+## Element451 - UI Perfection (v126)
 
 ### Configuration
 
@@ -39,21 +39,23 @@ Lockdowns are checked in priority order. When triggered, the FAB turns red with 
 Blocks entries where First Name or Last Name contains "test" (either side), or the full name exactly matches Angela Armstrong, Gillespie Armstrong, or Mariah Armstrong. The triggering row is highlighted red.
 
 **2. Department Lockdown**
-Blocks entries belonging to a department other than the configured `Allowed Department`. Detection scans rows containing Workflows, Application, Program, type:, status:, or Outreach_ for these patterns:
+Blocks entries belonging to a department other than the configured `Allowed Department`. Detection scans **all** rows containing Workflows, Application, Program, type:, status:, or Outreach_ and collects department flags before classifying. This ensures the result is consistent regardless of row order.
 
 | Pattern | Classification |
 |---|---|
+| `IA_`, `_IA_`, or `_IA ` | IA (highest priority) |
 | `GRAD_` or `grad student` | Grad |
-| `IA_`, `_IA_`, or `_IA ` | IA |
 | `Outreach_` without `UGRD` | Non-Undergrad (ambiguous — blocked for all specific departments) |
 | None of the above | UnderGrad (default) |
+
+**Priority: IA > Grad > Non-Undergrad > UnderGrad.** A student with both Grad and IA markers is always classified as IA, because students can be both graduate and international. The entire page is scanned before a classification is made — early rows do not short-circuit detection.
 
 - **All**: no filtering, everything allowed.
 - **None**: blocks everything regardless of classification.
 - **UnderGrad / Grad / IA**: blocks anything that doesn't match.
 - **Non-Undergrad**: always blocked for UnderGrad, Grad, and IA. Kept as orange "Unresolved" on the list page since it can't be confidently classified.
 
-The triggering row is highlighted red.
+The row that matches the detected department is highlighted red (e.g., if classified as IA, the row containing the IA marker is highlighted).
 
 **3. Student ID Mismatch Lockdown**
 Blocks entries where the left and right sides have different School Id values — these are two different students and cannot be merged. The School ID row is highlighted with a deep red border and shadow. This is a complete block with no override.

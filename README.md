@@ -36,7 +36,7 @@ All settings are accessible through the **gear icon** in the navbar (no reload n
 Lockdowns are checked in priority order. When triggered, the FAB turns red with a null symbol and clicking it shows an alert explaining the block.
 
 **1. Forbidden Entry Lockdown** (highest priority)
-Blocks entries where First Name or Last Name contains "test" (either side), or the full name exactly matches Angela Armstrong, Gillespie Armstrong, or Mariah Armstrong. The triggering row is highlighted red.
+Blocks entries where First Name or Last Name contains "test" (either side), or the full name exactly matches one of the hardcoded forbidden names in the script source. The triggering row is highlighted red.
 
 **2. Department Lockdown**
 Blocks entries belonging to a department other than the configured `Allowed Department`. Detection scans **all** rows containing Workflows, Application, Program, type:, status:, or Outreach_ and collects department flags before classifying. This ensures the result is consistent regardless of row order.
@@ -173,7 +173,7 @@ Monitors SPA navigation. Maintains a session-scoped Set of up to 10 recently-see
 
 ---
 
-## Element451 - CSV Database (v4)
+## Element451 - CSV Database (v7)
 
 A companion script that tracks blocked entries in a local database and annotates the duplicates list page with department badges.
 

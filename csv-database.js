@@ -16,7 +16,7 @@
 // Storage key: 'elm_csv_database' in localStorage
 //
 // Department detection: The main UI Perfection script sets
-// document.body.dataset.csvDept ('Grad', 'IA', 'UnderGrad',
+// document.body.dataset.csvDept ('Grad/IA', 'UnderGrad',
 // 'Forbidden', 'Ignored'). This script polls for that attribute
 // and auto-records when it appears.
 //
@@ -52,21 +52,13 @@
          * The inline styles set by annotateDuplicatesList() serve as the
          * primary mechanism; these CSS rules act as a fallback so the user
          * never sees the original orange "Unresolved" flash through. */
-        elm-chip .bg-color[data-csv-dept="Grad"] {
+        elm-chip .bg-color[data-csv-dept="Grad/IA"] {
             background-color: #e3f2fd !important;
         }
-        elm-chip .bg-color[data-csv-dept="Grad"] ~ .elm-chip-label,
-        elm-chip .bg-color[data-csv-dept="Grad"] + .elm-chip-label,
-        elm-row[data-csv-dept="Grad"] elm-chip .elm-chip-label {
+        elm-chip .bg-color[data-csv-dept="Grad/IA"] ~ .elm-chip-label,
+        elm-chip .bg-color[data-csv-dept="Grad/IA"] + .elm-chip-label,
+        elm-row[data-csv-dept="Grad/IA"] elm-chip .elm-chip-label {
             color: #1565c0 !important;
-        }
-        elm-chip .bg-color[data-csv-dept="IA"] {
-            background-color: #fff9c4 !important;
-        }
-        elm-chip .bg-color[data-csv-dept="IA"] ~ .elm-chip-label,
-        elm-chip .bg-color[data-csv-dept="IA"] + .elm-chip-label,
-        elm-row[data-csv-dept="IA"] elm-chip .elm-chip-label {
-            color: #f57f17 !important;
         }
         elm-chip .bg-color[data-csv-dept="UnderGrad"] {
             background-color: #f3e5f5 !important;
@@ -210,7 +202,7 @@
         }
         // No blocked row in DOM — provide context based on dept
         if (dept === 'Ignored') return 'Student has Ignored chip';
-        return 'No IA or Grad rows detected';
+        return 'No Grad/IA rows detected';
     }
 
     // --- NAME EXTRACTION ---
@@ -575,16 +567,14 @@
 
     // --- LIST PAGE: DEPT BADGE COLORS ---
     const DEPT_LABELS = {
-        Grad:      'Graduate',
-        IA:        'International',
-        UnderGrad: 'UnderGrad',
-        Forbidden: 'Forbidden',
-        Ignored:   'Ignored'
+        'Grad/IA':  'Grad/IA',
+        UnderGrad:  'UnderGrad',
+        Forbidden:  'Forbidden',
+        Ignored:    'Ignored'
     };
 
     const DEPT_COLORS = {
-        Grad:       { bg: '#e3f2fd', fg: '#1565c0' },
-        IA:         { bg: '#fff9c4', fg: '#f57f17' },
+        'Grad/IA':  { bg: '#e3f2fd', fg: '#1565c0' },
         UnderGrad:  { bg: '#f3e5f5', fg: '#6a1b9a' },
         Forbidden:  { bg: '#fce4ec', fg: '#c2185b' },
         Ignored:    { bg: '#f5f5f5', fg: '#616161' }
@@ -728,7 +718,7 @@
 
                 const dbEntry = matchRowToDbEntry(row, db, usedDbIndices);
                 if (!dbEntry) return;
-                if (dbEntry.dept === 'Non-Undergrad' || dbEntry.dept === 'Ignored') return;
+                if (dbEntry.dept === 'Ignored') return;
 
                 // If Element451 already shows this chip as "Ignored", don't overwrite it.
                 // The DB may have a stale dept from before the entry was ignored.
@@ -832,11 +822,9 @@
                 return;
             }
 
-            // Non-Undergrad entries are ambiguous — keep the default orange
-            // "Unresolved" chip instead of rewriting it.
-            // Ignored entries should also keep their original chip unmodified
+            // Ignored entries should keep their original chip unmodified
             // per user request — they are still "Unresolved" in the system.
-            if (dbEntry.dept === 'Non-Undergrad' || dbEntry.dept === 'Ignored') {
+            if (dbEntry.dept === 'Ignored') {
                 // Clean up any stale annotation that may exist from before
                 if (colorDiv && colorDiv.hasAttribute('data-csv-dept')) {
                     colorDiv.removeAttribute('data-csv-dept');

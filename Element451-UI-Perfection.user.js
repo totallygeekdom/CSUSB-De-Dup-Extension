@@ -1477,7 +1477,23 @@
         }
         if (matchedRow) return { dept: 'Grad/IA', row: matchedRow };
         // For undergrad, return the applicant row if available (for highlighting)
-        const applicantRow = getApplicantRow();
+        // First try the data-attribute approach (set by autoResolveRows after FAB click)
+        let applicantRow = getApplicantRow();
+        // If not found, scan rows directly for Cal State Apply or Application entries
+        if (!applicantRow) {
+            for (const row of allRows) {
+                const text = row.textContent || '';
+                if (text.includes('Cal State Apply Application')) {
+                    applicantRow = row;
+                    break;
+                }
+                const applicationPattern = /type:\s*(Application Start|Application Submit|Application Complete|Admit)/i;
+                if (applicationPattern.test(text)) {
+                    applicantRow = row;
+                    break;
+                }
+            }
+        }
         return { dept: 'UnderGrad', row: applicantRow };
     }
     // --- HELPER: CHECK IF WRONG DEPARTMENT ---

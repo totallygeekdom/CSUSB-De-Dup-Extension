@@ -100,6 +100,39 @@
         elm-merge-row.blocked-row * {
             color: #b71c1c !important;
         }
+        /* --- 2d. APPLICANT ROW HIGHLIGHT (green when undergrad allowed) --- */
+        elm-merge-row.applicant-row-highlight {
+            background-color: #e8f5e9 !important;
+            border: 3px solid #2e7d32 !important;
+            box-shadow: 0 0 8px rgba(46, 125, 50, 0.4) !important;
+        }
+        elm-merge-row.applicant-row-highlight:hover {
+            background-color: #c8e6c9 !important;
+        }
+        elm-merge-row.applicant-row-highlight .elm-merge-row-input {
+            background-color: #e8f5e9 !important;
+        }
+        elm-merge-row.applicant-row-highlight:hover .elm-merge-row-input {
+            background-color: #c8e6c9 !important;
+        }
+        elm-merge-row.applicant-row-highlight * {
+            color: #1b5e20 !important;
+        }
+        /* Blocked row overrides applicant highlight */
+        elm-merge-row.applicant-row-highlight.blocked-row,
+        elm-merge-row.applicant-row-highlight.blocked-row-critical {
+            background-color: #ffcdd2 !important;
+            border: 3px solid #b71c1c !important;
+            box-shadow: 0 0 8px rgba(183, 28, 28, 0.4) !important;
+        }
+        elm-merge-row.applicant-row-highlight.blocked-row *,
+        elm-merge-row.applicant-row-highlight.blocked-row-critical * {
+            color: #b71c1c !important;
+        }
+        body.no-highlight-borders elm-merge-row.applicant-row-highlight {
+            border: none !important;
+            box-shadow: none !important;
+        }
         /* --- 3. GHOST TOOLTIPS --- */
         .cdk-overlay-container,
         .mat-mdc-tooltip-panel,
@@ -1446,7 +1479,9 @@
             }
         }
         if (matchedRow) return { dept: 'Grad/IA', row: matchedRow };
-        return { dept: 'UnderGrad', row: null };
+        // For undergrad, return the applicant row if available (for highlighting)
+        const applicantRow = getApplicantRow();
+        return { dept: 'UnderGrad', row: applicantRow };
     }
     // --- HELPER: CHECK IF WRONG DEPARTMENT ---
     function isWrongDepartment() {
@@ -1540,15 +1575,22 @@
     // --- FEATURE: HIGHLIGHT APPLICANT SIDE ---
     let lastHighlightUrl = '';
     function highlightApplicantSide() {
-        const applicantSide = getCSUApplicationSide() || getApplicantRecordSide();
-        // Remove existing highlight if no applicant side found or URL changed
         const existingHighlight = document.getElementById('elm-applicant-highlight');
-        const currentUrl = window.location.href;
         // Cleanup function for container classes if status changes
         const cleanupClasses = () => {
             const existingContainer = document.querySelector('.applicant-side-left, .applicant-side-right');
             if (existingContainer) existingContainer.classList.remove('applicant-side-left', 'applicant-side-right');
         };
+        // Only highlight applicant side for undergrad entries
+        const detectedDept = detectActualDepartment();
+        if (detectedDept.dept !== 'UnderGrad') {
+            if (existingHighlight) existingHighlight.remove();
+            cleanupClasses();
+            lastHighlightUrl = '';
+            return;
+        }
+        const applicantSide = getCSUApplicationSide() || getApplicantRecordSide();
+        const currentUrl = window.location.href;
         if (!applicantSide) {
             if (existingHighlight) existingHighlight.remove();
             cleanupClasses();
@@ -2137,6 +2179,12 @@
             return row.dataset.csuApplication;
         }
         return null;
+    }
+    // Helper function to get the applicant row element (the row that triggered applicant detection)
+    function getApplicantRow() {
+        return document.querySelector('elm-merge-row[data-csu-application]') ||
+               document.querySelector('elm-merge-row[data-applicant-record]') ||
+               null;
     }
     // --- FEATURE: DUAL PERSONAL EMAIL PRIORITY ---
     function autoDualPersonalEmails() {
@@ -2843,9 +2891,9 @@
             textSpan.innerText = "Merge";
             actionButton.appendChild(textSpan);
         }
-        // Clear all previous blocked row highlights
-        document.querySelectorAll('.blocked-row, .blocked-row-critical').forEach(row => {
-            row.classList.remove('blocked-row', 'blocked-row-critical');
+        // Clear all previous blocked row and applicant row highlights
+        document.querySelectorAll('.blocked-row, .blocked-row-critical, .applicant-row-highlight').forEach(row => {
+            row.classList.remove('blocked-row', 'blocked-row-critical', 'applicant-row-highlight');
         });
         // Signal department to csv-database.js via body attribute
         const forbiddenResult = isForbiddenEntry();
@@ -2889,6 +2937,11 @@
             return;
         } else {
             document.body.classList.remove('student-id-mismatch');
+        }
+        // Highlight the applicant row green when undergrad is allowed
+        const applicantRow = getApplicantRow();
+        if (applicantRow) {
+            applicantRow.classList.add('applicant-row-highlight');
         }
         const totalErrorRows = document.querySelectorAll('elm-merge-row.has-error').length;
         const unresolvedErrors = document.querySelectorAll('elm-merge-row.has-error:not(:has(.ng-valid))').length;

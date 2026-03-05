@@ -1446,7 +1446,7 @@
             }
         }
         if (matchedRow) return { dept: 'Grad/IA', row: matchedRow };
-        return { dept: 'UnderGrad', row: allRows[0] || null };
+        return { dept: 'UnderGrad', row: null };
     }
     // --- HELPER: CHECK IF WRONG DEPARTMENT ---
     function isWrongDepartment() {

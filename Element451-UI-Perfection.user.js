@@ -1422,33 +1422,27 @@
     setTimeout(attemptAutoClickFAB, 2000);
     setTimeout(attemptAutoClickFAB, 3500);
     // --- HELPER: DETECT ACTUAL DEPARTMENT ---
-    // Returns the actual department of the entry: 'Grad', 'IA', or 'UnderGrad'
-    // Independent of CFG.ALLOWED_DEPARTMENT - always scans for patterns.
+    // Returns the actual department of the entry: 'Grad/IA' or 'UnderGrad'
+    // IA and Grad are merged into one designation since they cannot be
+    // accurately differentiated. Only rows with "status: Finished" count.
+    // Outreach keywords are treated as undergrad.
     function detectActualDepartment() {
         const allRows = Array.from(document.querySelectorAll('elm-merge-row'));
         const isGradText = (t) => t.includes('GRAD_') || /grad student/i.test(t);
         const isIAText = (t) => t.includes('IA_') || t.includes('_IA_') || t.includes('_IA ');
-        let foundGrad = false;
-        let foundIA = false;
-        let foundNonUndergrad = false;
+        let foundGradIA = false;
         for (const row of allRows) {
             const text = row.textContent;
             const isRelevantRow = text.includes('Workflows') ||
                 text.includes('Application') ||
                 text.includes('Program') ||
                 text.includes('type:') ||
-                text.includes('status:') ||
-                text.includes('Outreach_');
+                text.includes('status:');
             if (!isRelevantRow) continue;
-            if (isIAText(text)) foundIA = true;
-            if (isGradText(text)) foundGrad = true;
-            // Outreach_ without UGRD is ambiguous — not clearly Grad or UnderGrad
-            if (text.includes('Outreach_') && !text.includes('UGRD')) foundNonUndergrad = true;
+            // IA/Grad keywords only valid if the row also contains "status: Finished"
+            if ((isIAText(text) || isGradText(text)) && /status:\s*Finished/i.test(text)) foundGradIA = true;
         }
-        // IA takes priority: students can be both graduate and international
-        if (foundIA) return 'IA';
-        if (foundGrad) return 'Grad';
-        if (foundNonUndergrad) return 'Non-Undergrad';
+        if (foundGradIA) return 'Grad/IA';
         return 'UnderGrad';
     }
     // --- HELPER: CHECK IF WRONG DEPARTMENT ---
@@ -1461,35 +1455,29 @@
             const actualDept = detectActualDepartment();
             // Find the row that matches the detected department to highlight it
             const allRows = Array.from(document.querySelectorAll('elm-merge-row'));
-            const isGradTextNone = (t) => t.includes('GRAD_') || /grad student/i.test(t);
-            const isIATextNone = (t) => t.includes('IA_') || t.includes('_IA_') || t.includes('_IA ');
+            const isGradIAText = (t) => (t.includes('GRAD_') || /grad student/i.test(t) ||
+                t.includes('IA_') || t.includes('_IA_') || t.includes('_IA ')) && /status:\s*Finished/i.test(t);
             let deptMatchRow = null;
             let fallbackRow = null;
             for (const row of allRows) {
                 const text = row.textContent;
                 const isRelevantRow = text.includes('Workflows') || text.includes('Application') ||
                     text.includes('Program') || text.includes('type:') ||
-                    text.includes('status:') || text.includes('Outreach_');
+                    text.includes('status:');
                 if (!isRelevantRow) continue;
                 fallbackRow = row;
-                // Prefer the row that actually matches the detected department
-                if (!deptMatchRow) {
-                    if (actualDept === 'Grad' && isGradTextNone(text)) deptMatchRow = row;
-                    else if (actualDept === 'IA' && isIATextNone(text)) deptMatchRow = row;
-                    else if (actualDept === 'Non-Undergrad' && text.includes('Outreach_') && !text.includes('UGRD')) deptMatchRow = row;
-                }
+                if (!deptMatchRow && actualDept === 'Grad/IA' && isGradIAText(text)) deptMatchRow = row;
             }
             const relevantRow = deptMatchRow || fallbackRow || (allRows.length > 0 ? allRows[0] : null);
             return { wrongDept: true, row: relevantRow, reason: actualDept };
         }
-        // Scan all rows to collect department flags — IA takes priority over Grad
-        // because students can be both graduate and international
+        // Scan all rows to detect department
         const actualDept = detectActualDepartment();
         if (actualDept.toLowerCase() === dept) return { wrongDept: false };
         // Find the best row to highlight for the mismatch
         const allRows = Array.from(document.querySelectorAll('elm-merge-row'));
-        const isGradText = (t) => t.includes('GRAD_') || /grad student/i.test(t);
-        const isIAText = (t) => t.includes('IA_') || t.includes('_IA_') || t.includes('_IA ');
+        const isGradIAText = (t) => (t.includes('GRAD_') || /grad student/i.test(t) ||
+            t.includes('IA_') || t.includes('_IA_') || t.includes('_IA ')) && /status:\s*Finished/i.test(t);
         let deptMatchRow = null;
         let fallbackRow = null;
         for (const row of allRows) {
@@ -1498,15 +1486,10 @@
                 text.includes('Application') ||
                 text.includes('Program') ||
                 text.includes('type:') ||
-                text.includes('status:') ||
-                text.includes('Outreach_');
+                text.includes('status:');
             if (!isRelevantRow) continue;
             fallbackRow = row;
-            if (!deptMatchRow) {
-                if (actualDept === 'IA' && isIAText(text)) deptMatchRow = row;
-                else if (actualDept === 'Grad' && isGradText(text)) deptMatchRow = row;
-                else if (actualDept === 'Non-Undergrad' && text.includes('Outreach_') && !text.includes('UGRD')) deptMatchRow = row;
-            }
+            if (!deptMatchRow && actualDept === 'Grad/IA' && isGradIAText(text)) deptMatchRow = row;
         }
         const rowToHighlight = deptMatchRow || fallbackRow || (allRows.length > 0 ? allRows[0] : null);
         return { wrongDept: true, row: rowToHighlight, reason: actualDept };
@@ -2509,8 +2492,7 @@
                         <select id="elm-settings-dept-select" class="elm-select">
                             <option value="All" ${allowedDept === 'All' ? 'selected' : ''}>All</option>
                             <option value="UnderGrad" ${allowedDept === 'UnderGrad' ? 'selected' : ''}>UnderGrad</option>
-                            <option value="Grad" ${allowedDept === 'Grad' ? 'selected' : ''}>Grad</option>
-                            <option value="IA" ${allowedDept === 'IA' ? 'selected' : ''}>IA</option>
+                            <option value="Grad/IA" ${allowedDept === 'Grad/IA' ? 'selected' : ''}>Grad/IA</option>
                             <option value="None" ${allowedDept === 'None' ? 'selected' : ''}>None</option>
                         </select>
                     </div>

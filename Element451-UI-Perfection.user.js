@@ -100,23 +100,20 @@
         elm-merge-row.blocked-row * {
             color: #b71c1c !important;
         }
-        /* --- 2d. APPLICANT ROW HIGHLIGHT (green when undergrad allowed) --- */
+        /* --- 2d. APPLICANT ROW HIGHLIGHT (yellow, matching overlay) --- */
         elm-merge-row.applicant-row-highlight {
-            background-color: #e8f5e9 !important;
-            border: 3px solid #2e7d32 !important;
-            box-shadow: 0 0 8px rgba(46, 125, 50, 0.4) !important;
+            background-color: #fff9c4 !important;
+            border: 3px solid #fbc02d !important;
+            box-shadow: 0 0 8px rgba(251, 192, 45, 0.4) !important;
         }
         elm-merge-row.applicant-row-highlight:hover {
-            background-color: #c8e6c9 !important;
+            background-color: #fff176 !important;
         }
         elm-merge-row.applicant-row-highlight .elm-merge-row-input {
-            background-color: #e8f5e9 !important;
+            background-color: #fff9c4 !important;
         }
         elm-merge-row.applicant-row-highlight:hover .elm-merge-row-input {
-            background-color: #c8e6c9 !important;
-        }
-        elm-merge-row.applicant-row-highlight * {
-            color: #1b5e20 !important;
+            background-color: #fff176 !important;
         }
         /* Blocked row overrides applicant highlight */
         elm-merge-row.applicant-row-highlight.blocked-row,

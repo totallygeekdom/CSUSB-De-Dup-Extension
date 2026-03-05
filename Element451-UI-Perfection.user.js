@@ -1465,7 +1465,7 @@
                     text.includes('Program') || text.includes('type:') ||
                     text.includes('status:');
                 if (!isRelevantRow) continue;
-                fallbackRow = row;
+                if (!fallbackRow) fallbackRow = row;
                 if (!deptMatchRow && actualDept === 'Grad/IA' && isGradIAText(text)) deptMatchRow = row;
             }
             const relevantRow = deptMatchRow || fallbackRow || (allRows.length > 0 ? allRows[0] : null);
@@ -1488,7 +1488,7 @@
                 text.includes('type:') ||
                 text.includes('status:');
             if (!isRelevantRow) continue;
-            fallbackRow = row;
+            if (!fallbackRow) fallbackRow = row;
             if (!deptMatchRow && actualDept === 'Grad/IA' && isGradIAText(text)) deptMatchRow = row;
         }
         const rowToHighlight = deptMatchRow || fallbackRow || (allRows.length > 0 ? allRows[0] : null);

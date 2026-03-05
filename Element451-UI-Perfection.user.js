@@ -1476,25 +1476,7 @@
             }
         }
         if (matchedRow) return { dept: 'Grad/IA', row: matchedRow };
-        // For undergrad, return the applicant row if available (for highlighting)
-        // First try the data-attribute approach (set by autoResolveRows after FAB click)
-        let applicantRow = getApplicantRow();
-        // If not found, scan rows directly for Cal State Apply or Application entries
-        if (!applicantRow) {
-            for (const row of allRows) {
-                const text = row.textContent || '';
-                if (text.includes('Cal State Apply Application')) {
-                    applicantRow = row;
-                    break;
-                }
-                const applicationPattern = /type:\s*(Application Start|Application Submit|Application Complete|Admit)/i;
-                if (applicationPattern.test(text)) {
-                    applicantRow = row;
-                    break;
-                }
-            }
-        }
-        return { dept: 'UnderGrad', row: applicantRow };
+        return { dept: 'UnderGrad', row: null };
     }
     // --- HELPER: CHECK IF WRONG DEPARTMENT ---
     function isWrongDepartment() {
@@ -2930,9 +2912,25 @@
         if (deptResult.wrongDept) {
             document.body.classList.add('wrong-department');
             document.body.classList.remove('ready-to-merge', 'review-required', 'student-id-mismatch');
-            // Highlight the blocked row in deep red
-            if (deptResult.row) {
-                deptResult.row.classList.add('blocked-row-critical');
+            // Highlight the applicant row in deep red
+            // Try data-attribute first (after FAB click), then scan rows directly
+            let blockedRow = deptResult.row || getApplicantRow();
+            if (!blockedRow) {
+                const allRows = document.querySelectorAll('elm-merge-row');
+                for (const row of allRows) {
+                    const text = row.textContent || '';
+                    if (text.includes('Cal State Apply Application')) {
+                        blockedRow = row;
+                        break;
+                    }
+                    if (/type:\s*(Application Start|Application Submit|Application Complete|Admit)/i.test(text)) {
+                        blockedRow = row;
+                        break;
+                    }
+                }
+            }
+            if (blockedRow) {
+                blockedRow.classList.add('blocked-row-critical');
             }
             return;
         } else {

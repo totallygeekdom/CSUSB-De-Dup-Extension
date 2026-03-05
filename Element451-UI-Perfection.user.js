@@ -2914,9 +2914,9 @@
         if (deptResult.wrongDept) {
             document.body.classList.add('wrong-department');
             document.body.classList.remove('ready-to-merge', 'review-required', 'student-id-mismatch');
-            // Highlight the blocked row
+            // Highlight the blocked row in deep red
             if (deptResult.row) {
-                deptResult.row.classList.add('blocked-row');
+                deptResult.row.classList.add('blocked-row-critical');
             }
             return;
         } else {

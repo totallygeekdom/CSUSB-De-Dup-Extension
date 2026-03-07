@@ -2913,15 +2913,16 @@
         if (deptResult.wrongDept) {
             document.body.classList.add('wrong-department');
             document.body.classList.remove('ready-to-merge', 'review-required', 'student-id-mismatch');
-            // Highlight the blocked row
-            if (deptResult.row) {
-                deptResult.row.classList.add('blocked-row');
-            }
-            // If it's a blocked undergrad entry, also highlight the applicant keyword row
-            // (gives a visual cue as to why the profile was identified as undergrad)
             if (deptResult.reason === 'UnderGrad') {
+                // For blocked undergrad, only highlight the applicant keyword row if one exists.
+                // deptResult.row is just allRows[0] for undergrad (not meaningful), so skip it.
                 const kwRow = findApplicantKeywordRow();
                 if (kwRow) kwRow.classList.add('applicant-keyword-row');
+            } else {
+                // For blocked Grad/IA, highlight the matched keyword row as usual
+                if (deptResult.row) {
+                    deptResult.row.classList.add('blocked-row');
+                }
             }
             return;
         } else {

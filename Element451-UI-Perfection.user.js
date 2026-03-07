@@ -1383,6 +1383,7 @@
                 hasScrolledToBottom = false; // Reset scroll flag for new page
                 fabHasBeenClicked = false; // Reset FAB click flag for new page
                 autoClickAttempted = false; // Reset auto-click flag for new page
+                delete document.body.dataset.csvFabClicked; // Reset FAB signal for csv-database.js
                 mergeSuccessProcessed = false; // Reset merge success flag for new page
                 awaitingMergeSuccess = false; // Reset awaiting merge flag for new page
                 conflictWarningShown = false; // Reset conflict warning flag for new page
@@ -1525,6 +1526,8 @@
     // --- RUN AUTO-RESOLUTION (called after FAB click) ---
     function runAutoResolution() {
         console.log('🚀 Running auto-resolution...');
+        // Signal to csv-database.js that the FAB has been clicked so it can record UnderGrad entries
+        document.body.dataset.csvFabClicked = 'true';
         // Schedule auto-resolution with delays to allow DOM to update
         setTimeout(() => {
             autoResolveRows();

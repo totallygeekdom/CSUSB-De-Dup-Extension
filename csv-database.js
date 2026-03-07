@@ -196,11 +196,17 @@
     // The main script highlights the triggering row with .blocked-row
     // or .blocked-row-critical classes (deep red). This reads that row's text.
     function getBlockedRowText(dept) {
+        // For undergrad entries the main script marks the applicant keyword row
+        // with .applicant-keyword-row — prefer that as it's the most meaningful row
+        const kwRow = document.querySelector('.applicant-keyword-row');
+        if (kwRow) {
+            return kwRow.textContent.trim().replace(/\s+/g, ' ');
+        }
         const blockedRow = document.querySelector('.blocked-row, .blocked-row-critical');
         if (blockedRow) {
             return blockedRow.textContent.trim().replace(/\s+/g, ' ');
         }
-        // No blocked row in DOM — provide context based on dept
+        // No highlighted row in DOM — provide context based on dept
         if (dept === 'Ignored') return 'Student has Ignored chip';
         return 'No Grad/IA rows detected';
     }

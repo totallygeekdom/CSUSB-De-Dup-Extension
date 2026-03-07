@@ -100,6 +100,21 @@
         elm-merge-row.blocked-row * {
             color: #b71c1c !important;
         }
+        /* --- 2d. APPLICANT KEYWORD ROW HIGHLIGHT --- */
+        /* Yellow (same fill/border as the overlay) when undergrad is allowed */
+        elm-merge-row.applicant-keyword-row {
+            background-color: #fff9c4 !important;
+            border: 2px solid #fbc02d !important;
+        }
+        /* Deep red when undergrad is blocked - signals why the entry was ID'd as undergrad */
+        body.wrong-department elm-merge-row.applicant-keyword-row {
+            background-color: #ffcdd2 !important;
+            border: 3px solid #b71c1c !important;
+            box-shadow: 0 0 8px rgba(183, 28, 28, 0.4) !important;
+        }
+        body.wrong-department elm-merge-row.applicant-keyword-row * {
+            color: #b71c1c !important;
+        }
         /* --- 3. GHOST TOOLTIPS --- */
         .cdk-overlay-container,
         .mat-mdc-tooltip-panel,
@@ -1492,12 +1507,15 @@
     // --- MAIN LOOP ---
     function runLogic() {
         killPaginationTooltips();
-        // Smart links and highlight only run after FAB has been clicked
+        // Smart links only run after FAB has been clicked
         if (fabHasBeenClicked) {
             processSmartLinks();
-            highlightApplicantSide();
         }
         checkMergeStatus();
+        // Highlight runs after checkMergeStatus so its keyword-row cleanup happens first
+        if (fabHasBeenClicked) {
+            highlightApplicantSide();
+        }
         setupSmartNavButton();
         setupScrollDetection();
         suppressToasts();
@@ -1638,6 +1656,10 @@
         highlight.style.width = `${highlightWidth}px`;
         highlight.style.height = `${highlightHeight}px`;
         lastHighlightUrl = currentUrl;
+        // Highlight the specific row containing the applicant keyword (yellow, same as overlay)
+        // checkMergeStatus() already cleared applicant-keyword-row before this runs
+        const kwRow = findApplicantKeywordRow();
+        if (kwRow) kwRow.classList.add('applicant-keyword-row');
     }
     // Helper to get applicant record side (from Application type entries)
     function getApplicantRecordSide() {
@@ -1704,9 +1726,11 @@
     // --- FEATURE: AUTO-RESOLVE ROWS ---
     function autoResolveRows() {
         // STEP 1: DISCOVERY - Scan ALL rows (not just conflicts) to find applicant side
+        // Applicant detection only applies to undergrad entries
         const allRows = document.querySelectorAll('elm-merge-row');
-        let applicantSide = getCSUApplicationSide();
-        if (!applicantSide) {
+        const isUndergrad = detectActualDepartment().dept === 'UnderGrad';
+        let applicantSide = isUndergrad ? getCSUApplicationSide() : null;
+        if (!applicantSide && isUndergrad) {
             for (const row of allRows) {
                 const text = row.textContent || "";
                 const values = row.querySelectorAll('elm-merge-value');
@@ -2135,6 +2159,23 @@
         const rows = document.querySelectorAll('elm-merge-row[data-csu-application]');
         for (const row of rows) {
             return row.dataset.csuApplication;
+        }
+        return null;
+    }
+    // Helper to find the row element that contains the applicant keyword
+    // Checks cached dataset attributes first, then falls back to a live scan
+    function findApplicantKeywordRow() {
+        const csuRow = document.querySelector('elm-merge-row[data-csu-application]');
+        if (csuRow) return csuRow;
+        const appRow = document.querySelector('elm-merge-row[data-applicant-record]');
+        if (appRow) return appRow;
+        // Live scan (used in blocked state where auto-resolve never ran)
+        const applicationPattern = /type:\s*(Application Start|Application Submit|Application Complete|Admit)/i;
+        for (const row of document.querySelectorAll('elm-merge-row')) {
+            const text = row.textContent || '';
+            if (text.includes('Cal State Apply Application') || applicationPattern.test(text)) {
+                return row;
+            }
         }
         return null;
     }
@@ -2847,6 +2888,9 @@
         document.querySelectorAll('.blocked-row, .blocked-row-critical').forEach(row => {
             row.classList.remove('blocked-row', 'blocked-row-critical');
         });
+        document.querySelectorAll('.applicant-keyword-row').forEach(row => {
+            row.classList.remove('applicant-keyword-row');
+        });
         // Signal department to csv-database.js via body attribute
         const forbiddenResult = isForbiddenEntry();
         if (forbiddenResult.forbidden) document.body.dataset.csvDept = 'Forbidden';
@@ -2872,6 +2916,12 @@
             // Highlight the blocked row
             if (deptResult.row) {
                 deptResult.row.classList.add('blocked-row');
+            }
+            // If it's a blocked undergrad entry, also highlight the applicant keyword row
+            // (gives a visual cue as to why the profile was identified as undergrad)
+            if (deptResult.reason === 'UnderGrad') {
+                const kwRow = findApplicantKeywordRow();
+                if (kwRow) kwRow.classList.add('applicant-keyword-row');
             }
             return;
         } else {

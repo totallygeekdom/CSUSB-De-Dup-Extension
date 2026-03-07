@@ -197,8 +197,8 @@
     // or .blocked-row-critical classes (deep red). This reads that row's text.
     function getBlockedRowText(dept) {
         // For undergrad entries the main script marks the applicant keyword row
-        // with .applicant-keyword-row. Recording for allowed UnderGrad is gated
-        // on csvFabClicked so this class is guaranteed present when it exists.
+        // with .applicant-keyword-row. This may initially be absent (placeholder)
+        // and update once the FAB fires and the row is highlighted.
         const kwRow = document.querySelector('.applicant-keyword-row');
         if (kwRow) {
             return kwRow.textContent.trim().replace(/\s+/g, ' ');
@@ -209,7 +209,7 @@
         }
         // No highlighted row in DOM — provide context based on dept
         if (dept === 'Ignored') return 'Student has Ignored chip';
-        return 'No Grad/IA rows detected';
+        return 'No IA/Grad Keywords Found';
     }
 
     // --- NAME EXTRACTION ---
@@ -1209,14 +1209,6 @@
     setInterval(() => {
         const dept = document.body.dataset.csvDept;
         if (dept) {
-            // For allowed UnderGrad entries, wait until the FAB has been clicked.
-            // Blocked UnderGrad (body.wrong-department) records immediately since the FAB never fires.
-            if (dept === 'UnderGrad' &&
-                !document.body.classList.contains('wrong-department') &&
-                !document.body.dataset.csvFabClicked) {
-                updateDbSizeBadge();
-                return;
-            }
             recordEntry(dept);
         }
         updateDbSizeBadge();

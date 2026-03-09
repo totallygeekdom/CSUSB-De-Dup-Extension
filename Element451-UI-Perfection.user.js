@@ -1418,6 +1418,11 @@
                 conflictWarningShown = false; // Reset conflict warning flag for new page
                 autoSkipAttempted = false; // Reset auto-skip flag for new page
                 autoClickPending = false; // Reset auto-click verification flag for new page
+                // Clear stale department signal so csv-database.js doesn't record
+                // the OLD entry's dept with the NEW entry's unique ID from the URL.
+                // checkMergeStatus() will re-set this once the new page's DOM loads.
+                delete document.body.dataset.csvDept;
+                delete document.body.dataset.csvUid;
                 lastKnownUrl = currentUrl;
                 runLogic();
                 // Auto-click will be triggered by mutation observer when Spark IDs change
@@ -1427,6 +1432,8 @@
             else {
                 console.log('📋 Non-duplicate page - allowing navigation');
                 currentDuplicateId = null;
+                delete document.body.dataset.csvDept;
+                delete document.body.dataset.csvUid; // Clear stale dept signal
                 lastKnownUrl = currentUrl;
                 runLogic();
             }
@@ -2935,11 +2942,16 @@
         document.querySelectorAll('.applicant-keyword-row').forEach(row => {
             row.classList.remove('applicant-keyword-row');
         });
-        // Signal department to csv-database.js via body attribute
+        // Signal department to csv-database.js via body attributes.
+        // csvUid stamps which duplicate entry this dept belongs to, so csv-database
+        // can verify the URL still matches before recording (prevents stale data
+        // from being stored with the wrong unique ID during fast navigation).
         const forbiddenResult = isForbiddenEntry();
+        const currentUid = extractDuplicateId(window.location.href);
         if (forbiddenResult.forbidden) document.body.dataset.csvDept = 'Forbidden';
         else if (isStudentIgnored()) document.body.dataset.csvDept = 'Ignored';
         else document.body.dataset.csvDept = detectActualDepartment().dept;
+        if (currentUid) document.body.dataset.csvUid = currentUid;
         // Check forbidden entry FIRST (highest priority)
         if (forbiddenResult.forbidden) {
             document.body.classList.add('forbidden-entry');

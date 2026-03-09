@@ -1169,6 +1169,9 @@
                     }
                     saveDatabase(entries);
                     updateDbSizeBadge();
+                    // Refresh list page annotations with the new database
+                    clearStaleAnnotations();
+                    annotateDuplicatesList();
                     alert(`Database replaced with ${entries.length} entries.`);
                 } catch (err) {
                     alert('Error parsing CSV file: ' + err.message);
@@ -1187,8 +1190,10 @@
             }
             if (confirm(`Are you sure you want to delete all ${db.length} entries from the database? This cannot be undone.`)) {
                 saveDatabase([]);
+                updateDbSizeBadge();
+                // Clear list page annotations since the database is now empty
+                clearStaleAnnotations();
                 alert('Database cleared.');
-                location.reload();
             }
         };
     }

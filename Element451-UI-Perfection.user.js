@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection
 // @namespace    http://tampermonkey.net/
-// @version      126
+// @version      127
 // @description  Merge workflow with auto-selection, smart links, and UI enhancements
 // @author       You
 // @match        https://*.element451.io/*
@@ -2385,29 +2385,28 @@
             };
             controlsWrapper.appendChild(settingsBtn);
 
-            // Merge Counter (conditionally shown)
-            if (CFG.SHOW_MERGE_COUNTER) {
-                const count = localStorage.getItem('elm_merge_count') || 0;
-                const counterWrapper = document.createElement('div');
-                counterWrapper.id = 'elm-counter-wrapper';
-                const resetBtn = document.createElement('button');
-                resetBtn.id = 'elm-reset-btn';
-                resetBtn.innerHTML = '\u21BB';
-                resetBtn.title = "Reset Counter";
-                resetBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    if (confirm("Reset your merge count to 0?")) {
-                        localStorage.setItem('elm_merge_count', 0);
-                        document.getElementById('elm-merge-counter').innerText = `Merges: 0`;
-                    }
-                };
-                const counterText = document.createElement('span');
-                counterText.id = 'elm-merge-counter';
-                counterText.innerText = `Merges: ${count}`;
-                counterWrapper.appendChild(resetBtn);
-                counterWrapper.appendChild(counterText);
-                controlsWrapper.appendChild(counterWrapper);
-            }
+            // Merge Counter (always created, visibility controlled by setting)
+            const count = localStorage.getItem('elm_merge_count') || 0;
+            const counterWrapper = document.createElement('div');
+            counterWrapper.id = 'elm-counter-wrapper';
+            if (!CFG.SHOW_MERGE_COUNTER) counterWrapper.style.display = 'none';
+            const resetBtn = document.createElement('button');
+            resetBtn.id = 'elm-reset-btn';
+            resetBtn.innerHTML = '\u21BB';
+            resetBtn.title = "Reset Counter";
+            resetBtn.onclick = (e) => {
+                e.stopPropagation();
+                if (confirm("Reset your merge count to 0?")) {
+                    localStorage.setItem('elm_merge_count', 0);
+                    document.getElementById('elm-merge-counter').innerText = `Merges: 0`;
+                }
+            };
+            const counterText = document.createElement('span');
+            counterText.id = 'elm-merge-counter';
+            counterText.innerText = `Merges: ${count}`;
+            counterWrapper.appendChild(resetBtn);
+            counterWrapper.appendChild(counterText);
+            controlsWrapper.appendChild(counterWrapper);
 
             navRight.insertBefore(controlsWrapper, searchBox);
 
@@ -2532,23 +2531,37 @@
         };
 
         // --- Helper for simple boolean toggles ---
-        function setupToggle(elementId, storageKey) {
+        function setupToggle(elementId, storageKey, onChange) {
             const toggle = document.getElementById(elementId);
             toggle.onclick = () => {
                 toggle.classList.toggle('active');
-                localStorage.setItem(storageKey, toggle.classList.contains('active') ? 'true' : 'false');
+                const isActive = toggle.classList.contains('active');
+                localStorage.setItem(storageKey, isActive ? 'true' : 'false');
+                if (onChange) onChange(isActive);
             };
         }
 
-        setupToggle('elm-settings-merge-counter-toggle', 'elm_show_merge_counter');
+        setupToggle('elm-settings-merge-counter-toggle', 'elm_show_merge_counter', (active) => {
+            const wrapper = document.getElementById('elm-counter-wrapper');
+            if (wrapper) wrapper.style.display = active ? '' : 'none';
+        });
         setupToggle('elm-settings-auto-click-toggle', 'elm_auto_click_fab');
         setupToggle('elm-settings-auto-nav-toggle', 'elm_auto_navigate_after_merge');
-        setupToggle('elm-settings-auto-skip-toggle', 'elm_auto_skip_blocked');
-        setupToggle('elm-settings-scroll-toggle', 'elm_require_scroll_to_bottom');
+        setupToggle('elm-settings-auto-skip-toggle', 'elm_auto_skip_blocked', (active) => {
+            if (active) {
+                // Reset the skip flag and re-attempt so the setting takes effect immediately
+                autoSkipAttempted = false;
+                attemptAutoSkipBlocked();
+            }
+        });
+        setupToggle('elm-settings-scroll-toggle', 'elm_require_scroll_to_bottom', () => {
+            checkMergeStatus();
+        });
 
         // --- Department Select ---
         document.getElementById('elm-settings-dept-select').onchange = (e) => {
             localStorage.setItem('elm_allowed_department', e.target.value);
+            checkMergeStatus();
         };
     }
 

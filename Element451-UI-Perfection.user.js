@@ -2547,7 +2547,13 @@
         });
         setupToggle('elm-settings-auto-click-toggle', 'elm_auto_click_fab');
         setupToggle('elm-settings-auto-nav-toggle', 'elm_auto_navigate_after_merge');
-        setupToggle('elm-settings-auto-skip-toggle', 'elm_auto_skip_blocked');
+        setupToggle('elm-settings-auto-skip-toggle', 'elm_auto_skip_blocked', (active) => {
+            if (active) {
+                // Reset the skip flag and re-attempt so the setting takes effect immediately
+                autoSkipAttempted = false;
+                attemptAutoSkipBlocked();
+            }
+        });
         setupToggle('elm-settings-scroll-toggle', 'elm_require_scroll_to_bottom', () => {
             checkMergeStatus();
         });

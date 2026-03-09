@@ -268,6 +268,17 @@
         const uniqueId = extractUniqueId();
         if (!uniqueId) return; // Not on a duplicates page
 
+        // Verify the body's csvUid matches the current URL's unique ID.
+        // During fast navigation (e.g., auto-skip), the URL may have changed
+        // to the NEXT entry while data-csv-dept still reflects the PREVIOUS
+        // entry. Without this check, the old dept/names would be stored with
+        // the new unique ID, corrupting the database.
+        const bodyUid = document.body.dataset.csvUid;
+        if (bodyUid && bodyUid !== uniqueId) {
+            console.log('CSV Database: Skipping record — URL unique ID (' + uniqueId + ') does not match body csvUid (' + bodyUid + '), likely mid-navigation');
+            return;
+        }
+
         // Check if names are available (page content loaded)
         const { firstName, lastName } = extractNames();
         if (!firstName && !lastName) {

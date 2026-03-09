@@ -928,6 +928,8 @@
     let conflictWarningShown = false; // Track if we've shown the conflict warning for this page
     // NEW: Auto-skip blocked tracking
     let autoSkipAttempted = false; // Track if we've attempted auto-skip for this page
+    // NEW: Auto-click verification delay tracking
+    let autoClickPending = false; // Track if we're in the verification delay before clicking FAB
     // --- HELPER: EXTRACT DUPLICATE ID FROM URL ---
     function extractDuplicateId(url) {
         const match = url.match(/\/duplicates\/([a-f0-9]{24})/i);
@@ -1201,29 +1203,57 @@
         return { conflictCount, shouldWarn, conflicts };
     }
     // --- HELPER: ATTEMPT AUTO-CLICK FAB ---
+    // Uses a two-phase approach to prevent race conditions:
+    // Phase 1: Initial check — if entry appears non-blocked, schedule verification
+    // Phase 2: Re-verify after delay — merge rows may still be loading when Spark IDs
+    //          appear, causing detectActualDepartment() to default to 'UnderGrad'
+    //          before Application/Workflow rows with Grad/IA keywords have loaded.
+    //          The re-check catches cases where the department changes during the delay.
     function attemptAutoClickFAB() {
+        if (autoClickPending) return; // Already waiting for verification
         if (!shouldAutoClickFAB()) {
             // If blocked, attempt auto-skip to next entry
             attemptAutoSkipBlocked();
             return;
         }
-        // Check for conflicting records before auto-clicking (possible twins/different people)
-        if (!conflictWarningShown && CONFLICT_ROW_THRESHOLD > 0) {
-            const { conflictCount, shouldWarn, conflicts } = checkForConflictingRecords();
-            if (shouldWarn) {
-                conflictWarningShown = true; // Don't show again for this page
-                alert(`⚠️ Warning: ${conflictCount} conflicting rows detected!\n\nConflicts found in: ${conflicts.join(', ')}\n\nThese entries might be twins or two different people. Please review carefully before merging.`);
+        // Phase 1: Department check passed — but merge rows may still be loading.
+        // Wait briefly and re-verify to prevent the race condition where Spark IDs
+        // load before Application/Workflow rows containing dept keywords.
+        autoClickPending = true;
+        const initialDept = detectActualDepartment().dept;
+        console.log('🔄 Auto-click: Initial check passed (dept: ' + initialDept + '), verifying after delay...');
+        setTimeout(() => {
+            autoClickPending = false;
+            // Phase 2: Re-check all blocked conditions after rows had more time to load
+            if (isForbiddenEntry().forbidden ||
+                isWrongDepartment().wrongDept ||
+                isStudentIdMismatch().mismatch ||
+                isStudentIgnored()) {
+                const newDept = detectActualDepartment().dept;
+                console.log('⛔ Auto-click aborted: Entry became blocked during verification (dept changed: ' + initialDept + ' → ' + newDept + ')');
+                autoClickAttempted = true;
+                attemptAutoSkipBlocked();
+                return;
             }
-        }
-        const actionWrapper = document.querySelector('.elm-page-action-floating');
-        const btn = actionWrapper ? actionWrapper.querySelector('button') : null;
-        if (btn) {
-            console.log('🤖 Auto-clicking FAB (triggered by page load)...');
-            autoClickAttempted = true; // Mark as attempted
-            btn.click();
-        } else {
-            console.log('⚠️ Auto-click failed: FAB button not found');
-        }
+            // Still not blocked after delay — proceed with click
+            // Check for conflicting records before auto-clicking (possible twins/different people)
+            if (!conflictWarningShown && CONFLICT_ROW_THRESHOLD > 0) {
+                const { conflictCount, shouldWarn, conflicts } = checkForConflictingRecords();
+                if (shouldWarn) {
+                    conflictWarningShown = true; // Don't show again for this page
+                    alert(`⚠️ Warning: ${conflictCount} conflicting rows detected!\n\nConflicts found in: ${conflicts.join(', ')}\n\nThese entries might be twins or two different people. Please review carefully before merging.`);
+                }
+            }
+            const actionWrapper = document.querySelector('.elm-page-action-floating');
+            const btn = actionWrapper ? actionWrapper.querySelector('button') : null;
+            if (btn) {
+                console.log('🤖 Auto-clicking FAB (verified after delay, dept: ' + detectActualDepartment().dept + ')...');
+                autoClickAttempted = true; // Mark as attempted
+                btn.click();
+            } else {
+                console.log('⚠️ Auto-click failed: FAB button not found');
+            }
+        }, 500);
     }
     // --- AUTO-SKIP BLOCKED ENTRIES ---
     function attemptAutoSkipBlocked() {
@@ -1387,6 +1417,7 @@
                 awaitingMergeSuccess = false; // Reset awaiting merge flag for new page
                 conflictWarningShown = false; // Reset conflict warning flag for new page
                 autoSkipAttempted = false; // Reset auto-skip flag for new page
+                autoClickPending = false; // Reset auto-click verification flag for new page
                 lastKnownUrl = currentUrl;
                 runLogic();
                 // Auto-click will be triggered by mutation observer when Spark IDs change

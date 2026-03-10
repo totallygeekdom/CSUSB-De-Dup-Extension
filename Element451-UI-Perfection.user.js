@@ -1307,19 +1307,25 @@
                 attemptAutoClickFAB();
                 return;
             }
-            // Check if the database has recorded this entry
+            // Check if the database has recorded this entry WITH the correct dept.
+            // Previously we only checked existence by uniqueId, which meant auto-skip
+            // could navigate away while the database still held a premature dept value
+            // (e.g. "UnderGrad" instead of "Ignored") that was recorded before the DOM
+            // fully loaded. Now we also verify the recorded dept matches the current
+            // body.dataset.csvDept so the final determination is captured.
             let recorded = false;
             if (currentUniqueId) {
                 try {
                     const dbData = localStorage.getItem('elm_csv_database');
                     const db = dbData ? JSON.parse(dbData) : [];
-                    recorded = db.some(entry => entry.uniqueId === currentUniqueId);
+                    const currentDept = document.body.dataset.csvDept;
+                    recorded = db.some(entry => entry.uniqueId === currentUniqueId && entry.dept === currentDept);
                 } catch (e) {
                     console.warn('⏭️ Auto-skip: Error reading database', e);
                 }
             }
             if (recorded) {
-                console.log('⏭️ Auto-skip: Database confirmed entry recorded, navigating to next...');
+                console.log('⏭️ Auto-skip: Database confirmed entry recorded with correct dept, navigating to next...');
                 navigateToNext();
             } else if (pollCount >= maxPolls) {
                 // Safety fallback: skip anyway after max wait so we don't get stuck
@@ -2946,12 +2952,23 @@
         // csvUid stamps which duplicate entry this dept belongs to, so csv-database
         // can verify the URL still matches before recording (prevents stale data
         // from being stored with the wrong unique ID during fast navigation).
+        //
+        // IMPORTANT: Only stamp csvDept/csvUid once Spark IDs are present, which
+        // indicates the page content has fully loaded. Without this guard,
+        // checkMergeStatus() fires on early DOM mutations before the "Ignored" chip
+        // or Grad/IA keywords have rendered, causing isStudentIgnored() to return
+        // false and detectActualDepartment() to default to "UnderGrad". The premature
+        // dept value gets recorded by csv-database.js, and auto-skip may navigate
+        // away before the correct value can overwrite it.
         const forbiddenResult = isForbiddenEntry();
         const currentUid = extractDuplicateId(window.location.href);
-        if (forbiddenResult.forbidden) document.body.dataset.csvDept = 'Forbidden';
-        else if (isStudentIgnored()) document.body.dataset.csvDept = 'Ignored';
-        else document.body.dataset.csvDept = detectActualDepartment().dept;
-        if (currentUid) document.body.dataset.csvUid = currentUid;
+        const sparkIds = getCurrentSparkIds();
+        if (sparkIds) {
+            if (forbiddenResult.forbidden) document.body.dataset.csvDept = 'Forbidden';
+            else if (isStudentIgnored()) document.body.dataset.csvDept = 'Ignored';
+            else document.body.dataset.csvDept = detectActualDepartment().dept;
+            if (currentUid) document.body.dataset.csvUid = currentUid;
+        }
         // Check forbidden entry FIRST (highest priority)
         if (forbiddenResult.forbidden) {
             document.body.classList.add('forbidden-entry');

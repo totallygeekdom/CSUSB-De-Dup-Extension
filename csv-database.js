@@ -46,35 +46,67 @@
     // CSS (database-owned styles)
     // =========================================================
     const dbCss = `
-        /* --- Chip annotation persistence via CSS ---
-         * These rules apply department colors based on data attributes
-         * so chips stay styled even when Angular re-renders inline styles.
-         * The inline styles set by annotateDuplicatesList() serve as the
-         * primary mechanism; these CSS rules act as a fallback so the user
-         * never sees the original orange "Unresolved" flash through. */
-        elm-chip .bg-color[data-csv-dept="Grad/IA"] {
+        /* --- Chip annotation via CSS-only approach ---
+         * All visual changes (text, colors, backgrounds) are driven purely
+         * by the data-csv-dept attribute on elm-row elements.  JavaScript
+         * only sets/removes that single attribute — it never touches
+         * textContent, style.cssText, or other Angular-managed properties.
+         * This prevents the DOM-modification war with Angular's change
+         * detection that caused annotations to disappear after ~60 seconds.
+         */
+
+        /* --- Grad/IA --- */
+        elm-row[data-csv-dept="Grad/IA"] elm-chip,
+        elm-row[data-csv-dept="Grad/IA"] elm-chip .bg-color {
             background-color: #e3f2fd !important;
         }
-        elm-chip .bg-color[data-csv-dept="Grad/IA"] ~ .elm-chip-label,
-        elm-chip .bg-color[data-csv-dept="Grad/IA"] + .elm-chip-label,
         elm-row[data-csv-dept="Grad/IA"] elm-chip .elm-chip-label {
-            color: #1565c0 !important;
+            font-size: 0 !important;
+            line-height: 0 !important;
+            color: transparent !important;
         }
-        elm-chip .bg-color[data-csv-dept="UnderGrad"] {
+        elm-row[data-csv-dept="Grad/IA"] elm-chip .elm-chip-label::after {
+            content: " Grad/IA ";
+            font-size: 12px !important;
+            line-height: normal !important;
+            color: #1565c0 !important;
+            white-space: nowrap;
+        }
+
+        /* --- UnderGrad --- */
+        elm-row[data-csv-dept="UnderGrad"] elm-chip,
+        elm-row[data-csv-dept="UnderGrad"] elm-chip .bg-color {
             background-color: #f3e5f5 !important;
         }
-        elm-chip .bg-color[data-csv-dept="UnderGrad"] ~ .elm-chip-label,
-        elm-chip .bg-color[data-csv-dept="UnderGrad"] + .elm-chip-label,
         elm-row[data-csv-dept="UnderGrad"] elm-chip .elm-chip-label {
-            color: #6a1b9a !important;
+            font-size: 0 !important;
+            line-height: 0 !important;
+            color: transparent !important;
         }
-        elm-chip .bg-color[data-csv-dept="Forbidden"] {
+        elm-row[data-csv-dept="UnderGrad"] elm-chip .elm-chip-label::after {
+            content: " UnderGrad ";
+            font-size: 12px !important;
+            line-height: normal !important;
+            color: #6a1b9a !important;
+            white-space: nowrap;
+        }
+
+        /* --- Forbidden --- */
+        elm-row[data-csv-dept="Forbidden"] elm-chip,
+        elm-row[data-csv-dept="Forbidden"] elm-chip .bg-color {
             background-color: #fce4ec !important;
         }
-        elm-chip .bg-color[data-csv-dept="Forbidden"] ~ .elm-chip-label,
-        elm-chip .bg-color[data-csv-dept="Forbidden"] + .elm-chip-label,
         elm-row[data-csv-dept="Forbidden"] elm-chip .elm-chip-label {
+            font-size: 0 !important;
+            line-height: 0 !important;
+            color: transparent !important;
+        }
+        elm-row[data-csv-dept="Forbidden"] elm-chip .elm-chip-label::after {
+            content: " Forbidden ";
+            font-size: 12px !important;
+            line-height: normal !important;
             color: #c2185b !important;
+            white-space: nowrap;
         }
         /* --- API Status Toast --- */
         #csv-api-toast {
@@ -442,22 +474,13 @@
     }
 
     // --- HELPER: CLEAR STALE CHIP ANNOTATIONS ---
-    // Removes all chip annotations so they can be re-applied with correct data.
-    // Called when fresh API data arrives to prevent wrong labels from persisting.
+    // Removes data attributes from rows so CSS-driven annotations disappear.
+    // Only touches custom data-* attributes — never modifies Angular-owned
+    // properties (textContent, style, etc.) to avoid change-detection fights.
     function clearStaleAnnotations() {
         document.querySelectorAll('elm-row').forEach(row => {
-            // Clear the stamped unique ID so stale page data doesn't persist
             row.removeAttribute('data-csv-uid');
             row.removeAttribute('data-csv-dept');
-            const chip = row.querySelector('elm-chip');
-            if (!chip) return;
-            const colorDiv = chip.querySelector('.bg-color');
-            if (colorDiv && colorDiv.hasAttribute('data-csv-dept')) {
-                colorDiv.removeAttribute('data-csv-dept');
-                colorDiv.removeAttribute('data-csv-gen');
-                colorDiv.style.cssText = '';
-            }
-            chip.style.cssText = '';
         });
     }
 
@@ -583,21 +606,6 @@
             .catch(() => {}); // Silently fail — interceptors will catch future pages
     }
 
-    // --- LIST PAGE: DEPT BADGE COLORS ---
-    const DEPT_LABELS = {
-        'Grad/IA':  'Grad/IA',
-        UnderGrad:  'UnderGrad',
-        Forbidden:  'Forbidden',
-        Ignored:    'Ignored'
-    };
-
-    const DEPT_COLORS = {
-        'Grad/IA':  { bg: '#e3f2fd', fg: '#1565c0' },
-        UnderGrad:  { bg: '#f3e5f5', fg: '#6a1b9a' },
-        Forbidden:  { bg: '#fce4ec', fg: '#c2185b' },
-        Ignored:    { bg: '#f5f5f5', fg: '#616161' }
-    };
-
     // --- HELPER: CONTENT-BASED ROW-TO-API MATCHING ---
     // Matches a DOM row to an API entry by comparing the visible name text
     // in the row against the API's name/duplicate_name fields. This is more
@@ -651,27 +659,18 @@
         return null;
     }
 
-    // --- LIST PAGE: REWRITE elm-chip IN EACH ROW TO SHOW DEPT ---
+    // --- LIST PAGE: ANNOTATE elm-row WITH DEPT DATA ATTRIBUTES ---
     // Uses the intercepted API data to match each row to its unique ID,
-    // then looks up that ID in the CSV database and rewrites the existing
-    // elm-chip (the orange "Unresolved" chip) to show department + color.
+    // then looks up that ID in the CSV database and sets data-csv-dept
+    // on the elm-row element. CSS rules handle all visual changes (text
+    // replacement, background colors, label colors) based on that attribute.
     //
-    // Angular re-renders can overwrite our chip modifications at any time.
-    // Instead of relying on a flag, we check the chip's actual label text
-    // AND color each time and re-apply if Angular has reverted anything.
+    // This CSS-only approach avoids modifying Angular-owned properties
+    // (textContent, style.cssText) which previously caused a feedback loop
+    // with Angular's change detection, making annotations vanish after ~60s.
     //
-    // STALENESS PROTECTION: When navigating between pages, the MutationObserver
-    // can fire before the new API response arrives, causing stale page 1 data
-    // to be applied to page 2 rows (wrong labels). We prevent this by:
-    // 1. Tracking which page the API data was captured for (apiCapturedPageKey)
-    // 2. Checking the page cache before invalidating stale data
-    // 3. Tracking the API generation on each chip to force re-evaluation
-    // 4. Cleaning up stale annotations when an entry isn't in the database
-    //
-    // CACHE RESTORATION: Element451 caches previously viewed list pages and
-    // may serve them without making a new API call. When that happens, the
-    // XHR/fetch interceptors never fire and apiDuplicatesList stays null.
-    // We restore from our page-keyed cache to re-annotate cached pages.
+    // STALENESS PROTECTION: Tracks which page the API data belongs to and
+    // uses a page-keyed cache to restore data for previously-viewed pages.
     function annotateDuplicatesList() {
         // Only run on list page — skip if on detail page (has elm-merge-row)
         if (document.querySelector('elm-merge-row')) return;
@@ -725,49 +724,27 @@
         // When API data is unavailable, match DOM rows directly against
         // database entries by firstName/lastName. Less precise (no unique ID
         // confirmation) but ensures chips still show department colors.
+        // Only sets data-csv-dept on elm-row — CSS handles all visual changes.
         if (useDbFallback) {
             const usedDbIndices = new Set();
             let matched = 0;
             rows.forEach(row => {
-                const chip = row.querySelector('elm-chip');
-                if (!chip) return;
-                const colorDiv = chip.querySelector('.bg-color');
-                const label = chip.querySelector('.elm-chip-label');
-
                 const dbEntry = matchRowToDbEntry(row, db, usedDbIndices);
                 if (!dbEntry) return;
                 if (dbEntry.dept === 'Ignored') return;
 
                 // If Element451 already shows this chip as "Ignored", don't overwrite it.
-                // The DB may have a stale dept from before the entry was ignored.
+                const chip = row.querySelector('elm-chip');
+                const label = chip ? chip.querySelector('.elm-chip-label') : null;
                 if (label && label.textContent.trim().toLowerCase() === 'ignored') {
-                    if (colorDiv && colorDiv.hasAttribute('data-csv-dept')) {
-                        colorDiv.removeAttribute('data-csv-dept');
-                        colorDiv.removeAttribute('data-csv-gen');
-                        colorDiv.style.cssText = '';
-                        chip.style.cssText = '';
-                    }
                     row.removeAttribute('data-csv-dept');
                     return;
                 }
 
-                const desiredLabel = DEPT_LABELS[dbEntry.dept] || dbEntry.dept;
-                const colors = DEPT_COLORS[dbEntry.dept] || { bg: '#f5f5f5', fg: '#333' };
-
                 // Check if already annotated correctly
-                if (label && label.textContent.trim() === desiredLabel &&
-                    colorDiv && colorDiv.getAttribute('data-csv-dept') === dbEntry.dept) return;
+                if (row.getAttribute('data-csv-dept') === dbEntry.dept) return;
 
-                if (label) {
-                    label.textContent = ` ${desiredLabel} `;
-                    label.style.color = colors.fg;
-                }
-                if (colorDiv) {
-                    colorDiv.style.cssText = `background-color: ${colors.bg} !important`;
-                    colorDiv.setAttribute('data-csv-dept', dbEntry.dept);
-                }
                 row.setAttribute('data-csv-dept', dbEntry.dept);
-                chip.style.cssText = `background-color: ${colors.bg} !important; color: ${colors.fg} !important`;
                 matched++;
             });
             if (matched > 0 && lastAnnotationSource !== 'db-fallback') {
@@ -778,6 +755,11 @@
         }
 
         // ---- PRIMARY PATH (API data available) ----
+        // Only sets data-csv-uid and data-csv-dept on elm-row elements.
+        // All visual changes (text, colors, backgrounds) are handled by CSS
+        // rules keyed on data-csv-dept. This avoids modifying Angular-owned
+        // properties (textContent, style) which caused a change-detection
+        // feedback loop that made annotations disappear after ~60 seconds.
         if (lastAnnotationSource !== 'api') {
             lastAnnotationSource = 'api';
             showApiToast('API: data captured successfully', 'success');
@@ -787,7 +769,6 @@
         const dbMap = {};
         db.forEach(entry => { dbMap[entry.uniqueId] = entry; });
 
-        const genStr = String(apiGeneration);
         const usedApiIndices = new Set(); // Track which API entries have been claimed
 
         // Check if row count matches API count — only allow index fallback
@@ -818,136 +799,58 @@
             }
             if (!uniqueId) return;
 
-            // Find the elm-chip in this row
-            const chip = row.querySelector('elm-chip');
-            if (!chip) return;
-
-            const colorDiv = chip.querySelector('.bg-color');
-            const label = chip.querySelector('.elm-chip-label');
-
             const dbEntry = dbMap[uniqueId];
 
             // If entry is NOT in database, clean up any stale annotation
-            // that may have been applied by previous (wrong) API data
             if (!dbEntry) {
-                if (colorDiv && colorDiv.hasAttribute('data-csv-dept')) {
-                    colorDiv.removeAttribute('data-csv-dept');
-                    colorDiv.removeAttribute('data-csv-gen');
-                    colorDiv.style.cssText = '';
-                    chip.style.cssText = '';
-                }
                 row.removeAttribute('data-csv-dept');
                 return;
             }
 
             // Ignored entries should keep their original chip unmodified
-            // per user request — they are still "Unresolved" in the system.
             if (dbEntry.dept === 'Ignored') {
-                // Clean up any stale annotation that may exist from before
-                if (colorDiv && colorDiv.hasAttribute('data-csv-dept')) {
-                    colorDiv.removeAttribute('data-csv-dept');
-                    colorDiv.removeAttribute('data-csv-gen');
-                    colorDiv.style.cssText = '';
-                    chip.style.cssText = '';
-                }
                 row.removeAttribute('data-csv-dept');
                 return;
             }
 
             // If Element451 already shows this chip as "Ignored", don't overwrite it.
-            // The DB may have a stale dept from before the entry was ignored.
+            const chip = row.querySelector('elm-chip');
+            const label = chip ? chip.querySelector('.elm-chip-label') : null;
             if (label && label.textContent.trim().toLowerCase() === 'ignored') {
-                // Clean up any stale annotation
-                if (colorDiv && colorDiv.hasAttribute('data-csv-dept')) {
-                    colorDiv.removeAttribute('data-csv-dept');
-                    colorDiv.removeAttribute('data-csv-gen');
-                    colorDiv.style.cssText = '';
-                    chip.style.cssText = '';
-                }
                 row.removeAttribute('data-csv-dept');
                 return;
             }
 
-            const desiredLabel = DEPT_LABELS[dbEntry.dept] || dbEntry.dept;
-            const colors = DEPT_COLORS[dbEntry.dept] || { bg: '#f5f5f5', fg: '#333' };
-
-            // Check if chip already has our desired label AND color from the
-            // CURRENT API generation — skip only if everything matches.
-            // The generation check ensures re-evaluation when fresh API data
-            // arrives, even if the label/color happen to match by coincidence.
-            // Also verify the DOM elements still have our attributes (Angular
-            // may have replaced the inner elements entirely).
-            const currentGen = colorDiv ? colorDiv.getAttribute('data-csv-gen') : null;
-            const labelOk = label && label.textContent.trim() === desiredLabel;
-            const colorOk = colorDiv && colorDiv.style.backgroundColor &&
-                            colorDiv.getAttribute('data-csv-dept') === dbEntry.dept;
-            if (labelOk && colorOk && currentGen === genStr) return;
-
-            // Apply or re-apply annotation
-            if (label) {
-                label.textContent = ` ${desiredLabel} `;
-                label.style.color = colors.fg;
+            // Set the data attribute — CSS handles all visual changes
+            if (row.getAttribute('data-csv-dept') !== dbEntry.dept) {
+                row.setAttribute('data-csv-dept', dbEntry.dept);
             }
-
-            // Rewrite the chip background color
-            if (colorDiv) {
-                colorDiv.style.cssText = `background-color: ${colors.bg} !important`;
-                colorDiv.setAttribute('data-csv-dept', dbEntry.dept);
-                colorDiv.setAttribute('data-csv-gen', genStr);
-            }
-
-            // Stamp dept on the row element so CSS rules can target labels
-            // even when Angular replaces inner chip elements
-            row.setAttribute('data-csv-dept', dbEntry.dept);
-
-            // Also set chip-level styles as a fallback in case .bg-color
-            // is missing or gets replaced by Angular
-            chip.style.cssText = `background-color: ${colors.bg} !important; color: ${colors.fg} !important`;
         });
     }
 
     // --- LIST PAGE: MUTATION OBSERVER ---
-    // Angular re-renders can overwrite our chip modifications at any time.
-    // A MutationObserver reacts immediately to DOM changes so we can
-    // re-annotate before the user sees the revert.
+    // Angular re-renders can replace elm-row elements, losing our data-csv-uid
+    // and data-csv-dept attributes. The observer detects when rows or chips are
+    // added/replaced so we can re-stamp the data attributes.
     //
-    // Strategy: Use two debounce timers —
-    //   1. A short timer (20ms) that fires on EVERY batch of mutations to
-    //      quickly re-apply styles that Angular just wiped. This catches the
-    //      common case of Angular re-rendering a single row's chip.
-    //   2. A longer timer (200ms) that fires after Angular finishes a full
-    //      render cycle (pagination, filtering, etc.) to do a complete pass.
+    // Because we now only set data-* attributes (no textContent/style changes),
+    // our own modifications rarely trigger the observer, breaking the feedback
+    // loop that previously caused annotations to vanish after ~60 seconds.
     let listAnnotationTimer = null;
-    let listAnnotationQuickTimer = null;
     const listObserver = new MutationObserver((mutations) => {
-        // Quick pass: check if any mutation affected an elm-chip or elm-row.
-        // If so, re-annotate quickly to prevent visible flicker.
-        let chipAffected = false;
+        // Only re-annotate if rows or chips were actually added/replaced.
+        // Ignore attribute-only mutations (which are likely our own data-* changes).
+        let rowsChanged = false;
         for (const m of mutations) {
-            if (m.target && (m.target.closest && (m.target.closest('elm-chip') || m.target.closest('elm-row')))) {
-                chipAffected = true;
+            if (m.type === 'childList' && (m.addedNodes.length > 0 || m.removedNodes.length > 0)) {
+                rowsChanged = true;
                 break;
             }
-            // Also check added/removed nodes
-            for (const node of m.addedNodes) {
-                if (node.nodeType === 1 && (node.tagName === 'ELM-CHIP' || node.tagName === 'ELM-ROW' ||
-                    node.querySelector && (node.querySelector('elm-chip') || node.querySelector('elm-row')))) {
-                    chipAffected = true;
-                    break;
-                }
-            }
-            if (chipAffected) break;
         }
+        if (!rowsChanged) return;
 
-        if (chipAffected) {
-            // Quick re-annotation for chip-specific mutations
-            if (listAnnotationQuickTimer) clearTimeout(listAnnotationQuickTimer);
-            listAnnotationQuickTimer = setTimeout(annotateDuplicatesList, 20);
-        }
-
-        // Full pass after Angular finishes its render cycle
         if (listAnnotationTimer) clearTimeout(listAnnotationTimer);
-        listAnnotationTimer = setTimeout(annotateDuplicatesList, 200);
+        listAnnotationTimer = setTimeout(annotateDuplicatesList, 150);
     });
     // Track current observer target to detect when the container changes
     // (e.g., Angular replaces .elm-table-body during navigation).
@@ -1004,12 +907,14 @@
         }
     }
 
-    // Run annotation periodically on the list page (fallback for observer)
+    // Run annotation periodically on the list page (fallback for observer).
+    // 2-second interval is sufficient now that we only set data attributes
+    // (no constant style/textContent fight with Angular).
     setInterval(() => {
         attemptFirstPageFetch();
         annotateDuplicatesList();
         startListObserver();
-    }, 1000);
+    }, 2000);
 
     // Poll for SPA navigation (URL changes without full reload)
     setInterval(checkListUrlChange, 500);

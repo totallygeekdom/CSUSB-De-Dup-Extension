@@ -101,16 +101,43 @@
             color: #b71c1c !important;
         }
         /* --- 2d. APPLICANT KEYWORD ROW HIGHLIGHT --- */
-        /* Yellow (same fill/border as the overlay) when undergrad is allowed */
+        /* Yellow (same fill/border as the overlay) when entry is allowed */
         elm-merge-row.applicant-keyword-row {
             background-color: #fff9c4 !important;
             border: 2px solid #fbc02d !important;
+        }
+        elm-merge-row.applicant-keyword-row:hover {
+            background-color: #fff176 !important;
+        }
+        elm-merge-row.applicant-keyword-row .elm-merge-row-input,
+        elm-merge-row.applicant-keyword-row mat-button-toggle-group {
+            background-color: #fff9c4 !important;
+            border-color: #fbc02d !important;
+        }
+        elm-merge-row.applicant-keyword-row:hover .elm-merge-row-input,
+        elm-merge-row.applicant-keyword-row:hover mat-button-toggle-group {
+            background-color: #fff176 !important;
+        }
+        elm-merge-row.applicant-keyword-row * {
+            color: #f57f17 !important;
         }
         /* Deep red when undergrad is blocked - signals why the entry was ID'd as undergrad */
         body.wrong-department elm-merge-row.applicant-keyword-row {
             background-color: #ffcdd2 !important;
             border: 3px solid #b71c1c !important;
             box-shadow: 0 0 8px rgba(183, 28, 28, 0.4) !important;
+        }
+        body.wrong-department elm-merge-row.applicant-keyword-row:hover {
+            background-color: #ef9a9a !important;
+        }
+        body.wrong-department elm-merge-row.applicant-keyword-row .elm-merge-row-input,
+        body.wrong-department elm-merge-row.applicant-keyword-row mat-button-toggle-group {
+            background-color: #ffcdd2 !important;
+            border-color: #ef9a9a !important;
+        }
+        body.wrong-department elm-merge-row.applicant-keyword-row:hover .elm-merge-row-input,
+        body.wrong-department elm-merge-row.applicant-keyword-row:hover mat-button-toggle-group {
+            background-color: #ef9a9a !important;
         }
         body.wrong-department elm-merge-row.applicant-keyword-row * {
             color: #b71c1c !important;
@@ -232,6 +259,9 @@
         body.no-highlight-borders elm-merge-row.blocked-row {
             border: none !important;
             box-shadow: none !important;
+        }
+        body.no-highlight-borders elm-merge-row.applicant-keyword-row {
+            border: none !important;
         }
         body.no-highlight-borders #elm-applicant-highlight {
             border: none !important;
@@ -1038,8 +1068,6 @@
     }
     // --- HELPER: CHECK IF AUTO-CLICK FAB SHOULD HAPPEN ---
     function shouldAutoClickFAB() {
-        // Check if feature is enabled
-        if (!CFG.AUTO_CLICK_FAB) return false;
         // Check if already attempted this page
         if (autoClickAttempted) return false;
         // Check if already clicked this page (manual or auto)
@@ -1060,6 +1088,8 @@
             console.log('🔄 Spark IDs changed - page content updated:', sparkIds);
             lastSparkIds = sparkIds;
         }
+        // Check blocked conditions — always run these even when AUTO_CLICK_FAB is disabled
+        // so that autoClickAttempted is set and auto-skip can trigger on blocked entries.
         // Check forbidden entry (highest priority block)
         if (isForbiddenEntry().forbidden) {
             console.log('⛔ Auto-click blocked: Forbidden entry detected');
@@ -1084,6 +1114,9 @@
             autoClickAttempted = true; // Don't retry
             return false;
         }
+        // Check if feature is enabled (after block detection so autoClickAttempted is
+        // always set correctly, allowing auto-skip to work even when auto-click is off)
+        if (!CFG.AUTO_CLICK_FAB) return false;
         return true;
     }
     // --- HELPER: CHECK FOR POSSIBLE TWINS/DIFFERENT PEOPLE ---
@@ -1611,6 +1644,17 @@
             const existingContainer = document.querySelector('.applicant-side-left, .applicant-side-right');
             if (existingContainer) existingContainer.classList.remove('applicant-side-left', 'applicant-side-right');
         };
+        // Remove overlay when entry is blocked — blocked state uses its own row highlights
+        // (red borders), so the yellow applicant overlay would be misleading/stale.
+        const isBlocked = document.body.classList.contains('forbidden-entry') ||
+                          document.body.classList.contains('wrong-department') ||
+                          document.body.classList.contains('student-id-mismatch');
+        if (isBlocked) {
+            if (existingHighlight) existingHighlight.remove();
+            cleanupClasses();
+            lastHighlightUrl = '';
+            return;
+        }
         if (!applicantSide) {
             if (existingHighlight) existingHighlight.remove();
             cleanupClasses();
@@ -2593,9 +2637,12 @@
         setupToggle('elm-settings-auto-nav-toggle', 'elm_auto_navigate_after_merge');
         setupToggle('elm-settings-auto-skip-toggle', 'elm_auto_skip_blocked', (active) => {
             if (active) {
-                // Reset the skip flag and re-attempt so the setting takes effect immediately
+                // Reset all auto-click/skip flags so the full detection flow re-runs,
+                // properly detecting the blocked state and triggering a skip if needed.
                 autoSkipAttempted = false;
-                attemptAutoSkipBlocked();
+                autoClickAttempted = false;
+                autoClickPending = false;
+                attemptAutoClickFAB();
             }
         });
         setupToggle('elm-settings-scroll-toggle', 'elm_require_scroll_to_bottom', () => {
@@ -2605,7 +2652,7 @@
         // --- Department Select ---
         document.getElementById('elm-settings-dept-select').onchange = (e) => {
             localStorage.setItem('elm_allowed_department', e.target.value);
-            checkMergeStatus();
+            runLogic(); // Runs checkMergeStatus() + highlightApplicantSide() to clear stale highlights
         };
     }
 

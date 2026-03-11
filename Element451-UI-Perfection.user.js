@@ -101,16 +101,43 @@
             color: #b71c1c !important;
         }
         /* --- 2d. APPLICANT KEYWORD ROW HIGHLIGHT --- */
-        /* Yellow (same fill/border as the overlay) when undergrad is allowed */
+        /* Yellow (same fill/border as the overlay) when entry is allowed */
         elm-merge-row.applicant-keyword-row {
             background-color: #fff9c4 !important;
             border: 2px solid #fbc02d !important;
+        }
+        elm-merge-row.applicant-keyword-row:hover {
+            background-color: #fff176 !important;
+        }
+        elm-merge-row.applicant-keyword-row .elm-merge-row-input,
+        elm-merge-row.applicant-keyword-row mat-button-toggle-group {
+            background-color: #fff9c4 !important;
+            border-color: #fbc02d !important;
+        }
+        elm-merge-row.applicant-keyword-row:hover .elm-merge-row-input,
+        elm-merge-row.applicant-keyword-row:hover mat-button-toggle-group {
+            background-color: #fff176 !important;
+        }
+        elm-merge-row.applicant-keyword-row * {
+            color: #f57f17 !important;
         }
         /* Deep red when undergrad is blocked - signals why the entry was ID'd as undergrad */
         body.wrong-department elm-merge-row.applicant-keyword-row {
             background-color: #ffcdd2 !important;
             border: 3px solid #b71c1c !important;
             box-shadow: 0 0 8px rgba(183, 28, 28, 0.4) !important;
+        }
+        body.wrong-department elm-merge-row.applicant-keyword-row:hover {
+            background-color: #ef9a9a !important;
+        }
+        body.wrong-department elm-merge-row.applicant-keyword-row .elm-merge-row-input,
+        body.wrong-department elm-merge-row.applicant-keyword-row mat-button-toggle-group {
+            background-color: #ffcdd2 !important;
+            border-color: #ef9a9a !important;
+        }
+        body.wrong-department elm-merge-row.applicant-keyword-row:hover .elm-merge-row-input,
+        body.wrong-department elm-merge-row.applicant-keyword-row:hover mat-button-toggle-group {
+            background-color: #ef9a9a !important;
         }
         body.wrong-department elm-merge-row.applicant-keyword-row * {
             color: #b71c1c !important;
@@ -232,6 +259,9 @@
         body.no-highlight-borders elm-merge-row.blocked-row {
             border: none !important;
             box-shadow: none !important;
+        }
+        body.no-highlight-borders elm-merge-row.applicant-keyword-row {
+            border: none !important;
         }
         body.no-highlight-borders #elm-applicant-highlight {
             border: none !important;

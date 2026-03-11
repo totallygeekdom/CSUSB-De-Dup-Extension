@@ -4,7 +4,7 @@ Two Tampermonkey userscripts that streamline the Element451 duplicate-contact me
 
 ---
 
-## Element451 - UI Perfection (v126)
+## Element451 - UI Perfection (v127)
 
 ### Configuration
 
@@ -173,7 +173,7 @@ Monitors SPA navigation. Maintains a session-scoped Set of up to 10 recently-see
 
 ---
 
-## Element451 - CSV Database (v7)
+## Element451 - CSV Database (v8)
 
 A companion script that tracks blocked entries in a local database and annotates the duplicates list page with department badges.
 

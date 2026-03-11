@@ -1528,27 +1528,29 @@ None. The script uses a built-in `AddressComparer` module for address parsing (t
 
 **v127 Changes (UI Perfection + CSV Database v8):**
 
-- **REWORK: Department detection** — Merged Grad/IA detection logic, dropped unreliable `Outreach_` pattern, and now requires a row with `status: Finished` to confirm department before classifying. `detectActualDepartment()` returns the matched row directly for use by highlighting and signalling logic
-- **FIX: Blocked row highlighting** — Department lockdown now highlights the **first** relevant row rather than the last, giving a more predictable visual cue
-- **NEW: UnderGrad applicant keyword highlight** — For blocked UnderGrad entries, the row containing the applicant keyword is highlighted yellow (matching the Cal-State-Apply highlight style). Detection is gated to UnderGrad-only entries; if no applicant keyword is found, no row is highlighted
-- **FIX: Settings take effect immediately** — All settings changes (Auto-Click FAB, Auto-Skip Blocked, Allowed Department, etc.) now take effect without requiring a page reload
-- **FIX: Auto-Skip Blocked toggle** — The Auto-Skip Blocked setting now takes effect on the current page immediately after being toggled
+- **FIX: Settings take effect immediately** — All settings changes (Auto-Click FAB, Auto-Skip Blocked, Allowed Department, etc.) now take effect on the current page without requiring a page reload
+- **FIX: Auto-Skip Blocked toggle** — Toggling Auto-Skip Blocked now resets `autoClickAttempted`/`autoClickPending` and re-runs the full auto-click detection flow so the new setting is applied to the current entry immediately
+- **FIX: AUTO_CLICK_FAB check order** — Block detection (`isForbiddenEntry`, `isWrongDepartment`, `isStudentIdMismatch`) now always runs before the `AUTO_CLICK_FAB` enabled check so that `autoClickAttempted` is set correctly even when auto-click is disabled. This allows auto-skip to trigger on blocked entries regardless of whether auto-click is on
+- **FIX: Applicant overlay cleared on blocked entries** — The yellow Cal-State-Apply overlay is removed when any lockdown body class is active (`forbidden-entry`, `wrong-department`, `student-id-mismatch`). Previously the overlay could persist on blocked pages, conflicting with the red blocked-row highlights
+- **FIX: Department change clears stale highlights** — Allowed department changes now call `runLogic()` (which includes `highlightApplicantSide()`) instead of just `checkMergeStatus()`, ensuring stale applicant overlays are removed when the department setting changes
 - **FIX: Auto-click FAB race condition** — Fixed a race condition where the auto-click FAB could accidentally trigger a merge on a blocked entry when new rows loaded asynchronously after the initial block check
 - **FIX: Unique ID mismatch during fast navigation** — Fixed unique ID mismatch that occurred when auto-skip navigated to the next entry before the CSV Database had finished stamping the current entry's ID
 - **FIX: Department annotation race** — `csvDept` is now guarded until the page is fully loaded, and the dept value is re-verified immediately before auto-skip triggers to prevent stale annotations from causing incorrect skips
 - **FIX: List page not reflecting database changes** — The list page chip annotations now refresh correctly after a database clear or replace operation
 - **FIX: Chip annotations disappearing after ~60s** — Moved chip annotations to CSS-only approach, eliminating the timer-based re-annotation that caused chips to drop after extended idle periods
 - **FIX: Auto-skip not persisting across navigations** — Fixed autoskip state not being preserved when navigating between entries
-- **FIX: Highlights not clearing on department change** — Applicant keyword row highlights are now properly cleared when the department changes between entries
-- **FIX: Applicant keyword row highlight styling** — Yellow highlight on the applicant keyword row now uses the same style as other highlighted rows (consistent overlay opacity and border)
-- **CSV Database v8:** All CSV Database changes above are part of this version bump (department detection rework, applicant keyword logging, CSS-only chip annotations, annotation race fixes, settings-reload fixes)
+- **FIX: Applicant keyword row highlight styling** — Added hover states, input/toggle-group background colours, and amber text colour to `.applicant-keyword-row`. Added `no-highlight-borders` support to suppress the border when high contrast is off. Comment updated from "when undergrad is allowed" to "when entry is allowed"
+- **CSV Database v8:** Shares department detection rework, applicant keyword logging, annotation race fixes, and settings-reload fixes from v126 (CSV Database items below)
 
 ---
 
-**v126 Changes (UI Perfection):**
+**v126 Changes (UI Perfection + CSV Database v4–v7 continued):**
 
 - **FIX: IA > Grad department detection priority** — Students with both Grad and IA markers are now always classified as IA, because students can be both graduate and international
-- **Updated README** to document the priority change
+- **REWORK: Department detection** — Merged Grad/IA detection into a single pass, dropped the `Outreach_` pattern (no longer used to classify entries), and now requires a row with `status: Finished` to confirm a department before classifying. `detectActualDepartment()` returns the matched row directly for use by highlighting and CSV signalling
+- **FIX: Blocked row highlighting** — Department lockdown now highlights the **first** relevant row rather than the last, giving a more predictable visual cue
+- **NEW: UnderGrad applicant keyword highlight** — For blocked UnderGrad entries, the row containing the applicant keyword is highlighted yellow. Detection is gated to UnderGrad-only entries; if no applicant keyword is found, no row is highlighted. Uses `'No IA/Grad Keywords Found'` as the UnderGrad CSV fallback value
+- **CSV Database:** Department detection rework applied to csv-database.js; applicant keyword row contents logged for UnderGrad entries in the database record
 
 ---
 

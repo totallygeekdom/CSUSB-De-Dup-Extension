@@ -231,6 +231,50 @@
         elm-merge-row.has-error:has(.ng-valid) * {
             color: #1b5e20 !important;
         }
+        /* --- 5b. SUPPRESS RED/GREEN HIGHLIGHTS WHEN ENTRY IS BLOCKED --- */
+        /* When the entry is blocked (wrong dept, forbidden, student ID mismatch),
+           suppress the green/red conflict row highlights so they don't persist
+           after switching the allowed department or navigating to a blocked entry.
+           Rows with .blocked-row / .blocked-row-critical are exempted so they
+           keep their own red styling. */
+        body.wrong-department elm-merge-row.has-error:has(.ng-valid):not(.blocked-row):not(.blocked-row-critical),
+        body.wrong-department elm-merge-row.has-error:has(.ng-invalid):not(.blocked-row):not(.blocked-row-critical),
+        body.wrong-department elm-merge-row.has-error:not(:has(.ng-valid)):not(.blocked-row):not(.blocked-row-critical),
+        body.forbidden-entry elm-merge-row.has-error:has(.ng-valid):not(.blocked-row):not(.blocked-row-critical),
+        body.forbidden-entry elm-merge-row.has-error:has(.ng-invalid):not(.blocked-row):not(.blocked-row-critical),
+        body.forbidden-entry elm-merge-row.has-error:not(:has(.ng-valid)):not(.blocked-row):not(.blocked-row-critical),
+        body.student-id-mismatch elm-merge-row.has-error:has(.ng-valid):not(.blocked-row):not(.blocked-row-critical),
+        body.student-id-mismatch elm-merge-row.has-error:has(.ng-invalid):not(.blocked-row):not(.blocked-row-critical),
+        body.student-id-mismatch elm-merge-row.has-error:not(:has(.ng-valid)):not(.blocked-row):not(.blocked-row-critical) {
+            background-color: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+        }
+        body.wrong-department elm-merge-row.has-error:has(.ng-valid):not(.blocked-row):not(.blocked-row-critical):hover,
+        body.wrong-department elm-merge-row.has-error:has(.ng-invalid):not(.blocked-row):not(.blocked-row-critical):hover,
+        body.wrong-department elm-merge-row.has-error:not(:has(.ng-valid)):not(.blocked-row):not(.blocked-row-critical):hover,
+        body.forbidden-entry elm-merge-row.has-error:has(.ng-valid):not(.blocked-row):not(.blocked-row-critical):hover,
+        body.forbidden-entry elm-merge-row.has-error:has(.ng-invalid):not(.blocked-row):not(.blocked-row-critical):hover,
+        body.forbidden-entry elm-merge-row.has-error:not(:has(.ng-valid)):not(.blocked-row):not(.blocked-row-critical):hover,
+        body.student-id-mismatch elm-merge-row.has-error:has(.ng-valid):not(.blocked-row):not(.blocked-row-critical):hover,
+        body.student-id-mismatch elm-merge-row.has-error:has(.ng-invalid):not(.blocked-row):not(.blocked-row-critical):hover,
+        body.student-id-mismatch elm-merge-row.has-error:not(:has(.ng-valid)):not(.blocked-row):not(.blocked-row-critical):hover {
+            background-color: transparent !important;
+        }
+        body.wrong-department elm-merge-row.has-error:not(.blocked-row):not(.blocked-row-critical) .elm-merge-row-input,
+        body.wrong-department elm-merge-row.has-error:not(.blocked-row):not(.blocked-row-critical) mat-button-toggle-group,
+        body.forbidden-entry elm-merge-row.has-error:not(.blocked-row):not(.blocked-row-critical) .elm-merge-row-input,
+        body.forbidden-entry elm-merge-row.has-error:not(.blocked-row):not(.blocked-row-critical) mat-button-toggle-group,
+        body.student-id-mismatch elm-merge-row.has-error:not(.blocked-row):not(.blocked-row-critical) .elm-merge-row-input,
+        body.student-id-mismatch elm-merge-row.has-error:not(.blocked-row):not(.blocked-row-critical) mat-button-toggle-group {
+            background-color: transparent !important;
+            border-color: initial !important;
+        }
+        body.wrong-department elm-merge-row.has-error:not(.blocked-row):not(.blocked-row-critical) *,
+        body.forbidden-entry elm-merge-row.has-error:not(.blocked-row):not(.blocked-row-critical) *,
+        body.student-id-mismatch elm-merge-row.has-error:not(.blocked-row):not(.blocked-row-critical) * {
+            color: initial !important;
+        }
         /* --- 6. YELLOW APPLICANT SIDE HIGHLIGHT OVERLAY --- */
         #elm-applicant-highlight {
             position: absolute;

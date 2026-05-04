@@ -3052,10 +3052,11 @@
         // dept value gets recorded by csv-database.js, and auto-skip may navigate
         // away before the correct value can overwrite it.
         const forbiddenResult = isForbiddenEntry();
+        const studentIdResult = isStudentIdMismatch();
         const currentUid = extractDuplicateId(window.location.href);
         const sparkIds = getCurrentSparkIds();
         if (sparkIds) {
-            if (forbiddenResult.forbidden) document.body.dataset.csvDept = 'Forbidden';
+            if (forbiddenResult.forbidden || studentIdResult.mismatch) document.body.dataset.csvDept = 'Forbidden';
             else if (isStudentIgnored()) document.body.dataset.csvDept = 'Ignored';
             else document.body.dataset.csvDept = detectActualDepartment().dept;
             if (currentUid) document.body.dataset.csvUid = currentUid;
@@ -3093,7 +3094,6 @@
             document.body.classList.remove('wrong-department');
         }
         // Then check student ID mismatch
-        const studentIdResult = isStudentIdMismatch();
         if (studentIdResult.mismatch) {
             document.body.classList.add('student-id-mismatch');
             document.body.classList.remove('ready-to-merge', 'review-required');

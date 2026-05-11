@@ -1140,13 +1140,13 @@
             const values = row.querySelectorAll('elm-merge-value');
             if (values.length >= 1) {
                 const leftText = values[0].textContent.toLowerCase();
-                if (leftText.includes('apeal')) {
+                if (leftText.includes('appeal')) {
                     return { appeal: true, row: row, side: 'left' };
                 }
             }
             if (values.length >= 2) {
                 const rightText = values[1].textContent.toLowerCase();
-                if (rightText.includes('apeal')) {
+                if (rightText.includes('appeal')) {
                     return { appeal: true, row: row, side: 'right' };
                 }
             }
@@ -2809,7 +2809,7 @@
                     e.stopImmediatePropagation();
                     const appealResult = isAppealKeyword();
                     const sideLabel = appealResult.side === 'left' ? 'left side' : 'right side';
-                    alert("Merge blocked: Appeal keyword detected.\n\nReason: The word \"apeal\" was found on the " + sideLabel + " of this entry.\n\nMerges containing an appeal cannot be processed.");
+                    alert("Merge blocked: Appeal keyword detected.\n\nReason: The word \"appeal\" was found on the " + sideLabel + " of this entry.\n\nMerges containing an appeal cannot be processed.");
                     return;
                 }
                 // Then check department
@@ -3118,7 +3118,7 @@
         const sparkIds = getCurrentSparkIds();
         if (sparkIds) {
             if (forbiddenResult.forbidden || studentIdResult.mismatch) document.body.dataset.csvDept = 'Forbidden';
-            else if (appealResult.appeal) document.body.dataset.csvDept = 'apeal';
+            else if (appealResult.appeal) document.body.dataset.csvDept = 'appeal';
             else if (isStudentIgnored()) document.body.dataset.csvDept = 'Ignored';
             else document.body.dataset.csvDept = detectActualDepartment().dept;
             if (currentUid) document.body.dataset.csvUid = currentUid;

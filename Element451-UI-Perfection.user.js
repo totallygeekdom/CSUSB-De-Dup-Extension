@@ -76,6 +76,20 @@
             content: "∅";
             color: white; font-size: 28px; line-height: 1; font-weight: bold; display: block; margin: auto;
         }
+        /* --- 2b2. APPEAL KEYWORD LOCKDOWN --- */
+        body.appeal-keyword .elm-page-action-floating button {
+            background-color: #d32f2f !important;
+            padding-right: 16px !important;
+            width: 56px !important;
+        }
+        body.appeal-keyword .elm-page-action-floating button *,
+        body.appeal-keyword .fab-merge-text {
+            display: none !important;
+        }
+        body.appeal-keyword .elm-page-action-floating button::after {
+            content: "∅";
+            color: white; font-size: 28px; line-height: 1; font-weight: bold; display: block; margin: auto;
+        }
         /* --- 2c. BLOCKED ROW HIGHLIGHTING --- */
         /* Deep red for all blocked rows (student ID mismatch, dept block, forbidden entry) */
         elm-merge-row.blocked-row-critical,
@@ -245,7 +259,10 @@
         body.forbidden-entry elm-merge-row.has-error:not(:has(.ng-valid)):not(.blocked-row):not(.blocked-row-critical),
         body.student-id-mismatch elm-merge-row.has-error:has(.ng-valid):not(.blocked-row):not(.blocked-row-critical),
         body.student-id-mismatch elm-merge-row.has-error:has(.ng-invalid):not(.blocked-row):not(.blocked-row-critical),
-        body.student-id-mismatch elm-merge-row.has-error:not(:has(.ng-valid)):not(.blocked-row):not(.blocked-row-critical) {
+        body.student-id-mismatch elm-merge-row.has-error:not(:has(.ng-valid)):not(.blocked-row):not(.blocked-row-critical),
+        body.appeal-keyword elm-merge-row.has-error:has(.ng-valid):not(.blocked-row):not(.blocked-row-critical),
+        body.appeal-keyword elm-merge-row.has-error:has(.ng-invalid):not(.blocked-row):not(.blocked-row-critical),
+        body.appeal-keyword elm-merge-row.has-error:not(:has(.ng-valid)):not(.blocked-row):not(.blocked-row-critical) {
             background-color: transparent !important;
             border: none !important;
             box-shadow: none !important;
@@ -258,7 +275,10 @@
         body.forbidden-entry elm-merge-row.has-error:not(:has(.ng-valid)):not(.blocked-row):not(.blocked-row-critical):hover,
         body.student-id-mismatch elm-merge-row.has-error:has(.ng-valid):not(.blocked-row):not(.blocked-row-critical):hover,
         body.student-id-mismatch elm-merge-row.has-error:has(.ng-invalid):not(.blocked-row):not(.blocked-row-critical):hover,
-        body.student-id-mismatch elm-merge-row.has-error:not(:has(.ng-valid)):not(.blocked-row):not(.blocked-row-critical):hover {
+        body.student-id-mismatch elm-merge-row.has-error:not(:has(.ng-valid)):not(.blocked-row):not(.blocked-row-critical):hover,
+        body.appeal-keyword elm-merge-row.has-error:has(.ng-valid):not(.blocked-row):not(.blocked-row-critical):hover,
+        body.appeal-keyword elm-merge-row.has-error:has(.ng-invalid):not(.blocked-row):not(.blocked-row-critical):hover,
+        body.appeal-keyword elm-merge-row.has-error:not(:has(.ng-valid)):not(.blocked-row):not(.blocked-row-critical):hover {
             background-color: transparent !important;
         }
         body.wrong-department elm-merge-row.has-error:not(.blocked-row):not(.blocked-row-critical) .elm-merge-row-input,
@@ -266,13 +286,16 @@
         body.forbidden-entry elm-merge-row.has-error:not(.blocked-row):not(.blocked-row-critical) .elm-merge-row-input,
         body.forbidden-entry elm-merge-row.has-error:not(.blocked-row):not(.blocked-row-critical) mat-button-toggle-group,
         body.student-id-mismatch elm-merge-row.has-error:not(.blocked-row):not(.blocked-row-critical) .elm-merge-row-input,
-        body.student-id-mismatch elm-merge-row.has-error:not(.blocked-row):not(.blocked-row-critical) mat-button-toggle-group {
+        body.student-id-mismatch elm-merge-row.has-error:not(.blocked-row):not(.blocked-row-critical) mat-button-toggle-group,
+        body.appeal-keyword elm-merge-row.has-error:not(.blocked-row):not(.blocked-row-critical) .elm-merge-row-input,
+        body.appeal-keyword elm-merge-row.has-error:not(.blocked-row):not(.blocked-row-critical) mat-button-toggle-group {
             background-color: transparent !important;
             border-color: initial !important;
         }
         body.wrong-department elm-merge-row.has-error:not(.blocked-row):not(.blocked-row-critical) *,
         body.forbidden-entry elm-merge-row.has-error:not(.blocked-row):not(.blocked-row-critical) *,
-        body.student-id-mismatch elm-merge-row.has-error:not(.blocked-row):not(.blocked-row-critical) * {
+        body.student-id-mismatch elm-merge-row.has-error:not(.blocked-row):not(.blocked-row-critical) *,
+        body.appeal-keyword elm-merge-row.has-error:not(.blocked-row):not(.blocked-row-critical) * {
             color: initial !important;
         }
         /* --- 6. YELLOW APPLICANT SIDE HIGHLIGHT OVERLAY --- */
@@ -1110,6 +1133,26 @@
         }
         return { forbidden: false };
     }
+    // --- HELPER: CHECK FOR APPEAL KEYWORD ---
+    function isAppealKeyword() {
+        const allRows = Array.from(document.querySelectorAll('elm-merge-row'));
+        for (const row of allRows) {
+            const values = row.querySelectorAll('elm-merge-value');
+            if (values.length >= 1) {
+                const leftText = values[0].textContent.toLowerCase();
+                if (leftText.includes('apeal')) {
+                    return { appeal: true, row: row, side: 'left' };
+                }
+            }
+            if (values.length >= 2) {
+                const rightText = values[1].textContent.toLowerCase();
+                if (rightText.includes('apeal')) {
+                    return { appeal: true, row: row, side: 'right' };
+                }
+            }
+        }
+        return { appeal: false };
+    }
     // --- HELPER: CHECK IF AUTO-CLICK FAB SHOULD HAPPEN ---
     function shouldAutoClickFAB() {
         // Check if already attempted this page
@@ -1137,6 +1180,12 @@
         // Check forbidden entry (highest priority block)
         if (isForbiddenEntry().forbidden) {
             console.log('⛔ Auto-click blocked: Forbidden entry detected');
+            autoClickAttempted = true; // Don't retry
+            return false;
+        }
+        // Check appeal keyword
+        if (isAppealKeyword().appeal) {
+            console.log('⛔ Auto-click blocked: Appeal keyword detected');
             autoClickAttempted = true; // Don't retry
             return false;
         }
@@ -1692,7 +1741,8 @@
         // (red borders), so the yellow applicant overlay would be misleading/stale.
         const isBlocked = document.body.classList.contains('forbidden-entry') ||
                           document.body.classList.contains('wrong-department') ||
-                          document.body.classList.contains('student-id-mismatch');
+                          document.body.classList.contains('student-id-mismatch') ||
+                          document.body.classList.contains('appeal-keyword');
         if (isBlocked) {
             if (existingHighlight) existingHighlight.remove();
             cleanupClasses();
@@ -2752,6 +2802,16 @@
                     alert("Forbidden entry");
                     return;
                 }
+                // Check appeal keyword
+                if (document.body.classList.contains('appeal-keyword')) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                    const appealResult = isAppealKeyword();
+                    const sideLabel = appealResult.side === 'left' ? 'left side' : 'right side';
+                    alert("Merge blocked: Appeal keyword detected.\n\nReason: The word \"apeal\" was found on the " + sideLabel + " of this entry.\n\nMerges containing an appeal cannot be processed.");
+                    return;
+                }
                 // Then check department
                 if (document.body.classList.contains('wrong-department')) {
                     e.preventDefault();
@@ -3052,11 +3112,13 @@
         // dept value gets recorded by csv-database.js, and auto-skip may navigate
         // away before the correct value can overwrite it.
         const forbiddenResult = isForbiddenEntry();
+        const appealResult = isAppealKeyword();
         const studentIdResult = isStudentIdMismatch();
         const currentUid = extractDuplicateId(window.location.href);
         const sparkIds = getCurrentSparkIds();
         if (sparkIds) {
             if (forbiddenResult.forbidden || studentIdResult.mismatch) document.body.dataset.csvDept = 'Forbidden';
+            else if (appealResult.appeal) document.body.dataset.csvDept = 'apeal';
             else if (isStudentIgnored()) document.body.dataset.csvDept = 'Ignored';
             else document.body.dataset.csvDept = detectActualDepartment().dept;
             if (currentUid) document.body.dataset.csvUid = currentUid;
@@ -3064,7 +3126,7 @@
         // Check forbidden entry FIRST (highest priority)
         if (forbiddenResult.forbidden) {
             document.body.classList.add('forbidden-entry');
-            document.body.classList.remove('ready-to-merge', 'review-required', 'wrong-department', 'student-id-mismatch');
+            document.body.classList.remove('ready-to-merge', 'review-required', 'wrong-department', 'student-id-mismatch', 'appeal-keyword');
             // Highlight the blocked row
             if (forbiddenResult.row) {
                 forbiddenResult.row.classList.add('blocked-row');
@@ -3072,6 +3134,17 @@
             return;
         } else {
             document.body.classList.remove('forbidden-entry');
+        }
+        // Then check appeal keyword
+        if (appealResult.appeal) {
+            document.body.classList.add('appeal-keyword');
+            document.body.classList.remove('ready-to-merge', 'review-required', 'wrong-department', 'student-id-mismatch');
+            if (appealResult.row) {
+                appealResult.row.classList.add('blocked-row');
+            }
+            return;
+        } else {
+            document.body.classList.remove('appeal-keyword');
         }
         // Then check department
         const deptResult = isWrongDepartment();

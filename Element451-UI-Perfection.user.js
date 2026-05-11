@@ -739,7 +739,7 @@
                 let cityCount = 0;
                 for (const part of parts) {
                     const partNorm = this.normalizeForFuzzy(part);
-                    if (partNorm.includes(cityNorm) || cityNorm.includes(partNorm) ||
+                    if (partNorm.includes(cityNorm) || (cityNorm.includes(partNorm) && partNorm.length > 3) ||
                         this.stringSimilarity(partNorm, cityNorm) > 0.8) {
                         cityCount++;
                     }

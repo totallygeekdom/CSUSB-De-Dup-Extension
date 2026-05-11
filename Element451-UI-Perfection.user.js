@@ -1023,6 +1023,7 @@
     let awaitingMergeSuccess = false; // Track if we're waiting for merge success (green FAB was clicked)
     // NEW: Conflict warning tracking
     let conflictWarningShown = false; // Track if we've shown the conflict warning for this page
+    let appealWarningShown = false; // Track if we've shown the appeal warning for this page
     // NEW: Auto-skip blocked tracking
     let autoSkipAttempted = false; // Track if we've attempted auto-skip for this page
     // NEW: Auto-click verification delay tracking
@@ -1548,6 +1549,7 @@
                 mergeSuccessProcessed = false; // Reset merge success flag for new page
                 awaitingMergeSuccess = false; // Reset awaiting merge flag for new page
                 conflictWarningShown = false; // Reset conflict warning flag for new page
+                appealWarningShown = false; // Reset appeal warning flag for new page
                 autoSkipAttempted = false; // Reset auto-skip flag for new page
                 autoClickPending = false; // Reset auto-click verification flag for new page
                 // Clear stale department signal so csv-database.js doesn't record
@@ -3141,6 +3143,11 @@
             document.body.classList.remove('ready-to-merge', 'review-required', 'wrong-department', 'student-id-mismatch');
             if (appealResult.row) {
                 appealResult.row.classList.add('blocked-row');
+            }
+            if (!appealWarningShown) {
+                appealWarningShown = true;
+                const sideLabel = appealResult.side === 'left' ? 'left side' : 'right side';
+                alert("⚠️ Appeal keyword detected!\n\nReason: The word \"appeal\" was found on the " + sideLabel + " of this entry.\n\nThis merge is blocked and cannot be processed.");
             }
             return;
         } else {

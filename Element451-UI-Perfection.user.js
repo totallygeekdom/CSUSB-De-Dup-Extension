@@ -3144,7 +3144,7 @@
             if (appealResult.row) {
                 appealResult.row.classList.add('blocked-row');
             }
-            if (!appealWarningShown) {
+            if (!appealWarningShown && sparkIds) {
                 appealWarningShown = true;
                 const sideLabel = appealResult.side === 'left' ? 'left side' : 'right side';
                 alert("⚠️ Appeal keyword detected!\n\nReason: The word \"appeal\" was found on the " + sideLabel + " of this entry.\n\nThis merge is blocked and cannot be processed.");

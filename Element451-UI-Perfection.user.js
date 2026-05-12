@@ -3120,7 +3120,7 @@
         const sparkIds = getCurrentSparkIds();
         if (sparkIds) {
             if (forbiddenResult.forbidden || studentIdResult.mismatch) document.body.dataset.csvDept = 'Forbidden';
-            else if (appealResult.appeal) document.body.dataset.csvDept = 'appeal';
+            else if (appealResult.appeal) document.body.dataset.csvDept = 'Appeal';
             else if (isStudentIgnored()) document.body.dataset.csvDept = 'Ignored';
             else document.body.dataset.csvDept = detectActualDepartment().dept;
             if (currentUid) document.body.dataset.csvUid = currentUid;
@@ -3144,7 +3144,7 @@
             if (appealResult.row) {
                 appealResult.row.classList.add('blocked-row');
             }
-            if (!appealWarningShown) {
+            if (!appealWarningShown && sparkIds) {
                 appealWarningShown = true;
                 const sideLabel = appealResult.side === 'left' ? 'left side' : 'right side';
                 alert("⚠️ Appeal keyword detected!\n\nReason: The word \"appeal\" was found on the " + sideLabel + " of this entry.\n\nThis merge is blocked and cannot be processed.");

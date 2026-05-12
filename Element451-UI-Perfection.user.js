@@ -1023,7 +1023,7 @@
     let awaitingMergeSuccess = false; // Track if we're waiting for merge success (green FAB was clicked)
     // NEW: Conflict warning tracking
     let conflictWarningShown = false; // Track if we've shown the conflict warning for this page
-    let appealWarningShown = false; // Track if we've shown the appeal warning for this page
+    let appealWarningShownForSparkIds = ''; // SparkIds string when appeal warning was last shown; empty means not yet shown
     // NEW: Auto-skip blocked tracking
     let autoSkipAttempted = false; // Track if we've attempted auto-skip for this page
     // NEW: Auto-click verification delay tracking
@@ -1549,7 +1549,9 @@
                 mergeSuccessProcessed = false; // Reset merge success flag for new page
                 awaitingMergeSuccess = false; // Reset awaiting merge flag for new page
                 conflictWarningShown = false; // Reset conflict warning flag for new page
-                appealWarningShown = false; // Reset appeal warning flag for new page
+                // appealWarningShownForSparkIds is intentionally NOT reset here.
+                // The sparkIds comparison in checkMergeStatus() naturally prevents re-showing
+                // the popup for the same entry's DOM while the page is transitioning.
                 autoSkipAttempted = false; // Reset auto-skip flag for new page
                 autoClickPending = false; // Reset auto-click verification flag for new page
                 // Clear stale department signal so csv-database.js doesn't record
@@ -3144,8 +3146,8 @@
             if (appealResult.row) {
                 appealResult.row.classList.add('blocked-row');
             }
-            if (!appealWarningShown && sparkIds) {
-                appealWarningShown = true;
+            if (sparkIds && sparkIds !== appealWarningShownForSparkIds) {
+                appealWarningShownForSparkIds = sparkIds;
                 const sideLabel = appealResult.side === 'left' ? 'left side' : 'right side';
                 alert("⚠️ Appeal keyword detected!\n\nReason: The word \"appeal\" was found on the " + sideLabel + " of this entry.\n\nThis merge is blocked and cannot be processed.");
             }

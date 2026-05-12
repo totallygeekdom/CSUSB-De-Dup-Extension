@@ -108,6 +108,24 @@
             color: #c2185b !important;
             white-space: nowrap;
         }
+        /* --- Appeal --- */
+        elm-row[data-csv-dept="Appeal"] elm-chip,
+        elm-row[data-csv-dept="Appeal"] elm-chip .bg-color {
+            background-color: #fff8e1 !important;
+        }
+        elm-row[data-csv-dept="Appeal"] elm-chip .elm-chip-label {
+            font-size: 0 !important;
+            line-height: 0 !important;
+            color: transparent !important;
+        }
+        elm-row[data-csv-dept="Appeal"] elm-chip .elm-chip-label::after {
+            content: " Appeal ";
+            font-size: 12px !important;
+            line-height: normal !important;
+            color: #f57f17 !important;
+            white-space: nowrap;
+        }
+
         /* --- API Status Toast --- */
         #csv-api-toast {
             position: fixed;

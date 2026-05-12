@@ -3120,7 +3120,7 @@
         const sparkIds = getCurrentSparkIds();
         if (sparkIds) {
             if (forbiddenResult.forbidden || studentIdResult.mismatch) document.body.dataset.csvDept = 'Forbidden';
-            else if (appealResult.appeal) document.body.dataset.csvDept = 'appeal';
+            else if (appealResult.appeal) document.body.dataset.csvDept = 'Appeal';
             else if (isStudentIgnored()) document.body.dataset.csvDept = 'Ignored';
             else document.body.dataset.csvDept = detectActualDepartment().dept;
             if (currentUid) document.body.dataset.csvUid = currentUid;

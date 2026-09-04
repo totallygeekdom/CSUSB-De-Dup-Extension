@@ -4,6 +4,40 @@ Two Tampermonkey userscripts that streamline the Element451 duplicate-contact me
 
 ---
 
+## New "Deduplication" Layout (v2 scripts)
+
+Element451 replaced the classic merge page with a redesigned, AI-assisted
+**Deduplication** review-queue UI: a sortable queue table
+(`elm-review-queue-table`) plus a side panel (`elm-review-duplicates-sidebar`)
+containing a field-by-field diff form (`elm-duplicate-field-diff-form`)
+instead of the old full-page `elm-merge-row` list and floating merge button.
+
+`Element451-UI-Perfection-v2.user.js` and `csv-database-v2.js` are ports of
+the two classic scripts targeting that new layout. They reuse the same
+`localStorage` settings keys and the same lockdown/resolution rules
+(department classification, forbidden names, address comparison, email
+preference, csusb.major/school, Encoura/College Board ID, etc.), adapted to
+the new DOM structure.
+
+**Known limitations — these were ported from a single static, PII-redacted
+HTML snapshot with no way to click through the live app, so verify before
+relying on them for unattended automation:**
+- The merge-success indicator, the "Ignored" chip, and the review page's URL
+  scheme were not visible in the snapshot and are best-effort guesses.
+- The "email open count" tiebreaker (sourced from a "User Activity" section
+  in the classic UI) was dropped — no equivalent section was found.
+- The classic script's custom list-page pagination (jump to page N) was not
+  ported — the new queue table uses a stock Angular Material paginator that
+  can't be safely driven the same way from outside Angular.
+- The list-page department badge is now an appended pill rather than a
+  restyled existing chip, since the real cell content was redacted in the
+  reference snapshot.
+
+The classic scripts remain unchanged for as long as the old layout is still
+reachable anywhere.
+
+---
+
 ## Element451 - UI Perfection (v127)
 
 ### Configuration

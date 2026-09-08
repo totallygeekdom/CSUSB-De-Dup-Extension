@@ -29,17 +29,19 @@
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
     // =========================================================
-    const HEADER_OFFSET = 64;
     function getBoolSetting(key, defaultValue) {
         const val = localStorage.getItem(key);
         if (val === null) return defaultValue;
         return val === 'true';
     }
     const CONFLICT_ROW_THRESHOLD = 2;
+    // NOTE: no REQUIRE_SCROLL_TO_BOTTOM or AUTO_NAVIGATE_AFTER_MERGE here.
+    // The classic script's scroll-gating doesn't map onto the sidebar layout,
+    // and auto-navigate can't be done safely until there's a real
+    // merge-success signal to detect (see checkForMergeResult below) — both
+    // need live investigation before they're worth exposing as settings.
     const CFG = Object.defineProperties({}, {
-        REQUIRE_SCROLL_TO_BOTTOM: { get() { return getBoolSetting('elm_require_scroll_to_bottom', true); } },
-        AUTO_CLICK_FAB:           { get() { return getBoolSetting('elm_auto_click_fab', true); } },
-        AUTO_NAVIGATE_AFTER_MERGE:{ get() { return getBoolSetting('elm_auto_navigate_after_merge', true); } },
+        AUTO_RESOLVE_FIELDS:      { get() { return getBoolSetting('elm_auto_click_fab', true); } },
         SHOW_MERGE_COUNTER:       { get() { return getBoolSetting('elm_show_merge_counter', true); } },
         AUTO_SKIP_BLOCKED:        { get() { return getBoolSetting('elm_auto_skip_blocked', true); } },
         ALLOWED_DEPARTMENT:       { get() { return localStorage.getItem('elm_allowed_department') || 'UnderGrad'; } },
@@ -548,7 +550,8 @@
             b => b.textContent.trim().toLowerCase() === text.toLowerCase()
         ) || null;
     }
-    function clickMergeContacts() { const b = getSidebarActionButton('Merge Contacts'); if (b) b.click(); return !!b; }
+    // No clickMergeContacts() helper — merging is never automated (see the
+    // MAIN AUTOMATION LOOP notes below).
     // IMPORTANT: "Dismiss" is NOT the equivalent of the classic script's
     // auto-skip (which just moved to the next entry). In this UI it opens a
     // "Not a duplicate?" feedback dialog and, once confirmed, permanently
@@ -1008,8 +1011,15 @@
 
     // =========================================================
     // MAIN AUTOMATION LOOP
+    //
+    // IMPORTANT: this only ever fills in field selections. It never clicks
+    // "Merge Contacts" itself. The classic script worked the same way — its
+    // "Auto-Click FAB" setting only fired the FAB's *first* click (which
+    // triggers conflict detection/auto-resolution); the FAB's second click,
+    // the one that actually commits the merge, always required a human,
+    // even with that setting on. Merging here stays exactly as manual.
     // =========================================================
-    function attemptAutoResolveAndMerge() {
+    function attemptAutoResolve() {
         if (!isDedupReviewPage()) return;
         if (!getContactNames().filter(Boolean).length) return; // page still loading
         const pairKey = getPairKey();
@@ -1033,7 +1043,7 @@
             return;
         }
         if (resolutionAttempted) return;
-        if (!CFG.AUTO_CLICK_FAB) return;
+        if (!CFG.AUTO_RESOLVE_FIELDS) return;
         resolutionAttempted = true;
         // Two-phase, mirroring the classic script: resolve now, then re-verify
         // shortly after in case more Workflow/Source rows loaded in the meantime.
@@ -1051,26 +1061,41 @@
                 if (shouldWarn) {
                     conflictWarningShown = true;
                     alert(`⚠️ Warning: ${conflictCount} conflicting signal(s) detected!\n\nConflicts found in: ${conflicts.join(', ')}\n\nThese entries might be twins or two different people. Please review carefully before merging.`);
-                    return; // don't auto-merge past a conflict warning — require a manual click
                 }
             }
             const scoreLevel = getScoreChipLevel();
             if (scoreLevel === 'low' && !conflictWarningShown) {
                 conflictWarningShown = true;
                 alert('⚠️ Bolt confidence score is "Low" for this pair. Please review carefully before merging.');
-                return;
             }
-            awaitingMergeResult = true;
-            lastMergeContactNamesKey = pairKey;
-            clickMergeContacts();
+            // Resolution stops here. Reviewing the selections and clicking
+            // "Merge Contacts" is always a human decision.
         }, 600);
+    }
+    // Tracks merges regardless of who clicks "Merge Contacts" (always a
+    // human, per above) so the counter/auto-navigate still work.
+    let mergeButtonBound = null;
+    function bindMergeButtonTracking() {
+        const btn = getSidebarActionButton('Merge Contacts');
+        if (!btn || btn === mergeButtonBound) return;
+        mergeButtonBound = btn;
+        btn.addEventListener('click', () => {
+            awaitingMergeResult = true;
+            lastMergeContactNamesKey = getPairKey();
+        });
     }
     function checkForMergeResult() {
         if (!awaitingMergeResult) return;
         // BEST EFFORT: no merge-success element existed in the reference
         // snapshot. Detect success as "the pair on screen changed" after
-        // clicking Merge Contacts, which is the one thing guaranteed to
+        // Merge Contacts was clicked, which is the one thing guaranteed to
         // happen whether the UI shows a toast or just advances the queue.
+        // NOTE: this only fires once the pair on screen has already
+        // changed, meaning the app already advanced the queue on its own —
+        // do NOT also call clickNextDuplicate() here, that would skip an
+        // extra pair. An "auto-navigate after merge" feature isn't safe to
+        // add back until there's a real merge-success indicator that can
+        // tell "merged" apart from "nothing happened yet" (see README).
         const pairKey = getPairKey();
         if (pairKey && pairKey !== lastMergeContactNamesKey) {
             awaitingMergeResult = false;
@@ -1079,7 +1104,8 @@
         }
     }
     setInterval(() => {
-        attemptAutoResolveAndMerge();
+        attemptAutoResolve();
+        bindMergeButtonTracking();
         checkForMergeResult();
         injectMergeCounter();
     }, 750);
@@ -1164,9 +1190,8 @@
             </div>
             <div class="settings-body">
                 <div class="settings-section-title">Automation</div>
-                <div class="setting-row"><label>Auto-Resolve &amp; Merge</label>${toggleHtml('elm-auto-click-fab')}</div>
+                <div class="setting-row"><label>Auto-Resolve Fields</label>${toggleHtml('elm-auto-resolve-fields')}</div>
                 <div class="setting-row"><label>Auto-Skip Blocked</label>${toggleHtml('elm-auto-skip-blocked')}</div>
-                <div class="setting-row"><label>Auto-Navigate After Merge</label>${toggleHtml('elm-auto-navigate-after-merge')}</div>
                 <div class="settings-section-title">Display</div>
                 <div class="setting-row"><label>Show Merge Counter</label>${toggleHtml('elm-show-merge-counter')}</div>
                 <div class="settings-section-title">Department</div>
@@ -1186,9 +1211,8 @@
         function toggleHtml(id) {
             return `<label class="elm-toggle-switch"><input type="checkbox" id="${id}"><span class="elm-toggle-slider"></span></label>`;
         }
-        setupToggle('elm-auto-click-fab', 'elm_auto_click_fab');
+        setupToggle('elm-auto-resolve-fields', 'elm_auto_click_fab');
         setupToggle('elm-auto-skip-blocked', 'elm_auto_skip_blocked');
-        setupToggle('elm-auto-navigate-after-merge', 'elm_auto_navigate_after_merge');
         setupToggle('elm-show-merge-counter', 'elm_show_merge_counter', () => { document.getElementById('elm-controls-wrapper')?.remove(); injectMergeCounter(); });
         function setupToggle(elementId, storageKey, onChange) {
             const el = document.getElementById(elementId);

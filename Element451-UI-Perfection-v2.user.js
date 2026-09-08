@@ -549,22 +549,15 @@
         ) || null;
     }
     function clickMergeContacts() { const b = getSidebarActionButton('Merge Contacts'); if (b) b.click(); return !!b; }
-    function clickSidebarDismiss() { const b = getSidebarActionButton('Dismiss'); if (b) b.click(); return !!b; }
-    // Clicking "Dismiss" opens a "Not a duplicate?" feedback dialog (bolt-dialog)
-    // asking for an optional reason before the dismiss actually takes effect.
-    // Auto-confirm it (leaving feedback blank) so auto-skip doesn't stall
-    // waiting for a human to click through it.
-    function autoConfirmNotADuplicateDialog() {
-        const dialogs = document.querySelectorAll('bolt-dialog');
-        for (const dialog of dialogs) {
-            const titleEl = dialog.querySelector('bolt-dialog-title, .panel-title');
-            if (!titleEl || !/not a duplicate/i.test(titleEl.textContent)) continue;
-            const confirmBtn = Array.from(dialog.querySelectorAll('bolt-dialog-actions button'))
-                .find(b => b.textContent.trim().toLowerCase() === 'confirm');
-            if (confirmBtn) { confirmBtn.click(); return true; }
-        }
-        return false;
-    }
+    // IMPORTANT: "Dismiss" is NOT the equivalent of the classic script's
+    // auto-skip (which just moved to the next entry). In this UI it opens a
+    // "Not a duplicate?" feedback dialog and, once confirmed, permanently
+    // tells Bolt these two contacts are different people — removing the
+    // pair from the queue and training the matcher on that verdict. A
+    // department/forbidden/appeal/ignored block says nothing about whether
+    // the pair is actually a duplicate, so automation must never click this.
+    // Skipping a blocked entry must only ever move to the next pair via
+    // clickNextDuplicate() below, leaving the pair untouched in the queue.
     function clickSaveForLater() { const b = getSidebarActionButton('Save for later'); if (b) b.click(); return !!b; }
     function clickNextDuplicate() {
         const b = document.querySelector('[aria-label="Next duplicate"]:not([disabled])') ||
@@ -1035,7 +1028,7 @@
             if (resolutionAttempted) return;
             resolutionAttempted = true;
             if (CFG.AUTO_SKIP_BLOCKED) {
-                setTimeout(() => { clickSidebarDismiss() || clickNextDuplicate(); }, 1200);
+                setTimeout(() => { clickNextDuplicate(); }, 1200);
             }
             return;
         }
@@ -1049,7 +1042,7 @@
             const laterBlockers = getAllBlockers();
             applyBlockStyling(laterBlockers);
             if (laterBlockers.length > 0) {
-                if (CFG.AUTO_SKIP_BLOCKED) { clickSidebarDismiss() || clickNextDuplicate(); }
+                if (CFG.AUTO_SKIP_BLOCKED) { clickNextDuplicate(); }
                 return;
             }
             runAutoResolution();
@@ -1086,13 +1079,11 @@
         }
     }
     setInterval(() => {
-        autoConfirmNotADuplicateDialog();
         attemptAutoResolveAndMerge();
         checkForMergeResult();
         injectMergeCounter();
     }, 750);
     new MutationObserver(() => {
-        autoConfirmNotADuplicateDialog();
         checkForMergeResult();
     }).observe(document.body, { childList: true, subtree: true });
 

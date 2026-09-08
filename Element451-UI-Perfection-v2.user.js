@@ -86,6 +86,41 @@
             background-color: #fff9c4 !important;
             border-color: #f9a825 !important;
         }
+        /* --- AI-vs-script pick comparison bar + per-row disagreement badges --- */
+        #elm2-pick-compare-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            padding: 10px 12px;
+            margin: 0 0 8px;
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        }
+        #elm2-pick-compare-count { font-size: 13px; color: #555; flex: 1 1 auto; min-width: 160px; }
+        #elm2-pick-compare-bar button {
+            border: 1px solid #ccc;
+            background: #fff;
+            border-radius: 6px;
+            padding: 6px 12px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+        #elm2-use-ai-btn:hover, #elm2-use-script-btn:hover { background: #eee; }
+        .elm2-pick-badge {
+            display: inline-block;
+            margin-left: 8px;
+            padding: 1px 7px;
+            border-radius: 8px;
+            font-size: 11px;
+            font-weight: 600;
+            background: #fff3e0;
+            color: #e65100;
+            white-space: nowrap;
+            vertical-align: middle;
+        }
         /* --- Merge counter / settings pane (unchanged from classic script; the
                top navbar — .bolt-navigation-right / elm-universal-search — was not
                redesigned) --- */
@@ -512,6 +547,25 @@
         const needle = labelSubstr.toLowerCase();
         return getDiffRows().filter(r => r.label.toLowerCase().includes(needle));
     }
+    // Records the side Bolt had pre-selected before our script touched the
+    // row, the first time each row is seen (idempotent — a no-op on rows
+    // already stamped). Must run before runAutoResolution() so it captures
+    // Bolt's actual default rather than our own prior click.
+    function snapshotNativeSelections() {
+        getDiffRows().forEach(row => {
+            if (row.element.dataset.elm2AiSide) return; // already captured
+            if (row.leftSelected) row.element.dataset.elm2AiSide = 'left';
+            else if (row.rightSelected) row.element.dataset.elm2AiSide = 'right';
+        });
+    }
+    // Selects a side AND records it as our script's pick, so the AI-vs-script
+    // comparison bar can show both and let a human bulk-switch between them.
+    // Every resolution rule below should call this instead of row.selectSide()
+    // directly.
+    function applyScriptPick(row, side) {
+        row.element.dataset.elm2ScriptSide = side;
+        row.selectSide(side);
+    }
     function getContactCards() {
         const form = getDiffForm();
         if (!form) return [];
@@ -840,7 +894,7 @@
             if (!leftText || !rightText) return;
             if (applicantSide) {
                 row.element.dataset.elm2AutoResolved = 'true';
-                row.selectSide(applicantSide);
+                applyScriptPick(row, applicantSide);
                 const btn = row.element.querySelectorAll(':scope > .diff-value-button')[applicantSide === 'left' ? 0 : 1];
                 if (btn) btn.classList.add('elm2-applicant-side');
                 return;
@@ -851,7 +905,7 @@
                 const leftTypeMatch = leftText.match(typePattern), rightTypeMatch = rightText.match(typePattern);
                 if (leftTypeMatch && rightTypeMatch && leftTypeMatch[1].toLowerCase() === rightTypeMatch[1].toLowerCase()) {
                     row.element.dataset.elm2AutoResolved = 'true';
-                    row.selectSide('left');
+                    applyScriptPick(row, 'left');
                     return;
                 }
             }
@@ -860,38 +914,38 @@
                 const personalDomains = ['gmail.com', 'yahoo.com', 'icloud.com', 'hotmail.com', 'aol.com', 'me.com', 'outlook.com', 'live.com', 'msn.com', 'protonmail.com', 'proton.me'];
                 const leftIsPersonal = personalDomains.some(d => leftText.toLowerCase().includes('@' + d));
                 const rightIsPersonal = personalDomains.some(d => rightText.toLowerCase().includes('@' + d));
-                if (leftIsPersonal && !rightIsPersonal) { row.element.dataset.elm2AutoResolved = 'true'; row.selectSide('left'); return; }
-                if (rightIsPersonal && !leftIsPersonal) { row.element.dataset.elm2AutoResolved = 'true'; row.selectSide('right'); return; }
+                if (leftIsPersonal && !rightIsPersonal) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'left'); return; }
+                if (rightIsPersonal && !leftIsPersonal) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'right'); return; }
                 if (leftIsPersonal && rightIsPersonal) { row.element.dataset.elm2AutoResolved = 'true'; row.element.dataset.elm2DualPersonal = 'true'; return; }
             }
             // csusb.major preference
             if (/csusb\.major\./i.test(text)) {
                 const leftHas = /csusb\.major\./i.test(leftText), rightHas = /csusb\.major\./i.test(rightText);
-                if (leftHas && !rightHas) { row.element.dataset.elm2AutoResolved = 'true'; row.selectSide('left'); return; }
-                if (rightHas && !leftHas) { row.element.dataset.elm2AutoResolved = 'true'; row.selectSide('right'); return; }
+                if (leftHas && !rightHas) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'left'); return; }
+                if (rightHas && !leftHas) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'right'); return; }
                 if (leftHas && rightHas) {
                     const emailSide = getSelectedEmailSide();
-                    if (emailSide) { row.element.dataset.elm2AutoResolved = 'true'; row.selectSide(emailSide); }
+                    if (emailSide) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, emailSide); }
                     return;
                 }
             }
             // Encoura / College Board ID — default left when both sides have it
             if (/Encoura Id:/i.test(leftText) && /Encoura Id:/i.test(rightText)) {
-                row.element.dataset.elm2AutoResolved = 'true'; row.selectSide('left'); return;
+                row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'left'); return;
             }
             if (/College Board Id:/i.test(leftText) && /College Board Id:/i.test(rightText)) {
-                row.element.dataset.elm2AutoResolved = 'true'; row.selectSide('left'); return;
+                row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'left'); return;
             }
             // csusb.school preference (Student Type rows)
             if (text.includes('Student Type') && /csusb\.school\.\d+/i.test(text)) {
                 const schoolPattern = /csusb\.school\.\d+/i;
                 const leftHas = schoolPattern.test(leftText), rightHas = schoolPattern.test(rightText);
-                if (leftHas && !rightHas) { row.element.dataset.elm2AutoResolved = 'true'; row.selectSide('left'); return; }
-                if (rightHas && !leftHas) { row.element.dataset.elm2AutoResolved = 'true'; row.selectSide('right'); return; }
+                if (leftHas && !rightHas) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'left'); return; }
+                if (rightHas && !leftHas) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'right'); return; }
                 if (!leftHas && !rightHas) return;
                 if (leftHas && rightHas) {
                     const emailSide = getSelectedEmailSide();
-                    if (emailSide) { row.element.dataset.elm2AutoResolved = 'true'; row.selectSide(emailSide); }
+                    if (emailSide) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, emailSide); }
                     return;
                 }
             }
@@ -900,15 +954,15 @@
                 const leftYear = leftText.match(/\b(\d{4})\b/), rightYear = rightText.match(/\b(\d{4})\b/);
                 const leftInvalid = leftYear && (leftYear[1].startsWith('0') || parseInt(leftYear[1]) < 1900);
                 const rightInvalid = rightYear && (rightYear[1].startsWith('0') || parseInt(rightYear[1]) < 1900);
-                if (leftInvalid && !rightInvalid) { row.element.dataset.elm2AutoResolved = 'true'; row.selectSide('right'); return; }
-                if (rightInvalid && !leftInvalid) { row.element.dataset.elm2AutoResolved = 'true'; row.selectSide('left'); return; }
+                if (leftInvalid && !rightInvalid) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'right'); return; }
+                if (rightInvalid && !leftInvalid) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'left'); return; }
             }
             // First Generation Student — prefer Yes over No
             if (row.label.toLowerCase().includes('first generation')) {
                 const leftYes = /\byes\b/i.test(leftText), rightYes = /\byes\b/i.test(rightText);
                 const leftNo = /\bno\b/i.test(leftText), rightNo = /\bno\b/i.test(rightText);
-                if (leftYes && rightNo) { row.element.dataset.elm2AutoResolved = 'true'; row.selectSide('left'); return; }
-                if (rightYes && leftNo) { row.element.dataset.elm2AutoResolved = 'true'; row.selectSide('right'); return; }
+                if (leftYes && rightNo) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'left'); return; }
+                if (rightYes && leftNo) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'right'); return; }
             }
             // Intended Term — prefer later term code
             if (row.label.toLowerCase().includes('intended term')) {
@@ -916,8 +970,8 @@
                 const leftCodeMatch = leftText.match(termCodePattern), rightCodeMatch = rightText.match(termCodePattern);
                 if (leftCodeMatch && rightCodeMatch) {
                     const leftCode = parseInt(leftCodeMatch[1]), rightCode = parseInt(rightCodeMatch[1]);
-                    if (rightCode > leftCode) { row.element.dataset.elm2AutoResolved = 'true'; row.selectSide('right'); return; }
-                    if (leftCode > rightCode) { row.element.dataset.elm2AutoResolved = 'true'; row.selectSide('left'); return; }
+                    if (rightCode > leftCode) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'right'); return; }
+                    if (leftCode > rightCode) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'left'); return; }
                 }
             }
             // Name case preference — Title Case over ALL CAPS / all lowercase
@@ -926,8 +980,8 @@
                     const isAllUpper = (s) => s === s.toUpperCase() && s !== s.toLowerCase();
                     const isAllLower = (s) => s === s.toLowerCase() && s !== s.toUpperCase();
                     const isTitleCase = (s) => !isAllUpper(s) && !isAllLower(s);
-                    if (isTitleCase(rightText) && !isTitleCase(leftText)) { row.element.dataset.elm2AutoResolved = 'true'; row.selectSide('right'); return; }
-                    if (isTitleCase(leftText) && !isTitleCase(rightText)) { row.element.dataset.elm2AutoResolved = 'true'; row.selectSide('left'); return; }
+                    if (isTitleCase(rightText) && !isTitleCase(leftText)) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'right'); return; }
+                    if (isTitleCase(leftText) && !isTitleCase(rightText)) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'left'); return; }
                 }
             }
             // Legacy default-to-left patterns (only reached with no applicant context)
@@ -942,7 +996,7 @@
             ];
             if (legacyPatterns.some(p => p.test(text))) {
                 row.element.dataset.elm2AutoResolved = 'true';
-                row.selectSide('left');
+                applyScriptPick(row, 'left');
             }
         });
     }
@@ -973,16 +1027,16 @@
             // Priority: first name, then last name, then birth year
             const leftFirst = emailContainsName(leftLower, firstA) || emailContainsName(leftLower, firstB);
             const rightFirst = emailContainsName(rightLower, firstA) || emailContainsName(rightLower, firstB);
-            if (leftFirst && !rightFirst) { row.element.dataset.elm2DualResolved = 'true'; row.selectSide('left'); return; }
-            if (rightFirst && !leftFirst) { row.element.dataset.elm2DualResolved = 'true'; row.selectSide('right'); return; }
+            if (leftFirst && !rightFirst) { row.element.dataset.elm2DualResolved = 'true'; applyScriptPick(row, 'left'); return; }
+            if (rightFirst && !leftFirst) { row.element.dataset.elm2DualResolved = 'true'; applyScriptPick(row, 'right'); return; }
             const leftLast = emailContainsName(leftLower, lastA) || emailContainsName(leftLower, lastB);
             const rightLast = emailContainsName(rightLower, lastA) || emailContainsName(rightLower, lastB);
-            if (leftLast && !rightLast) { row.element.dataset.elm2DualResolved = 'true'; row.selectSide('left'); return; }
-            if (rightLast && !leftLast) { row.element.dataset.elm2DualResolved = 'true'; row.selectSide('right'); return; }
+            if (leftLast && !rightLast) { row.element.dataset.elm2DualResolved = 'true'; applyScriptPick(row, 'left'); return; }
+            if (rightLast && !leftLast) { row.element.dataset.elm2DualResolved = 'true'; applyScriptPick(row, 'right'); return; }
             const leftYear = (leftYearValid && checkYearInEmail(leftLower, birthYearLeft)) || (rightYearValid && checkYearInEmail(leftLower, birthYearRight));
             const rightYear = (leftYearValid && checkYearInEmail(rightLower, birthYearLeft)) || (rightYearValid && checkYearInEmail(rightLower, birthYearRight));
-            if (leftYear && !rightYear) { row.element.dataset.elm2DualResolved = 'true'; row.selectSide('left'); return; }
-            if (rightYear && !leftYear) { row.element.dataset.elm2DualResolved = 'true'; row.selectSide('right'); return; }
+            if (leftYear && !rightYear) { row.element.dataset.elm2DualResolved = 'true'; applyScriptPick(row, 'left'); return; }
+            if (rightYear && !leftYear) { row.element.dataset.elm2DualResolved = 'true'; applyScriptPick(row, 'right'); return; }
             row.element.dataset.elm2DualResolved = 'true'; // no tiebreaker — leave for manual review
         });
     }
@@ -993,20 +1047,87 @@
             const leftText = row.values[0].textContent, rightText = row.values[1].textContent;
             if (!leftText || !rightText) return;
             row.element.dataset.elm2AddressResolved = 'true';
-            if (applicantSide) { row.selectSide(applicantSide); return; }
+            if (applicantSide) { applyScriptPick(row, applicantSide); return; }
             const comparison = AddressComparer.compareAddresses(leftText, rightText);
             let winner = comparison.winner;
             if (winner === 'tie') {
                 const emailSide = getSelectedEmailSide();
                 if (emailSide) winner = emailSide;
             }
-            if (winner === 'left' || winner === 'right') row.selectSide(winner);
+            if (winner === 'left' || winner === 'right') applyScriptPick(row, winner);
         });
     }
     function runAutoResolution() {
         autoResolveRows();
         autoDualPersonalEmails();
         autoResolveAddresses();
+    }
+
+    // =========================================================
+    // AI-VS-SCRIPT PICK COMPARISON
+    // Every row where both elm2AiSide (Bolt's original default, captured by
+    // snapshotNativeSelections()) and elm2ScriptSide (our resolution engine's
+    // pick, stamped by applyScriptPick()) are known can be compared. Rows the
+    // script had no opinion on (no rule matched, or it left a tie for manual
+    // review) simply have no elm2ScriptSide and are left out of the count —
+    // there's nothing to switch on those.
+    // =========================================================
+    function getPickComparisonRows() {
+        return getDiffRows().filter(r => r.element.dataset.elm2AiSide && r.element.dataset.elm2ScriptSide);
+    }
+    function annotateRowPickBadges() {
+        getDiffRows().forEach(row => {
+            const ai = row.element.dataset.elm2AiSide;
+            const script = row.element.dataset.elm2ScriptSide;
+            let badge = row.element.querySelector(':scope > .elm2-pick-badge');
+            if (!ai || !script || ai === script) {
+                if (badge) badge.remove();
+                return;
+            }
+            if (!badge) {
+                badge = document.createElement('span');
+                badge.className = 'elm2-pick-badge';
+                const titleEl = row.element.querySelector(':scope > .diff-title');
+                if (titleEl) titleEl.insertAdjacentElement('afterend', badge);
+                else row.element.appendChild(badge);
+            }
+            const label = (side) => (side === 'left' ? 'A' : 'B');
+            badge.textContent = `🤖 ${label(ai)} vs ⚙ ${label(script)}`;
+            badge.title = 'Bolt AI picked Contact ' + label(ai) + '; our script picked Contact ' + label(script);
+        });
+    }
+    function applyAllPicks(sourceAttr) {
+        getDiffRows().forEach(row => {
+            const side = row.element.dataset[sourceAttr];
+            if (side) row.selectSide(side);
+        });
+        annotateRowPickBadges();
+        injectPickComparisonBar();
+    }
+    function injectPickComparisonBar() {
+        const form = getDiffForm();
+        const formEl = form ? form.querySelector('form.diff-form') : null;
+        let bar = document.getElementById('elm2-pick-compare-bar');
+        const rows = getPickComparisonRows();
+        if (!formEl || rows.length === 0) { if (bar) bar.remove(); return; }
+        if (!bar) {
+            bar = document.createElement('div');
+            bar.id = 'elm2-pick-compare-bar';
+            bar.innerHTML = `
+                <span id="elm2-pick-compare-count"></span>
+                <button type="button" id="elm2-use-ai-btn">Use Bolt AI picks</button>
+                <button type="button" id="elm2-use-script-btn">Use our picks</button>
+            `;
+            const header = formEl.querySelector(':scope > .diff-contacts-header');
+            if (header) header.insertAdjacentElement('afterend', bar);
+            else formEl.insertBefore(bar, formEl.firstChild);
+            document.getElementById('elm2-use-ai-btn').addEventListener('click', () => applyAllPicks('elm2AiSide'));
+            document.getElementById('elm2-use-script-btn').addEventListener('click', () => applyAllPicks('elm2ScriptSide'));
+        }
+        const differing = rows.filter(r => r.element.dataset.elm2AiSide !== r.element.dataset.elm2ScriptSide).length;
+        document.getElementById('elm2-pick-compare-count').textContent = differing > 0
+            ? `⚠ ${differing} of ${rows.length} field(s) differ from Bolt's picks`
+            : `Our picks match Bolt's defaults on all ${rows.length} resolved field(s)`;
     }
 
     // =========================================================
@@ -1022,6 +1143,7 @@
     function attemptAutoResolve() {
         if (!isDedupReviewPage()) return;
         if (!getContactNames().filter(Boolean).length) return; // page still loading
+        snapshotNativeSelections(); // capture Bolt's defaults before anything below can click a row
         const pairKey = getPairKey();
         if (pairKey !== currentQueuePositionKey) {
             currentQueuePositionKey = pairKey;
@@ -1108,6 +1230,10 @@
         bindMergeButtonTracking();
         checkForMergeResult();
         injectMergeCounter();
+        if (isDedupReviewPage()) {
+            annotateRowPickBadges();
+            injectPickComparisonBar();
+        }
     }, 750);
     new MutationObserver(() => {
         checkForMergeResult();

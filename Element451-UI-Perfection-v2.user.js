@@ -550,6 +550,21 @@
     }
     function clickMergeContacts() { const b = getSidebarActionButton('Merge Contacts'); if (b) b.click(); return !!b; }
     function clickSidebarDismiss() { const b = getSidebarActionButton('Dismiss'); if (b) b.click(); return !!b; }
+    // Clicking "Dismiss" opens a "Not a duplicate?" feedback dialog (bolt-dialog)
+    // asking for an optional reason before the dismiss actually takes effect.
+    // Auto-confirm it (leaving feedback blank) so auto-skip doesn't stall
+    // waiting for a human to click through it.
+    function autoConfirmNotADuplicateDialog() {
+        const dialogs = document.querySelectorAll('bolt-dialog');
+        for (const dialog of dialogs) {
+            const titleEl = dialog.querySelector('bolt-dialog-title, .panel-title');
+            if (!titleEl || !/not a duplicate/i.test(titleEl.textContent)) continue;
+            const confirmBtn = Array.from(dialog.querySelectorAll('bolt-dialog-actions button'))
+                .find(b => b.textContent.trim().toLowerCase() === 'confirm');
+            if (confirmBtn) { confirmBtn.click(); return true; }
+        }
+        return false;
+    }
     function clickSaveForLater() { const b = getSidebarActionButton('Save for later'); if (b) b.click(); return !!b; }
     function clickNextDuplicate() {
         const b = document.querySelector('[aria-label="Next duplicate"]:not([disabled])') ||
@@ -1071,11 +1086,13 @@
         }
     }
     setInterval(() => {
+        autoConfirmNotADuplicateDialog();
         attemptAutoResolveAndMerge();
         checkForMergeResult();
         injectMergeCounter();
     }, 750);
     new MutationObserver(() => {
+        autoConfirmNotADuplicateDialog();
         checkForMergeResult();
     }).observe(document.body, { childList: true, subtree: true });
 

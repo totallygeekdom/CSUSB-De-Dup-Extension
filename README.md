@@ -33,6 +33,24 @@ relying on them for unattended automation:**
   restyled existing chip, since the real cell content was redacted in the
   reference snapshot.
 
+**Corrected after live testing:**
+- Auto-skip never clicks "Dismiss" on a blocked entry. In this UI, Dismiss
+  opens a "Not a duplicate?" feedback dialog and, once confirmed, permanently
+  tells Bolt the pair is not a match — removing it from the queue and
+  training the matcher on that verdict. A department/forbidden/appeal/
+  ignored block says nothing about whether a pair is actually a duplicate,
+  so skipping only ever moves to the next entry, leaving the blocked pair
+  untouched for a human to review.
+- The script never auto-clicks "Merge Contacts" — that's a deliberate,
+  permanent action with no undo, and this UI needs only one click to commit
+  it (unlike the classic merge page, where the FAB's auto-clicked first
+  press only *revealed* conflicts; the second, merge-committing click always
+  required a human, even with Auto-Click FAB on). "Auto-Resolve Fields"
+  only fills in the field-level selections; reviewing them and clicking
+  Merge is always manual. "Auto-Navigate After Merge" was removed for now —
+  it has nothing reliable to trigger off since there's no confirmed
+  merge-success signal yet (see above).
+
 The classic scripts remain unchanged for as long as the old layout is still
 reachable anywhere.
 

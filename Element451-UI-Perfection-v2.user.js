@@ -617,8 +617,7 @@
     // clickNextDuplicate() below, leaving the pair untouched in the queue.
     function clickSaveForLater() { const b = getSidebarActionButton('Save for later'); if (b) b.click(); return !!b; }
     function clickNextDuplicate() {
-        const b = document.querySelector('[aria-label="Next duplicate"]:not([disabled])') ||
-                  document.querySelector('.mat-mdc-paginator-navigation-next:not([disabled])');
+        const b = document.querySelector('.review-queue-nav [aria-label="Next duplicate"]:not([disabled])');
         if (b) { b.click(); return true; }
         return false;
     }
@@ -1129,6 +1128,24 @@
             ? `⚠ ${differing} of ${rows.length} field(s) differ from Bolt's picks`
             : `Our picks match Bolt's defaults on all ${rows.length} resolved field(s)`;
     }
+
+
+    // Safety net: Dismiss (and Confirm on its "Not a duplicate?" dialog) is a
+    // permanent verdict and must only ever come from a human. Real clicks have
+    // isTrusted=true; anything a script fires via .click() is false. Block those
+    // in the capture phase, and log a stack trace naming whoever tried.
+    document.addEventListener('click', (e) => {
+        if (e.isTrusted) return;
+        const btn = e.target && e.target.closest ? e.target.closest('button') : null;
+        if (!btn) return;
+        const text = btn.textContent.trim().toLowerCase();
+        const inNotDupDialog = !!btn.closest('bolt-dialog') && /not a duplicate/i.test(btn.closest('bolt-dialog').textContent);
+        if (text === 'dismiss' || (inNotDupDialog && text === 'confirm')) {
+            e.stopImmediatePropagation();
+            e.preventDefault();
+            console.warn('[elm2] BLOCKED a script-generated click on "' + btn.textContent.trim() + '"', new Error().stack);
+        }
+    }, true);
 
     // =========================================================
     // MAIN AUTOMATION LOOP

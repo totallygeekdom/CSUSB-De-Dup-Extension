@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-7';
+    const BUILD = 'v2-build-8';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -574,7 +574,7 @@
     // directly.
     function applyScriptPick(row, side) {
         row.element.dataset.elm2ScriptSide = side;
-        row.selectSide(side);
+        if (CFG.AUTO_RESOLVE_FIELDS) row.selectSide(side);
     }
     function getContactCards() {
         const form = getDiffForm();
@@ -854,6 +854,7 @@
     }
     function getSelectedEmailSide() {
         for (const row of getDiffRowsByLabel('email')) {
+            if (row.element.dataset.elm2ScriptSide) return row.element.dataset.elm2ScriptSide;
             if (row.leftSelected) return 'left';
             if (row.rightSelected) return 'right';
         }
@@ -1149,10 +1150,10 @@
         const blocked = document.body.classList.contains('elm2-blocked');
         let msg;
         if (blocked) msg = `Blocked entry — no suggestions made (${conflicts} conflicting of ${all.length} fields)`;
-        else if (!CFG.AUTO_RESOLVE_FIELDS) msg = `Auto-Resolve Fields is OFF — no suggestions (${conflicts} conflicting of ${all.length} fields)`;
         else if (ours.length === 0) msg = `${conflicts} conflicting field(s); our rules had no opinion on any of them`;
         else if (differing > 0) msg = `⚠ ${differing} of ${ours.length} suggestions differ from Bolt's picks (${conflicts} conflicting of ${all.length} fields)`;
         else msg = `Our ${ours.length} suggestion(s) match Bolt's picks (${conflicts} conflicting of ${all.length} fields)`;
+        if (!blocked && ours.length > 0 && !CFG.AUTO_RESOLVE_FIELDS) msg += ' — suggestions only, not applied';
         document.getElementById('elm2-pick-compare-count').textContent = msg;
         document.getElementById('elm2-use-ai-btn').disabled = both.length === 0;
         document.getElementById('elm2-use-script-btn').disabled = ours.length === 0;
@@ -1220,7 +1221,6 @@
         }
         if (!resolutionAttempted) console.log('[elm2] Not blocked — allowed dept:', CFG.ALLOWED_DEPARTMENT, '| detected:', detectActualDepartment().dept);
         if (resolutionAttempted) return;
-        if (!CFG.AUTO_RESOLVE_FIELDS) return;
         resolutionAttempted = true;
         // Two-phase, mirroring the classic script: resolve now, then re-verify
         // shortly after in case more Workflow/Source rows loaded in the meantime.
@@ -1375,7 +1375,7 @@
             </div>
             <div class="settings-body">
                 <div class="settings-section-title">Automation</div>
-                <div class="setting-row"><label>Auto-Resolve Fields</label>${toggleHtml('elm-auto-resolve-fields')}</div>
+                <div class="setting-row"><label>Auto-Apply Suggestions</label>${toggleHtml('elm-auto-resolve-fields')}</div>
                 <div class="setting-row"><label>Auto-Skip Blocked</label>${toggleHtml('elm-auto-skip-blocked')}</div>
                 <div class="settings-section-title">Display</div>
                 <div class="setting-row"><label>Show Merge Counter</label>${toggleHtml('elm-show-merge-counter')}</div>

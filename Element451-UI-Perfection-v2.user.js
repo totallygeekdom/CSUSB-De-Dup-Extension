@@ -1159,11 +1159,17 @@
         if (blockers.length > 0) {
             if (resolutionAttempted) return;
             resolutionAttempted = true;
+            console.log('[elm2] Blocked:', blockers.map(b => b.type + (b.reason ? ' (' + b.reason + ')' : '')).join(', '),
+                '| auto-skip', CFG.AUTO_SKIP_BLOCKED ? 'ON' : 'OFF');
             if (CFG.AUTO_SKIP_BLOCKED) {
-                setTimeout(() => { clickNextDuplicate(); }, 1200);
+                setTimeout(() => {
+                    const ok = clickNextDuplicate();
+                    console.log('[elm2] Clicked Next duplicate:', ok);
+                }, 1200);
             }
             return;
         }
+        if (!resolutionAttempted) console.log('[elm2] Not blocked — allowed dept:', CFG.ALLOWED_DEPARTMENT, '| detected:', detectActualDepartment().dept);
         if (resolutionAttempted) return;
         if (!CFG.AUTO_RESOLVE_FIELDS) return;
         resolutionAttempted = true;

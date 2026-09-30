@@ -25,21 +25,24 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
+    const BUILD = 'v2-build-3';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
     // =========================================================
-    const HEADER_OFFSET = 64;
     function getBoolSetting(key, defaultValue) {
         const val = localStorage.getItem(key);
         if (val === null) return defaultValue;
         return val === 'true';
     }
     const CONFLICT_ROW_THRESHOLD = 2;
+    // NOTE: no REQUIRE_SCROLL_TO_BOTTOM or AUTO_NAVIGATE_AFTER_MERGE here.
+    // The classic script's scroll-gating doesn't map onto the sidebar layout,
+    // and auto-navigate can't be done safely until there's a real
+    // merge-success signal to detect (see checkForMergeResult below) — both
+    // need live investigation before they're worth exposing as settings.
     const CFG = Object.defineProperties({}, {
-        REQUIRE_SCROLL_TO_BOTTOM: { get() { return getBoolSetting('elm_require_scroll_to_bottom', true); } },
-        AUTO_CLICK_FAB:           { get() { return getBoolSetting('elm_auto_click_fab', true); } },
-        AUTO_NAVIGATE_AFTER_MERGE:{ get() { return getBoolSetting('elm_auto_navigate_after_merge', true); } },
+        AUTO_RESOLVE_FIELDS:      { get() { return getBoolSetting('elm_auto_click_fab', true); } },
         SHOW_MERGE_COUNTER:       { get() { return getBoolSetting('elm_show_merge_counter', true); } },
         AUTO_SKIP_BLOCKED:        { get() { return getBoolSetting('elm_auto_skip_blocked', true); } },
         ALLOWED_DEPARTMENT:       { get() { return localStorage.getItem('elm_allowed_department') || 'UnderGrad'; } },
@@ -83,6 +86,41 @@
         .diff-value-button.elm2-applicant-side {
             background-color: #fff9c4 !important;
             border-color: #f9a825 !important;
+        }
+        /* --- AI-vs-script pick comparison bar + per-row disagreement badges --- */
+        #elm2-pick-compare-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            padding: 10px 12px;
+            margin: 0 0 8px;
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        }
+        #elm2-pick-compare-count { font-size: 13px; color: #555; flex: 1 1 auto; min-width: 160px; }
+        #elm2-pick-compare-bar button {
+            border: 1px solid #ccc;
+            background: #fff;
+            border-radius: 6px;
+            padding: 6px 12px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+        #elm2-use-ai-btn:hover, #elm2-use-script-btn:hover { background: #eee; }
+        .elm2-pick-badge {
+            display: inline-block;
+            margin-left: 8px;
+            padding: 1px 7px;
+            border-radius: 8px;
+            font-size: 11px;
+            font-weight: 600;
+            background: #fff3e0;
+            color: #e65100;
+            white-space: nowrap;
+            vertical-align: middle;
         }
         /* --- Merge counter / settings pane (unchanged from classic script; the
                top navbar — .bolt-navigation-right / elm-universal-search — was not
@@ -510,6 +548,25 @@
         const needle = labelSubstr.toLowerCase();
         return getDiffRows().filter(r => r.label.toLowerCase().includes(needle));
     }
+    // Records the side Bolt had pre-selected before our script touched the
+    // row, the first time each row is seen (idempotent — a no-op on rows
+    // already stamped). Must run before runAutoResolution() so it captures
+    // Bolt's actual default rather than our own prior click.
+    function snapshotNativeSelections() {
+        getDiffRows().forEach(row => {
+            if (row.element.dataset.elm2AiSide) return; // already captured
+            if (row.leftSelected) row.element.dataset.elm2AiSide = 'left';
+            else if (row.rightSelected) row.element.dataset.elm2AiSide = 'right';
+        });
+    }
+    // Selects a side AND records it as our script's pick, so the AI-vs-script
+    // comparison bar can show both and let a human bulk-switch between them.
+    // Every resolution rule below should call this instead of row.selectSide()
+    // directly.
+    function applyScriptPick(row, side) {
+        row.element.dataset.elm2ScriptSide = side;
+        row.selectSide(side);
+    }
     function getContactCards() {
         const form = getDiffForm();
         if (!form) return [];
@@ -548,12 +605,20 @@
             b => b.textContent.trim().toLowerCase() === text.toLowerCase()
         ) || null;
     }
-    function clickMergeContacts() { const b = getSidebarActionButton('Merge Contacts'); if (b) b.click(); return !!b; }
-    function clickSidebarDismiss() { const b = getSidebarActionButton('Dismiss'); if (b) b.click(); return !!b; }
+    // No clickMergeContacts() helper — merging is never automated (see the
+    // MAIN AUTOMATION LOOP notes below).
+    // IMPORTANT: "Dismiss" is NOT the equivalent of the classic script's
+    // auto-skip (which just moved to the next entry). In this UI it opens a
+    // "Not a duplicate?" feedback dialog and, once confirmed, permanently
+    // tells Bolt these two contacts are different people — removing the
+    // pair from the queue and training the matcher on that verdict. A
+    // department/forbidden/appeal/ignored block says nothing about whether
+    // the pair is actually a duplicate, so automation must never click this.
+    // Skipping a blocked entry must only ever move to the next pair via
+    // clickNextDuplicate() below, leaving the pair untouched in the queue.
     function clickSaveForLater() { const b = getSidebarActionButton('Save for later'); if (b) b.click(); return !!b; }
     function clickNextDuplicate() {
-        const b = document.querySelector('[aria-label="Next duplicate"]:not([disabled])') ||
-                  document.querySelector('.mat-mdc-paginator-navigation-next:not([disabled])');
+        const b = document.querySelector('.review-queue-nav [aria-label="Next duplicate"]:not([disabled])');
         if (b) { b.click(); return true; }
         return false;
     }
@@ -829,7 +894,7 @@
             if (!leftText || !rightText) return;
             if (applicantSide) {
                 row.element.dataset.elm2AutoResolved = 'true';
-                row.selectSide(applicantSide);
+                applyScriptPick(row, applicantSide);
                 const btn = row.element.querySelectorAll(':scope > .diff-value-button')[applicantSide === 'left' ? 0 : 1];
                 if (btn) btn.classList.add('elm2-applicant-side');
                 return;
@@ -840,7 +905,7 @@
                 const leftTypeMatch = leftText.match(typePattern), rightTypeMatch = rightText.match(typePattern);
                 if (leftTypeMatch && rightTypeMatch && leftTypeMatch[1].toLowerCase() === rightTypeMatch[1].toLowerCase()) {
                     row.element.dataset.elm2AutoResolved = 'true';
-                    row.selectSide('left');
+                    applyScriptPick(row, 'left');
                     return;
                 }
             }
@@ -849,38 +914,38 @@
                 const personalDomains = ['gmail.com', 'yahoo.com', 'icloud.com', 'hotmail.com', 'aol.com', 'me.com', 'outlook.com', 'live.com', 'msn.com', 'protonmail.com', 'proton.me'];
                 const leftIsPersonal = personalDomains.some(d => leftText.toLowerCase().includes('@' + d));
                 const rightIsPersonal = personalDomains.some(d => rightText.toLowerCase().includes('@' + d));
-                if (leftIsPersonal && !rightIsPersonal) { row.element.dataset.elm2AutoResolved = 'true'; row.selectSide('left'); return; }
-                if (rightIsPersonal && !leftIsPersonal) { row.element.dataset.elm2AutoResolved = 'true'; row.selectSide('right'); return; }
+                if (leftIsPersonal && !rightIsPersonal) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'left'); return; }
+                if (rightIsPersonal && !leftIsPersonal) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'right'); return; }
                 if (leftIsPersonal && rightIsPersonal) { row.element.dataset.elm2AutoResolved = 'true'; row.element.dataset.elm2DualPersonal = 'true'; return; }
             }
             // csusb.major preference
             if (/csusb\.major\./i.test(text)) {
                 const leftHas = /csusb\.major\./i.test(leftText), rightHas = /csusb\.major\./i.test(rightText);
-                if (leftHas && !rightHas) { row.element.dataset.elm2AutoResolved = 'true'; row.selectSide('left'); return; }
-                if (rightHas && !leftHas) { row.element.dataset.elm2AutoResolved = 'true'; row.selectSide('right'); return; }
+                if (leftHas && !rightHas) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'left'); return; }
+                if (rightHas && !leftHas) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'right'); return; }
                 if (leftHas && rightHas) {
                     const emailSide = getSelectedEmailSide();
-                    if (emailSide) { row.element.dataset.elm2AutoResolved = 'true'; row.selectSide(emailSide); }
+                    if (emailSide) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, emailSide); }
                     return;
                 }
             }
             // Encoura / College Board ID — default left when both sides have it
             if (/Encoura Id:/i.test(leftText) && /Encoura Id:/i.test(rightText)) {
-                row.element.dataset.elm2AutoResolved = 'true'; row.selectSide('left'); return;
+                row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'left'); return;
             }
             if (/College Board Id:/i.test(leftText) && /College Board Id:/i.test(rightText)) {
-                row.element.dataset.elm2AutoResolved = 'true'; row.selectSide('left'); return;
+                row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'left'); return;
             }
             // csusb.school preference (Student Type rows)
             if (text.includes('Student Type') && /csusb\.school\.\d+/i.test(text)) {
                 const schoolPattern = /csusb\.school\.\d+/i;
                 const leftHas = schoolPattern.test(leftText), rightHas = schoolPattern.test(rightText);
-                if (leftHas && !rightHas) { row.element.dataset.elm2AutoResolved = 'true'; row.selectSide('left'); return; }
-                if (rightHas && !leftHas) { row.element.dataset.elm2AutoResolved = 'true'; row.selectSide('right'); return; }
+                if (leftHas && !rightHas) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'left'); return; }
+                if (rightHas && !leftHas) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'right'); return; }
                 if (!leftHas && !rightHas) return;
                 if (leftHas && rightHas) {
                     const emailSide = getSelectedEmailSide();
-                    if (emailSide) { row.element.dataset.elm2AutoResolved = 'true'; row.selectSide(emailSide); }
+                    if (emailSide) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, emailSide); }
                     return;
                 }
             }
@@ -889,15 +954,15 @@
                 const leftYear = leftText.match(/\b(\d{4})\b/), rightYear = rightText.match(/\b(\d{4})\b/);
                 const leftInvalid = leftYear && (leftYear[1].startsWith('0') || parseInt(leftYear[1]) < 1900);
                 const rightInvalid = rightYear && (rightYear[1].startsWith('0') || parseInt(rightYear[1]) < 1900);
-                if (leftInvalid && !rightInvalid) { row.element.dataset.elm2AutoResolved = 'true'; row.selectSide('right'); return; }
-                if (rightInvalid && !leftInvalid) { row.element.dataset.elm2AutoResolved = 'true'; row.selectSide('left'); return; }
+                if (leftInvalid && !rightInvalid) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'right'); return; }
+                if (rightInvalid && !leftInvalid) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'left'); return; }
             }
             // First Generation Student — prefer Yes over No
             if (row.label.toLowerCase().includes('first generation')) {
                 const leftYes = /\byes\b/i.test(leftText), rightYes = /\byes\b/i.test(rightText);
                 const leftNo = /\bno\b/i.test(leftText), rightNo = /\bno\b/i.test(rightText);
-                if (leftYes && rightNo) { row.element.dataset.elm2AutoResolved = 'true'; row.selectSide('left'); return; }
-                if (rightYes && leftNo) { row.element.dataset.elm2AutoResolved = 'true'; row.selectSide('right'); return; }
+                if (leftYes && rightNo) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'left'); return; }
+                if (rightYes && leftNo) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'right'); return; }
             }
             // Intended Term — prefer later term code
             if (row.label.toLowerCase().includes('intended term')) {
@@ -905,8 +970,8 @@
                 const leftCodeMatch = leftText.match(termCodePattern), rightCodeMatch = rightText.match(termCodePattern);
                 if (leftCodeMatch && rightCodeMatch) {
                     const leftCode = parseInt(leftCodeMatch[1]), rightCode = parseInt(rightCodeMatch[1]);
-                    if (rightCode > leftCode) { row.element.dataset.elm2AutoResolved = 'true'; row.selectSide('right'); return; }
-                    if (leftCode > rightCode) { row.element.dataset.elm2AutoResolved = 'true'; row.selectSide('left'); return; }
+                    if (rightCode > leftCode) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'right'); return; }
+                    if (leftCode > rightCode) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'left'); return; }
                 }
             }
             // Name case preference — Title Case over ALL CAPS / all lowercase
@@ -915,8 +980,8 @@
                     const isAllUpper = (s) => s === s.toUpperCase() && s !== s.toLowerCase();
                     const isAllLower = (s) => s === s.toLowerCase() && s !== s.toUpperCase();
                     const isTitleCase = (s) => !isAllUpper(s) && !isAllLower(s);
-                    if (isTitleCase(rightText) && !isTitleCase(leftText)) { row.element.dataset.elm2AutoResolved = 'true'; row.selectSide('right'); return; }
-                    if (isTitleCase(leftText) && !isTitleCase(rightText)) { row.element.dataset.elm2AutoResolved = 'true'; row.selectSide('left'); return; }
+                    if (isTitleCase(rightText) && !isTitleCase(leftText)) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'right'); return; }
+                    if (isTitleCase(leftText) && !isTitleCase(rightText)) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'left'); return; }
                 }
             }
             // Legacy default-to-left patterns (only reached with no applicant context)
@@ -931,7 +996,7 @@
             ];
             if (legacyPatterns.some(p => p.test(text))) {
                 row.element.dataset.elm2AutoResolved = 'true';
-                row.selectSide('left');
+                applyScriptPick(row, 'left');
             }
         });
     }
@@ -962,16 +1027,16 @@
             // Priority: first name, then last name, then birth year
             const leftFirst = emailContainsName(leftLower, firstA) || emailContainsName(leftLower, firstB);
             const rightFirst = emailContainsName(rightLower, firstA) || emailContainsName(rightLower, firstB);
-            if (leftFirst && !rightFirst) { row.element.dataset.elm2DualResolved = 'true'; row.selectSide('left'); return; }
-            if (rightFirst && !leftFirst) { row.element.dataset.elm2DualResolved = 'true'; row.selectSide('right'); return; }
+            if (leftFirst && !rightFirst) { row.element.dataset.elm2DualResolved = 'true'; applyScriptPick(row, 'left'); return; }
+            if (rightFirst && !leftFirst) { row.element.dataset.elm2DualResolved = 'true'; applyScriptPick(row, 'right'); return; }
             const leftLast = emailContainsName(leftLower, lastA) || emailContainsName(leftLower, lastB);
             const rightLast = emailContainsName(rightLower, lastA) || emailContainsName(rightLower, lastB);
-            if (leftLast && !rightLast) { row.element.dataset.elm2DualResolved = 'true'; row.selectSide('left'); return; }
-            if (rightLast && !leftLast) { row.element.dataset.elm2DualResolved = 'true'; row.selectSide('right'); return; }
+            if (leftLast && !rightLast) { row.element.dataset.elm2DualResolved = 'true'; applyScriptPick(row, 'left'); return; }
+            if (rightLast && !leftLast) { row.element.dataset.elm2DualResolved = 'true'; applyScriptPick(row, 'right'); return; }
             const leftYear = (leftYearValid && checkYearInEmail(leftLower, birthYearLeft)) || (rightYearValid && checkYearInEmail(leftLower, birthYearRight));
             const rightYear = (leftYearValid && checkYearInEmail(rightLower, birthYearLeft)) || (rightYearValid && checkYearInEmail(rightLower, birthYearRight));
-            if (leftYear && !rightYear) { row.element.dataset.elm2DualResolved = 'true'; row.selectSide('left'); return; }
-            if (rightYear && !leftYear) { row.element.dataset.elm2DualResolved = 'true'; row.selectSide('right'); return; }
+            if (leftYear && !rightYear) { row.element.dataset.elm2DualResolved = 'true'; applyScriptPick(row, 'left'); return; }
+            if (rightYear && !leftYear) { row.element.dataset.elm2DualResolved = 'true'; applyScriptPick(row, 'right'); return; }
             row.element.dataset.elm2DualResolved = 'true'; // no tiebreaker — leave for manual review
         });
     }
@@ -982,14 +1047,14 @@
             const leftText = row.values[0].textContent, rightText = row.values[1].textContent;
             if (!leftText || !rightText) return;
             row.element.dataset.elm2AddressResolved = 'true';
-            if (applicantSide) { row.selectSide(applicantSide); return; }
+            if (applicantSide) { applyScriptPick(row, applicantSide); return; }
             const comparison = AddressComparer.compareAddresses(leftText, rightText);
             let winner = comparison.winner;
             if (winner === 'tie') {
                 const emailSide = getSelectedEmailSide();
                 if (emailSide) winner = emailSide;
             }
-            if (winner === 'left' || winner === 'right') row.selectSide(winner);
+            if (winner === 'left' || winner === 'right') applyScriptPick(row, winner);
         });
     }
     function runAutoResolution() {
@@ -999,11 +1064,107 @@
     }
 
     // =========================================================
-    // MAIN AUTOMATION LOOP
+    // AI-VS-SCRIPT PICK COMPARISON
+    // Every row where both elm2AiSide (Bolt's original default, captured by
+    // snapshotNativeSelections()) and elm2ScriptSide (our resolution engine's
+    // pick, stamped by applyScriptPick()) are known can be compared. Rows the
+    // script had no opinion on (no rule matched, or it left a tie for manual
+    // review) simply have no elm2ScriptSide and are left out of the count —
+    // there's nothing to switch on those.
     // =========================================================
-    function attemptAutoResolveAndMerge() {
+    function getPickComparisonRows() {
+        return getDiffRows().filter(r => r.element.dataset.elm2AiSide && r.element.dataset.elm2ScriptSide);
+    }
+    function annotateRowPickBadges() {
+        getDiffRows().forEach(row => {
+            const ai = row.element.dataset.elm2AiSide;
+            const script = row.element.dataset.elm2ScriptSide;
+            let badge = row.element.querySelector(':scope > .elm2-pick-badge');
+            if (!ai || !script || ai === script) {
+                if (badge) badge.remove();
+                return;
+            }
+            if (!badge) {
+                badge = document.createElement('span');
+                badge.className = 'elm2-pick-badge';
+                const titleEl = row.element.querySelector(':scope > .diff-title');
+                if (titleEl) titleEl.insertAdjacentElement('afterend', badge);
+                else row.element.appendChild(badge);
+            }
+            const label = (side) => (side === 'left' ? 'A' : 'B');
+            badge.textContent = `🤖 ${label(ai)} vs ⚙ ${label(script)}`;
+            badge.title = 'Bolt AI picked Contact ' + label(ai) + '; our script picked Contact ' + label(script);
+        });
+    }
+    function applyAllPicks(sourceAttr) {
+        getDiffRows().forEach(row => {
+            const side = row.element.dataset[sourceAttr];
+            if (side) row.selectSide(side);
+        });
+        annotateRowPickBadges();
+        injectPickComparisonBar();
+    }
+    function injectPickComparisonBar() {
+        const form = getDiffForm();
+        const formEl = form ? form.querySelector('form.diff-form') : null;
+        let bar = document.getElementById('elm2-pick-compare-bar');
+        const rows = getPickComparisonRows();
+        if (!formEl || rows.length === 0) { if (bar) bar.remove(); return; }
+        if (!bar) {
+            bar = document.createElement('div');
+            bar.id = 'elm2-pick-compare-bar';
+            bar.innerHTML = `
+                <span id="elm2-pick-compare-count"></span>
+                <button type="button" id="elm2-use-ai-btn">Use Bolt AI picks</button>
+                <button type="button" id="elm2-use-script-btn">Use our picks</button>
+            `;
+            const header = formEl.querySelector(':scope > .diff-contacts-header');
+            if (header) header.insertAdjacentElement('afterend', bar);
+            else formEl.insertBefore(bar, formEl.firstChild);
+            document.getElementById('elm2-use-ai-btn').addEventListener('click', () => applyAllPicks('elm2AiSide'));
+            document.getElementById('elm2-use-script-btn').addEventListener('click', () => applyAllPicks('elm2ScriptSide'));
+        }
+        const differing = rows.filter(r => r.element.dataset.elm2AiSide !== r.element.dataset.elm2ScriptSide).length;
+        document.getElementById('elm2-pick-compare-count').textContent = differing > 0
+            ? `⚠ ${differing} of ${rows.length} field(s) differ from Bolt's picks`
+            : `Our picks match Bolt's defaults on all ${rows.length} resolved field(s)`;
+    }
+
+
+    // Safety net: Dismiss (and Confirm on its "Not a duplicate?" dialog) is a
+    // permanent verdict and must only ever come from a human. Real clicks have
+    // isTrusted=true; anything a script fires via .click() is false. Block those
+    // in the capture phase, and log a stack trace naming whoever tried.
+    document.addEventListener('click', (e) => {
+        if (e.isTrusted) return;
+        const btn = e.target && e.target.closest ? e.target.closest('button') : null;
+        if (!btn) return;
+        const text = btn.textContent.trim().toLowerCase();
+        if (!btn.classList.contains('diff-value-button')) {
+            console.log('[elm2] script click on button:', JSON.stringify(btn.textContent.trim() || btn.getAttribute('aria-label') || ''));
+        }
+        const inNotDupDialog = !!btn.closest('bolt-dialog') && /not a duplicate/i.test(btn.closest('bolt-dialog').textContent);
+        if (text === 'dismiss' || (inNotDupDialog && text === 'confirm')) {
+            e.stopImmediatePropagation();
+            e.preventDefault();
+            console.warn('[elm2] BLOCKED a script-generated click on "' + btn.textContent.trim() + '"', new Error().stack);
+        }
+    }, true);
+
+    // =========================================================
+    // MAIN AUTOMATION LOOP
+    //
+    // IMPORTANT: this only ever fills in field selections. It never clicks
+    // "Merge Contacts" itself. The classic script worked the same way — its
+    // "Auto-Click FAB" setting only fired the FAB's *first* click (which
+    // triggers conflict detection/auto-resolution); the FAB's second click,
+    // the one that actually commits the merge, always required a human,
+    // even with that setting on. Merging here stays exactly as manual.
+    // =========================================================
+    function attemptAutoResolve() {
         if (!isDedupReviewPage()) return;
         if (!getContactNames().filter(Boolean).length) return; // page still loading
+        snapshotNativeSelections(); // capture Bolt's defaults before anything below can click a row
         const pairKey = getPairKey();
         if (pairKey !== currentQueuePositionKey) {
             currentQueuePositionKey = pairKey;
@@ -1019,13 +1180,19 @@
         if (blockers.length > 0) {
             if (resolutionAttempted) return;
             resolutionAttempted = true;
+            console.log('[elm2] Blocked:', blockers.map(b => b.type + (b.reason ? ' (' + b.reason + ')' : '')).join(', '),
+                '| auto-skip', CFG.AUTO_SKIP_BLOCKED ? 'ON' : 'OFF');
             if (CFG.AUTO_SKIP_BLOCKED) {
-                setTimeout(() => { clickSidebarDismiss() || clickNextDuplicate(); }, 1200);
+                setTimeout(() => {
+                    const ok = clickNextDuplicate();
+                    console.log('[elm2] Clicked Next duplicate:', ok);
+                }, 1200);
             }
             return;
         }
+        if (!resolutionAttempted) console.log('[elm2] Not blocked — allowed dept:', CFG.ALLOWED_DEPARTMENT, '| detected:', detectActualDepartment().dept);
         if (resolutionAttempted) return;
-        if (!CFG.AUTO_CLICK_FAB) return;
+        if (!CFG.AUTO_RESOLVE_FIELDS) return;
         resolutionAttempted = true;
         // Two-phase, mirroring the classic script: resolve now, then re-verify
         // shortly after in case more Workflow/Source rows loaded in the meantime.
@@ -1034,7 +1201,7 @@
             const laterBlockers = getAllBlockers();
             applyBlockStyling(laterBlockers);
             if (laterBlockers.length > 0) {
-                if (CFG.AUTO_SKIP_BLOCKED) { clickSidebarDismiss() || clickNextDuplicate(); }
+                if (CFG.AUTO_SKIP_BLOCKED) { clickNextDuplicate(); }
                 return;
             }
             runAutoResolution();
@@ -1043,26 +1210,41 @@
                 if (shouldWarn) {
                     conflictWarningShown = true;
                     alert(`⚠️ Warning: ${conflictCount} conflicting signal(s) detected!\n\nConflicts found in: ${conflicts.join(', ')}\n\nThese entries might be twins or two different people. Please review carefully before merging.`);
-                    return; // don't auto-merge past a conflict warning — require a manual click
                 }
             }
             const scoreLevel = getScoreChipLevel();
             if (scoreLevel === 'low' && !conflictWarningShown) {
                 conflictWarningShown = true;
                 alert('⚠️ Bolt confidence score is "Low" for this pair. Please review carefully before merging.');
-                return;
             }
-            awaitingMergeResult = true;
-            lastMergeContactNamesKey = pairKey;
-            clickMergeContacts();
+            // Resolution stops here. Reviewing the selections and clicking
+            // "Merge Contacts" is always a human decision.
         }, 600);
+    }
+    // Tracks merges regardless of who clicks "Merge Contacts" (always a
+    // human, per above) so the counter/auto-navigate still work.
+    let mergeButtonBound = null;
+    function bindMergeButtonTracking() {
+        const btn = getSidebarActionButton('Merge Contacts');
+        if (!btn || btn === mergeButtonBound) return;
+        mergeButtonBound = btn;
+        btn.addEventListener('click', () => {
+            awaitingMergeResult = true;
+            lastMergeContactNamesKey = getPairKey();
+        });
     }
     function checkForMergeResult() {
         if (!awaitingMergeResult) return;
         // BEST EFFORT: no merge-success element existed in the reference
         // snapshot. Detect success as "the pair on screen changed" after
-        // clicking Merge Contacts, which is the one thing guaranteed to
+        // Merge Contacts was clicked, which is the one thing guaranteed to
         // happen whether the UI shows a toast or just advances the queue.
+        // NOTE: this only fires once the pair on screen has already
+        // changed, meaning the app already advanced the queue on its own —
+        // do NOT also call clickNextDuplicate() here, that would skip an
+        // extra pair. An "auto-navigate after merge" feature isn't safe to
+        // add back until there's a real merge-success indicator that can
+        // tell "merged" apart from "nothing happened yet" (see README).
         const pairKey = getPairKey();
         if (pairKey && pairKey !== lastMergeContactNamesKey) {
             awaitingMergeResult = false;
@@ -1071,9 +1253,14 @@
         }
     }
     setInterval(() => {
-        attemptAutoResolveAndMerge();
+        attemptAutoResolve();
+        bindMergeButtonTracking();
         checkForMergeResult();
         injectMergeCounter();
+        if (isDedupReviewPage()) {
+            annotateRowPickBadges();
+            injectPickComparisonBar();
+        }
     }, 750);
     new MutationObserver(() => {
         checkForMergeResult();
@@ -1151,14 +1338,13 @@
         pane.id = 'elm-settings-pane';
         pane.innerHTML = `
             <div class="settings-header">
-                <span>Settings (New Layout)</span>
+                <span>Settings (New Layout) · ${BUILD}</span>
                 <button id="elm-settings-close" style="background:none;border:none;font-size:20px;cursor:pointer;">&times;</button>
             </div>
             <div class="settings-body">
                 <div class="settings-section-title">Automation</div>
-                <div class="setting-row"><label>Auto-Resolve &amp; Merge</label>${toggleHtml('elm-auto-click-fab')}</div>
+                <div class="setting-row"><label>Auto-Resolve Fields</label>${toggleHtml('elm-auto-resolve-fields')}</div>
                 <div class="setting-row"><label>Auto-Skip Blocked</label>${toggleHtml('elm-auto-skip-blocked')}</div>
-                <div class="setting-row"><label>Auto-Navigate After Merge</label>${toggleHtml('elm-auto-navigate-after-merge')}</div>
                 <div class="settings-section-title">Display</div>
                 <div class="setting-row"><label>Show Merge Counter</label>${toggleHtml('elm-show-merge-counter')}</div>
                 <div class="settings-section-title">Department</div>
@@ -1178,9 +1364,8 @@
         function toggleHtml(id) {
             return `<label class="elm-toggle-switch"><input type="checkbox" id="${id}"><span class="elm-toggle-slider"></span></label>`;
         }
-        setupToggle('elm-auto-click-fab', 'elm_auto_click_fab');
+        setupToggle('elm-auto-resolve-fields', 'elm_auto_click_fab');
         setupToggle('elm-auto-skip-blocked', 'elm_auto_skip_blocked');
-        setupToggle('elm-auto-navigate-after-merge', 'elm_auto_navigate_after_merge');
         setupToggle('elm-show-merge-counter', 'elm_show_merge_counter', () => { document.getElementById('elm-controls-wrapper')?.remove(); injectMergeCounter(); });
         function setupToggle(elementId, storageKey, onChange) {
             const el = document.getElementById(elementId);
@@ -1196,5 +1381,5 @@
         deptSelect.addEventListener('change', () => localStorage.setItem('elm_allowed_department', deptSelect.value));
     }
 
-    console.log('%cElement451 UI Perfection (new layout) loaded', 'color:#6a1b9a;font-weight:bold;');
+    console.log('%cElement451 UI Perfection (new layout) loaded — ' + BUILD, 'color:#6a1b9a;font-weight:bold;');
 })();

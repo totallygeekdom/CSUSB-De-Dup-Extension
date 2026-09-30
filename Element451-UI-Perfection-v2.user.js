@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-5';
+    const BUILD = 'v2-build-6';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -111,7 +111,6 @@
         }
         #elm2-use-ai-btn:hover, #elm2-use-script-btn:hover { background: #eee; }
         #elm2-pick-compare-bar button:disabled { opacity: 0.45; cursor: default; }
-        .diff-row.elm2-conflict-row { background-color: #fff8e1; box-shadow: inset 4px 0 0 #f9a825; }
         .diff-value-button.elm2-suggested { outline: 2px dashed #f9a825; outline-offset: -2px; }
         .elm2-pick-badge:not(.elm2-pick-differs) { background: #e8f5e9; color: #2e7d32; }
         .elm2-pick-badge {
@@ -537,8 +536,8 @@
             return {
                 element: row,
                 label,
-                // Element451 no longer flags conflicting rows, so we detect them
-                // ourselves: a row is a conflict when the two sides differ.
+                // Element451 doesn't flag conflicting rows (it just hides matching
+                // ones), so we detect them ourselves: the two sides differ.
                 isConflict: norm(leftText) !== norm(rightText),
                 textContent: `${label} ${leftText} ${rightText}`,
                 values: [{ textContent: leftText }, { textContent: rightText }],
@@ -1086,7 +1085,6 @@
     function annotateRowPickBadges() {
         const label = (side) => (side === 'left' ? 'A' : 'B');
         getDiffRows().forEach(row => {
-            row.element.classList.toggle('elm2-conflict-row', row.isConflict);
             const ai = row.element.dataset.elm2AiSide;
             const script = row.element.dataset.elm2ScriptSide;
             let badge = row.element.querySelector(':scope > .elm2-pick-badge');

@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-4';
+    const BUILD = 'v2-build-5';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -111,6 +111,7 @@
         }
         #elm2-use-ai-btn:hover, #elm2-use-script-btn:hover { background: #eee; }
         #elm2-pick-compare-bar button:disabled { opacity: 0.45; cursor: default; }
+        .diff-row.elm2-conflict-row { background-color: #fff8e1; box-shadow: inset 4px 0 0 #f9a825; }
         .diff-value-button.elm2-suggested { outline: 2px dashed #f9a825; outline-offset: -2px; }
         .elm2-pick-badge:not(.elm2-pick-differs) { background: #e8f5e9; color: #2e7d32; }
         .elm2-pick-badge {
@@ -532,9 +533,13 @@
             const rightBtn = buttons[1] || null;
             const leftText = leftBtn ? leftBtn.textContent.trim() : '';
             const rightText = rightBtn ? rightBtn.textContent.trim() : '';
+            const norm = (t) => t.toLowerCase().replace(/\s+/g, ' ').trim();
             return {
                 element: row,
                 label,
+                // Element451 no longer flags conflicting rows, so we detect them
+                // ourselves: a row is a conflict when the two sides differ.
+                isConflict: norm(leftText) !== norm(rightText),
                 textContent: `${label} ${leftText} ${rightText}`,
                 values: [{ textContent: leftText }, { textContent: rightText }],
                 leftSelected: !!(leftBtn && leftBtn.classList.contains('diff-option-selected')),
@@ -890,7 +895,7 @@
     }
     function autoResolveRows() {
         const applicantSide = findApplicantSide();
-        const rows = getDiffRows().filter(r => !r.element.dataset.elm2AutoResolved);
+        const rows = getDiffRows().filter(r => r.isConflict && !r.element.dataset.elm2AutoResolved);
         rows.forEach(row => {
             const text = row.textContent;
             const leftText = row.values[0].textContent, rightText = row.values[1].textContent;
@@ -1006,7 +1011,7 @@
     // Dual-personal-email tiebreak (name/DOB-in-email). Email-open-count tier
     // dropped — no "User Activity" section found in the new layout.
     function autoDualPersonalEmails() {
-        const rows = getDiffRows().filter(r => r.element.dataset.elm2DualPersonal && !r.element.dataset.elm2DualResolved);
+        const rows = getDiffRows().filter(r => r.isConflict && r.element.dataset.elm2DualPersonal && !r.element.dataset.elm2DualResolved);
         const names = getContactNames();
         const [firstA = '', ...restA] = (names[0] || '').toLowerCase().split(/\s+/);
         const [firstB = '', ...restB] = (names[1] || '').toLowerCase().split(/\s+/);
@@ -1045,7 +1050,7 @@
     }
     function autoResolveAddresses() {
         const applicantSide = findApplicantSide();
-        const rows = getDiffRowsByLabel('address').filter(r => !r.element.dataset.elm2AddressResolved);
+        const rows = getDiffRowsByLabel('address').filter(r => r.isConflict && !r.element.dataset.elm2AddressResolved);
         rows.forEach(row => {
             const leftText = row.values[0].textContent, rightText = row.values[1].textContent;
             if (!leftText || !rightText) return;
@@ -1081,6 +1086,7 @@
     function annotateRowPickBadges() {
         const label = (side) => (side === 'left' ? 'A' : 'B');
         getDiffRows().forEach(row => {
+            row.element.classList.toggle('elm2-conflict-row', row.isConflict);
             const ai = row.element.dataset.elm2AiSide;
             const script = row.element.dataset.elm2ScriptSide;
             let badge = row.element.querySelector(':scope > .elm2-pick-badge');
@@ -1132,16 +1138,17 @@
             document.getElementById('elm2-use-script-btn').addEventListener('click', () => applyAllPicks('elm2ScriptSide'));
         }
         const all = getDiffRows();
+        const conflicts = all.filter(r => r.isConflict).length;
         const ours = all.filter(r => r.element.dataset.elm2ScriptSide);
         const both = ours.filter(r => r.element.dataset.elm2AiSide);
         const differing = both.filter(r => r.element.dataset.elm2AiSide !== r.element.dataset.elm2ScriptSide).length;
         const blocked = document.body.classList.contains('elm2-blocked');
         let msg;
-        if (blocked) msg = `Blocked entry — no suggestions made (${all.length} fields)`;
-        else if (!CFG.AUTO_RESOLVE_FIELDS) msg = `Auto-Resolve Fields is OFF — no suggestions (${all.length} fields)`;
-        else if (ours.length === 0) msg = `Our rules had no opinion on any of the ${all.length} fields`;
-        else if (differing > 0) msg = `⚠ ${differing} of ${ours.length} suggestions differ from Bolt's picks (${all.length} fields total)`;
-        else msg = `Our ${ours.length} suggestion(s) match Bolt's picks (${all.length} fields total)`;
+        if (blocked) msg = `Blocked entry — no suggestions made (${conflicts} conflicting of ${all.length} fields)`;
+        else if (!CFG.AUTO_RESOLVE_FIELDS) msg = `Auto-Resolve Fields is OFF — no suggestions (${conflicts} conflicting of ${all.length} fields)`;
+        else if (ours.length === 0) msg = `${conflicts} conflicting field(s); our rules had no opinion on any of them`;
+        else if (differing > 0) msg = `⚠ ${differing} of ${ours.length} suggestions differ from Bolt's picks (${conflicts} conflicting of ${all.length} fields)`;
+        else msg = `Our ${ours.length} suggestion(s) match Bolt's picks (${conflicts} conflicting of ${all.length} fields)`;
         document.getElementById('elm2-pick-compare-count').textContent = msg;
         document.getElementById('elm2-use-ai-btn').disabled = both.length === 0;
         document.getElementById('elm2-use-script-btn').disabled = ours.length === 0;

@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-6';
+    const BUILD = 'v2-build-7';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -111,6 +111,8 @@
         }
         #elm2-use-ai-btn:hover, #elm2-use-script-btn:hover { background: #eee; }
         #elm2-pick-compare-bar button:disabled { opacity: 0.45; cursor: default; }
+        .diff-row.elm2-agree-row { background-color: #e8f5e9; box-shadow: inset 4px 0 0 #43a047; }
+        .diff-row.elm2-disagree-row { background-color: #ffebee; box-shadow: inset 4px 0 0 #d32f2f; }
         .diff-value-button.elm2-suggested { outline: 2px dashed #f9a825; outline-offset: -2px; }
         .elm2-pick-badge:not(.elm2-pick-differs) { background: #e8f5e9; color: #2e7d32; }
         .elm2-pick-badge {
@@ -1087,6 +1089,10 @@
         getDiffRows().forEach(row => {
             const ai = row.element.dataset.elm2AiSide;
             const script = row.element.dataset.elm2ScriptSide;
+            // Green = Bolt's original pick matches ours, red = it doesn't.
+            // Rows where our rules have no opinion (or Bolt had no default) stay plain.
+            row.element.classList.toggle('elm2-agree-row', !!ai && !!script && ai === script);
+            row.element.classList.toggle('elm2-disagree-row', !!ai && !!script && ai !== script);
             let badge = row.element.querySelector(':scope > .elm2-pick-badge');
             const btns = row.element.querySelectorAll(':scope > .diff-value-button');
             btns.forEach(b => b.classList.remove('elm2-suggested'));

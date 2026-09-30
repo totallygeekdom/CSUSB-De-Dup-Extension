@@ -25,6 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
+    const BUILD = 'v2-build-3';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -1139,6 +1140,9 @@
         const btn = e.target && e.target.closest ? e.target.closest('button') : null;
         if (!btn) return;
         const text = btn.textContent.trim().toLowerCase();
+        if (!btn.classList.contains('diff-value-button')) {
+            console.log('[elm2] script click on button:', JSON.stringify(btn.textContent.trim() || btn.getAttribute('aria-label') || ''));
+        }
         const inNotDupDialog = !!btn.closest('bolt-dialog') && /not a duplicate/i.test(btn.closest('bolt-dialog').textContent);
         if (text === 'dismiss' || (inNotDupDialog && text === 'confirm')) {
             e.stopImmediatePropagation();
@@ -1334,7 +1338,7 @@
         pane.id = 'elm-settings-pane';
         pane.innerHTML = `
             <div class="settings-header">
-                <span>Settings (New Layout)</span>
+                <span>Settings (New Layout) · ${BUILD}</span>
                 <button id="elm-settings-close" style="background:none;border:none;font-size:20px;cursor:pointer;">&times;</button>
             </div>
             <div class="settings-body">
@@ -1377,5 +1381,5 @@
         deptSelect.addEventListener('change', () => localStorage.setItem('elm_allowed_department', deptSelect.value));
     }
 
-    console.log('%cElement451 UI Perfection (new layout) loaded', 'color:#6a1b9a;font-weight:bold;');
+    console.log('%cElement451 UI Perfection (new layout) loaded — ' + BUILD, 'color:#6a1b9a;font-weight:bold;');
 })();

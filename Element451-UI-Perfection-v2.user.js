@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-11';
+    const BUILD = 'v2-build-12';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -111,7 +111,8 @@
                Green = Bolt's original pick matches our suggestion, red = it doesn't. --- */
         /* Solid, saturated fill + matching border replace Element451's pale
                semi-transparent blue fill/border (including its overlay pseudo-elements).
-               Green = Bolt's pick matches ours, red = differs, gray = no opinion. */
+               Green = Bolt's pick matches ours, red = differs. Rows where our rules have
+               no opinion keep Element451's default styling. */
         body .diff-row.elm2-agree-row button.diff-option-selected {
             background: #2e7d32 !important;
             background-color: #2e7d32 !important;
@@ -147,25 +148,6 @@
         body .diff-row.elm2-disagree-row button.diff-option-selected::after {
             background: transparent !important;
             border-color: #8e0000 !important;
-            box-shadow: none !important;
-            opacity: 0 !important;
-        }
-        body .diff-row.elm2-none-row button.diff-option-selected {
-            background: #616161 !important;
-            background-color: #616161 !important;
-            border: 2px solid #424242 !important;
-            box-shadow: none !important;
-            outline: none !important;
-            color: #fff !important;
-        }
-        body .diff-row.elm2-none-row button.diff-option-selected * {
-            background: transparent !important;
-            color: #fff !important;
-        }
-        body .diff-row.elm2-none-row button.diff-option-selected::before,
-        body .diff-row.elm2-none-row button.diff-option-selected::after {
-            background: transparent !important;
-            border-color: #424242 !important;
             box-shadow: none !important;
             opacity: 0 !important;
         }
@@ -1135,7 +1117,6 @@
             // where our rules have no opinion keep Element451's own styling.
             row.element.classList.toggle('elm2-agree-row', !!ai && !!script && ai === script);
             row.element.classList.toggle('elm2-disagree-row', !!ai && !!script && ai !== script);
-            row.element.classList.toggle('elm2-none-row', !script && !document.body.classList.contains('elm2-blocked'));
             if (ai && script) {
                 row.element.title = 'Our rules suggest Contact ' + label(script) + '; Bolt picked Contact ' + label(ai);
             } else {

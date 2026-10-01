@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-13';
+    const BUILD = 'v2-build-14';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -154,6 +154,22 @@
             border-color: #c62828 !important;
             box-shadow: none !important;
             opacity: 0 !important;
+        }
+        /* Arrow buttons on disagreement rows: blue = Bolt's pick (Element451's own
+               accent color), orange = our script's pick. */
+        body .diff-row .diff-actions .diff-action-button.elm2-arrow-bolt {
+            background: rgba(25, 118, 210, 0.22) !important;
+            border: 2px solid #1976d2 !important;
+            color: #1976d2 !important;
+        }
+        body .diff-row .diff-actions .diff-action-button.elm2-arrow-ours {
+            background: rgba(239, 108, 0, 0.22) !important;
+            border: 2px solid #ef6c00 !important;
+            color: #ef6c00 !important;
+        }
+        body .diff-row .diff-actions .diff-action-button.elm2-arrow-bolt *,
+        body .diff-row .diff-actions .diff-action-button.elm2-arrow-ours * {
+            color: inherit !important;
         }
         /* --- Merge counter / settings pane (unchanged from classic script; the
                top navbar — .bolt-navigation-right / elm-universal-search — was not
@@ -1126,6 +1142,21 @@
             } else {
                 row.element.removeAttribute('title');
             }
+            // Arrow buttons between the two values: on disagreement rows, mark
+            // which arrow is Bolt's pick and which is ours. Agreement rows keep
+            // Element451's default arrow styling.
+            const arrows = {
+                left: row.element.querySelector(':scope > .diff-actions > .diff-action-button[title="Keep Contact A"]'),
+                right: row.element.querySelector(':scope > .diff-actions > .diff-action-button[title="Keep Contact B"]')
+            };
+            ['left', 'right'].forEach(side => {
+                const btn = arrows[side];
+                if (!btn) return;
+                const isBolt = !!ai && !!script && ai !== script && ai === side;
+                const isOurs = !!ai && !!script && ai !== script && script === side;
+                btn.classList.toggle('elm2-arrow-bolt', isBolt);
+                btn.classList.toggle('elm2-arrow-ours', isOurs);
+            });
         });
     }
     function applyAllPicks(sourceAttr) {

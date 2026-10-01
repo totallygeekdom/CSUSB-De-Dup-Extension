@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-27';
+    const BUILD = 'v2-build-28';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -1132,10 +1132,9 @@
                 /\[ACUx\]/i,
                 /Outreach_UGRD_/i
             ];
-            // Both sides must be that kind of value — testing the combined row text let a
-            // pattern on one side alone force "left" even when left was empty.
-            const isLegacy = (t) => legacyPatterns.some(p => p.test(t));
-            if (isLegacy(leftText) && isLegacy(rightText)) {
+            // Matches on the whole row, as in the classic script. A blank left side
+            // never reaches here: the blank-side rule above picks the filled side first.
+            if (legacyPatterns.some(p => p.test(text))) {
                 row.element.dataset.elm2AutoResolved = 'true';
                 applyScriptPick(row, 'left');
             }

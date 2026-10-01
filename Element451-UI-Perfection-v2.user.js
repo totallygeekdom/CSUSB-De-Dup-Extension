@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-19';
+    const BUILD = 'v2-build-20';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -43,6 +43,7 @@
     // need live investigation before they're worth exposing as settings.
     const CFG = Object.defineProperties({}, {
         AUTO_RESOLVE_FIELDS:      { get() { return getBoolSetting('elm_auto_click_fab', true); } },
+        HIGHLIGHT_ROWS:           { get() { return getBoolSetting('elm_highlight_rows', true); } },
         SHOW_MERGE_COUNTER:       { get() { return getBoolSetting('elm_show_merge_counter', true); } },
         AUTO_SKIP_BLOCKED:        { get() { return getBoolSetting('elm_auto_skip_blocked', true); } },
         ALLOWED_DEPARTMENT:       { get() { return localStorage.getItem('elm_allowed_department') || 'UnderGrad'; } },
@@ -1161,6 +1162,14 @@
     }
     function annotateRowColors() {
         resetStaleRows();
+        if (!CFG.HIGHLIGHT_ROWS) {
+            document.querySelectorAll('.elm2-agree-row, .elm2-disagree-row').forEach(el => {
+                el.classList.remove('elm2-agree-row', 'elm2-disagree-row');
+                el.removeAttribute('title');
+            });
+            document.querySelectorAll('.elm2-arrow-bolt, .elm2-arrow-ours').forEach(el => el.classList.remove('elm2-arrow-bolt', 'elm2-arrow-ours'));
+            return;
+        }
         const label = (side) => (side === 'left' ? 'A' : 'B');
         getDiffRows().forEach(row => {
             const ai = row.element.dataset.elm2AiSide;
@@ -1457,6 +1466,7 @@
                 <div class="setting-row"><label>Auto-Apply Suggestions</label>${toggleHtml('elm-auto-resolve-fields')}</div>
                 <div class="setting-row"><label>Auto-Skip Blocked</label>${toggleHtml('elm-auto-skip-blocked')}</div>
                 <div class="settings-section-title">Display</div>
+                <div class="setting-row"><label>Highlight Rows</label>${toggleHtml('elm-highlight-rows')}</div>
                 <div class="setting-row"><label>Show Merge Counter</label>${toggleHtml('elm-show-merge-counter')}</div>
                 <div class="settings-section-title">Department</div>
                 <div class="setting-row">
@@ -1477,6 +1487,7 @@
         }
         setupToggle('elm-auto-resolve-fields', 'elm_auto_click_fab');
         setupToggle('elm-auto-skip-blocked', 'elm_auto_skip_blocked');
+        setupToggle('elm-highlight-rows', 'elm_highlight_rows');
         setupToggle('elm-show-merge-counter', 'elm_show_merge_counter', () => { document.getElementById('elm-controls-wrapper')?.remove(); injectMergeCounter(); });
         function setupToggle(elementId, storageKey, onChange) {
             const el = document.getElementById(elementId);

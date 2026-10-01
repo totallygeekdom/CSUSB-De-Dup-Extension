@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-8';
+    const BUILD = 'v2-build-9';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -83,10 +83,6 @@
         /* --- Applicant-side driven resolution: light yellow tint (replaces the old
                pixel-overlay approach — much simpler now that each side is its own
                button element instead of a shared row) --- */
-        .diff-value-button.elm2-applicant-side {
-            background-color: #fff9c4 !important;
-            border-color: #f9a825 !important;
-        }
         /* --- AI-vs-script pick comparison bar + per-row disagreement badges --- */
         #elm2-pick-compare-bar {
             display: flex;
@@ -111,21 +107,19 @@
         }
         #elm2-use-ai-btn:hover, #elm2-use-script-btn:hover { background: #eee; }
         #elm2-pick-compare-bar button:disabled { opacity: 0.45; cursor: default; }
-        .diff-row.elm2-agree-row { background-color: #e8f5e9; box-shadow: inset 4px 0 0 #43a047; }
-        .diff-row.elm2-disagree-row { background-color: #ffebee; box-shadow: inset 4px 0 0 #d32f2f; }
-        .diff-value-button.elm2-suggested { outline: 2px dashed #f9a825; outline-offset: -2px; }
-        .elm2-pick-badge:not(.elm2-pick-differs) { background: #e8f5e9; color: #2e7d32; }
-        .elm2-pick-badge {
-            display: inline-block;
-            margin-left: 8px;
-            padding: 1px 7px;
-            border-radius: 8px;
-            font-size: 11px;
-            font-weight: 600;
-            background: #fff3e0;
-            color: #e65100;
-            white-space: nowrap;
-            vertical-align: middle;
+        /* --- Pick comparison colors: replace Element451's blue "selected" look.
+               Green = Bolt's original pick matches our suggestion, red = it doesn't. --- */
+        .diff-row.elm2-agree-row .diff-option-selected,
+        .diff-row.elm2-agree-row .diff-option-selected * {
+            background-color: #43a047 !important;
+            border-color: #2e7d32 !important;
+            color: #fff !important;
+        }
+        .diff-row.elm2-disagree-row .diff-option-selected,
+        .diff-row.elm2-disagree-row .diff-option-selected * {
+            background-color: #d32f2f !important;
+            border-color: #b71c1c !important;
+            color: #fff !important;
         }
         /* --- Merge counter / settings pane (unchanged from classic script; the
                top navbar — .bolt-navigation-right / elm-universal-search — was not
@@ -905,8 +899,6 @@
             if (applicantSide) {
                 row.element.dataset.elm2AutoResolved = 'true';
                 applyScriptPick(row, applicantSide);
-                const btn = row.element.querySelectorAll(':scope > .diff-value-button')[applicantSide === 'left' ? 0 : 1];
-                if (btn) btn.classList.add('elm2-applicant-side');
                 return;
             }
             // Milestone type matching (no applicant context)
@@ -1085,34 +1077,21 @@
     function getPickComparisonRows() {
         return getDiffRows().filter(r => r.element.dataset.elm2AiSide && r.element.dataset.elm2ScriptSide);
     }
-    function annotateRowPickBadges() {
+    function annotateRowColors() {
         const label = (side) => (side === 'left' ? 'A' : 'B');
         getDiffRows().forEach(row => {
             const ai = row.element.dataset.elm2AiSide;
             const script = row.element.dataset.elm2ScriptSide;
-            // Green = Bolt's original pick matches ours, red = it doesn't.
-            // Rows where our rules have no opinion (or Bolt had no default) stay plain.
+            // Recolors Element451's blue "selected" button: green when Bolt's
+            // original pick matches our suggestion, red when it doesn't. Rows
+            // where our rules have no opinion keep Element451's own styling.
             row.element.classList.toggle('elm2-agree-row', !!ai && !!script && ai === script);
             row.element.classList.toggle('elm2-disagree-row', !!ai && !!script && ai !== script);
-            let badge = row.element.querySelector(':scope > .elm2-pick-badge');
-            const btns = row.element.querySelectorAll(':scope > .diff-value-button');
-            btns.forEach(b => b.classList.remove('elm2-suggested'));
-            if (!script) { if (badge) badge.remove(); return; }
-            const suggestedBtn = btns[script === 'left' ? 0 : 1];
-            if (suggestedBtn) suggestedBtn.classList.add('elm2-suggested');
-            if (!badge) {
-                badge = document.createElement('span');
-                badge.className = 'elm2-pick-badge';
-                const titleEl = row.element.querySelector(':scope > .diff-title');
-                if (titleEl) titleEl.insertAdjacentElement('afterend', badge);
-                else row.element.appendChild(badge);
+            if (ai && script) {
+                row.element.title = 'Our rules suggest Contact ' + label(script) + '; Bolt picked Contact ' + label(ai);
+            } else {
+                row.element.removeAttribute('title');
             }
-            const differs = !!ai && ai !== script;
-            badge.classList.toggle('elm2-pick-differs', differs);
-            badge.textContent = differs
-                ? `⚠ Bolt: ${label(ai)} · Ours: ${label(script)}`
-                : `⚙ Ours: ${label(script)}${ai ? ' ✓ matches Bolt' : ''}`;
-            badge.title = 'Our rules suggest Contact ' + label(script) + (ai ? '; Bolt picked Contact ' + label(ai) : '');
         });
     }
     function applyAllPicks(sourceAttr) {
@@ -1120,7 +1099,7 @@
             const side = row.element.dataset[sourceAttr];
             if (side) row.selectSide(side);
         });
-        annotateRowPickBadges();
+        annotateRowColors();
         injectPickComparisonBar();
     }
     function injectPickComparisonBar() {
@@ -1290,7 +1269,7 @@
         checkForMergeResult();
         injectMergeCounter();
         if (isDedupReviewPage()) {
-            annotateRowPickBadges();
+            annotateRowColors();
             injectPickComparisonBar();
         }
     }, 750);

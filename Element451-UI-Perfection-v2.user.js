@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-25';
+    const BUILD = 'v2-build-26';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -572,6 +572,7 @@
     function getDiffRows() {
         const form = getDiffForm();
         if (!form) return [];
+        const labelCounts = {};
         return Array.from(form.querySelectorAll('.diff-row')).map(row => {
             const buttons = row.querySelectorAll(':scope > .diff-value-button');
             const titleEl = row.querySelector(':scope > .diff-title');
@@ -591,8 +592,12 @@
             const nativeSide = (isSel(arrowA) && !isSel(arrowB)) ? 'left'
                 : (isSel(arrowB) && !isSel(arrowA)) ? 'right'
                 : isSel(leftBtn) ? 'left' : isSel(rightBtn) ? 'right' : null;
+            // Stable identity for this row within the current pair (survives
+            // Element451 re-rendering the DOM node): field label + nth occurrence + both values.
+            const occ = labelCounts[label] = (labelCounts[label] || 0) + 1;
             return {
                 element: row,
+                key: `${label}#${occ}|${norm(leftText)}|${norm(rightText)}`,
                 label,
                 nativeSide,
                 // Element451 doesn't flag conflicting rows (it just hides matching
@@ -628,17 +633,34 @@
     // flags, colors) attached to a row that now shows different data. Tag each
     // row with the pair it was computed for and wipe anything stale.
     const ROW_STATE_KEYS = ['elm2AiSide', 'elm2AiSeen', 'elm2ScriptSide', 'elm2AutoResolved', 'elm2DualPersonal', 'elm2DualResolved', 'elm2AddressResolved'];
+    // Bolt's original picks and our own picks, remembered in the script (not just
+    // on the DOM nodes) for the current pair, so they survive Element451
+    // re-rendering a row after the user or our script has changed the selection.
+    // Entry: { ai: 'left'|'right', script: 'left'|'right', acted: bool }.
+    const rowMemory = new Map();
+    let memoryPairKey = '';
+    function rememberRow(key, patch) {
+        rowMemory.set(key, Object.assign(rowMemory.get(key) || {}, patch));
+    }
     function resetStaleRows() {
         const pairKey = getPairKey();
         if (!pairKey) return;
+        if (memoryPairKey !== pairKey) { rowMemory.clear(); memoryPairKey = pairKey; }
         getDiffRows().forEach(row => {
             const el = row.element;
-            if (el.dataset.elm2Pair === pairKey) return;
-            ROW_STATE_KEYS.forEach(k => delete el.dataset[k]);
-            el.classList.remove('elm2-blocked-row');
-            el.removeAttribute('title');
-            el.querySelectorAll(':scope > .diff-value-button').forEach(b => b.classList.remove('elm2-agree-pick', 'elm2-pick-bolt', 'elm2-pick-ours'));
-            el.dataset.elm2Pair = pairKey;
+            if (el.dataset.elm2Pair !== pairKey) {
+                ROW_STATE_KEYS.forEach(k => delete el.dataset[k]);
+                el.classList.remove('elm2-blocked-row');
+                el.removeAttribute('title');
+                el.querySelectorAll(':scope > .diff-value-button').forEach(b => b.classList.remove('elm2-agree-pick', 'elm2-pick-bolt', 'elm2-pick-ours'));
+                el.dataset.elm2Pair = pairKey;
+            }
+            const m = rowMemory.get(row.key);
+            if (m) {
+                if (m.ai) el.dataset.elm2AiSide = m.ai;
+                if (m.script) el.dataset.elm2ScriptSide = m.script;
+                if (m.acted) el.dataset.elm2AiSeen = '1';
+            }
         });
     }
     // Element451's default blue outline color, read from one of its own
@@ -659,7 +681,7 @@
         getDiffRows().forEach(row => {
             const d = row.element.dataset;
             if (d.elm2AiSide || d.elm2AiSeen) return; // already captured, or we've already acted on this row
-            if (row.nativeSide) d.elm2AiSide = row.nativeSide;
+            if (row.nativeSide) { d.elm2AiSide = row.nativeSide; rememberRow(row.key, { ai: row.nativeSide }); }
         });
     }
     // Selects a side AND records it as our script's pick, so the AI-vs-script
@@ -668,9 +690,10 @@
     // directly.
     function applyScriptPick(row, side) {
         const d = row.element.dataset;
-        if (!d.elm2AiSide && !d.elm2AiSeen && row.nativeSide) d.elm2AiSide = row.nativeSide;
+        if (!d.elm2AiSide && !d.elm2AiSeen && row.nativeSide) { d.elm2AiSide = row.nativeSide; rememberRow(row.key, { ai: row.nativeSide }); }
         d.elm2AiSeen = '1'; // from here on, a selection on this row may be ours, not Bolt's
         d.elm2ScriptSide = side;
+        rememberRow(row.key, { script: side, acted: true });
         if (CFG.AUTO_RESOLVE_FIELDS) row.selectSide(side);
     }
     function getContactCards() {

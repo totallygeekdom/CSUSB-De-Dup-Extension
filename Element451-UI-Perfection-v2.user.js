@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-26';
+    const BUILD = 'v2-build-27';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -1028,6 +1028,15 @@
                 applyScriptPick(row, applicantSide);
                 return;
             }
+            // One side blank ("-"), the other has data: keep the data. (Checked before
+            // the pattern rules below, which would otherwise match on the filled
+            // side's text alone.)
+            const isBlank = (t) => !t || /^[-\u2013\u2014\s]+$/.test(t);
+            if (isBlank(leftText) !== isBlank(rightText)) {
+                row.element.dataset.elm2AutoResolved = 'true';
+                applyScriptPick(row, isBlank(leftText) ? 'right' : 'left');
+                return;
+            }
             // Milestone type matching (no applicant context)
             if (text.match(/type:\s*\w+,\s*\w{3}\s+\d{1,2},\s*\d{4}/i)) {
                 const typePattern = /type:\s*(\w+),/i;
@@ -1123,7 +1132,10 @@
                 /\[ACUx\]/i,
                 /Outreach_UGRD_/i
             ];
-            if (legacyPatterns.some(p => p.test(text))) {
+            // Both sides must be that kind of value — testing the combined row text let a
+            // pattern on one side alone force "left" even when left was empty.
+            const isLegacy = (t) => legacyPatterns.some(p => p.test(t));
+            if (isLegacy(leftText) && isLegacy(rightText)) {
                 row.element.dataset.elm2AutoResolved = 'true';
                 applyScriptPick(row, 'left');
             }

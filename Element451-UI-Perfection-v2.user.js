@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-9';
+    const BUILD = 'v2-build-10';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -109,16 +109,23 @@
         #elm2-pick-compare-bar button:disabled { opacity: 0.45; cursor: default; }
         /* --- Pick comparison colors: replace Element451's blue "selected" look.
                Green = Bolt's original pick matches our suggestion, red = it doesn't. --- */
-        .diff-row.elm2-agree-row .diff-option-selected,
-        .diff-row.elm2-agree-row .diff-option-selected * {
+        body .diff-row.elm2-agree-row button.diff-option-selected,
+        body .diff-row.elm2-agree-row button.diff-option-selected * {
             background-color: #43a047 !important;
             border-color: #2e7d32 !important;
             color: #fff !important;
         }
-        .diff-row.elm2-disagree-row .diff-option-selected,
-        .diff-row.elm2-disagree-row .diff-option-selected * {
+        body .diff-row.elm2-disagree-row button.diff-option-selected,
+        body .diff-row.elm2-disagree-row button.diff-option-selected * {
             background-color: #d32f2f !important;
             border-color: #b71c1c !important;
+            color: #fff !important;
+        }
+        /* No suggestion from our rules: neutral gray instead of Element's blue */
+        body .diff-row.elm2-none-row button.diff-option-selected,
+        body .diff-row.elm2-none-row button.diff-option-selected * {
+            background-color: #757575 !important;
+            border-color: #616161 !important;
             color: #fff !important;
         }
         /* --- Merge counter / settings pane (unchanged from classic script; the
@@ -1087,6 +1094,7 @@
             // where our rules have no opinion keep Element451's own styling.
             row.element.classList.toggle('elm2-agree-row', !!ai && !!script && ai === script);
             row.element.classList.toggle('elm2-disagree-row', !!ai && !!script && ai !== script);
+            row.element.classList.toggle('elm2-none-row', !script && !document.body.classList.contains('elm2-blocked'));
             if (ai && script) {
                 row.element.title = 'Our rules suggest Contact ' + label(script) + '; Bolt picked Contact ' + label(ai);
             } else {

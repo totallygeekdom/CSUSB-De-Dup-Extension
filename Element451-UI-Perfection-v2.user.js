@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-20';
+    const BUILD = 'v2-build-21';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -111,70 +111,66 @@
         #elm2-use-script-btn { border: 2px solid #ef6c00; color: #ef6c00; }
         #elm2-use-script-btn:hover { background: rgba(239, 108, 0, 0.12); }
         #elm2-pick-compare-bar button:disabled { opacity: 0.45; cursor: default; }
-        /* --- Pick comparison colors: replace Element451's blue "selected" look.
-               Green = Bolt's original pick matches our suggestion, red = it doesn't. --- */
-        /* Solid, saturated fill + matching border replace Element451's pale
-               semi-transparent blue fill/border (including its overlay pseudo-elements).
-               Green = Bolt's pick matches ours, red = differs. Rows where our rules have
-               no opinion keep Element451's default styling. */
-        /* Light, semi-transparent fill with a saturated border, like Element451's
-               own selected style but green/red. Hides Element451's blue overlay
-               pseudo-elements. Green = Bolt's pick matches ours, red = differs. Rows where
-               our rules have no opinion keep Element451's default styling. */
-        body .diff-row.elm2-agree-row button.diff-option-selected {
+        /* --- Pick comparison colors (light semi-transparent fill + saturated border,
+               replacing Element451's own blue; its overlay pseudo-elements are hidden).
+               Agreement row: the selected value is green.
+               Conflict row (our pick differs from Bolt's): the two values are colored by
+               who picked them — Element451's blue = Bolt's pick, orange = ours.
+               Rows where our rules have no opinion keep Element451's default styling. --- */
+        body .diff-row .elm2-agree-row button.diff-option-selected {
             background: rgba(67, 160, 71, 0.22) !important;
-            background-color: rgba(67, 160, 71, 0.22) !important;
             border: 2px solid #2e7d32 !important;
             box-shadow: none !important;
             outline: none !important;
             color: #212121 !important;
         }
-        body .diff-row.elm2-agree-row button.diff-option-selected * {
+        body .diff-row .elm2-agree-row button.diff-option-selected * {
             background: transparent !important;
             color: #212121 !important;
         }
-        body .diff-row.elm2-agree-row button.diff-option-selected::before,
-        body .diff-row.elm2-agree-row button.diff-option-selected::after {
+        body .diff-row .elm2-agree-row button.diff-option-selected::before,
+        body .diff-row .elm2-agree-row button.diff-option-selected::after {
             background: transparent !important;
             border-color: #2e7d32 !important;
             box-shadow: none !important;
             opacity: 0 !important;
         }
-        body .diff-row.elm2-disagree-row button.diff-option-selected {
-            background: rgba(211, 47, 47, 0.22) !important;
-            background-color: rgba(211, 47, 47, 0.22) !important;
-            border: 2px solid #c62828 !important;
+        body .diff-row button.diff-value-button.elm2-pick-bolt {
+            background: rgba(25, 118, 210, 0.22) !important;
+            background: color-mix(in srgb, var(--elm2-bolt-blue, #1976d2) 22%, transparent) !important;
+            border: 2px solid var(--elm2-bolt-blue, #1976d2) !important;
             box-shadow: none !important;
             outline: none !important;
             color: #212121 !important;
         }
-        body .diff-row.elm2-disagree-row button.diff-option-selected * {
+        body .diff-row button.diff-value-button.elm2-pick-bolt * {
             background: transparent !important;
             color: #212121 !important;
         }
-        body .diff-row.elm2-disagree-row button.diff-option-selected::before,
-        body .diff-row.elm2-disagree-row button.diff-option-selected::after {
+        body .diff-row button.diff-value-button.elm2-pick-bolt::before,
+        body .diff-row button.diff-value-button.elm2-pick-bolt::after {
             background: transparent !important;
-            border-color: #c62828 !important;
+            border-color: var(--elm2-bolt-blue, #1976d2) !important;
             box-shadow: none !important;
             opacity: 0 !important;
         }
-        /* Arrow buttons on disagreement rows: blue = Bolt's pick (Element451's own
-               accent color), orange = our script's pick. */
-        body .diff-row .diff-actions .diff-action-button.elm2-arrow-bolt {
-            background: rgba(25, 118, 210, 0.22) !important;
-            background: color-mix(in srgb, var(--elm2-bolt-blue, #1976d2) 22%, transparent) !important;
-            border: 2px solid var(--elm2-bolt-blue, #1976d2) !important;
-            color: var(--elm2-bolt-blue, #1976d2) !important;
-        }
-        body .diff-row .diff-actions .diff-action-button.elm2-arrow-ours {
+        body .diff-row button.diff-value-button.elm2-pick-ours {
             background: rgba(239, 108, 0, 0.22) !important;
             border: 2px solid #ef6c00 !important;
-            color: #ef6c00 !important;
+            box-shadow: none !important;
+            outline: none !important;
+            color: #212121 !important;
         }
-        body .diff-row .diff-actions .diff-action-button.elm2-arrow-bolt *,
-        body .diff-row .diff-actions .diff-action-button.elm2-arrow-ours * {
-            color: inherit !important;
+        body .diff-row button.diff-value-button.elm2-pick-ours * {
+            background: transparent !important;
+            color: #212121 !important;
+        }
+        body .diff-row button.diff-value-button.elm2-pick-ours::before,
+        body .diff-row button.diff-value-button.elm2-pick-ours::after {
+            background: transparent !important;
+            border-color: #ef6c00 !important;
+            box-shadow: none !important;
+            opacity: 0 !important;
         }
         /* --- Merge counter / settings pane (unchanged from classic script; the
                top navbar — .bolt-navigation-right / elm-universal-search — was not
@@ -618,9 +614,9 @@
             const el = row.element;
             if (el.dataset.elm2Pair === pairKey) return;
             ROW_STATE_KEYS.forEach(k => delete el.dataset[k]);
-            el.classList.remove('elm2-agree-row', 'elm2-disagree-row', 'elm2-blocked-row');
+            el.classList.remove('elm2-agree-row', 'elm2-blocked-row');
             el.removeAttribute('title');
-            el.querySelectorAll(':scope > .diff-actions > .diff-action-button').forEach(b => b.classList.remove('elm2-arrow-bolt', 'elm2-arrow-ours'));
+            el.querySelectorAll(':scope > .diff-value-button').forEach(b => b.classList.remove('elm2-pick-bolt', 'elm2-pick-ours'));
             el.dataset.elm2Pair = pairKey;
         });
     }
@@ -1160,45 +1156,38 @@
     function getPickComparisonRows() {
         return getDiffRows().filter(r => r.element.dataset.elm2AiSide && r.element.dataset.elm2ScriptSide);
     }
+    function clearPickClasses(root) {
+        root.querySelectorAll('.elm2-agree-row').forEach(el => el.classList.remove('elm2-agree-row'));
+        root.querySelectorAll('.elm2-pick-bolt, .elm2-pick-ours').forEach(el => el.classList.remove('elm2-pick-bolt', 'elm2-pick-ours'));
+    }
     function annotateRowColors() {
         resetStaleRows();
         if (!CFG.HIGHLIGHT_ROWS) {
-            document.querySelectorAll('.elm2-agree-row, .elm2-disagree-row').forEach(el => {
-                el.classList.remove('elm2-agree-row', 'elm2-disagree-row');
-                el.removeAttribute('title');
-            });
-            document.querySelectorAll('.elm2-arrow-bolt, .elm2-arrow-ours').forEach(el => el.classList.remove('elm2-arrow-bolt', 'elm2-arrow-ours'));
+            clearPickClasses(document);
+            document.querySelectorAll('.diff-row[title]').forEach(el => el.removeAttribute('title'));
             return;
         }
         const label = (side) => (side === 'left' ? 'A' : 'B');
         getDiffRows().forEach(row => {
             const ai = row.element.dataset.elm2AiSide;
             const script = row.element.dataset.elm2ScriptSide;
-            // Recolors Element451's blue "selected" button: green when Bolt's
-            // original pick matches our suggestion, red when it doesn't. Rows
-            // where our rules have no opinion keep Element451's own styling.
-            row.element.classList.toggle('elm2-agree-row', !!ai && !!script && ai === script);
-            row.element.classList.toggle('elm2-disagree-row', !!ai && !!script && ai !== script);
-            if (ai && script) {
+            const both = !!ai && !!script;
+            const agree = both && ai === script;
+            const conflict = both && ai !== script;
+            row.element.classList.toggle('elm2-agree-row', agree);
+            // Conflict rows: color the two value buttons by who picked them.
+            const btns = row.element.querySelectorAll(':scope > .diff-value-button');
+            ['left', 'right'].forEach((side, idx) => {
+                const btn = btns[idx];
+                if (!btn) return;
+                btn.classList.toggle('elm2-pick-bolt', conflict && ai === side);
+                btn.classList.toggle('elm2-pick-ours', conflict && script === side);
+            });
+            if (both) {
                 row.element.title = 'Our rules suggest Contact ' + label(script) + '; Bolt picked Contact ' + label(ai);
             } else {
                 row.element.removeAttribute('title');
             }
-            // Arrow buttons between the two values: on disagreement rows, mark
-            // which arrow is Bolt's pick and which is ours. Agreement rows keep
-            // Element451's default arrow styling.
-            const arrows = {
-                left: row.element.querySelector(':scope > .diff-actions > .diff-action-button[title="Keep Contact A"]'),
-                right: row.element.querySelector(':scope > .diff-actions > .diff-action-button[title="Keep Contact B"]')
-            };
-            ['left', 'right'].forEach(side => {
-                const btn = arrows[side];
-                if (!btn) return;
-                const isBolt = !!ai && !!script && ai !== script && ai === side;
-                const isOurs = !!ai && !!script && ai !== script && script === side;
-                btn.classList.toggle('elm2-arrow-bolt', isBolt);
-                btn.classList.toggle('elm2-arrow-ours', isOurs);
-            });
         });
     }
     function applyAllPicks(sourceAttr) {

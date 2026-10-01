@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-16';
+    const BUILD = 'v2-build-17';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -601,6 +601,24 @@
         const needle = labelSubstr.toLowerCase();
         return getDiffRows().filter(r => r.label.toLowerCase().includes(needle));
     }
+    // Element451 may reuse the same .diff-row elements when moving to the next
+    // pair, which would leave our per-row state (Bolt's pick, our pick, resolved
+    // flags, colors) attached to a row that now shows different data. Tag each
+    // row with the pair it was computed for and wipe anything stale.
+    const ROW_STATE_KEYS = ['elm2AiSide', 'elm2ScriptSide', 'elm2AutoResolved', 'elm2DualPersonal', 'elm2DualResolved', 'elm2AddressResolved'];
+    function resetStaleRows() {
+        const pairKey = getPairKey();
+        if (!pairKey) return;
+        getDiffRows().forEach(row => {
+            const el = row.element;
+            if (el.dataset.elm2Pair === pairKey) return;
+            ROW_STATE_KEYS.forEach(k => delete el.dataset[k]);
+            el.classList.remove('elm2-agree-row', 'elm2-disagree-row', 'elm2-blocked-row');
+            el.removeAttribute('title');
+            el.querySelectorAll(':scope > .diff-actions > .diff-action-button').forEach(b => b.classList.remove('elm2-arrow-bolt', 'elm2-arrow-ours'));
+            el.dataset.elm2Pair = pairKey;
+        });
+    }
     // Records the side Bolt had pre-selected before our script touched the
     // row, the first time each row is seen (idempotent — a no-op on rows
     // already stamped). Must run before runAutoResolution() so it captures
@@ -1128,6 +1146,7 @@
         return getDiffRows().filter(r => r.element.dataset.elm2AiSide && r.element.dataset.elm2ScriptSide);
     }
     function annotateRowColors() {
+        resetStaleRows();
         const label = (side) => (side === 'left' ? 'A' : 'B');
         getDiffRows().forEach(row => {
             const ai = row.element.dataset.elm2AiSide;
@@ -1237,6 +1256,7 @@
     function attemptAutoResolve() {
         if (!isDedupReviewPage()) return;
         if (!getContactNames().filter(Boolean).length) return; // page still loading
+        resetStaleRows();
         snapshotNativeSelections(); // capture Bolt's defaults before anything below can click a row
         const pairKey = getPairKey();
         if (pairKey !== currentQueuePositionKey) {

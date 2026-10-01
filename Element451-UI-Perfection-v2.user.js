@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-24';
+    const BUILD = 'v2-build-25';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -581,15 +581,16 @@
             const leftText = leftBtn ? leftBtn.textContent.trim() : '';
             const rightText = rightBtn ? rightBtn.textContent.trim() : '';
             const norm = (t) => t.toLowerCase().replace(/\s+/g, ' ').trim();
-            // Which side Element451 itself has selected. The value button's
-            // aria-checked/diff-option-selected is the primary signal; the
-            // "Keep Contact A/B" arrow buttons carry the same class and are used
-            // as a fallback in case the arrows are the only thing marked.
+            // Which side Element451 itself has selected. Bolt AI marks its default
+            // pick on the "Keep Contact A/B" arrow buttons (and a user overrides it by
+            // clicking an arrow), so the arrows are the primary signal; the value
+            // buttons' aria-checked/diff-option-selected are only a fallback.
             const isSel = (b) => !!b && (b.getAttribute('aria-checked') === 'true' || b.classList.contains('diff-option-selected'));
             const arrowA = row.querySelector(':scope > .diff-actions > .diff-action-button[title="Keep Contact A"]');
             const arrowB = row.querySelector(':scope > .diff-actions > .diff-action-button[title="Keep Contact B"]');
-            const nativeSide = isSel(leftBtn) ? 'left' : isSel(rightBtn) ? 'right'
-                : (isSel(arrowA) && !isSel(arrowB)) ? 'left' : (isSel(arrowB) && !isSel(arrowA)) ? 'right' : null;
+            const nativeSide = (isSel(arrowA) && !isSel(arrowB)) ? 'left'
+                : (isSel(arrowB) && !isSel(arrowA)) ? 'right'
+                : isSel(leftBtn) ? 'left' : isSel(rightBtn) ? 'right' : null;
             return {
                 element: row,
                 label,
@@ -602,8 +603,17 @@
                 leftSelected: !!(leftBtn && leftBtn.classList.contains('diff-option-selected')),
                 rightSelected: !!(rightBtn && rightBtn.classList.contains('diff-option-selected')),
                 selectSide(side) {
-                    const btn = side === 'left' ? leftBtn : rightBtn;
-                    if (btn && !btn.classList.contains('diff-option-selected')) btn.click();
+                    const arrow = side === 'left' ? arrowA : arrowB;
+                    const value = side === 'left' ? leftBtn : rightBtn;
+                    if (isSel(arrow) || (!arrow && isSel(value))) return; // already selected
+                    // The arrows are the real control; fall back to the value button
+                    // if clicking the arrow didn't register.
+                    if (arrow) {
+                        arrow.click();
+                        if (value) setTimeout(() => { if (!isSel(value) && !isSel(arrow)) value.click(); }, 80);
+                    } else if (value) {
+                        value.click();
+                    }
                 }
             };
         });

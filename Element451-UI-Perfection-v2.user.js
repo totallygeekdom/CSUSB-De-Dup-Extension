@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-14';
+    const BUILD = 'v2-build-15';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -105,7 +105,10 @@
             font-size: 13px;
             cursor: pointer;
         }
-        #elm2-use-ai-btn:hover, #elm2-use-script-btn:hover { background: #eee; }
+        #elm2-use-ai-btn { border: 2px solid #1976d2; color: #1976d2; }
+        #elm2-use-script-btn { border: 2px solid #7b1fa2; color: #7b1fa2; }
+        #elm2-use-ai-btn:hover { background: rgba(25, 118, 210, 0.12); }
+        #elm2-use-script-btn:hover { background: rgba(123, 31, 162, 0.12); }
         #elm2-pick-compare-bar button:disabled { opacity: 0.45; cursor: default; }
         /* --- Pick comparison colors: replace Element451's blue "selected" look.
                Green = Bolt's original pick matches our suggestion, red = it doesn't. --- */
@@ -156,16 +159,17 @@
             opacity: 0 !important;
         }
         /* Arrow buttons on disagreement rows: blue = Bolt's pick (Element451's own
-               accent color), orange = our script's pick. */
+               accent color), purple = our script's pick. The comparison bar buttons use
+               the same two colors as a key. */
         body .diff-row .diff-actions .diff-action-button.elm2-arrow-bolt {
             background: rgba(25, 118, 210, 0.22) !important;
             border: 2px solid #1976d2 !important;
             color: #1976d2 !important;
         }
         body .diff-row .diff-actions .diff-action-button.elm2-arrow-ours {
-            background: rgba(239, 108, 0, 0.22) !important;
-            border: 2px solid #ef6c00 !important;
-            color: #ef6c00 !important;
+            background: rgba(123, 31, 162, 0.22) !important;
+            border: 2px solid #7b1fa2 !important;
+            color: #7b1fa2 !important;
         }
         body .diff-row .diff-actions .diff-action-button.elm2-arrow-bolt *,
         body .diff-row .diff-actions .diff-action-button.elm2-arrow-ours * {

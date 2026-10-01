@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-12';
+    const BUILD = 'v2-build-13';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -113,41 +113,45 @@
                semi-transparent blue fill/border (including its overlay pseudo-elements).
                Green = Bolt's pick matches ours, red = differs. Rows where our rules have
                no opinion keep Element451's default styling. */
+        /* Light, semi-transparent fill with a saturated border, like Element451's
+               own selected style but green/red. Hides Element451's blue overlay
+               pseudo-elements. Green = Bolt's pick matches ours, red = differs. Rows where
+               our rules have no opinion keep Element451's default styling. */
         body .diff-row.elm2-agree-row button.diff-option-selected {
-            background: #2e7d32 !important;
-            background-color: #2e7d32 !important;
-            border: 2px solid #1b5e20 !important;
+            background: rgba(67, 160, 71, 0.22) !important;
+            background-color: rgba(67, 160, 71, 0.22) !important;
+            border: 2px solid #2e7d32 !important;
             box-shadow: none !important;
             outline: none !important;
-            color: #fff !important;
+            color: #212121 !important;
         }
         body .diff-row.elm2-agree-row button.diff-option-selected * {
             background: transparent !important;
-            color: #fff !important;
+            color: #212121 !important;
         }
         body .diff-row.elm2-agree-row button.diff-option-selected::before,
         body .diff-row.elm2-agree-row button.diff-option-selected::after {
             background: transparent !important;
-            border-color: #1b5e20 !important;
+            border-color: #2e7d32 !important;
             box-shadow: none !important;
             opacity: 0 !important;
         }
         body .diff-row.elm2-disagree-row button.diff-option-selected {
-            background: #c62828 !important;
-            background-color: #c62828 !important;
-            border: 2px solid #8e0000 !important;
+            background: rgba(211, 47, 47, 0.22) !important;
+            background-color: rgba(211, 47, 47, 0.22) !important;
+            border: 2px solid #c62828 !important;
             box-shadow: none !important;
             outline: none !important;
-            color: #fff !important;
+            color: #212121 !important;
         }
         body .diff-row.elm2-disagree-row button.diff-option-selected * {
             background: transparent !important;
-            color: #fff !important;
+            color: #212121 !important;
         }
         body .diff-row.elm2-disagree-row button.diff-option-selected::before,
         body .diff-row.elm2-disagree-row button.diff-option-selected::after {
             background: transparent !important;
-            border-color: #8e0000 !important;
+            border-color: #c62828 !important;
             box-shadow: none !important;
             opacity: 0 !important;
         }

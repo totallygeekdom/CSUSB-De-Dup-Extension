@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-23';
+    const BUILD = 'v2-build-24';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -113,23 +113,24 @@
         #elm2-pick-compare-bar button:disabled { opacity: 0.45; cursor: default; }
         /* --- Pick comparison colors (light semi-transparent fill + saturated border,
                replacing Element451's own blue; its overlay pseudo-elements are hidden).
-               Agreement row: the selected value is green.
+               Agreement row: the value both agreed on stays green (even if you then select the other one,
+               which just gets Element451's normal blue).
                Conflict row (our pick differs from Bolt's): the two values are colored by
                who picked them — Element451's blue = Bolt's pick, orange = ours.
                Rows where our rules have no opinion keep Element451's default styling. --- */
-        body .diff-row.elm2-agree-row button.diff-value-button.diff-option-selected {
+        body .diff-row button.diff-value-button.elm2-agree-pick {
             background: rgba(67, 160, 71, 0.22) !important;
             border: 2px solid #2e7d32 !important;
             box-shadow: none !important;
             outline: none !important;
             color: #212121 !important;
         }
-        body .diff-row.elm2-agree-row button.diff-value-button.diff-option-selected * {
+        body .diff-row button.diff-value-button.elm2-agree-pick * {
             background: transparent !important;
             color: #212121 !important;
         }
-        body .diff-row.elm2-agree-row button.diff-value-button.diff-option-selected::before,
-        body .diff-row.elm2-agree-row button.diff-value-button.diff-option-selected::after {
+        body .diff-row button.diff-value-button.elm2-agree-pick::before,
+        body .diff-row button.diff-value-button.elm2-agree-pick::after {
             background: transparent !important;
             border-color: #2e7d32 !important;
             box-shadow: none !important;
@@ -580,9 +581,19 @@
             const leftText = leftBtn ? leftBtn.textContent.trim() : '';
             const rightText = rightBtn ? rightBtn.textContent.trim() : '';
             const norm = (t) => t.toLowerCase().replace(/\s+/g, ' ').trim();
+            // Which side Element451 itself has selected. The value button's
+            // aria-checked/diff-option-selected is the primary signal; the
+            // "Keep Contact A/B" arrow buttons carry the same class and are used
+            // as a fallback in case the arrows are the only thing marked.
+            const isSel = (b) => !!b && (b.getAttribute('aria-checked') === 'true' || b.classList.contains('diff-option-selected'));
+            const arrowA = row.querySelector(':scope > .diff-actions > .diff-action-button[title="Keep Contact A"]');
+            const arrowB = row.querySelector(':scope > .diff-actions > .diff-action-button[title="Keep Contact B"]');
+            const nativeSide = isSel(leftBtn) ? 'left' : isSel(rightBtn) ? 'right'
+                : (isSel(arrowA) && !isSel(arrowB)) ? 'left' : (isSel(arrowB) && !isSel(arrowA)) ? 'right' : null;
             return {
                 element: row,
                 label,
+                nativeSide,
                 // Element451 doesn't flag conflicting rows (it just hides matching
                 // ones), so we detect them ourselves: the two sides differ.
                 isConflict: norm(leftText) !== norm(rightText),
@@ -606,7 +617,7 @@
     // pair, which would leave our per-row state (Bolt's pick, our pick, resolved
     // flags, colors) attached to a row that now shows different data. Tag each
     // row with the pair it was computed for and wipe anything stale.
-    const ROW_STATE_KEYS = ['elm2AiSide', 'elm2ScriptSide', 'elm2AutoResolved', 'elm2DualPersonal', 'elm2DualResolved', 'elm2AddressResolved'];
+    const ROW_STATE_KEYS = ['elm2AiSide', 'elm2AiSeen', 'elm2ScriptSide', 'elm2AutoResolved', 'elm2DualPersonal', 'elm2DualResolved', 'elm2AddressResolved'];
     function resetStaleRows() {
         const pairKey = getPairKey();
         if (!pairKey) return;
@@ -614,9 +625,9 @@
             const el = row.element;
             if (el.dataset.elm2Pair === pairKey) return;
             ROW_STATE_KEYS.forEach(k => delete el.dataset[k]);
-            el.classList.remove('elm2-agree-row', 'elm2-blocked-row');
+            el.classList.remove('elm2-blocked-row');
             el.removeAttribute('title');
-            el.querySelectorAll(':scope > .diff-value-button').forEach(b => b.classList.remove('elm2-pick-bolt', 'elm2-pick-ours'));
+            el.querySelectorAll(':scope > .diff-value-button').forEach(b => b.classList.remove('elm2-agree-pick', 'elm2-pick-bolt', 'elm2-pick-ours'));
             el.dataset.elm2Pair = pairKey;
         });
     }
@@ -636,9 +647,9 @@
     // Bolt's actual default rather than our own prior click.
     function snapshotNativeSelections() {
         getDiffRows().forEach(row => {
-            if (row.element.dataset.elm2AiSide) return; // already captured
-            if (row.leftSelected) row.element.dataset.elm2AiSide = 'left';
-            else if (row.rightSelected) row.element.dataset.elm2AiSide = 'right';
+            const d = row.element.dataset;
+            if (d.elm2AiSide || d.elm2AiSeen) return; // already captured, or we've already acted on this row
+            if (row.nativeSide) d.elm2AiSide = row.nativeSide;
         });
     }
     // Selects a side AND records it as our script's pick, so the AI-vs-script
@@ -646,7 +657,10 @@
     // Every resolution rule below should call this instead of row.selectSide()
     // directly.
     function applyScriptPick(row, side) {
-        row.element.dataset.elm2ScriptSide = side;
+        const d = row.element.dataset;
+        if (!d.elm2AiSide && !d.elm2AiSeen && row.nativeSide) d.elm2AiSide = row.nativeSide;
+        d.elm2AiSeen = '1'; // from here on, a selection on this row may be ours, not Bolt's
+        d.elm2ScriptSide = side;
         if (CFG.AUTO_RESOLVE_FIELDS) row.selectSide(side);
     }
     function getContactCards() {
@@ -730,6 +744,7 @@
     // STATE
     // =========================================================
     let currentQueuePositionKey = '';   // "current/total" — used to detect navigation to a new pair
+    let pairFirstSeenAt = 0;            // when the current pair was first seen
     let resolutionAttempted = false;    // resolution ran for the current pair
     let mergeClickPending = false;      // waiting on the two-phase verification delay
     let conflictWarningShown = false;
@@ -1157,8 +1172,7 @@
         return getDiffRows().filter(r => r.element.dataset.elm2AiSide && r.element.dataset.elm2ScriptSide);
     }
     function clearPickClasses(root) {
-        root.querySelectorAll('.elm2-agree-row').forEach(el => el.classList.remove('elm2-agree-row'));
-        root.querySelectorAll('.elm2-pick-bolt, .elm2-pick-ours').forEach(el => el.classList.remove('elm2-pick-bolt', 'elm2-pick-ours'));
+        root.querySelectorAll('.elm2-agree-pick, .elm2-pick-bolt, .elm2-pick-ours').forEach(el => el.classList.remove('elm2-agree-pick', 'elm2-pick-bolt', 'elm2-pick-ours'));
     }
     function annotateRowColors() {
         resetStaleRows();
@@ -1174,12 +1188,12 @@
             const both = !!ai && !!script;
             const agree = both && ai === script;
             const conflict = both && ai !== script;
-            row.element.classList.toggle('elm2-agree-row', agree);
             // Conflict rows: color the two value buttons by who picked them.
             const btns = row.element.querySelectorAll(':scope > .diff-value-button');
             ['left', 'right'].forEach((side, idx) => {
                 const btn = btns[idx];
                 if (!btn) return;
+                btn.classList.toggle('elm2-agree-pick', agree && ai === side);
                 btn.classList.toggle('elm2-pick-bolt', conflict && ai === side);
                 btn.classList.toggle('elm2-pick-ours', conflict && script === side);
             });
@@ -1273,6 +1287,7 @@
         const pairKey = getPairKey();
         if (pairKey !== currentQueuePositionKey) {
             currentQueuePositionKey = pairKey;
+            pairFirstSeenAt = Date.now();
             resolutionAttempted = false;
             conflictWarningShown = false;
             appealWarningShown = false;
@@ -1297,6 +1312,11 @@
         }
         if (!resolutionAttempted) console.log('[elm2] Not blocked — allowed dept:', CFG.ALLOWED_DEPARTMENT, '| detected:', detectActualDepartment().dept);
         if (resolutionAttempted) return;
+        // Wait for Element451 to apply its own default picks before we touch
+        // anything, so we can record them first (give up after 3s in case Bolt
+        // made no picks on this pair).
+        const bolt = getDiffRows().filter(r => r.element.dataset.elm2AiSide).length;
+        if (bolt === 0 && Date.now() - pairFirstSeenAt < 3000) return;
         resolutionAttempted = true;
         // Two-phase, mirroring the classic script: resolve now, then re-verify
         // shortly after in case more Workflow/Source rows loaded in the meantime.

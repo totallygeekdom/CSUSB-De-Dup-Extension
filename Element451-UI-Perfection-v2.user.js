@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-22';
+    const BUILD = 'v2-build-23';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -117,19 +117,19 @@
                Conflict row (our pick differs from Bolt's): the two values are colored by
                who picked them — Element451's blue = Bolt's pick, orange = ours.
                Rows where our rules have no opinion keep Element451's default styling. --- */
-        body .diff-row .elm2-agree-row button.diff-value-button.diff-option-selected {
+        body .diff-row.elm2-agree-row button.diff-value-button.diff-option-selected {
             background: rgba(67, 160, 71, 0.22) !important;
             border: 2px solid #2e7d32 !important;
             box-shadow: none !important;
             outline: none !important;
             color: #212121 !important;
         }
-        body .diff-row .elm2-agree-row button.diff-value-button.diff-option-selected * {
+        body .diff-row.elm2-agree-row button.diff-value-button.diff-option-selected * {
             background: transparent !important;
             color: #212121 !important;
         }
-        body .diff-row .elm2-agree-row button.diff-value-button.diff-option-selected::before,
-        body .diff-row .elm2-agree-row button.diff-value-button.diff-option-selected::after {
+        body .diff-row.elm2-agree-row button.diff-value-button.diff-option-selected::before,
+        body .diff-row.elm2-agree-row button.diff-value-button.diff-option-selected::after {
             background: transparent !important;
             border-color: #2e7d32 !important;
             box-shadow: none !important;

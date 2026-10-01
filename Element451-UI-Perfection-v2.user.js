@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-18';
+    const BUILD = 'v2-build-19';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -105,7 +105,8 @@
             font-size: 13px;
             cursor: pointer;
         }
-        #elm2-use-ai-btn:hover { background: #eee; }
+        #elm2-use-ai-btn { border: 2px solid var(--elm2-bolt-blue, #1976d2); color: var(--elm2-bolt-blue, #1976d2); }
+        #elm2-use-ai-btn:hover { background: rgba(25, 118, 210, 0.12); background: color-mix(in srgb, var(--elm2-bolt-blue, #1976d2) 12%, transparent); }
         #elm2-use-script-btn { border: 2px solid #ef6c00; color: #ef6c00; }
         #elm2-use-script-btn:hover { background: rgba(239, 108, 0, 0.12); }
         #elm2-pick-compare-bar button:disabled { opacity: 0.45; cursor: default; }
@@ -161,8 +162,9 @@
                accent color), orange = our script's pick. */
         body .diff-row .diff-actions .diff-action-button.elm2-arrow-bolt {
             background: rgba(25, 118, 210, 0.22) !important;
-            border: 2px solid #1976d2 !important;
-            color: #1976d2 !important;
+            background: color-mix(in srgb, var(--elm2-bolt-blue, #1976d2) 22%, transparent) !important;
+            border: 2px solid var(--elm2-bolt-blue, #1976d2) !important;
+            color: var(--elm2-bolt-blue, #1976d2) !important;
         }
         body .diff-row .diff-actions .diff-action-button.elm2-arrow-ours {
             background: rgba(239, 108, 0, 0.22) !important;
@@ -620,6 +622,16 @@
             el.querySelectorAll(':scope > .diff-actions > .diff-action-button').forEach(b => b.classList.remove('elm2-arrow-bolt', 'elm2-arrow-ours'));
             el.dataset.elm2Pair = pairKey;
         });
+    }
+    // Element451's default blue outline color, read from one of its own
+    // outlined accent buttons (e.g. "Save for later") so our Bolt-side styling
+    // matches it exactly instead of relying on a guessed hex value.
+    function syncBoltBlue() {
+        const ref = document.querySelector('bolt-stackable-sidebar-header-actions button.bolt-button-outlined.bolt-button-color-accent');
+        if (!ref) return;
+        const c = getComputedStyle(ref).borderTopColor;
+        if (!c || c === 'rgba(0, 0, 0, 0)' || c === 'transparent') return;
+        document.documentElement.style.setProperty('--elm2-bolt-blue', c);
     }
     // Records the side Bolt had pre-selected before our script touched the
     // row, the first time each row is seen (idempotent — a no-op on rows
@@ -1356,6 +1368,7 @@
         checkForMergeResult();
         injectMergeCounter();
         if (isDedupReviewPage()) {
+            syncBoltBlue();
             annotateRowColors();
             injectPickComparisonBar();
         }

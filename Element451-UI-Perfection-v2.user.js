@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-29';
+    const BUILD = 'v2-build-30';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -1026,20 +1026,18 @@
             const text = row.textContent;
             const leftText = row.values[0].textContent, rightText = row.values[1].textContent;
             if (!leftText || !rightText) return;
+            // One side blank ("-"), the other has data: nothing to decide, so we have no
+            // opinion and leave Bolt's pick alone. Checked first so no rule below
+            // (applicant side, legacy default-to-left, ...) can pick the empty side.
+            const isBlank = (t) => !t || /^[-\u2013\u2014\s]+$/.test(t);
+            if (isBlank(leftText) !== isBlank(rightText)) {
+                row.element.dataset.elm2AutoResolved = 'true';
+                return;
+            }
             if (applicantSide) {
                 currentRule = 'follows applicant side (Application/Cal State Apply)';
                 row.element.dataset.elm2AutoResolved = 'true';
                 applyScriptPick(row, applicantSide);
-                return;
-            }
-            // One side blank ("-"), the other has data: keep the data. (Checked before
-            // the pattern rules below, which would otherwise match on the filled
-            // side's text alone.)
-            const isBlank = (t) => !t || /^[-\u2013\u2014\s]+$/.test(t);
-            if (isBlank(leftText) !== isBlank(rightText)) {
-                currentRule = 'one side blank -> keep the data';
-                row.element.dataset.elm2AutoResolved = 'true';
-                applyScriptPick(row, isBlank(leftText) ? 'right' : 'left');
                 return;
             }
             // Milestone type matching (no applicant context)

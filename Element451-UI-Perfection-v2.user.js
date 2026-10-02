@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-7';
+    const BUILD = 'v2-build-30';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -43,6 +43,7 @@
     // need live investigation before they're worth exposing as settings.
     const CFG = Object.defineProperties({}, {
         AUTO_RESOLVE_FIELDS:      { get() { return getBoolSetting('elm_auto_click_fab', true); } },
+        HIGHLIGHT_ROWS:           { get() { return getBoolSetting('elm_highlight_rows', true); } },
         SHOW_MERGE_COUNTER:       { get() { return getBoolSetting('elm_show_merge_counter', true); } },
         AUTO_SKIP_BLOCKED:        { get() { return getBoolSetting('elm_auto_skip_blocked', true); } },
         ALLOWED_DEPARTMENT:       { get() { return localStorage.getItem('elm_allowed_department') || 'UnderGrad'; } },
@@ -83,10 +84,6 @@
         /* --- Applicant-side driven resolution: light yellow tint (replaces the old
                pixel-overlay approach — much simpler now that each side is its own
                button element instead of a shared row) --- */
-        .diff-value-button.elm2-applicant-side {
-            background-color: #fff9c4 !important;
-            border-color: #f9a825 !important;
-        }
         /* --- AI-vs-script pick comparison bar + per-row disagreement badges --- */
         #elm2-pick-compare-bar {
             display: flex;
@@ -109,23 +106,72 @@
             font-size: 13px;
             cursor: pointer;
         }
-        #elm2-use-ai-btn:hover, #elm2-use-script-btn:hover { background: #eee; }
+        #elm2-use-ai-btn { border: 2px solid var(--elm2-bolt-blue, #1976d2); color: var(--elm2-bolt-blue, #1976d2); }
+        #elm2-use-ai-btn:hover { background: rgba(25, 118, 210, 0.12); background: color-mix(in srgb, var(--elm2-bolt-blue, #1976d2) 12%, transparent); }
+        #elm2-use-script-btn { border: 2px solid #ef6c00; color: #ef6c00; }
+        #elm2-use-script-btn:hover { background: rgba(239, 108, 0, 0.12); }
         #elm2-pick-compare-bar button:disabled { opacity: 0.45; cursor: default; }
-        .diff-row.elm2-agree-row { background-color: #e8f5e9; box-shadow: inset 4px 0 0 #43a047; }
-        .diff-row.elm2-disagree-row { background-color: #ffebee; box-shadow: inset 4px 0 0 #d32f2f; }
-        .diff-value-button.elm2-suggested { outline: 2px dashed #f9a825; outline-offset: -2px; }
-        .elm2-pick-badge:not(.elm2-pick-differs) { background: #e8f5e9; color: #2e7d32; }
-        .elm2-pick-badge {
-            display: inline-block;
-            margin-left: 8px;
-            padding: 1px 7px;
-            border-radius: 8px;
-            font-size: 11px;
-            font-weight: 600;
-            background: #fff3e0;
-            color: #e65100;
-            white-space: nowrap;
-            vertical-align: middle;
+        /* --- Pick comparison colors (light semi-transparent fill + saturated border,
+               replacing Element451's own blue; its overlay pseudo-elements are hidden).
+               Agreement row: the value both agreed on stays green (even if you then select the other one,
+               which just gets Element451's normal blue).
+               Conflict row (our pick differs from Bolt's): the two values are colored by
+               who picked them — Element451's blue = Bolt's pick, orange = ours.
+               Rows where our rules have no opinion keep Element451's default styling. --- */
+        body .diff-row button.diff-value-button.elm2-agree-pick {
+            background: rgba(67, 160, 71, 0.22) !important;
+            border: 2px solid #2e7d32 !important;
+            box-shadow: none !important;
+            outline: none !important;
+            color: #212121 !important;
+        }
+        body .diff-row button.diff-value-button.elm2-agree-pick * {
+            background: transparent !important;
+            color: #212121 !important;
+        }
+        body .diff-row button.diff-value-button.elm2-agree-pick::before,
+        body .diff-row button.diff-value-button.elm2-agree-pick::after {
+            background: transparent !important;
+            border-color: #2e7d32 !important;
+            box-shadow: none !important;
+            opacity: 0 !important;
+        }
+        body .diff-row button.diff-value-button.elm2-pick-bolt {
+            background: rgba(25, 118, 210, 0.22) !important;
+            background: color-mix(in srgb, var(--elm2-bolt-blue, #1976d2) 22%, transparent) !important;
+            border: 2px solid var(--elm2-bolt-blue, #1976d2) !important;
+            box-shadow: none !important;
+            outline: none !important;
+            color: #212121 !important;
+        }
+        body .diff-row button.diff-value-button.elm2-pick-bolt * {
+            background: transparent !important;
+            color: #212121 !important;
+        }
+        body .diff-row button.diff-value-button.elm2-pick-bolt::before,
+        body .diff-row button.diff-value-button.elm2-pick-bolt::after {
+            background: transparent !important;
+            border-color: var(--elm2-bolt-blue, #1976d2) !important;
+            box-shadow: none !important;
+            opacity: 0 !important;
+        }
+        body .diff-row button.diff-value-button.elm2-pick-ours {
+            background: rgba(239, 108, 0, 0.22) !important;
+            border: 2px solid #ef6c00 !important;
+            box-shadow: none !important;
+            outline: none !important;
+            color: #212121 !important;
+        }
+        body .diff-row button.diff-value-button.elm2-pick-ours * {
+            background: transparent !important;
+            color: #212121 !important;
+        }
+        body .diff-row button.diff-value-button.elm2-pick-ours::before,
+        body .diff-row button.diff-value-button.elm2-pick-ours::after {
+            background: transparent !important;
+            border-color: #ef6c00 !important;
+            box-shadow: none !important;
+            opacity: 0 !important;
         }
         /* --- Merge counter / settings pane (unchanged from classic script; the
                top navbar — .bolt-navigation-right / elm-universal-search — was not
@@ -526,6 +572,7 @@
     function getDiffRows() {
         const form = getDiffForm();
         if (!form) return [];
+        const labelCounts = {};
         return Array.from(form.querySelectorAll('.diff-row')).map(row => {
             const buttons = row.querySelectorAll(':scope > .diff-value-button');
             const titleEl = row.querySelector(':scope > .diff-title');
@@ -535,9 +582,24 @@
             const leftText = leftBtn ? leftBtn.textContent.trim() : '';
             const rightText = rightBtn ? rightBtn.textContent.trim() : '';
             const norm = (t) => t.toLowerCase().replace(/\s+/g, ' ').trim();
+            // Which side Element451 itself has selected. Bolt AI marks its default
+            // pick on the "Keep Contact A/B" arrow buttons (and a user overrides it by
+            // clicking an arrow), so the arrows are the primary signal; the value
+            // buttons' aria-checked/diff-option-selected are only a fallback.
+            const isSel = (b) => !!b && (b.getAttribute('aria-checked') === 'true' || b.classList.contains('diff-option-selected'));
+            const arrowA = row.querySelector(':scope > .diff-actions > .diff-action-button[title="Keep Contact A"]');
+            const arrowB = row.querySelector(':scope > .diff-actions > .diff-action-button[title="Keep Contact B"]');
+            const nativeSide = (isSel(arrowA) && !isSel(arrowB)) ? 'left'
+                : (isSel(arrowB) && !isSel(arrowA)) ? 'right'
+                : isSel(leftBtn) ? 'left' : isSel(rightBtn) ? 'right' : null;
+            // Stable identity for this row within the current pair (survives
+            // Element451 re-rendering the DOM node): field label + nth occurrence + both values.
+            const occ = labelCounts[label] = (labelCounts[label] || 0) + 1;
             return {
                 element: row,
+                key: `${label}#${occ}|${norm(leftText)}|${norm(rightText)}`,
                 label,
+                nativeSide,
                 // Element451 doesn't flag conflicting rows (it just hides matching
                 // ones), so we detect them ourselves: the two sides differ.
                 isConflict: norm(leftText) !== norm(rightText),
@@ -546,8 +608,17 @@
                 leftSelected: !!(leftBtn && leftBtn.classList.contains('diff-option-selected')),
                 rightSelected: !!(rightBtn && rightBtn.classList.contains('diff-option-selected')),
                 selectSide(side) {
-                    const btn = side === 'left' ? leftBtn : rightBtn;
-                    if (btn && !btn.classList.contains('diff-option-selected')) btn.click();
+                    const arrow = side === 'left' ? arrowA : arrowB;
+                    const value = side === 'left' ? leftBtn : rightBtn;
+                    if (isSel(arrow) || (!arrow && isSel(value))) return; // already selected
+                    // The arrows are the real control; fall back to the value button
+                    // if clicking the arrow didn't register.
+                    if (arrow) {
+                        arrow.click();
+                        if (value) setTimeout(() => { if (!isSel(value) && !isSel(arrow)) value.click(); }, 80);
+                    } else if (value) {
+                        value.click();
+                    }
                 }
             };
         });
@@ -557,24 +628,76 @@
         const needle = labelSubstr.toLowerCase();
         return getDiffRows().filter(r => r.label.toLowerCase().includes(needle));
     }
+    // Element451 may reuse the same .diff-row elements when moving to the next
+    // pair, which would leave our per-row state (Bolt's pick, our pick, resolved
+    // flags, colors) attached to a row that now shows different data. Tag each
+    // row with the pair it was computed for and wipe anything stale.
+    const ROW_STATE_KEYS = ['elm2AiSide', 'elm2AiSeen', 'elm2ScriptSide', 'elm2AutoResolved', 'elm2DualPersonal', 'elm2DualResolved', 'elm2AddressResolved'];
+    // Bolt's original picks and our own picks, remembered in the script (not just
+    // on the DOM nodes) for the current pair, so they survive Element451
+    // re-rendering a row after the user or our script has changed the selection.
+    // Entry: { ai: 'left'|'right', script: 'left'|'right', acted: bool }.
+    const rowMemory = new Map();
+    let memoryPairKey = '';
+    function rememberRow(key, patch) {
+        rowMemory.set(key, Object.assign(rowMemory.get(key) || {}, patch));
+    }
+    function resetStaleRows() {
+        const pairKey = getPairKey();
+        if (!pairKey) return;
+        if (memoryPairKey !== pairKey) { rowMemory.clear(); memoryPairKey = pairKey; }
+        getDiffRows().forEach(row => {
+            const el = row.element;
+            if (el.dataset.elm2Pair !== pairKey) {
+                ROW_STATE_KEYS.forEach(k => delete el.dataset[k]);
+                el.classList.remove('elm2-blocked-row');
+                el.removeAttribute('title');
+                el.querySelectorAll(':scope > .diff-value-button').forEach(b => b.classList.remove('elm2-agree-pick', 'elm2-pick-bolt', 'elm2-pick-ours'));
+                el.dataset.elm2Pair = pairKey;
+            }
+            const m = rowMemory.get(row.key);
+            if (m) {
+                if (m.ai) el.dataset.elm2AiSide = m.ai;
+                if (m.script) el.dataset.elm2ScriptSide = m.script;
+                if (m.rule) el.dataset.elm2Rule = m.rule;
+                if (m.acted) el.dataset.elm2AiSeen = '1';
+            }
+        });
+    }
+    // Element451's default blue outline color, read from one of its own
+    // outlined accent buttons (e.g. "Save for later") so our Bolt-side styling
+    // matches it exactly instead of relying on a guessed hex value.
+    function syncBoltBlue() {
+        const ref = document.querySelector('bolt-stackable-sidebar-header-actions button.bolt-button-outlined.bolt-button-color-accent');
+        if (!ref) return;
+        const c = getComputedStyle(ref).borderTopColor;
+        if (!c || c === 'rgba(0, 0, 0, 0)' || c === 'transparent') return;
+        document.documentElement.style.setProperty('--elm2-bolt-blue', c);
+    }
     // Records the side Bolt had pre-selected before our script touched the
     // row, the first time each row is seen (idempotent — a no-op on rows
     // already stamped). Must run before runAutoResolution() so it captures
     // Bolt's actual default rather than our own prior click.
     function snapshotNativeSelections() {
         getDiffRows().forEach(row => {
-            if (row.element.dataset.elm2AiSide) return; // already captured
-            if (row.leftSelected) row.element.dataset.elm2AiSide = 'left';
-            else if (row.rightSelected) row.element.dataset.elm2AiSide = 'right';
+            const d = row.element.dataset;
+            if (d.elm2AiSide || d.elm2AiSeen) return; // already captured, or we've already acted on this row
+            if (row.nativeSide) { d.elm2AiSide = row.nativeSide; rememberRow(row.key, { ai: row.nativeSide }); }
         });
     }
     // Selects a side AND records it as our script's pick, so the AI-vs-script
     // comparison bar can show both and let a human bulk-switch between them.
     // Every resolution rule below should call this instead of row.selectSide()
     // directly.
+    let currentRule = '';
     function applyScriptPick(row, side) {
-        row.element.dataset.elm2ScriptSide = side;
-        row.selectSide(side);
+        const d = row.element.dataset;
+        d.elm2Rule = currentRule;
+        if (!d.elm2AiSide && !d.elm2AiSeen && row.nativeSide) { d.elm2AiSide = row.nativeSide; rememberRow(row.key, { ai: row.nativeSide }); }
+        d.elm2AiSeen = '1'; // from here on, a selection on this row may be ours, not Bolt's
+        d.elm2ScriptSide = side;
+        rememberRow(row.key, { script: side, acted: true, rule: currentRule });
+        if (CFG.AUTO_RESOLVE_FIELDS) row.selectSide(side);
     }
     function getContactCards() {
         const form = getDiffForm();
@@ -657,6 +780,7 @@
     // STATE
     // =========================================================
     let currentQueuePositionKey = '';   // "current/total" — used to detect navigation to a new pair
+    let pairFirstSeenAt = 0;            // when the current pair was first seen
     let resolutionAttempted = false;    // resolution ran for the current pair
     let mergeClickPending = false;      // waiting on the two-phase verification delay
     let conflictWarningShown = false;
@@ -854,6 +978,7 @@
     }
     function getSelectedEmailSide() {
         for (const row of getDiffRowsByLabel('email')) {
+            if (row.element.dataset.elm2ScriptSide) return row.element.dataset.elm2ScriptSide;
             if (row.leftSelected) return 'left';
             if (row.rightSelected) return 'right';
         }
@@ -901,14 +1026,22 @@
             const text = row.textContent;
             const leftText = row.values[0].textContent, rightText = row.values[1].textContent;
             if (!leftText || !rightText) return;
+            // One side blank ("-"), the other has data: nothing to decide, so we have no
+            // opinion and leave Bolt's pick alone. Checked first so no rule below
+            // (applicant side, legacy default-to-left, ...) can pick the empty side.
+            const isBlank = (t) => !t || /^[-\u2013\u2014\s]+$/.test(t);
+            if (isBlank(leftText) !== isBlank(rightText)) {
+                row.element.dataset.elm2AutoResolved = 'true';
+                return;
+            }
             if (applicantSide) {
+                currentRule = 'follows applicant side (Application/Cal State Apply)';
                 row.element.dataset.elm2AutoResolved = 'true';
                 applyScriptPick(row, applicantSide);
-                const btn = row.element.querySelectorAll(':scope > .diff-value-button')[applicantSide === 'left' ? 0 : 1];
-                if (btn) btn.classList.add('elm2-applicant-side');
                 return;
             }
             // Milestone type matching (no applicant context)
+            currentRule = 'milestone type match -> left';
             if (text.match(/type:\s*\w+,\s*\w{3}\s+\d{1,2},\s*\d{4}/i)) {
                 const typePattern = /type:\s*(\w+),/i;
                 const leftTypeMatch = leftText.match(typePattern), rightTypeMatch = rightText.match(typePattern);
@@ -919,6 +1052,7 @@
                 }
             }
             // Email preference
+            currentRule = 'personal email preferred';
             if (row.label.toLowerCase().includes('email')) {
                 const personalDomains = ['gmail.com', 'yahoo.com', 'icloud.com', 'hotmail.com', 'aol.com', 'me.com', 'outlook.com', 'live.com', 'msn.com', 'protonmail.com', 'proton.me'];
                 const leftIsPersonal = personalDomains.some(d => leftText.toLowerCase().includes('@' + d));
@@ -928,6 +1062,7 @@
                 if (leftIsPersonal && rightIsPersonal) { row.element.dataset.elm2AutoResolved = 'true'; row.element.dataset.elm2DualPersonal = 'true'; return; }
             }
             // csusb.major preference
+            currentRule = 'csusb.major';
             if (/csusb\.major\./i.test(text)) {
                 const leftHas = /csusb\.major\./i.test(leftText), rightHas = /csusb\.major\./i.test(rightText);
                 if (leftHas && !rightHas) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'left'); return; }
@@ -939,6 +1074,7 @@
                 }
             }
             // Encoura / College Board ID — default left when both sides have it
+            currentRule = 'Encoura/College Board ID -> left';
             if (/Encoura Id:/i.test(leftText) && /Encoura Id:/i.test(rightText)) {
                 row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'left'); return;
             }
@@ -946,6 +1082,7 @@
                 row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'left'); return;
             }
             // csusb.school preference (Student Type rows)
+            currentRule = 'csusb.school';
             if (text.includes('Student Type') && /csusb\.school\.\d+/i.test(text)) {
                 const schoolPattern = /csusb\.school\.\d+/i;
                 const leftHas = schoolPattern.test(leftText), rightHas = schoolPattern.test(rightText);
@@ -959,6 +1096,7 @@
                 }
             }
             // Date of Birth — reject invalid years
+            currentRule = 'date of birth validity';
             if (row.label.toLowerCase().includes('birth')) {
                 const leftYear = leftText.match(/\b(\d{4})\b/), rightYear = rightText.match(/\b(\d{4})\b/);
                 const leftInvalid = leftYear && (leftYear[1].startsWith('0') || parseInt(leftYear[1]) < 1900);
@@ -967,6 +1105,7 @@
                 if (rightInvalid && !leftInvalid) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'left'); return; }
             }
             // First Generation Student — prefer Yes over No
+            currentRule = 'first generation = yes';
             if (row.label.toLowerCase().includes('first generation')) {
                 const leftYes = /\byes\b/i.test(leftText), rightYes = /\byes\b/i.test(rightText);
                 const leftNo = /\bno\b/i.test(leftText), rightNo = /\bno\b/i.test(rightText);
@@ -974,6 +1113,7 @@
                 if (rightYes && leftNo) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'right'); return; }
             }
             // Intended Term — prefer later term code
+            currentRule = 'later intended term';
             if (row.label.toLowerCase().includes('intended term')) {
                 const termCodePattern = /\((\d{4})\)/;
                 const leftCodeMatch = leftText.match(termCodePattern), rightCodeMatch = rightText.match(termCodePattern);
@@ -984,6 +1124,7 @@
                 }
             }
             // Name case preference — Title Case over ALL CAPS / all lowercase
+            currentRule = 'name case';
             if (row.label.toLowerCase().includes('name') && !row.label.toLowerCase().includes('email')) {
                 if (leftText.toLowerCase() === rightText.toLowerCase() && leftText !== rightText) {
                     const isAllUpper = (s) => s === s.toUpperCase() && s !== s.toLowerCase();
@@ -1003,6 +1144,9 @@
                 /\[ACUx\]/i,
                 /Outreach_UGRD_/i
             ];
+            // Matches on the whole row, as in the classic script. A blank left side
+            // never reaches here: the blank-side rule above picks the filled side first.
+            currentRule = 'legacy default -> left';
             if (legacyPatterns.some(p => p.test(text))) {
                 row.element.dataset.elm2AutoResolved = 'true';
                 applyScriptPick(row, 'left');
@@ -1012,6 +1156,7 @@
     // Dual-personal-email tiebreak (name/DOB-in-email). Email-open-count tier
     // dropped — no "User Activity" section found in the new layout.
     function autoDualPersonalEmails() {
+        currentRule = 'dual personal email tiebreak';
         const rows = getDiffRows().filter(r => r.isConflict && r.element.dataset.elm2DualPersonal && !r.element.dataset.elm2DualResolved);
         const names = getContactNames();
         const [firstA = '', ...restA] = (names[0] || '').toLowerCase().split(/\s+/);
@@ -1050,6 +1195,7 @@
         });
     }
     function autoResolveAddresses() {
+        currentRule = 'address comparison';
         const applicantSide = findApplicantSide();
         const rows = getDiffRowsByLabel('address').filter(r => r.isConflict && !r.element.dataset.elm2AddressResolved);
         rows.forEach(row => {
@@ -1084,34 +1230,37 @@
     function getPickComparisonRows() {
         return getDiffRows().filter(r => r.element.dataset.elm2AiSide && r.element.dataset.elm2ScriptSide);
     }
-    function annotateRowPickBadges() {
+    function clearPickClasses(root) {
+        root.querySelectorAll('.elm2-agree-pick, .elm2-pick-bolt, .elm2-pick-ours').forEach(el => el.classList.remove('elm2-agree-pick', 'elm2-pick-bolt', 'elm2-pick-ours'));
+    }
+    function annotateRowColors() {
+        resetStaleRows();
+        if (!CFG.HIGHLIGHT_ROWS) {
+            clearPickClasses(document);
+            document.querySelectorAll('.diff-row[title]').forEach(el => el.removeAttribute('title'));
+            return;
+        }
         const label = (side) => (side === 'left' ? 'A' : 'B');
         getDiffRows().forEach(row => {
             const ai = row.element.dataset.elm2AiSide;
             const script = row.element.dataset.elm2ScriptSide;
-            // Green = Bolt's original pick matches ours, red = it doesn't.
-            // Rows where our rules have no opinion (or Bolt had no default) stay plain.
-            row.element.classList.toggle('elm2-agree-row', !!ai && !!script && ai === script);
-            row.element.classList.toggle('elm2-disagree-row', !!ai && !!script && ai !== script);
-            let badge = row.element.querySelector(':scope > .elm2-pick-badge');
+            const both = !!ai && !!script;
+            const agree = both && ai === script;
+            const conflict = both && ai !== script;
+            // Conflict rows: color the two value buttons by who picked them.
             const btns = row.element.querySelectorAll(':scope > .diff-value-button');
-            btns.forEach(b => b.classList.remove('elm2-suggested'));
-            if (!script) { if (badge) badge.remove(); return; }
-            const suggestedBtn = btns[script === 'left' ? 0 : 1];
-            if (suggestedBtn) suggestedBtn.classList.add('elm2-suggested');
-            if (!badge) {
-                badge = document.createElement('span');
-                badge.className = 'elm2-pick-badge';
-                const titleEl = row.element.querySelector(':scope > .diff-title');
-                if (titleEl) titleEl.insertAdjacentElement('afterend', badge);
-                else row.element.appendChild(badge);
+            ['left', 'right'].forEach((side, idx) => {
+                const btn = btns[idx];
+                if (!btn) return;
+                btn.classList.toggle('elm2-agree-pick', agree && ai === side);
+                btn.classList.toggle('elm2-pick-bolt', conflict && ai === side);
+                btn.classList.toggle('elm2-pick-ours', conflict && script === side);
+            });
+            if (both) {
+                row.element.title = 'Our rules suggest Contact ' + label(script) + (row.element.dataset.elm2Rule ? ' (' + row.element.dataset.elm2Rule + ')' : '') + '; Bolt picked Contact ' + label(ai);
+            } else {
+                row.element.removeAttribute('title');
             }
-            const differs = !!ai && ai !== script;
-            badge.classList.toggle('elm2-pick-differs', differs);
-            badge.textContent = differs
-                ? `⚠ Bolt: ${label(ai)} · Ours: ${label(script)}`
-                : `⚙ Ours: ${label(script)}${ai ? ' ✓ matches Bolt' : ''}`;
-            badge.title = 'Our rules suggest Contact ' + label(script) + (ai ? '; Bolt picked Contact ' + label(ai) : '');
         });
     }
     function applyAllPicks(sourceAttr) {
@@ -1119,7 +1268,7 @@
             const side = row.element.dataset[sourceAttr];
             if (side) row.selectSide(side);
         });
-        annotateRowPickBadges();
+        annotateRowColors();
         injectPickComparisonBar();
     }
     function injectPickComparisonBar() {
@@ -1149,10 +1298,10 @@
         const blocked = document.body.classList.contains('elm2-blocked');
         let msg;
         if (blocked) msg = `Blocked entry — no suggestions made (${conflicts} conflicting of ${all.length} fields)`;
-        else if (!CFG.AUTO_RESOLVE_FIELDS) msg = `Auto-Resolve Fields is OFF — no suggestions (${conflicts} conflicting of ${all.length} fields)`;
         else if (ours.length === 0) msg = `${conflicts} conflicting field(s); our rules had no opinion on any of them`;
         else if (differing > 0) msg = `⚠ ${differing} of ${ours.length} suggestions differ from Bolt's picks (${conflicts} conflicting of ${all.length} fields)`;
         else msg = `Our ${ours.length} suggestion(s) match Bolt's picks (${conflicts} conflicting of ${all.length} fields)`;
+        if (!blocked && ours.length > 0 && !CFG.AUTO_RESOLVE_FIELDS) msg += ' — suggestions only, not applied';
         document.getElementById('elm2-pick-compare-count').textContent = msg;
         document.getElementById('elm2-use-ai-btn').disabled = both.length === 0;
         document.getElementById('elm2-use-script-btn').disabled = ours.length === 0;
@@ -1192,10 +1341,12 @@
     function attemptAutoResolve() {
         if (!isDedupReviewPage()) return;
         if (!getContactNames().filter(Boolean).length) return; // page still loading
+        resetStaleRows();
         snapshotNativeSelections(); // capture Bolt's defaults before anything below can click a row
         const pairKey = getPairKey();
         if (pairKey !== currentQueuePositionKey) {
             currentQueuePositionKey = pairKey;
+            pairFirstSeenAt = Date.now();
             resolutionAttempted = false;
             conflictWarningShown = false;
             appealWarningShown = false;
@@ -1220,7 +1371,11 @@
         }
         if (!resolutionAttempted) console.log('[elm2] Not blocked — allowed dept:', CFG.ALLOWED_DEPARTMENT, '| detected:', detectActualDepartment().dept);
         if (resolutionAttempted) return;
-        if (!CFG.AUTO_RESOLVE_FIELDS) return;
+        // Wait for Element451 to apply its own default picks before we touch
+        // anything, so we can record them first (give up after 3s in case Bolt
+        // made no picks on this pair).
+        const bolt = getDiffRows().filter(r => r.element.dataset.elm2AiSide).length;
+        if (bolt === 0 && Date.now() - pairFirstSeenAt < 3000) return;
         resolutionAttempted = true;
         // Two-phase, mirroring the classic script: resolve now, then re-verify
         // shortly after in case more Workflow/Source rows loaded in the meantime.
@@ -1237,6 +1392,9 @@
             console.log('[elm2] Resolution done —', _rows.length, 'fields,',
                 _rows.filter(r => r.element.dataset.elm2ScriptSide).length, 'with our suggestion,',
                 _rows.filter(r => r.element.dataset.elm2AiSide).length, 'with a Bolt default captured');
+            const _byRule = {};
+            _rows.forEach(r => { const rl = r.element.dataset.elm2Rule; if (r.element.dataset.elm2ScriptSide) _byRule[rl || '(unknown)'] = (_byRule[rl || '(unknown)'] || 0) + 1; });
+            console.log('[elm2] Suggestions by rule:', JSON.stringify(_byRule));
             if (!conflictWarningShown && CONFLICT_ROW_THRESHOLD > 0) {
                 const { conflictCount, shouldWarn, conflicts } = checkForConflictingRecords();
                 if (shouldWarn) {
@@ -1290,7 +1448,8 @@
         checkForMergeResult();
         injectMergeCounter();
         if (isDedupReviewPage()) {
-            annotateRowPickBadges();
+            syncBoltBlue();
+            annotateRowColors();
             injectPickComparisonBar();
         }
     }, 750);
@@ -1375,9 +1534,10 @@
             </div>
             <div class="settings-body">
                 <div class="settings-section-title">Automation</div>
-                <div class="setting-row"><label>Auto-Resolve Fields</label>${toggleHtml('elm-auto-resolve-fields')}</div>
+                <div class="setting-row"><label>Auto-Apply Suggestions</label>${toggleHtml('elm-auto-resolve-fields')}</div>
                 <div class="setting-row"><label>Auto-Skip Blocked</label>${toggleHtml('elm-auto-skip-blocked')}</div>
                 <div class="settings-section-title">Display</div>
+                <div class="setting-row"><label>Highlight Rows</label>${toggleHtml('elm-highlight-rows')}</div>
                 <div class="setting-row"><label>Show Merge Counter</label>${toggleHtml('elm-show-merge-counter')}</div>
                 <div class="settings-section-title">Department</div>
                 <div class="setting-row">
@@ -1398,6 +1558,7 @@
         }
         setupToggle('elm-auto-resolve-fields', 'elm_auto_click_fab');
         setupToggle('elm-auto-skip-blocked', 'elm_auto_skip_blocked');
+        setupToggle('elm-highlight-rows', 'elm_highlight_rows');
         setupToggle('elm-show-merge-counter', 'elm_show_merge_counter', () => { document.getElementById('elm-controls-wrapper')?.remove(); injectMergeCounter(); });
         function setupToggle(elementId, storageKey, onChange) {
             const el = document.getElementById(elementId);

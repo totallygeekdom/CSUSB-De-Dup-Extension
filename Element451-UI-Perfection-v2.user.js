@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-28';
+    const BUILD = 'v2-build-29';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -659,6 +659,7 @@
             if (m) {
                 if (m.ai) el.dataset.elm2AiSide = m.ai;
                 if (m.script) el.dataset.elm2ScriptSide = m.script;
+                if (m.rule) el.dataset.elm2Rule = m.rule;
                 if (m.acted) el.dataset.elm2AiSeen = '1';
             }
         });
@@ -688,12 +689,14 @@
     // comparison bar can show both and let a human bulk-switch between them.
     // Every resolution rule below should call this instead of row.selectSide()
     // directly.
+    let currentRule = '';
     function applyScriptPick(row, side) {
         const d = row.element.dataset;
+        d.elm2Rule = currentRule;
         if (!d.elm2AiSide && !d.elm2AiSeen && row.nativeSide) { d.elm2AiSide = row.nativeSide; rememberRow(row.key, { ai: row.nativeSide }); }
         d.elm2AiSeen = '1'; // from here on, a selection on this row may be ours, not Bolt's
         d.elm2ScriptSide = side;
-        rememberRow(row.key, { script: side, acted: true });
+        rememberRow(row.key, { script: side, acted: true, rule: currentRule });
         if (CFG.AUTO_RESOLVE_FIELDS) row.selectSide(side);
     }
     function getContactCards() {
@@ -1024,6 +1027,7 @@
             const leftText = row.values[0].textContent, rightText = row.values[1].textContent;
             if (!leftText || !rightText) return;
             if (applicantSide) {
+                currentRule = 'follows applicant side (Application/Cal State Apply)';
                 row.element.dataset.elm2AutoResolved = 'true';
                 applyScriptPick(row, applicantSide);
                 return;
@@ -1033,11 +1037,13 @@
             // side's text alone.)
             const isBlank = (t) => !t || /^[-\u2013\u2014\s]+$/.test(t);
             if (isBlank(leftText) !== isBlank(rightText)) {
+                currentRule = 'one side blank -> keep the data';
                 row.element.dataset.elm2AutoResolved = 'true';
                 applyScriptPick(row, isBlank(leftText) ? 'right' : 'left');
                 return;
             }
             // Milestone type matching (no applicant context)
+            currentRule = 'milestone type match -> left';
             if (text.match(/type:\s*\w+,\s*\w{3}\s+\d{1,2},\s*\d{4}/i)) {
                 const typePattern = /type:\s*(\w+),/i;
                 const leftTypeMatch = leftText.match(typePattern), rightTypeMatch = rightText.match(typePattern);
@@ -1048,6 +1054,7 @@
                 }
             }
             // Email preference
+            currentRule = 'personal email preferred';
             if (row.label.toLowerCase().includes('email')) {
                 const personalDomains = ['gmail.com', 'yahoo.com', 'icloud.com', 'hotmail.com', 'aol.com', 'me.com', 'outlook.com', 'live.com', 'msn.com', 'protonmail.com', 'proton.me'];
                 const leftIsPersonal = personalDomains.some(d => leftText.toLowerCase().includes('@' + d));
@@ -1057,6 +1064,7 @@
                 if (leftIsPersonal && rightIsPersonal) { row.element.dataset.elm2AutoResolved = 'true'; row.element.dataset.elm2DualPersonal = 'true'; return; }
             }
             // csusb.major preference
+            currentRule = 'csusb.major';
             if (/csusb\.major\./i.test(text)) {
                 const leftHas = /csusb\.major\./i.test(leftText), rightHas = /csusb\.major\./i.test(rightText);
                 if (leftHas && !rightHas) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'left'); return; }
@@ -1068,6 +1076,7 @@
                 }
             }
             // Encoura / College Board ID — default left when both sides have it
+            currentRule = 'Encoura/College Board ID -> left';
             if (/Encoura Id:/i.test(leftText) && /Encoura Id:/i.test(rightText)) {
                 row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'left'); return;
             }
@@ -1075,6 +1084,7 @@
                 row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'left'); return;
             }
             // csusb.school preference (Student Type rows)
+            currentRule = 'csusb.school';
             if (text.includes('Student Type') && /csusb\.school\.\d+/i.test(text)) {
                 const schoolPattern = /csusb\.school\.\d+/i;
                 const leftHas = schoolPattern.test(leftText), rightHas = schoolPattern.test(rightText);
@@ -1088,6 +1098,7 @@
                 }
             }
             // Date of Birth — reject invalid years
+            currentRule = 'date of birth validity';
             if (row.label.toLowerCase().includes('birth')) {
                 const leftYear = leftText.match(/\b(\d{4})\b/), rightYear = rightText.match(/\b(\d{4})\b/);
                 const leftInvalid = leftYear && (leftYear[1].startsWith('0') || parseInt(leftYear[1]) < 1900);
@@ -1096,6 +1107,7 @@
                 if (rightInvalid && !leftInvalid) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'left'); return; }
             }
             // First Generation Student — prefer Yes over No
+            currentRule = 'first generation = yes';
             if (row.label.toLowerCase().includes('first generation')) {
                 const leftYes = /\byes\b/i.test(leftText), rightYes = /\byes\b/i.test(rightText);
                 const leftNo = /\bno\b/i.test(leftText), rightNo = /\bno\b/i.test(rightText);
@@ -1103,6 +1115,7 @@
                 if (rightYes && leftNo) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'right'); return; }
             }
             // Intended Term — prefer later term code
+            currentRule = 'later intended term';
             if (row.label.toLowerCase().includes('intended term')) {
                 const termCodePattern = /\((\d{4})\)/;
                 const leftCodeMatch = leftText.match(termCodePattern), rightCodeMatch = rightText.match(termCodePattern);
@@ -1113,6 +1126,7 @@
                 }
             }
             // Name case preference — Title Case over ALL CAPS / all lowercase
+            currentRule = 'name case';
             if (row.label.toLowerCase().includes('name') && !row.label.toLowerCase().includes('email')) {
                 if (leftText.toLowerCase() === rightText.toLowerCase() && leftText !== rightText) {
                     const isAllUpper = (s) => s === s.toUpperCase() && s !== s.toLowerCase();
@@ -1134,6 +1148,7 @@
             ];
             // Matches on the whole row, as in the classic script. A blank left side
             // never reaches here: the blank-side rule above picks the filled side first.
+            currentRule = 'legacy default -> left';
             if (legacyPatterns.some(p => p.test(text))) {
                 row.element.dataset.elm2AutoResolved = 'true';
                 applyScriptPick(row, 'left');
@@ -1143,6 +1158,7 @@
     // Dual-personal-email tiebreak (name/DOB-in-email). Email-open-count tier
     // dropped — no "User Activity" section found in the new layout.
     function autoDualPersonalEmails() {
+        currentRule = 'dual personal email tiebreak';
         const rows = getDiffRows().filter(r => r.isConflict && r.element.dataset.elm2DualPersonal && !r.element.dataset.elm2DualResolved);
         const names = getContactNames();
         const [firstA = '', ...restA] = (names[0] || '').toLowerCase().split(/\s+/);
@@ -1181,6 +1197,7 @@
         });
     }
     function autoResolveAddresses() {
+        currentRule = 'address comparison';
         const applicantSide = findApplicantSide();
         const rows = getDiffRowsByLabel('address').filter(r => r.isConflict && !r.element.dataset.elm2AddressResolved);
         rows.forEach(row => {
@@ -1242,7 +1259,7 @@
                 btn.classList.toggle('elm2-pick-ours', conflict && script === side);
             });
             if (both) {
-                row.element.title = 'Our rules suggest Contact ' + label(script) + '; Bolt picked Contact ' + label(ai);
+                row.element.title = 'Our rules suggest Contact ' + label(script) + (row.element.dataset.elm2Rule ? ' (' + row.element.dataset.elm2Rule + ')' : '') + '; Bolt picked Contact ' + label(ai);
             } else {
                 row.element.removeAttribute('title');
             }
@@ -1377,6 +1394,9 @@
             console.log('[elm2] Resolution done —', _rows.length, 'fields,',
                 _rows.filter(r => r.element.dataset.elm2ScriptSide).length, 'with our suggestion,',
                 _rows.filter(r => r.element.dataset.elm2AiSide).length, 'with a Bolt default captured');
+            const _byRule = {};
+            _rows.forEach(r => { const rl = r.element.dataset.elm2Rule; if (r.element.dataset.elm2ScriptSide) _byRule[rl || '(unknown)'] = (_byRule[rl || '(unknown)'] || 0) + 1; });
+            console.log('[elm2] Suggestions by rule:', JSON.stringify(_byRule));
             if (!conflictWarningShown && CONFLICT_ROW_THRESHOLD > 0) {
                 const { conflictCount, shouldWarn, conflicts } = checkForConflictingRecords();
                 if (shouldWarn) {

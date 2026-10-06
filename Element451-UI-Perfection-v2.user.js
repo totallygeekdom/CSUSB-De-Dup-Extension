@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-30';
+    const BUILD = 'v2-build-31';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -172,6 +172,13 @@
             border-color: #ef6c00 !important;
             box-shadow: none !important;
             opacity: 0 !important;
+        }
+        /* Applicant side (Application / Cal State Apply entries): when found, the
+               "follow the applicant" rule drives the picks, so mark that contact's card. */
+        .contact-card.elm2-applicant-card {
+            background-color: #fff9c4 !important;
+            outline: 3px solid #f9a825;
+            outline-offset: -3px;
         }
         /* --- Merge counter / settings pane (unchanged from classic script; the
                top navbar — .bolt-navigation-right / elm-universal-search — was not
@@ -1233,6 +1240,14 @@
     function clearPickClasses(root) {
         root.querySelectorAll('.elm2-agree-pick, .elm2-pick-bolt, .elm2-pick-ours').forEach(el => el.classList.remove('elm2-agree-pick', 'elm2-pick-bolt', 'elm2-pick-ours'));
     }
+    function annotateApplicantSide() {
+        document.querySelectorAll('.elm2-applicant-card').forEach(el => el.classList.remove('elm2-applicant-card'));
+        if (!CFG.HIGHLIGHT_ROWS || document.body.classList.contains('elm2-blocked')) return;
+        const side = findApplicantSide();
+        if (!side) return;
+        const card = getContactCards()[side === 'left' ? 0 : 1];
+        if (card) card.classList.add('elm2-applicant-card');
+    }
     function annotateRowColors() {
         resetStaleRows();
         if (!CFG.HIGHLIGHT_ROWS) {
@@ -1450,6 +1465,7 @@
         if (isDedupReviewPage()) {
             syncBoltBlue();
             annotateRowColors();
+            annotateApplicantSide();
             injectPickComparisonBar();
         }
     }, 750);

@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-46';
+    const BUILD = 'v2-build-47';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -283,12 +283,32 @@
         #elm-settings-pane .setting-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #f2f2f2; gap: 12px; }
         #elm-settings-pane .setting-row label { font-size: 14px; color: #333; }
         #elm-settings-pane select, #elm-settings-pane input[type=number] { padding: 4px 8px; border-radius: 6px; border: 1px solid #ccc; font-size: 13px; }
-        .elm-toggle-switch { position: relative; width: 40px; height: 22px; flex-shrink: 0; }
-        .elm-toggle-switch input { opacity: 0; width: 0; height: 0; }
-        .elm-toggle-slider { position: absolute; cursor: pointer; inset: 0; background-color: #ccc; transition: 0.2s; border-radius: 22px; }
-        .elm-toggle-slider::before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: white; transition: 0.2s; border-radius: 50%; }
-        .elm-toggle-switch input:checked + .elm-toggle-slider { background-color: #43a047; }
-        .elm-toggle-switch input:checked + .elm-toggle-slider::before { transform: translateX(18px); }
+        /* Material 3 style switches for the settings pane (same look as the restyled
+               "Hide matching items" toggle): 40x24 pill, small thumb off, filled track
+               with a white check thumb on. */
+        .elm-toggle-switch { position: relative; width: 40px; height: 24px; flex-shrink: 0; }
+        .elm-toggle-switch input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; z-index: 1; }
+        .elm-toggle-slider {
+            position: absolute; inset: 0; box-sizing: border-box;
+            border: 2px solid #79747e; border-radius: 12px; background: #e6e0e9;
+            transition: background-color 0.2s, border-color 0.2s;
+        }
+        .elm-toggle-slider::before {
+            content: ""; position: absolute; top: 50%; left: 4px;
+            width: 12px; height: 12px; margin-top: -6px; border-radius: 50%; background: #79747e;
+            transition: left 0.2s, width 0.2s, height 0.2s, margin-top 0.2s, background-color 0.2s;
+        }
+        .elm-toggle-switch input:checked + .elm-toggle-slider {
+            background: var(--elm2-bolt-blue, #1976d2); border-color: var(--elm2-bolt-blue, #1976d2);
+        }
+        .elm-toggle-switch input:checked + .elm-toggle-slider::before {
+            left: 17px; width: 18px; height: 18px; margin-top: -9px; background: #fff;
+        }
+        .elm-toggle-switch input:checked + .elm-toggle-slider::after {
+            content: ""; position: absolute; left: 24px; top: 4px; width: 4px; height: 8px;
+            border: solid var(--elm2-bolt-blue, #1976d2); border-width: 0 2px 2px 0; transform: rotate(45deg);
+        }
+        .elm-toggle-switch input:focus-visible + .elm-toggle-slider { outline: 2px solid var(--elm2-bolt-blue, #1976d2); outline-offset: 2px; }
     `;
     if (typeof GM_addStyle === 'function') GM_addStyle(css);
     else { const styleEl = document.createElement('style'); styleEl.textContent = css; document.head.appendChild(styleEl); }

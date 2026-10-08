@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-43';
+    const BUILD = 'v2-build-44';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -245,19 +245,22 @@
             transform: rotate(45deg);
         }
         /* Score chips: Medium and Low get the same solid look as High (which is left
-               exactly as Element451 draws it), in orange and red. */
-        elm-deduplication-score-chip bolt-chip.score-chip-medium {
+               exactly as Element451 draws it), in orange and red. Element451 sets each
+               level's fill with its own !important rule, so these selectors are
+               deliberately far more specific than that (the repeated
+               class only raises specificity). */
+        html body elm-deduplication-score-chip bolt-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip-medium {
             background-color: #ef6c00 !important;
             border-color: #ef6c00 !important;
             color: #fff !important;
         }
-        elm-deduplication-score-chip bolt-chip.score-chip-low {
+        html body elm-deduplication-score-chip bolt-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip-low {
             background-color: #d32f2f !important;
             border-color: #d32f2f !important;
             color: #fff !important;
         }
-        elm-deduplication-score-chip bolt-chip.score-chip-medium .bolt-chip-text,
-        elm-deduplication-score-chip bolt-chip.score-chip-low .bolt-chip-text {
+        html body elm-deduplication-score-chip bolt-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip-medium .bolt-chip-text,
+        html body elm-deduplication-score-chip bolt-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip-low .bolt-chip-text {
             color: #fff !important;
         }
         /* --- Merge counter / settings pane (unchanged from classic script; the

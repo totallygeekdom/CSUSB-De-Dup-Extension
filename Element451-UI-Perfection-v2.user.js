@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-40';
+    const BUILD = 'v2-build-41';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -244,10 +244,16 @@
             border-width: 0 2px 2px 0;
             transform: rotate(45deg);
         }
-        /* Score chip colors by level, same look as the green one (pale tint + saturated
-               text). High keeps Element451's own green; medium is orange, low is red.
-               The level is tagged on the chip by tagScoreChips() so this doesn't depend
-               on Element451's internal class names. Overrides its inline colors. */
+        /* Score chip traffic-light colors by level, all in the same style (tinted fill,
+               deep text, matching border): high green, medium orange, low red. The level is
+               tagged on each chip by tagScoreChips() so this doesn't depend on Element451's
+               class names. Element451 paints these chips grey with an inline style, hence !important. */
+        elm-deduplication-score-chip bolt-chip[data-elm2-level="high"] {
+            background: #c8e6c9 !important;
+            background-color: #c8e6c9 !important;
+            color: #1b5e20 !important;
+            border: 1.5px solid #2e7d32 !important;
+        }
         elm-deduplication-score-chip bolt-chip[data-elm2-level="medium"] {
             background: #ffe0b2 !important;
             background-color: #ffe0b2 !important;
@@ -261,8 +267,7 @@
             border: 1.5px solid #d32f2f !important;
         }
         /* inner chip parts can paint their own background/color over the host */
-        elm-deduplication-score-chip bolt-chip[data-elm2-level="medium"] *,
-        elm-deduplication-score-chip bolt-chip[data-elm2-level="low"] * {
+        elm-deduplication-score-chip bolt-chip[data-elm2-level] * {
             background: transparent !important;
             color: inherit !important;
         }

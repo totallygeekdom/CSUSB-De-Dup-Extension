@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-36';
+    const BUILD = 'v2-build-37';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -243,6 +243,22 @@
             border: solid var(--elm2-bolt-blue, #1976d2);
             border-width: 0 2px 2px 0;
             transform: rotate(45deg);
+        }
+        /* Score chip colors by level, same look as the green one (pale tint + saturated
+               text). High keeps Element451's own green; medium is orange, low is red.
+               The level is tagged on the chip by tagScoreChips() so this doesn't depend
+               on Element451's internal class names. Overrides its inline colors. */
+        elm-deduplication-score-chip bolt-chip[data-elm2-level="medium"] {
+            background-color: #fff3e0 !important;
+            color: #e65100 !important;
+        }
+        elm-deduplication-score-chip bolt-chip[data-elm2-level="low"] {
+            background-color: #ffebee !important;
+            color: #c62828 !important;
+        }
+        elm-deduplication-score-chip bolt-chip[data-elm2-level="medium"] *,
+        elm-deduplication-score-chip bolt-chip[data-elm2-level="low"] * {
+            color: inherit !important;
         }
         /* Bolt score chip repeated next to the "Records" heading */
         .relationship-card-toolbar { align-items: center; }
@@ -1325,6 +1341,15 @@
         const o = document.getElementById('elm2-applicant-outline');
         if (o) o.remove();
     }
+    // Marks every score chip with its level so CSS can color it. Runs on the list
+    // page too, not just the review panel.
+    function tagScoreChips() {
+        document.querySelectorAll('elm-deduplication-score-chip bolt-chip').forEach(chip => {
+            const t = chip.textContent.trim().toLowerCase();
+            const level = t.includes('low') ? 'low' : t.includes('medium') ? 'medium' : t.includes('high') ? 'high' : '';
+            if (level && chip.dataset.elm2Level !== level) chip.dataset.elm2Level = level;
+        });
+    }
     // Repeats the Bolt score chip (Low / Medium / High) from the top of the review
     // panel to the right of the "Records" heading. Cloned from the real chip so it keeps
     // Element451's own per-level colors; the large size is dropped to match the list page.
@@ -1612,10 +1637,12 @@
         bindMergeButtonTracking();
         checkForMergeResult();
         injectMergeCounter();
+        tagScoreChips();
         if (isDedupReviewPage()) {
             syncBoltBlue();
             annotateRowColors();
             annotateApplicantSide();
+            tagScoreChips();
             syncRecordsScoreChip();
             injectPickComparisonBar();
         }

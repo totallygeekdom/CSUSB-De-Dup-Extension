@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-38';
+    const BUILD = 'v2-build-39';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -249,15 +249,21 @@
                The level is tagged on the chip by tagScoreChips() so this doesn't depend
                on Element451's internal class names. Overrides its inline colors. */
         elm-deduplication-score-chip bolt-chip[data-elm2-level="medium"] {
-            background-color: #fff3e0 !important;
+            background: #ffe0b2 !important;
+            background-color: #ffe0b2 !important;
             color: #e65100 !important;
+            border: 1.5px solid #ef6c00 !important;
         }
         elm-deduplication-score-chip bolt-chip[data-elm2-level="low"] {
-            background-color: #ffebee !important;
-            color: #c62828 !important;
+            background: #ffcdd2 !important;
+            background-color: #ffcdd2 !important;
+            color: #b71c1c !important;
+            border: 1.5px solid #d32f2f !important;
         }
+        /* inner chip parts can paint their own background/color over the host */
         elm-deduplication-score-chip bolt-chip[data-elm2-level="medium"] *,
         elm-deduplication-score-chip bolt-chip[data-elm2-level="low"] * {
+            background: transparent !important;
             color: inherit !important;
         }
         /* Bolt score chip repeated next to the "Records" heading */
@@ -1348,7 +1354,10 @@
         document.querySelectorAll('elm-deduplication-score-chip bolt-chip').forEach(chip => {
             const t = chip.textContent.trim().toLowerCase();
             const level = t.includes('low') ? 'low' : t.includes('medium') ? 'medium' : t.includes('high') ? 'high' : '';
-            if (level && chip.dataset.elm2Level !== level) chip.dataset.elm2Level = level;
+            if (level && chip.dataset.elm2Level !== level) {
+                chip.dataset.elm2Level = level;
+                console.log('[elm2] score chip tagged:', level, '| text:', JSON.stringify(t), '| classes:', chip.className);
+            }
         });
     }
     // Repeats the Bolt score chip (Low / Medium / High) from the top of the review

@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-39';
+    const BUILD = 'v2-build-40';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -265,15 +265,6 @@
         elm-deduplication-score-chip bolt-chip[data-elm2-level="low"] * {
             background: transparent !important;
             color: inherit !important;
-        }
-        /* Bolt score chip repeated next to the "Records" heading */
-        .relationship-card-toolbar { align-items: center; }
-        .relationship-card-toolbar > .elm2-records-score {
-            display: inline-flex;
-            align-items: center;
-            margin-left: 12px;
-            margin-right: auto;
-            pointer-events: none;
         }
         /* --- Merge counter / settings pane (unchanged from classic script; the
                top navbar — .bolt-navigation-right / elm-universal-search — was not
@@ -1360,30 +1351,6 @@
             }
         });
     }
-    // Repeats the Bolt score chip (Low / Medium / High) from the top of the review
-    // panel to the right of the "Records" heading. Cloned from the real chip so it keeps
-    // Element451's own per-level colors; the large size is dropped to match the list page.
-    function syncRecordsScoreChip() {
-        const toolbar = document.querySelector('.relationship-card-toolbar');
-        const source = document.querySelector('.contacts-header-chip elm-deduplication-score-chip bolt-chip') ||
-                       document.querySelector('elm-deduplication-score-chip bolt-chip');
-        const existing = document.querySelector('.elm2-records-score');
-        if (!toolbar || !source) { if (existing) existing.remove(); return; }
-        const records = Array.from(toolbar.children).find(c => /records/i.test(c.textContent) && !c.classList.contains('elm2-records-score'));
-        if (!records) return;
-        const clone = source.cloneNode(true);
-        clone.classList.remove('bolt-chip-large');
-        clone.removeAttribute('aria-describedby');
-        clone.removeAttribute('cdk-describedby-host');
-        const sig = clone.outerHTML;
-        if (existing && existing.dataset.sig === sig && existing.previousElementSibling === records) return;
-        if (existing) existing.remove();
-        const wrap = document.createElement('span');
-        wrap.className = 'elm2-records-score';
-        wrap.dataset.sig = sig;
-        wrap.appendChild(clone);
-        records.insertAdjacentElement('afterend', wrap);
-    }
     function annotateApplicantSide() {
         document.querySelectorAll('.elm2-applicant-card').forEach(el => el.classList.remove('elm2-applicant-card'));
         if (!CFG.HIGHLIGHT_ROWS || document.body.classList.contains('elm2-blocked')) { clearApplicantBand(); return; }
@@ -1653,7 +1620,6 @@
             annotateRowColors();
             annotateApplicantSide();
             tagScoreChips();
-            syncRecordsScoreChip();
             injectPickComparisonBar();
         }
     }, 750);

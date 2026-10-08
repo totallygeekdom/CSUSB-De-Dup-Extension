@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-34';
+    const BUILD = 'v2-build-35';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -187,6 +187,62 @@
             border-radius: 4px;
             pointer-events: none;
             z-index: 2;
+        }
+        /* --- Material 3 style "Hide matching items" switch.
+               52x32 pill track; off = outlined track with a small 16px thumb,
+               on = filled track with a 24px white thumb and a check mark.
+               Element451's own MDC track/thumb internals are hidden and the visuals are
+               drawn with the button's pseudo-elements; the button itself (click, keyboard,
+               aria) is untouched. --- */
+        bolt-slide-toggle.hide-matching-items-toggle button.mdc-switch {
+            position: relative !important;
+            width: 52px !important;
+            min-width: 52px !important;
+            height: 32px !important;
+            padding: 0 !important;
+            box-sizing: border-box !important;
+            border-radius: 16px !important;
+            border: 2px solid #79747e !important;
+            background: #e6e0e9 !important;
+            transition: background-color 0.2s, border-color 0.2s;
+        }
+        bolt-slide-toggle.hide-matching-items-toggle button.mdc-switch.mdc-switch--selected {
+            background: var(--elm2-bolt-blue, #1976d2) !important;
+            border-color: var(--elm2-bolt-blue, #1976d2) !important;
+        }
+        bolt-slide-toggle.hide-matching-items-toggle button.mdc-switch .mdc-switch__track,
+        bolt-slide-toggle.hide-matching-items-toggle button.mdc-switch .mdc-switch__handle-track {
+            display: none !important;
+        }
+        bolt-slide-toggle.hide-matching-items-toggle button.mdc-switch::before {
+            content: "";
+            position: absolute;
+            top: 50%;
+            left: 6px;
+            width: 16px;
+            height: 16px;
+            margin-top: -8px;
+            border-radius: 50%;
+            background: #79747e;
+            transition: left 0.2s, width 0.2s, height 0.2s, margin-top 0.2s, background-color 0.2s;
+        }
+        bolt-slide-toggle.hide-matching-items-toggle button.mdc-switch.mdc-switch--selected::before {
+            left: 22px;
+            width: 24px;
+            height: 24px;
+            margin-top: -12px;
+            background: #fff;
+        }
+        bolt-slide-toggle.hide-matching-items-toggle button.mdc-switch.mdc-switch--selected::after {
+            content: "";
+            position: absolute;
+            left: 31px;
+            top: 7px;
+            width: 5px;
+            height: 10px;
+            border: solid var(--elm2-bolt-blue, #1976d2);
+            border-width: 0 2px 2px 0;
+            transform: rotate(45deg);
         }
         /* --- Merge counter / settings pane (unchanged from classic script; the
                top navbar — .bolt-navigation-right / elm-universal-search — was not

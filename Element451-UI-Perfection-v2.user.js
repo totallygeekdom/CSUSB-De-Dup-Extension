@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-33';
+    const BUILD = 'v2-build-34';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -179,6 +179,14 @@
             background-color: #fff9c4 !important;
             outline: 3px solid #f9a825;
             outline-offset: -3px;
+        }
+        #elm2-applicant-outline {
+            position: absolute;
+            box-sizing: border-box;
+            border: 2px solid #f9a825;
+            border-radius: 4px;
+            pointer-events: none;
+            z-index: 2;
         }
         /* --- Merge counter / settings pane (unchanged from classic script; the
                top navbar — .bolt-navigation-right / elm-universal-search — was not
@@ -1249,6 +1257,8 @@
             el.style.backgroundImage = '';
             el.removeAttribute('data-elm2-band');
         });
+        const o = document.getElementById('elm2-applicant-outline');
+        if (o) o.remove();
     }
     function annotateApplicantSide() {
         document.querySelectorAll('.elm2-applicant-card').forEach(el => el.classList.remove('elm2-applicant-card'));
@@ -1260,15 +1270,19 @@
         const card = getContactCards()[side === 'left' ? 0 : 1];
         if (card) card.classList.add('elm2-applicant-card');
 
-        const ref = Array.from(formEl.querySelectorAll('.diff-row')).find(r => r.querySelector(':scope > .diff-actions'));
+        // The band ends at the applicant contact's OWN arrow button (not the whole
+        // arrow group, which also contains the other contact's arrow).
+        const arrowSel = side === 'left' ? '[title="Keep Contact A"]' : '[title="Keep Contact B"]';
+        const ref = Array.from(formEl.querySelectorAll('.diff-row')).find(r => r.querySelector(':scope > .diff-actions > .diff-action-button' + arrowSel));
         if (!ref) { clearApplicantBand(); return; }
-        const arrows = ref.querySelector(':scope > .diff-actions').getBoundingClientRect();
-        const pad = 8;
-        const boundary = side === 'left' ? arrows.right + pad : arrows.left - pad;
+        const arrow = ref.querySelector(':scope > .diff-actions > .diff-action-button' + arrowSel).getBoundingClientRect();
+        const pad = 10;
+        const boundary = side === 'left' ? arrow.right + pad : arrow.left - pad;
         const yellow = '#fff9c4';
-        formEl.querySelectorAll('.diff-header, .diff-row').forEach(el => {
+        const targets = Array.from(formEl.querySelectorAll('.diff-header, .diff-row')).filter(el => el.getBoundingClientRect().width);
+        if (targets.length === 0) { clearApplicantBand(); return; }
+        targets.forEach(el => {
             const r = el.getBoundingClientRect();
-            if (!r.width) return;
             const n = Math.round(boundary - r.left);
             const img = side === 'left'
                 ? `linear-gradient(to right, ${yellow} 0, ${yellow} ${n}px, transparent ${n}px)`
@@ -1277,6 +1291,23 @@
             el.style.backgroundImage = img;
             el.dataset.elm2Band = side;
         });
+
+        // Amber outline around the whole applicant side, from the header row to the last
+        // row. Transparent inside, so it never tints the entries.
+        if (getComputedStyle(formEl).position === 'static') formEl.style.position = 'relative';
+        let outline = document.getElementById('elm2-applicant-outline');
+        if (!outline) { outline = document.createElement('div'); outline.id = 'elm2-applicant-outline'; }
+        if (outline.parentElement !== formEl) formEl.appendChild(outline);
+        const formRect = formEl.getBoundingClientRect();
+        const rects = targets.map(el => el.getBoundingClientRect());
+        const top = Math.min(...rects.map(r => r.top));
+        const bottom = Math.max(...rects.map(r => r.bottom));
+        const left = side === 'left' ? Math.min(...rects.map(r => r.left)) : boundary;
+        const right = side === 'left' ? boundary : Math.max(...rects.map(r => r.right));
+        outline.style.left = (left - formRect.left + formEl.scrollLeft) + 'px';
+        outline.style.top = (top - formRect.top + formEl.scrollTop) + 'px';
+        outline.style.width = (right - left) + 'px';
+        outline.style.height = (bottom - top) + 'px';
     }
     function annotateRowColors() {
         resetStaleRows();

@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-49';
+    const BUILD = 'v2-build-50';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -266,6 +266,16 @@
         bolt-slide-toggle.hide-matching-items-toggle label.mdc-label {
             margin-left: 12px !important;
             padding-left: 0 !important;
+        }
+        /* Pin the Previous / position / Next bar to the top of the review panel while the
+               field list scrolls. --elm2-nav-top leaves room for Element451's own title bar
+               when that is sticky too. */
+        .review-queue-nav {
+            position: sticky !important;
+            top: var(--elm2-nav-top, 0px);
+            z-index: 20;
+            background: #fff;
+            box-shadow: 0 1px 0 rgba(0, 0, 0, 0.08);
         }
         /* --- Merge counter / settings pane (unchanged from classic script; the
                top navbar — .bolt-navigation-right / elm-universal-search — was not
@@ -1390,6 +1400,17 @@
             }
         });
     }
+    // Keeps the pinned queue nav below Element451's own header if that is sticky/fixed.
+    function pinReviewQueueNav() {
+        if (!document.querySelector('.review-queue-nav')) return;
+        const hdr = document.querySelector('.bolt-stackable-sidebar-header-wrapper');
+        let top = 0;
+        if (hdr) {
+            const pos = getComputedStyle(hdr).position;
+            if (pos === 'sticky' || pos === 'fixed' || pos === 'absolute') top = Math.round(hdr.getBoundingClientRect().height);
+        }
+        document.documentElement.style.setProperty('--elm2-nav-top', top + 'px');
+    }
     function annotateApplicantSide() {
         document.querySelectorAll('.elm2-applicant-card').forEach(el => el.classList.remove('elm2-applicant-card'));
         if (!CFG.HIGHLIGHT_ROWS || document.body.classList.contains('elm2-blocked')) { clearApplicantBand(); return; }
@@ -1657,6 +1678,7 @@
         if (isDedupReviewPage()) {
             syncBoltBlue();
             annotateRowColors();
+            pinReviewQueueNav();
             annotateApplicantSide();
             injectPickComparisonBar();
         }

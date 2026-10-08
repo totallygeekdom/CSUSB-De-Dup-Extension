@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-41';
+    const BUILD = 'v2-build-42';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -246,20 +246,23 @@
         }
         /* Score chip traffic-light colors by level, all in the same style (tinted fill,
                deep text, matching border): high green, medium orange, low red. The level is
-               tagged on each chip by tagScoreChips() so this doesn't depend on Element451's
-               class names. Element451 paints these chips grey with an inline style, hence !important. */
+               matched by Element451's own score-chip-<level> class (and also tagged by
+               tagScoreChips() as a fallback). Element451 paints these chips grey with an inline style, hence !important. */
+        elm-deduplication-score-chip bolt-chip.score-chip-high,
         elm-deduplication-score-chip bolt-chip[data-elm2-level="high"] {
             background: #c8e6c9 !important;
             background-color: #c8e6c9 !important;
             color: #1b5e20 !important;
             border: 1.5px solid #2e7d32 !important;
         }
+        elm-deduplication-score-chip bolt-chip.score-chip-medium,
         elm-deduplication-score-chip bolt-chip[data-elm2-level="medium"] {
             background: #ffe0b2 !important;
             background-color: #ffe0b2 !important;
             color: #e65100 !important;
             border: 1.5px solid #ef6c00 !important;
         }
+        elm-deduplication-score-chip bolt-chip.score-chip-low,
         elm-deduplication-score-chip bolt-chip[data-elm2-level="low"] {
             background: #ffcdd2 !important;
             background-color: #ffcdd2 !important;
@@ -267,6 +270,9 @@
             border: 1.5px solid #d32f2f !important;
         }
         /* inner chip parts can paint their own background/color over the host */
+        elm-deduplication-score-chip bolt-chip.score-chip-high *,
+        elm-deduplication-score-chip bolt-chip.score-chip-medium *,
+        elm-deduplication-score-chip bolt-chip.score-chip-low *,
         elm-deduplication-score-chip bolt-chip[data-elm2-level] * {
             background: transparent !important;
             color: inherit !important;

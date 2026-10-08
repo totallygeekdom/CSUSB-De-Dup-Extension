@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-32';
+    const BUILD = 'v2-build-33';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -179,14 +179,6 @@
             background-color: #fff9c4 !important;
             outline: 3px solid #f9a825;
             outline-offset: -3px;
-        }
-        #elm2-applicant-overlay {
-            position: absolute;
-            background: rgba(255, 214, 0, 0.16);
-            border-left: 2px solid rgba(249, 168, 37, 0.7);
-            border-right: 2px solid rgba(249, 168, 37, 0.7);
-            pointer-events: none;
-            z-index: 2;
         }
         /* --- Merge counter / settings pane (unchanged from classic script; the
                top navbar — .bolt-navigation-right / elm-universal-search — was not
@@ -1248,44 +1240,43 @@
     function clearPickClasses(root) {
         root.querySelectorAll('.elm2-agree-pick, .elm2-pick-bolt, .elm2-pick-ours').forEach(el => el.classList.remove('elm2-agree-pick', 'elm2-pick-bolt', 'elm2-pick-ours'));
     }
-    // Translucent yellow band down the applicant side's value column across all
-    // field rows (as in the classic layout), plus a yellow highlight on that contact's
-    // card. Click-through and see-through, so it tints the green/blue/orange row
-    // colors instead of hiding them.
+    // Yellow background behind the applicant side across the whole field list, as in
+    // the classic layout: from the field label through that side's value and arrows,
+    // including the header row. It's painted as each row's own background, so the
+    // entries on top keep their green/blue/orange colors. Plus a yellow contact card.
+    function clearApplicantBand() {
+        document.querySelectorAll('[data-elm2-band]').forEach(el => {
+            el.style.backgroundImage = '';
+            el.removeAttribute('data-elm2-band');
+        });
+    }
     function annotateApplicantSide() {
         document.querySelectorAll('.elm2-applicant-card').forEach(el => el.classList.remove('elm2-applicant-card'));
-        const overlayId = 'elm2-applicant-overlay';
-        const removeOverlay = () => { const o = document.getElementById(overlayId); if (o) o.remove(); };
-        if (!CFG.HIGHLIGHT_ROWS || document.body.classList.contains('elm2-blocked')) { removeOverlay(); return; }
+        if (!CFG.HIGHLIGHT_ROWS || document.body.classList.contains('elm2-blocked')) { clearApplicantBand(); return; }
         const side = findApplicantSide();
         const form = getDiffForm();
         const formEl = form ? form.querySelector('form.diff-form') : null;
-        if (!side || !formEl) { removeOverlay(); return; }
+        if (!side || !formEl) { clearApplicantBand(); return; }
         const card = getContactCards()[side === 'left' ? 0 : 1];
         if (card) card.classList.add('elm2-applicant-card');
 
-        const idx = side === 'left' ? 0 : 1;
-        const rows = Array.from(formEl.querySelectorAll('.diff-row'))
-            .filter(r => r.querySelectorAll(':scope > .diff-value-button')[idx]);
-        if (rows.length === 0) { removeOverlay(); return; }
-        if (getComputedStyle(formEl).position === 'static') formEl.style.position = 'relative';
-        let overlay = document.getElementById(overlayId);
-        if (!overlay) {
-            overlay = document.createElement('div');
-            overlay.id = overlayId;
-            formEl.appendChild(overlay);
-        } else if (overlay.parentElement !== formEl) {
-            formEl.appendChild(overlay);
-        }
-        const formRect = formEl.getBoundingClientRect();
-        const first = rows[0].getBoundingClientRect();
-        const last = rows[rows.length - 1].getBoundingClientRect();
-        const btn = rows[0].querySelectorAll(':scope > .diff-value-button')[idx].getBoundingClientRect();
-        const pad = 6;
-        overlay.style.left = (btn.left - formRect.left + formEl.scrollLeft - pad) + 'px';
-        overlay.style.width = (btn.width + pad * 2) + 'px';
-        overlay.style.top = (first.top - formRect.top + formEl.scrollTop) + 'px';
-        overlay.style.height = (last.bottom - first.top) + 'px';
+        const ref = Array.from(formEl.querySelectorAll('.diff-row')).find(r => r.querySelector(':scope > .diff-actions'));
+        if (!ref) { clearApplicantBand(); return; }
+        const arrows = ref.querySelector(':scope > .diff-actions').getBoundingClientRect();
+        const pad = 8;
+        const boundary = side === 'left' ? arrows.right + pad : arrows.left - pad;
+        const yellow = '#fff9c4';
+        formEl.querySelectorAll('.diff-header, .diff-row').forEach(el => {
+            const r = el.getBoundingClientRect();
+            if (!r.width) return;
+            const n = Math.round(boundary - r.left);
+            const img = side === 'left'
+                ? `linear-gradient(to right, ${yellow} 0, ${yellow} ${n}px, transparent ${n}px)`
+                : `linear-gradient(to right, transparent ${n}px, ${yellow} ${n}px)`;
+            if (el.dataset.elm2Band === side && el.style.backgroundImage === img) return;
+            el.style.backgroundImage = img;
+            el.dataset.elm2Band = side;
+        });
     }
     function annotateRowColors() {
         resetStaleRows();

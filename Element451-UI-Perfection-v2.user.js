@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-48';
+    const BUILD = 'v2-build-49';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -189,19 +189,19 @@
             z-index: 2;
         }
         /* --- Material 3 style "Hide matching items" switch.
-               32x20 pill track; off = outlined track with a small 10px thumb,
-               on = filled track with a 14px white thumb and a check mark.
+               40x24 pill track; off = outlined track with a small 12px thumb,
+               on = filled track with an 18px white thumb and a check mark.
                Element451's own MDC track/thumb internals are hidden and the visuals are
                drawn with the button's pseudo-elements; the button itself (click, keyboard,
                aria) is untouched. --- */
         bolt-slide-toggle.hide-matching-items-toggle button.mdc-switch {
             position: relative !important;
-            width: 32px !important;
-            min-width: 32px !important;
-            height: 20px !important;
+            width: 40px !important;
+            min-width: 40px !important;
+            height: 24px !important;
             padding: 0 !important;
             box-sizing: border-box !important;
-            border-radius: 10px !important;
+            border-radius: 12px !important;
             border: 2px solid #79747e !important;
             background: #e6e0e9 !important;
             transition: background-color 0.2s, border-color 0.2s;
@@ -218,28 +218,28 @@
             content: "";
             position: absolute;
             top: 50%;
-            left: 3px;
-            width: 10px;
-            height: 10px;
-            margin-top: -5px;
+            left: 4px;
+            width: 12px;
+            height: 12px;
+            margin-top: -6px;
             border-radius: 50%;
             background: #79747e;
             transition: left 0.2s, width 0.2s, height 0.2s, margin-top 0.2s, background-color 0.2s;
         }
         bolt-slide-toggle.hide-matching-items-toggle button.mdc-switch.mdc-switch--selected::before {
-            left: 13px;
-            width: 14px;
-            height: 14px;
-            margin-top: -7px;
+            left: 17px;
+            width: 18px;
+            height: 18px;
+            margin-top: -9px;
             background: #fff;
         }
         bolt-slide-toggle.hide-matching-items-toggle button.mdc-switch.mdc-switch--selected::after {
             content: "";
             position: absolute;
-            left: 18px;
+            left: 24px;
             top: 4px;
-            width: 3px;
-            height: 6px;
+            width: 4px;
+            height: 8px;
             border: solid var(--elm2-bolt-blue, #1976d2);
             border-width: 0 2px 2px 0;
             transform: rotate(45deg);

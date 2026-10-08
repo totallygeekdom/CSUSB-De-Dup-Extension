@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-42';
+    const BUILD = 'v2-build-43';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -244,38 +244,21 @@
             border-width: 0 2px 2px 0;
             transform: rotate(45deg);
         }
-        /* Score chip traffic-light colors by level, all in the same style (tinted fill,
-               deep text, matching border): high green, medium orange, low red. The level is
-               matched by Element451's own score-chip-<level> class (and also tagged by
-               tagScoreChips() as a fallback). Element451 paints these chips grey with an inline style, hence !important. */
-        elm-deduplication-score-chip bolt-chip.score-chip-high,
-        elm-deduplication-score-chip bolt-chip[data-elm2-level="high"] {
-            background: #c8e6c9 !important;
-            background-color: #c8e6c9 !important;
-            color: #1b5e20 !important;
-            border: 1.5px solid #2e7d32 !important;
+        /* Score chips: Medium and Low get the same solid look as High (which is left
+               exactly as Element451 draws it), in orange and red. */
+        elm-deduplication-score-chip bolt-chip.score-chip-medium {
+            background-color: #ef6c00 !important;
+            border-color: #ef6c00 !important;
+            color: #fff !important;
         }
-        elm-deduplication-score-chip bolt-chip.score-chip-medium,
-        elm-deduplication-score-chip bolt-chip[data-elm2-level="medium"] {
-            background: #ffe0b2 !important;
-            background-color: #ffe0b2 !important;
-            color: #e65100 !important;
-            border: 1.5px solid #ef6c00 !important;
+        elm-deduplication-score-chip bolt-chip.score-chip-low {
+            background-color: #d32f2f !important;
+            border-color: #d32f2f !important;
+            color: #fff !important;
         }
-        elm-deduplication-score-chip bolt-chip.score-chip-low,
-        elm-deduplication-score-chip bolt-chip[data-elm2-level="low"] {
-            background: #ffcdd2 !important;
-            background-color: #ffcdd2 !important;
-            color: #b71c1c !important;
-            border: 1.5px solid #d32f2f !important;
-        }
-        /* inner chip parts can paint their own background/color over the host */
-        elm-deduplication-score-chip bolt-chip.score-chip-high *,
-        elm-deduplication-score-chip bolt-chip.score-chip-medium *,
-        elm-deduplication-score-chip bolt-chip.score-chip-low *,
-        elm-deduplication-score-chip bolt-chip[data-elm2-level] * {
-            background: transparent !important;
-            color: inherit !important;
+        elm-deduplication-score-chip bolt-chip.score-chip-medium .bolt-chip-text,
+        elm-deduplication-score-chip bolt-chip.score-chip-low .bolt-chip-text {
+            color: #fff !important;
         }
         /* --- Merge counter / settings pane (unchanged from classic script; the
                top navbar — .bolt-navigation-right / elm-universal-search — was not
@@ -1350,18 +1333,6 @@
         const o = document.getElementById('elm2-applicant-outline');
         if (o) o.remove();
     }
-    // Marks every score chip with its level so CSS can color it. Runs on the list
-    // page too, not just the review panel.
-    function tagScoreChips() {
-        document.querySelectorAll('elm-deduplication-score-chip bolt-chip').forEach(chip => {
-            const t = chip.textContent.trim().toLowerCase();
-            const level = t.includes('low') ? 'low' : t.includes('medium') ? 'medium' : t.includes('high') ? 'high' : '';
-            if (level && chip.dataset.elm2Level !== level) {
-                chip.dataset.elm2Level = level;
-                console.log('[elm2] score chip tagged:', level, '| text:', JSON.stringify(t), '| classes:', chip.className);
-            }
-        });
-    }
     function annotateApplicantSide() {
         document.querySelectorAll('.elm2-applicant-card').forEach(el => el.classList.remove('elm2-applicant-card'));
         if (!CFG.HIGHLIGHT_ROWS || document.body.classList.contains('elm2-blocked')) { clearApplicantBand(); return; }
@@ -1625,12 +1596,10 @@
         bindMergeButtonTracking();
         checkForMergeResult();
         injectMergeCounter();
-        tagScoreChips();
         if (isDedupReviewPage()) {
             syncBoltBlue();
             annotateRowColors();
             annotateApplicantSide();
-            tagScoreChips();
             injectPickComparisonBar();
         }
     }, 750);

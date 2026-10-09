@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.9
+// @version      2.10
 // @description  Tracks duplicate entries in a CSV database stored in browser localStorage — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -50,11 +50,11 @@
             white-space: nowrap;
             vertical-align: middle;
         }
-        /* right-align the badges so they line up down the column whatever their width */
-        .cdk-column-flagged:has(> .csv-dept-badge),
-        .cdk-column-signals:has(> .csv-dept-badge) { display: flex; align-items: center; }
-        .cdk-column-flagged > .csv-dept-badge,
-        .cdk-column-signals > .csv-dept-badge { margin-left: auto; }
+        /* right-align the badges so they line up down the column whatever their width:
+           the badge's parent becomes a flex row and the badge takes the free space on its left
+           (float covers a parent that stays a block) */
+        :has(> .csv-dept-badge) { display: flex; align-items: center; }
+        .csv-dept-badge { margin-left: auto; float: right; }
         .csv-dept-badge[data-dept="Grad/IA"]      { background: #e3f2fd; color: #1565c0; }
         .csv-dept-badge[data-dept="UnderGrad"]    { background: #f3e5f5; color: #6a1b9a; }
         .csv-dept-badge[data-dept="Forbidden"]    { background: #fce4ec; color: #c2185b; }
@@ -515,6 +515,7 @@
     // row itself as a fallback) rather than assuming/rewriting existing
     // content there, since that cell's real markup is unknown (redacted in
     // the reference snapshot).
+    let badgeDiagLogged = false;
     function applyBadge(row, dept) {
         if (dept === 'Ignored') { const b = row.querySelector('.csv-dept-badge'); if (b) b.remove(); row.removeAttribute('data-csv-dept'); return; }
         const chipIsIgnored = Array.from(row.querySelectorAll('.bolt-chip, elm-chip')).some(el => el.textContent.trim().toLowerCase() === 'ignored');
@@ -527,6 +528,13 @@
             badge.className = 'csv-dept-badge';
             const target = row.querySelector('.cdk-column-flagged') || row.querySelector('.cdk-column-signals') || row;
             target.appendChild(badge);
+            if (!badgeDiagLogged) {
+                badgeDiagLogged = true;
+                // Diagnostic (tag/class names and sizes only): where did the badge land?
+                const chain = [];
+                for (let el = target, n = 0; el && n < 3; el = el.parentElement, n++) chain.push(el.tagName.toLowerCase() + '.' + String(el.className).split(/\s+/).slice(0, 3).join('.') + '[' + getComputedStyle(el).display + ' ' + el.clientWidth + 'px]');
+                console.log('CSV Database: badge placed in', chain.join(' < '));
+            }
         }
         badge.dataset.dept = dept;
         const labels = { 'Grad/IA': 'Grad/IA', 'UnderGrad': 'UnderGrad', 'Forbidden': 'Forbidden', 'Appeal': 'Appeal' };
@@ -810,5 +818,5 @@
         updateDbSizeBadge();
     }, 1000);
 
-    console.log('%cCSV Database (new layout) v2.9 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
+    console.log('%cCSV Database (new layout) v2.10 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
 })();

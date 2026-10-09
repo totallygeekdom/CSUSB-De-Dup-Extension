@@ -344,6 +344,9 @@
     function parseApiEntries(entries) {
         const sample = entries[0];
         if (!sample || typeof sample !== 'object') return null;
+        // Diagnostic (field names only, no values): does the list API carry Spark IDs?
+        console.log('CSV Database: list API fields:', Object.keys(sample).join(', '),
+            '| mentions "spark":', /spark/i.test(JSON.stringify(sample)));
         const idField = sample._id ? '_id' : sample.id ? 'id' : null;
         // raw JSON is kept so Spark IDs can be matched without knowing the schema
         return entries.map((e, i) => ({

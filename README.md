@@ -58,6 +58,10 @@ relying on them for unattended automation:**
   (left/A and right/B contact). List-page badges match by Spark ID found in
   the API record or row text, falling back to names. Old 5-column files
   (Unique ID) still import and match by name only.
+- Names are stored obfuscated: only the first 3 letters of the first and last
+  name are kept (existing entries are shortened automatically, and full names
+  are masked out of the Row Contents text too). Name matching on the list
+  page is therefore a weak fallback; Spark IDs are the real key.
 
 The classic scripts remain unchanged for as long as the old layout is still
 reachable anywhere.

@@ -350,26 +350,35 @@
             content: ""; position: absolute; left: 24px; top: 4px; width: 4px; height: 8px;
             border: solid var(--elm2-bolt-blue, #1976d2); border-width: 0 2px 2px 0; transform: rotate(45deg);
         }
-        /* M3 slider (Auto-Apply level) */
+        /* M3 discrete slider (Auto-Apply level): 16px rounded track split by a 4px pill handle
+               with a 6px gap either side, stop dots on the track, a value bubble while
+               focused/pressed. The real <input type=range> sits on top, invisible, so
+               dragging, clicking and keyboard use are native. */
         #elm-settings-pane .elm-slider-head { min-height: 40px; }
         #elm-settings-pane .elm-level-label { font-size: 14px; font-weight: 500; letter-spacing: .1px; color: var(--md-primary); }
-        #elm-settings-pane .elm-slider { padding: 0 2px 12px; }
-        #elm-settings-pane .elm-slider input[type=range] {
-            -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 20px; margin: 0; background: transparent; cursor: pointer; --fill: 0%;
-        }
-        #elm-settings-pane .elm-slider input[type=range]::-webkit-slider-runnable-track {
-            height: 4px; border-radius: 2px; background: linear-gradient(to right, var(--md-primary) var(--fill), #cac4d0 var(--fill));
-        }
-        #elm-settings-pane .elm-slider input[type=range]::-moz-range-track { height: 4px; border-radius: 2px; background: #cac4d0; }
-        #elm-settings-pane .elm-slider input[type=range]::-moz-range-progress { height: 4px; border-radius: 2px; background: var(--md-primary); }
-        #elm-settings-pane .elm-slider input[type=range]::-webkit-slider-thumb {
-            -webkit-appearance: none; width: 20px; height: 20px; margin-top: -8px; border-radius: 50%;
-            background: var(--md-primary); border: none; box-shadow: var(--md-elev-1); transition: box-shadow .2s var(--md-ease);
-        }
-        #elm-settings-pane .elm-slider input[type=range]::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; background: var(--md-primary); border: none; box-shadow: var(--md-elev-1); }
-        #elm-settings-pane .elm-slider input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 8px rgba(25, 118, 210, .16); }
+        #elm-settings-pane .elm-slider { padding: 22px 2px 12px; }
+        #elm-settings-pane .m3s { position: relative; height: 44px; --p: 0; --gap: 6px; }
+        #elm-settings-pane .m3s input[type=range] { -webkit-appearance: none; appearance: none; position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; z-index: 3; }
+        #elm-settings-pane .m3s input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 4px; height: 44px; }
+        #elm-settings-pane .m3s input[type=range]::-moz-range-thumb { width: 4px; height: 44px; border: none; }
+        #elm-settings-pane .m3s-active, #elm-settings-pane .m3s-inactive { position: absolute; top: 14px; height: 16px; transition: width .2s var(--md-ease), left .2s var(--md-ease); }
+        #elm-settings-pane .m3s-active { left: 0; width: max(0px, calc((100% - 4px) * var(--p) - var(--gap))); background: var(--md-primary); border-radius: 8px 2px 2px 8px; }
+        #elm-settings-pane .m3s-inactive { right: 0; left: calc((100% - 4px) * var(--p) + 4px + var(--gap)); background: #cfe0f8; border-radius: 2px 8px 8px 2px; }
+        #elm-settings-pane .m3s-dots span { position: absolute; top: 20px; width: 4px; height: 4px; border-radius: 50%; left: calc(6px + (100% - 16px) * var(--i) / 4); }
+        #elm-settings-pane .m3s-dots span.on { background: #fff; }
+        #elm-settings-pane .m3s-dots span.off { background: var(--md-primary); }
+        #elm-settings-pane .m3s-dots span.here { display: none; }
+        #elm-settings-pane .m3s-handle { position: absolute; top: 0; width: 4px; height: 44px; border-radius: 2px; background: var(--md-primary); left: calc((100% - 4px) * var(--p)); pointer-events: none; z-index: 2; transition: left .2s var(--md-ease), width .15s var(--md-ease); }
+        #elm-settings-pane .m3s input[type=range]:active ~ .m3s-handle { width: 2px; margin-left: 1px; }
+        #elm-settings-pane .m3s-bubble { position: absolute; bottom: calc(100% + 4px); left: 50%; transform: translateX(-50%); background: #322f35; color: #f5eff7; font-size: 12px; line-height: 16px; letter-spacing: .4px; padding: 6px 12px; border-radius: 16px; white-space: nowrap; opacity: 0; transition: opacity .15s var(--md-ease); }
+        #elm-settings-pane .m3s input[type=range]:focus-visible ~ .m3s-handle .m3s-bubble,
+        #elm-settings-pane .m3s input[type=range]:active ~ .m3s-handle .m3s-bubble { opacity: 1; }
+        #elm-settings-pane .m3s-labels { position: relative; height: 16px; margin-top: 4px; font-size: 12px; line-height: 16px; letter-spacing: .4px; color: var(--md-on-surface-variant); }
+        #elm-settings-pane .m3s-labels span { position: absolute; top: 0; white-space: nowrap; left: calc((100% - 4px) * var(--i) / 4 + 2px); transform: translateX(-50%); transition: color .2s var(--md-ease); }
+        #elm-settings-pane .m3s-labels span:first-child { left: 0; transform: none; }
+        #elm-settings-pane .m3s-labels span:last-child { left: 100%; transform: translateX(-100%); }
+        #elm-settings-pane .m3s-labels span.sel { color: var(--md-primary); font-weight: 500; }
         #elm-settings-pane .elm-level-desc { font-size: 13px; line-height: 18px; letter-spacing: .25px; color: var(--md-on-surface-variant); margin: 0 0 8px; }
-        #elm-settings-pane .elm-slider-ticks { display: flex; justify-content: space-between; margin-top: 6px; font-size: 12px; line-height: 16px; letter-spacing: .4px; color: var(--md-on-surface-variant); }
         .elm-toggle-switch input:focus-visible + .elm-toggle-slider { outline: 2px solid var(--elm2-bolt-blue, #1976d2); outline-offset: 2px; }
     `;
     if (typeof GM_addStyle === 'function') GM_addStyle(css);
@@ -1850,8 +1859,14 @@
                 <div class="settings-section-title">Automation</div>
                 <div class="setting-row elm-slider-head"><label>Auto-Apply Suggestions</label><span id="elm-apply-level-label" class="elm-level-label"></span></div>
                 <div class="elm-slider">
-                    <input type="range" id="elm-apply-level" min="0" max="4" step="1" aria-label="Auto-apply level">
-                    <div class="elm-slider-ticks"><span>None</span><span>Applicant</span><span>Low</span><span>Medium</span><span>High/All</span></div>
+                    <div class="m3s" id="elm-m3s">
+                        <input type="range" id="elm-apply-level" min="0" max="4" step="1" aria-label="Auto-apply level">
+                        <div class="m3s-active"></div>
+                        <div class="m3s-inactive"></div>
+                        <div class="m3s-dots"><span style="--i:0"></span><span style="--i:1"></span><span style="--i:2"></span><span style="--i:3"></span><span style="--i:4"></span></div>
+                        <div class="m3s-handle"><span class="m3s-bubble" id="elm-m3s-bubble"></span></div>
+                    </div>
+                    <div class="m3s-labels"><span style="--i:0">None</span><span style="--i:1">Applicant</span><span style="--i:2">Low</span><span style="--i:3">Medium</span><span style="--i:4">High/All</span></div>
                 </div>
                 <div id="elm-apply-level-desc" class="elm-level-desc"></div>
                 <div class="setting-row"><label>Auto-Skip Blocked</label>${toggleHtml('elm-auto-skip-blocked')}</div>
@@ -1887,7 +1902,13 @@
         ];
         const syncLevel = () => {
             levelSlider.value = CFG.AUTO_APPLY_LEVEL;
-            levelSlider.style.setProperty('--fill', (levelSlider.value / 4 * 100) + '%');
+            const v = parseInt(levelSlider.value, 10);
+            document.getElementById('elm-m3s').style.setProperty('--p', v / 4);
+            document.querySelectorAll('#elm-m3s .m3s-dots span').forEach((d, i) => {
+                d.className = i < v ? 'on' : i > v ? 'off' : 'here';
+            });
+            document.querySelectorAll('#elm-settings-pane .m3s-labels span').forEach((l, i) => l.classList.toggle('sel', i === v));
+            document.getElementById('elm-m3s-bubble').textContent = levelNames[v];
             levelLabel.textContent = levelNames[levelSlider.value];
             document.getElementById('elm-apply-level-desc').textContent = levelDescs[levelSlider.value];
         };

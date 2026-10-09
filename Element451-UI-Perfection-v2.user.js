@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-55';
+    const BUILD = 'v2-build-56';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -1446,8 +1446,7 @@
     // Applied as inline !important on the chip because Element451's own per-level fill
     // rules beat any stylesheet rule we can write (e.g. an !important rule inside a
     // cascade layer outranks an unlayered one regardless of specificity); inline
-    // !important outranks all of them. Logs once per chip if the fill still doesn't take.
-    const chipDiagLogged = new WeakSet();
+    // !important outranks all of them.
     function colorScoreChips() {
         const colors = { medium: '#ef6c00', low: '#d32f2f' };
         document.querySelectorAll('elm-deduplication-score-chip bolt-chip').forEach(chip => {
@@ -1460,16 +1459,6 @@
             chip.style.setProperty('color', '#fff', 'important');
             const label = chip.querySelector('.bolt-chip-text');
             if (label) label.style.setProperty('color', '#fff', 'important');
-            if (!chipDiagLogged.has(chip)) {
-                chipDiagLogged.add(chip);
-                const bg = getComputedStyle(chip).backgroundColor;
-                const painters = [chip, ...chip.querySelectorAll('*')].flatMap(e => ['', '::before', '::after']
-                    .map(ps => ({ e, ps, s: getComputedStyle(e, ps || null) }))
-                    .filter(x => x.s.backgroundColor !== 'rgba(0, 0, 0, 0)' && x.e !== chip)
-                    .map(x => x.e.tagName + '.' + String(x.e.className).slice(0, 30) + x.ps + '=' + x.s.backgroundColor));
-                console.log('[elm2] score chip', level, '| host bg:', bg, '| opacity:', getComputedStyle(chip).opacity,
-                    '| other painted layers:', painters.length ? painters.join('; ') : 'none');
-            }
         });
     }
     // Keeps the pinned queue nav below Element451's own header if that is sticky/fixed.

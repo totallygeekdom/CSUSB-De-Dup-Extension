@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.6
+// @version      2.7
 // @description  Tracks duplicate entries in a CSV database stored in browser localStorage — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -140,7 +140,16 @@
         return !!id && id.length >= 4 && new RegExp('(^|[^A-Za-z0-9])' + escRe(id) + '($|[^A-Za-z0-9])').test(text);
     }
     // Privacy: only the first 3 letters of the first and last name are ever stored.
-    function trunc3(t) { return (t || '').trim().slice(0, 3); }
+    // A cut-off name is stored as "Jon..." so it reads as shortened; names of 3 letters
+    // or fewer are kept as-is, and an already-shortened name is left alone.
+    const ELLIPSIS = '...';
+    function trunc3(t) {
+        t = (t || '').trim();
+        if (t.endsWith(ELLIPSIS)) return t;
+        return t.length > 3 ? t.slice(0, 3) + ELLIPSIS : t;
+    }
+    function nameBase(t) { return (t || '').trim().replace(/\.\.\.$/, ''); }
+    function needsShortening(t) { t = (t || '').trim(); return t.length > 3 && !t.endsWith(ELLIPSIS); }
     function maskNames(text, ...names) {
         let out = text || '';
         names.forEach(n => {
@@ -191,7 +200,7 @@
             // entries saved before name truncation existed are shortened (and re-saved) here
             let changed = false;
             db.forEach(e => {
-                if ([e.firstName, e.lastName, e.firstName2, e.lastName2].some(n => (n || '').length > 3)) {
+                if ([e.firstName, e.lastName, e.firstName2, e.lastName2].some(needsShortening)) {
                     e.rowContents = maskNames(e.rowContents, e.firstName, e.lastName, e.firstName2, e.lastName2);
                     e.firstName = trunc3(e.firstName); e.lastName = trunc3(e.lastName); e.firstName2 = trunc3(e.firstName2); e.lastName2 = trunc3(e.lastName2);
                     changed = true;
@@ -272,8 +281,8 @@
             // 3-letter prefixes are stored, so require BOTH contacts of the pair (the
             // master and the duplicate columns) to match, not just one name.
             const has = (f, l) => f.length >= 2 && l.length >= 2 && startsWord(rowText, f) && startsWord(rowText, l);
-            const f1 = (entry.firstName || '').trim().toLowerCase(), l1 = (entry.lastName || '').trim().toLowerCase();
-            const f2 = (entry.firstName2 || '').trim().toLowerCase(), l2 = (entry.lastName2 || '').trim().toLowerCase();
+            const f1 = nameBase(entry.firstName).toLowerCase(), l1 = nameBase(entry.lastName).toLowerCase();
+            const f2 = nameBase(entry.firstName2).toLowerCase(), l2 = nameBase(entry.lastName2).toLowerCase();
             const second = f2 && l2;
             if (has(f1, l1) && (!second || has(f2, l2))) {
                 usedDbIndices.add(i);
@@ -781,5 +790,5 @@
         updateDbSizeBadge();
     }, 1000);
 
-    console.log('%cCSV Database (new layout) v2.6 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
+    console.log('%cCSV Database (new layout) v2.7 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
 })();

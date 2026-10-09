@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.2
+// @version      2.3
 // @description  Tracks duplicate entries in a CSV database stored in browser localStorage — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -341,25 +341,55 @@
             if (badge) badge.remove();
         });
     }
+    // Collects every scalar stored under a key containing "spark" (e.g.
+    // master.spark_id, duplicate.sparkId) anywhere in an API record.
+    function collectSparkIds(obj, path, out, paths) {
+        if (obj === null || typeof obj !== 'object') return;
+        for (const k of Object.keys(obj)) {
+            const v = obj[k];
+            const here = path ? path + '.' + k : k;
+            if (/spark/i.test(k)) {
+                (Array.isArray(v) ? v : [v]).forEach(x => {
+                    if (typeof x === 'string' || typeof x === 'number') { out.push(String(x).trim()); paths.add(here.replace(/\.\d+/g, '[]')); }
+                });
+            }
+            if (v && typeof v === 'object') collectSparkIds(v, here, out, paths);
+        }
+    }
     function parseApiEntries(entries) {
         const sample = entries[0];
         if (!sample || typeof sample !== 'object') return null;
-        // Diagnostic (field names only, no values): does the list API carry Spark IDs?
-        console.log('CSV Database: list API fields:', Object.keys(sample).join(', '),
-            '| mentions "spark":', /spark/i.test(JSON.stringify(sample)));
         const idField = sample._id ? '_id' : sample.id ? 'id' : null;
-        // raw JSON is kept so Spark IDs can be matched without knowing the schema
-        return entries.map((e, i) => ({
-            uniqueId: ((idField && e[idField]) || 'api-' + i).toString().toLowerCase(),
-            name: e.name || e.full_name || '',
-            duplicateName: e.duplicate_name || '',
-            raw: JSON.stringify(e)
-        }));
+        const sparkPaths = new Set();
+        const parsed = entries.map((e, i) => {
+            const sparks = [];
+            collectSparkIds(e, '', sparks, sparkPaths);
+            return {
+                uniqueId: ((idField && e[idField]) || 'api-' + i).toString().toLowerCase(),
+                name: e.name || e.full_name || '',
+                duplicateName: e.duplicate_name || '',
+                sparks: sparks.filter(Boolean),
+                raw: JSON.stringify(e)
+            };
+        });
+        // Diagnostic (key paths only, no values): where do Spark IDs live in a list record?
+        console.log('CSV Database: Spark ID fields in list API:', sparkPaths.size ? Array.from(sparkPaths).join(', ') : 'none by key name',
+            '| records with Spark IDs:', parsed.filter(x => x.sparks.length).length + '/' + parsed.length);
+        return parsed;
     }
+    // A list record matches a database entry when it carries all of the entry's
+    // Spark IDs (both contacts of the pair; a contact can be in several pairs, so
+    // one shared ID alone isn't enough when the entry has two).
     function dbEntryForApi(api, db) {
-        if (!api || !api.raw) return null;
+        if (!api) return null;
         for (const entry of db) {
-            if (containsId(api.raw, entry.sparkId1) || containsId(api.raw, entry.sparkId2)) return entry;
+            const ids = [entry.sparkId1, entry.sparkId2].filter(Boolean);
+            if (!ids.length) continue;
+            if (api.sparks.length) {
+                if (ids.every(id => api.sparks.includes(id))) return entry;
+            } else if (ids.some(id => containsId(api.raw, id))) {
+                return entry;
+            }
         }
         return null;
     }
@@ -725,5 +755,5 @@
         updateDbSizeBadge();
     }, 1000);
 
-    console.log('%cCSV Database (new layout) v2.2 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
+    console.log('%cCSV Database (new layout) v2.3 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
 })();

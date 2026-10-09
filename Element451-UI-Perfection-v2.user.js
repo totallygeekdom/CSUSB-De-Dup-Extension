@@ -1695,6 +1695,10 @@
         // made no picks on this pair).
         const bolt = getDiffRows().filter(r => r.element.dataset.elm2AiSide).length;
         if (bolt === 0 && Date.now() - pairFirstSeenAt < 3000) return;
+        // At the Low / Medium Auto-Apply levels the decision depends on Bolt's score, which can
+        // render a moment after the field rows: wait for it (up to 3s) before deciding.
+        const lvl = CFG.AUTO_APPLY_LEVEL;
+        if (lvl >= 2 && lvl < 4 && !getScoreChipLevel() && Date.now() - pairFirstSeenAt < 3000) return;
         resolutionAttempted = true;
         // Two-phase, mirroring the classic script: resolve now, then re-verify
         // shortly after in case more Workflow/Source rows loaded in the meantime.

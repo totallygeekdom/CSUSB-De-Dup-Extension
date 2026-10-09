@@ -139,6 +139,16 @@
     function containsId(text, id) {
         return !!id && id.length >= 4 && new RegExp('(^|[^A-Za-z0-9])' + escRe(id) + '($|[^A-Za-z0-9])').test(text);
     }
+    // Privacy: only the first 3 letters of the first and last name are ever stored.
+    function trunc3(t) { return (t || '').trim().slice(0, 3); }
+    function maskNames(text, first, last) {
+        let out = text || '';
+        [first, last].forEach(n => {
+            n = (n || '').trim();
+            if (n.length > 3) out = out.replace(new RegExp(escRe(n), 'gi'), trunc3(n));
+        });
+        return out;
+    }
     function extractNames() {
         const form = document.querySelector('elm-duplicate-field-diff-form');
         if (!form) return { firstName: '', lastName: '' };
@@ -146,7 +156,7 @@
         const fullName = nameEls[0] ? nameEls[0].textContent.trim() : (nameEls[1] ? nameEls[1].textContent.trim() : '');
         if (!fullName) return { firstName: '', lastName: '' };
         const parts = fullName.split(/\s+/);
-        return { firstName: parts[0] || '', lastName: parts.slice(1).join(' ') };
+        return { firstName: trunc3(parts[0]), lastName: trunc3(parts.slice(1).join(' ')), fullFirst: parts[0] || '', fullLast: parts.slice(1).join(' ') };
     }
     // Row(s) highlighted by Element451-UI-Perfection-v2.user.js as the trigger
     // for the current lockdown (mirrors the classic .blocked-row read).
@@ -165,7 +175,18 @@
     function getDatabase() {
         try {
             const data = localStorage.getItem(STORAGE_KEY);
-            return data ? JSON.parse(data) : [];
+            const db = data ? JSON.parse(data) : [];
+            // entries saved before name truncation existed are shortened (and re-saved) here
+            let changed = false;
+            db.forEach(e => {
+                if ((e.firstName || '').length > 3 || (e.lastName || '').length > 3) {
+                    e.rowContents = maskNames(e.rowContents, e.firstName, e.lastName);
+                    e.firstName = trunc3(e.firstName); e.lastName = trunc3(e.lastName);
+                    changed = true;
+                }
+            });
+            if (changed) localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+            return db;
         } catch (e) {
             console.error('CSV Database: Error reading database', e);
             return [];
@@ -181,10 +202,10 @@
         if (!sparks.a && !sparks.b) return;
         // stale signal mid-navigation: the main script's Spark IDs must match the page
         if (document.body.dataset.csvSpark1 !== sparks.a || document.body.dataset.csvSpark2 !== sparks.b) return;
-        const { firstName, lastName } = extractNames();
+        const { firstName, lastName, fullFirst, fullLast } = extractNames();
         if (!firstName && !lastName) return; // page content not ready
         const db = getDatabase();
-        const rowContents = getBlockedRowText(dept);
+        const rowContents = maskNames(getBlockedRowText(dept), fullFirst, fullLast);
         const newEntry = { firstName, lastName, dept, rowContents, sparkId1: sparks.a, sparkId2: sparks.b };
         const existingIdx = db.findIndex(entry => sameSparkPair(entry, sparks.a, sparks.b));
         if (existingIdx !== -1) {
@@ -224,6 +245,7 @@
     // =========================================================
     // ROW MATCHING (name-text based — same approach as the classic script)
     // =========================================================
+    function startsWord(text, prefix) { return new RegExp('(^|[^a-z0-9])' + escRe(prefix)).test(text); }
     function matchRowToDbEntry(row, db, usedDbIndices) {
         const rowText = row.textContent.trim().toLowerCase();
         for (let i = 0; i < db.length; i++) {
@@ -233,18 +255,10 @@
                 usedDbIndices.add(i);
                 return entry;
             }
+            // names are only stored as 3-letter prefixes: both must start a word in the row
             const first = (entry.firstName || '').trim().toLowerCase();
             const last = (entry.lastName || '').trim().toLowerCase();
-            if (first.length > 1 && last.length > 1 && rowText.includes(first) && rowText.includes(last)) {
-                usedDbIndices.add(i);
-                return entry;
-            }
-        }
-        for (let i = 0; i < db.length; i++) {
-            if (usedDbIndices.has(i)) continue;
-            const entry = db[i];
-            const last = (entry.lastName || '').trim().toLowerCase();
-            if (last.length > 3 && rowText.includes(last)) {
+            if (first.length >= 2 && last.length >= 2 && startsWord(rowText, first) && startsWord(rowText, last)) {
                 usedDbIndices.add(i);
                 return entry;
             }
@@ -640,8 +654,8 @@
                         const cols = parseCSVLine(lines[i]);
                         // 6 columns = Spark ID 1 / Spark ID 2. Old 5-column files (Unique ID) are
                         // still accepted; those rows have no Spark IDs and match by name only.
-                        if (cols.length >= 6) entries.push({ firstName: cols[0], lastName: cols[1], dept: cols[2], rowContents: cols[3], sparkId1: cols[4], sparkId2: cols[5] });
-                        else if (cols.length >= 5) entries.push({ firstName: cols[0], lastName: cols[1], dept: cols[2], rowContents: cols[3], sparkId1: '', sparkId2: '' });
+                        if (cols.length >= 6) entries.push({ firstName: trunc3(cols[0]), lastName: trunc3(cols[1]), dept: cols[2], rowContents: cols[3], sparkId1: cols[4], sparkId2: cols[5] });
+                        else if (cols.length >= 5) entries.push({ firstName: trunc3(cols[0]), lastName: trunc3(cols[1]), dept: cols[2], rowContents: cols[3], sparkId1: '', sparkId2: '' });
                     }
                     if (entries.length === 0) { alert('No valid entries found in CSV file.'); uploadInput.value = ''; return; }
                     if (!confirm(`Replace current database with ${entries.length} entries from "${file.name}"?`)) { uploadInput.value = ''; return; }

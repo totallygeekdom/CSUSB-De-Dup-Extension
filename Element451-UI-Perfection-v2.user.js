@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.58
+// @version      2.59
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-58'; // keep in sync with @version (2.58)
+    const BUILD = 'v2-build-59'; // keep in sync with @version (2.59)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -50,7 +50,7 @@
             return getBoolSetting('elm_auto_click_fab', true) ? 4 : 0;
         } },
         HIGHLIGHT_ROWS:           { get() { return getBoolSetting('elm_highlight_rows', true); } },
-        SHOW_MERGE_COUNTER:       { get() { return getBoolSetting('elm_show_merge_counter', true); } },
+        SHOW_MERGE_COUNTER:       { get() { return getBoolSetting('elm_show_merge_counter', false); } },
         AUTO_SKIP_BLOCKED:        { get() { return getBoolSetting('elm_auto_skip_blocked', true); } },
         ALLOWED_DEPARTMENT:       { get() { return localStorage.getItem('elm_allowed_department') || 'UnderGrad'; } },
     });

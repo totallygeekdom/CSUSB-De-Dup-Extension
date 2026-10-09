@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.4
+// @version      2.5
 // @description  Tracks duplicate entries in a CSV database stored in browser localStorage — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -353,6 +353,7 @@
     function collectSparkIds(obj, path, out, found) {
         if (obj === null || typeof obj !== 'object') return;
         for (const k of Object.keys(obj)) {
+            if (!path && (k === 'ai_analysis' || k === 'feedback')) continue; // free text, not profile data
             const v = obj[k];
             const here = (path ? path + '.' + k : k).replace(/\.\d+/g, '[]');
             if (/spark/i.test(k)) {
@@ -772,5 +773,5 @@
         updateDbSizeBadge();
     }, 1000);
 
-    console.log('%cCSV Database (new layout) v2.4 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
+    console.log('%cCSV Database (new layout) v2.5 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
 })();

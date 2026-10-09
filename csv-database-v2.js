@@ -56,11 +56,14 @@
         .csv-dept-badge[data-dept="Appeal"]       { background: #fff8e1; color: #f57f17; }
         .csv-dept-badge[data-dept="Ignored"]      { background: #f5f5f5; color: #616161; }
 
+        /* Material 3 snackbar */
         #csv-api-toast {
-            position: fixed; bottom: 16px; left: 16px; display: flex; align-items: center; gap: 10px;
-            padding: 8px 16px 8px 12px; border-radius: 10px; background: rgba(255, 255, 255, 0.75);
-            font-size: 12px; font-weight: 500; color: #333; z-index: 9999; opacity: 0;
-            transition: opacity 0.35s ease; pointer-events: none; max-width: 340px; box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+            position: fixed; bottom: 16px; left: 16px; display: flex; align-items: center; gap: 12px;
+            min-height: 48px; box-sizing: border-box; padding: 8px 16px 8px 12px; border-radius: 4px;
+            background: #322f35; color: #f5eff7; font: 400 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .25px;
+            z-index: 9999; opacity: 0; transition: opacity .3s cubic-bezier(.2, 0, 0, 1);
+            pointer-events: none; max-width: 340px;
+            box-shadow: 0 1px 3px rgba(0,0,0,.3), 0 4px 8px 3px rgba(0,0,0,.15);
         }
         #csv-api-toast.visible { opacity: 1; }
         .csv-toast-dot { position: relative; width: 18px; height: 18px; flex-shrink: 0; }
@@ -74,11 +77,21 @@
         #csv-api-toast.error .csv-toast-dot-outer { background: rgba(198, 40, 40, 0.3); }
         @keyframes csvPulse { 0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.6; } 50% { transform: translate(-50%, -50%) scale(1.5); opacity: 0.2; } }
 
-        #elm-db-size-badge { display: flex; align-items: center; background: #f5f5f5; border-radius: 20px; border: 1px solid #ddd; padding: 2px; white-space: nowrap; cursor: default; }
-        #elm-db-size-label { font-weight: 600; font-size: 14px; color: #555; padding: 4px 12px; }
-        .settings-action-btn { display: block; width: 100%; text-align: left; padding: 8px 10px; margin: 6px 0; border: 1px solid #ddd; border-radius: 8px; background: #fafafa; cursor: pointer; font-size: 13px; }
-        .settings-action-btn:hover { background: #f0f0f0; }
-        .settings-action-btn.danger { color: #c62828; border-color: #f2c2c2; }
+        /* tonal assist-chip style pill, matches the merge counter */
+        #elm-db-size-badge { display: flex; align-items: center; height: 32px; box-sizing: border-box; padding: 0 12px; background: #e6e0e9; border: none; border-radius: 8px; white-space: nowrap; cursor: default; }
+        #elm-db-size-label { font: 500 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .1px; color: #1d1b20; padding: 0; }
+        /* Material 3 buttons: Download/Upload are tonal, Clear is an outlined error button */
+        .settings-action-btn {
+            display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; height: 40px; margin: 8px 0; padding: 0 24px; box-sizing: border-box;
+            border: none; border-radius: 20px; background: #dce8f9; color: #0b2a4a;
+            font: 500 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .1px; cursor: pointer;
+            transition: box-shadow .2s cubic-bezier(.2, 0, 0, 1), background-color .2s cubic-bezier(.2, 0, 0, 1);
+        }
+        .settings-action-btn:hover { box-shadow: 0 1px 2px rgba(0,0,0,.3), 0 1px 3px 1px rgba(0,0,0,.15); background: #d2e1f6; }
+        .settings-action-btn:active { background: #c6d8f1; box-shadow: none; }
+        .settings-action-btn:focus-visible { outline: 2px solid #1976d2; outline-offset: 2px; }
+        .settings-action-btn.danger { background: transparent; border: 1px solid #79747e; color: #b3261e; }
+        .settings-action-btn.danger:hover { background: rgba(179, 38, 30, .08); box-shadow: none; }
         #elm-db-upload-input { display: none; }
     `;
     const styleEl = document.createElement('style');

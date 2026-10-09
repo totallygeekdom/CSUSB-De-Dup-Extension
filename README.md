@@ -61,7 +61,7 @@ relying on them for unattended automation:**
   happens to include them). Old 5-column files
   (Unique ID) still import and match by name only.
 - Names are stored obfuscated: only the first 3 letters of the first and last
-  name are kept (existing entries are shortened automatically, and full names
+  name are kept, followed by "..." when a name was cut (e.g. "Jon...") (existing entries are shortened automatically, and full names
   are masked out of the Row Contents text too). Name matching on the list
   page is therefore a weak fallback; Spark IDs are the real key.
 

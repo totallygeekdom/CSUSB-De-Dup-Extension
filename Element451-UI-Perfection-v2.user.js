@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.59
+// @version      2.60
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-59'; // keep in sync with @version (2.59)
+    const BUILD = 'v2-build-60'; // keep in sync with @version (2.60)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -1081,6 +1081,12 @@
             getContactCards().forEach(c => c.classList.add('elm2-blocked-card'));
         }
     }
+    // Database-scan mode: allowed department "None" blocks every pair and Auto-Skip moves
+    // on from each one, so warning popups (which need a click) are suppressed to let the
+    // scan run uninterrupted. Entries are still recorded and skipped as usual.
+    function isScanMode() {
+        return CFG.ALLOWED_DEPARTMENT.toLowerCase() === 'none' && CFG.AUTO_SKIP_BLOCKED;
+    }
     // Signals the current entry's department/block status to csv-database-v2.js
     // via document.body.dataset, same contract as the classic script.
     function updateCsvSignal(blockers) {
@@ -1094,7 +1100,7 @@
         else document.body.dataset.csvDept = detectActualDepartment().dept;
         if (sparks.a || sparks.b) { document.body.dataset.csvSpark1 = sparks.a; document.body.dataset.csvSpark2 = sparks.b; }
         else { delete document.body.dataset.csvSpark1; delete document.body.dataset.csvSpark2; }
-        if (appeal && !appealWarningShown) {
+        if (appeal && !appealWarningShown && !isScanMode()) {
             appealWarningShown = true;
             const sideLabel = appeal.side === 'left' ? 'left side' : 'right side';
             alert('⚠️ Appeal keyword detected!\n\nReason: The word "appeal" was found on the ' + sideLabel + ' of this entry.\n\nThis merge is blocked and cannot be processed.');
@@ -1701,7 +1707,7 @@
             const _byRule = {};
             _rows.forEach(r => { const rl = r.element.dataset.elm2Rule; if (r.element.dataset.elm2ScriptSide) _byRule[rl || '(unknown)'] = (_byRule[rl || '(unknown)'] || 0) + 1; });
             console.log('[elm2] Suggestions by rule:', JSON.stringify(_byRule));
-            if (!conflictWarningShown && CONFLICT_ROW_THRESHOLD > 0) {
+            if (!conflictWarningShown && CONFLICT_ROW_THRESHOLD > 0 && !isScanMode()) {
                 const { conflictCount, shouldWarn, conflicts } = checkForConflictingRecords();
                 if (shouldWarn) {
                     conflictWarningShown = true;
@@ -1709,7 +1715,7 @@
                 }
             }
             const scoreLevel = getScoreChipLevel();
-            if (scoreLevel === 'low' && !conflictWarningShown) {
+            if (scoreLevel === 'low' && !conflictWarningShown && !isScanMode()) {
                 conflictWarningShown = true;
                 alert('⚠️ Bolt confidence score is "Low" for this pair. Please review carefully before merging.');
             }

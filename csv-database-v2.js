@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.3
+// @version      2.4
 // @description  Tracks duplicate entries in a CSV database stored in browser localStorage — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -341,29 +341,42 @@
             if (badge) badge.remove();
         });
     }
-    // Collects every scalar stored under a key containing "spark" (e.g.
-    // master.spark_id, duplicate.sparkId) anywhere in an API record.
-    function collectSparkIds(obj, path, out, paths) {
+    // Collects Spark IDs from an API record, wherever they live: scalars under a key
+    // containing "spark" (e.g. master.spark_id), and "Spark Id: <id>" text inside any
+    // string value. Also records shapes (never real values) for diagnosis.
+    const SPARK_TEXT = /spark[\s_-]*id\W{0,3}([A-Za-z0-9-]{4,})/gi;
+    function sparkShape(str, idx) {
+        // letters -> x, digits -> 9, except the word "spark"
+        return str.slice(Math.max(0, idx - 15), idx + 40).replace(/spark/gi, '\u0001')
+            .replace(/[A-Za-z]/g, 'x').replace(/\d/g, '9').replace(/\u0001/g, 'Spark');
+    }
+    function collectSparkIds(obj, path, out, found) {
         if (obj === null || typeof obj !== 'object') return;
         for (const k of Object.keys(obj)) {
             const v = obj[k];
-            const here = path ? path + '.' + k : k;
+            const here = (path ? path + '.' + k : k).replace(/\.\d+/g, '[]');
             if (/spark/i.test(k)) {
                 (Array.isArray(v) ? v : [v]).forEach(x => {
-                    if (typeof x === 'string' || typeof x === 'number') { out.push(String(x).trim()); paths.add(here.replace(/\.\d+/g, '[]')); }
+                    if (typeof x === 'string' || typeof x === 'number') { out.push(String(x).trim()); found.keys.add(here); }
                 });
             }
-            if (v && typeof v === 'object') collectSparkIds(v, here, out, paths);
+            if (typeof v === 'string' && /spark/i.test(v)) {
+                let m;
+                SPARK_TEXT.lastIndex = 0;
+                while ((m = SPARK_TEXT.exec(v))) out.push(m[1]);
+                if (found.text.size < 4) found.text.add(here + ' -> ' + sparkShape(v, v.search(/spark/i)));
+            }
+            if (v && typeof v === 'object') collectSparkIds(v, here, out, found);
         }
     }
     function parseApiEntries(entries) {
         const sample = entries[0];
         if (!sample || typeof sample !== 'object') return null;
         const idField = sample._id ? '_id' : sample.id ? 'id' : null;
-        const sparkPaths = new Set();
+        const found = { keys: new Set(), text: new Set() };
         const parsed = entries.map((e, i) => {
             const sparks = [];
-            collectSparkIds(e, '', sparks, sparkPaths);
+            collectSparkIds(e, '', sparks, found);
             return {
                 uniqueId: ((idField && e[idField]) || 'api-' + i).toString().toLowerCase(),
                 name: e.name || e.full_name || '',
@@ -372,9 +385,13 @@
                 raw: JSON.stringify(e)
             };
         });
-        // Diagnostic (key paths only, no values): where do Spark IDs live in a list record?
-        console.log('CSV Database: Spark ID fields in list API:', sparkPaths.size ? Array.from(sparkPaths).join(', ') : 'none by key name',
+        // Diagnostics (paths and shapes only, never real values)
+        console.log('CSV Database: Spark ID key fields in list API:', found.keys.size ? Array.from(found.keys).join(', ') : 'none',
             '| records with Spark IDs:', parsed.filter(x => x.sparks.length).length + '/' + parsed.length);
+        if (found.text.size) console.log('CSV Database: "spark" text in list API values (shape only):', Array.from(found.text));
+        ['master', 'duplicate'].forEach(k => {
+            if (sample[k] && typeof sample[k] === 'object') console.log('CSV Database: list API ' + k + ' fields:', Object.keys(sample[k]).join(', '));
+        });
         return parsed;
     }
     // A list record matches a database entry when it carries all of the entry's
@@ -755,5 +772,5 @@
         updateDbSizeBadge();
     }, 1000);
 
-    console.log('%cCSV Database (new layout) v2.3 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
+    console.log('%cCSV Database (new layout) v2.4 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
 })();

@@ -141,22 +141,34 @@
     }
     // Privacy: only the first 3 letters of the first and last name are ever stored.
     function trunc3(t) { return (t || '').trim().slice(0, 3); }
-    function maskNames(text, first, last) {
+    function maskNames(text, ...names) {
         let out = text || '';
-        [first, last].forEach(n => {
+        names.forEach(n => {
             n = (n || '').trim();
             if (n.length > 3) out = out.replace(new RegExp(escRe(n), 'gi'), trunc3(n));
         });
         return out;
     }
+    // Both contacts' names (card A and card B), already cut to 3 letters, plus the
+    // full text so it can be masked out of row contents. Contact 1 is the first
+    // non-empty card, as before.
+    function splitName(full) {
+        const parts = (full || '').trim().split(/\s+/).filter(Boolean);
+        return { first: parts[0] || '', last: parts.slice(1).join(' ') };
+    }
     function extractNames() {
         const form = document.querySelector('elm-duplicate-field-diff-form');
         if (!form) return { firstName: '', lastName: '' };
         const nameEls = form.querySelectorAll('.contact-card-name');
-        const fullName = nameEls[0] ? nameEls[0].textContent.trim() : (nameEls[1] ? nameEls[1].textContent.trim() : '');
-        if (!fullName) return { firstName: '', lastName: '' };
-        const parts = fullName.split(/\s+/);
-        return { firstName: trunc3(parts[0]), lastName: trunc3(parts.slice(1).join(' ')), fullFirst: parts[0] || '', fullLast: parts.slice(1).join(' ') };
+        const n1 = splitName(nameEls[0] && nameEls[0].textContent);
+        const n2 = splitName(nameEls[1] && nameEls[1].textContent);
+        const c1 = n1.first ? n1 : n2;
+        const c2 = n1.first ? n2 : { first: '', last: '' };
+        return {
+            firstName: trunc3(c1.first), lastName: trunc3(c1.last),
+            firstName2: trunc3(c2.first), lastName2: trunc3(c2.last),
+            full: [c1.first, c1.last, c2.first, c2.last]
+        };
     }
     // Row(s) highlighted by Element451-UI-Perfection-v2.user.js as the trigger
     // for the current lockdown (mirrors the classic .blocked-row read).
@@ -179,9 +191,9 @@
             // entries saved before name truncation existed are shortened (and re-saved) here
             let changed = false;
             db.forEach(e => {
-                if ((e.firstName || '').length > 3 || (e.lastName || '').length > 3) {
-                    e.rowContents = maskNames(e.rowContents, e.firstName, e.lastName);
-                    e.firstName = trunc3(e.firstName); e.lastName = trunc3(e.lastName);
+                if ([e.firstName, e.lastName, e.firstName2, e.lastName2].some(n => (n || '').length > 3)) {
+                    e.rowContents = maskNames(e.rowContents, e.firstName, e.lastName, e.firstName2, e.lastName2);
+                    e.firstName = trunc3(e.firstName); e.lastName = trunc3(e.lastName); e.firstName2 = trunc3(e.firstName2); e.lastName2 = trunc3(e.lastName2);
                     changed = true;
                 }
             });
@@ -202,15 +214,16 @@
         if (!sparks.a && !sparks.b) return;
         // stale signal mid-navigation: the main script's Spark IDs must match the page
         if (document.body.dataset.csvSpark1 !== sparks.a || document.body.dataset.csvSpark2 !== sparks.b) return;
-        const { firstName, lastName, fullFirst, fullLast } = extractNames();
+        const { firstName, lastName, firstName2, lastName2, full } = extractNames();
         if (!firstName && !lastName) return; // page content not ready
         const db = getDatabase();
-        const rowContents = maskNames(getBlockedRowText(dept), fullFirst, fullLast);
-        const newEntry = { firstName, lastName, dept, rowContents, sparkId1: sparks.a, sparkId2: sparks.b };
+        const rowContents = maskNames(getBlockedRowText(dept), ...full);
+        const newEntry = { firstName, lastName, firstName2, lastName2, dept, rowContents, sparkId1: sparks.a, sparkId2: sparks.b };
         const existingIdx = db.findIndex(entry => sameSparkPair(entry, sparks.a, sparks.b));
         if (existingIdx !== -1) {
             const old = db[existingIdx];
-            if (old.dept === dept && old.firstName === firstName && old.lastName === lastName && old.rowContents === rowContents
+            if (old.dept === dept && old.firstName === firstName && old.lastName === lastName
+                && old.firstName2 === firstName2 && old.lastName2 === lastName2 && old.rowContents === rowContents
                 && old.sparkId1 === sparks.a && old.sparkId2 === sparks.b) return;
             db[existingIdx] = newEntry;
             saveDatabase(db);
@@ -255,10 +268,14 @@
                 usedDbIndices.add(i);
                 return entry;
             }
-            // names are only stored as 3-letter prefixes: both must start a word in the row
-            const first = (entry.firstName || '').trim().toLowerCase();
-            const last = (entry.lastName || '').trim().toLowerCase();
-            if (first.length >= 2 && last.length >= 2 && startsWord(rowText, first) && startsWord(rowText, last)) {
+            // The list rows don't show Spark IDs, so rows are matched on names. Only
+            // 3-letter prefixes are stored, so require BOTH contacts of the pair (the
+            // master and the duplicate columns) to match, not just one name.
+            const has = (f, l) => f.length >= 2 && l.length >= 2 && startsWord(rowText, f) && startsWord(rowText, l);
+            const f1 = (entry.firstName || '').trim().toLowerCase(), l1 = (entry.lastName || '').trim().toLowerCase();
+            const f2 = (entry.firstName2 || '').trim().toLowerCase(), l2 = (entry.lastName2 || '').trim().toLowerCase();
+            const second = f2 && l2;
+            if (has(f1, l1) && (!second || has(f2, l2))) {
                 usedDbIndices.add(i);
                 return entry;
             }
@@ -556,8 +573,8 @@
     function toCSV() {
         const db = getDatabase();
         if (db.length === 0) return '';
-        const headers = ['Firstname', 'Lastname', 'Dept.', 'Row Contents', 'Spark ID 1', 'Spark ID 2'];
-        const rows = db.map(e => [e.firstName, e.lastName, e.dept, e.rowContents, e.sparkId1, e.sparkId2]
+        const headers = ['Firstname', 'Lastname', 'Dept.', 'Row Contents', 'Spark ID 1', 'Spark ID 2', 'Firstname 2', 'Lastname 2'];
+        const rows = db.map(e => [e.firstName, e.lastName, e.dept, e.rowContents, e.sparkId1, e.sparkId2, e.firstName2, e.lastName2]
             .map(v => `"${(v || '').replace(/"/g, '""')}"`).join(','));
         return [headers.join(','), ...rows].join('\n');
     }
@@ -654,7 +671,7 @@
                         const cols = parseCSVLine(lines[i]);
                         // 6 columns = Spark ID 1 / Spark ID 2. Old 5-column files (Unique ID) are
                         // still accepted; those rows have no Spark IDs and match by name only.
-                        if (cols.length >= 6) entries.push({ firstName: trunc3(cols[0]), lastName: trunc3(cols[1]), dept: cols[2], rowContents: cols[3], sparkId1: cols[4], sparkId2: cols[5] });
+                        if (cols.length >= 6) entries.push({ firstName: trunc3(cols[0]), lastName: trunc3(cols[1]), dept: cols[2], rowContents: cols[3], sparkId1: cols[4], sparkId2: cols[5], firstName2: trunc3(cols[6]), lastName2: trunc3(cols[7]) });
                         else if (cols.length >= 5) entries.push({ firstName: trunc3(cols[0]), lastName: trunc3(cols[1]), dept: cols[2], rowContents: cols[3], sparkId1: '', sparkId2: '' });
                     }
                     if (entries.length === 0) { alert('No valid entries found in CSV file.'); uploadInput.value = ''; return; }

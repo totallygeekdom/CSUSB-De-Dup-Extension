@@ -368,6 +368,7 @@
         }
         #elm-settings-pane .elm-slider input[type=range]::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; background: var(--md-primary); border: none; box-shadow: var(--md-elev-1); }
         #elm-settings-pane .elm-slider input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 8px rgba(25, 118, 210, .16); }
+        #elm-settings-pane .elm-level-desc { font-size: 13px; line-height: 18px; letter-spacing: .25px; color: var(--md-on-surface-variant); margin: 0 0 8px; }
         #elm-settings-pane .elm-slider-ticks { display: flex; justify-content: space-between; margin-top: 6px; font-size: 12px; line-height: 16px; letter-spacing: .4px; color: var(--md-on-surface-variant); }
         .elm-toggle-switch input:focus-visible + .elm-toggle-slider { outline: 2px solid var(--elm2-bolt-blue, #1976d2); outline-offset: 2px; }
     `;
@@ -803,7 +804,7 @@
     // pair, which would leave our per-row state (Bolt's pick, our pick, resolved
     // flags, colors) attached to a row that now shows different data. Tag each
     // row with the pair it was computed for and wipe anything stale.
-    const ROW_STATE_KEYS = ['elm2Tier', 'elm2AiSide', 'elm2AiSeen', 'elm2ScriptSide', 'elm2AutoResolved', 'elm2DualPersonal', 'elm2DualResolved', 'elm2AddressResolved'];
+    const ROW_STATE_KEYS = ['elm2AiSide', 'elm2AiSeen', 'elm2ScriptSide', 'elm2AutoResolved', 'elm2DualPersonal', 'elm2DualResolved', 'elm2AddressResolved'];
     // Bolt's original picks and our own picks, remembered in the script (not just
     // on the DOM nodes) for the current pair, so they survive Element451
     // re-rendering a row after the user or our script has changed the selection.
@@ -831,7 +832,6 @@
                 if (m.ai) el.dataset.elm2AiSide = m.ai;
                 if (m.script) el.dataset.elm2ScriptSide = m.script;
                 if (m.rule) el.dataset.elm2Rule = m.rule;
-                if (m.tier) el.dataset.elm2Tier = m.tier;
                 if (m.acted) el.dataset.elm2AiSeen = '1';
             }
         });
@@ -862,16 +862,22 @@
     // Every resolution rule below should call this instead of row.selectSide()
     // directly.
     let currentRule = '';
-    // How far up the Auto-Apply slider a rule's picks get applied automatically:
-    // 1 applicant side, 2 clear-cut field rules, 3 preference rules, 4 arbitrary defaults.
-    const RULE_TIERS = {
-        'follows applicant side (Application/Cal State Apply)': 1,
-        'date of birth validity': 2, 'first generation = yes': 2, 'later intended term': 2, 'name case': 2,
-        'personal email preferred': 3, 'csusb.major': 3, 'csusb.school': 3,
-        'address comparison': 3, 'dual personal email tiebreak': 3,
-        'Encoura/College Board ID -> left': 4, 'milestone type match -> left': 4, 'legacy default -> left': 4
-    };
-    const ruleTier = (rule) => RULE_TIERS[rule] || 4;
+    // Whether the Auto-Apply slider covers the pair on screen. Cumulative:
+    // 0 none, 1 pairs with an applicant side, 2 + Bolt score Low, 3 + Medium, 4 every pair.
+    let autoApplyThisPair = false;
+    function computeAutoApplyForPair() {
+        const level = CFG.AUTO_APPLY_LEVEL;
+        let allowed = false;
+        if (level >= 4) allowed = true;
+        else if (level >= 1) {
+            const score = getScoreChipLevel();
+            allowed = !!findApplicantSide()
+                || (level >= 2 && score === 'low')
+                || (level >= 3 && score === 'medium');
+        }
+        autoApplyThisPair = allowed;
+        return allowed;
+    }
     function applyScriptPick(row, side) {
         const d = row.element.dataset;
         d.elm2Rule = currentRule;
@@ -879,10 +885,7 @@
         d.elm2AiSeen = '1'; // from here on, a selection on this row may be ours, not Bolt's
         d.elm2ScriptSide = side;
         rememberRow(row.key, { script: side, acted: true, rule: currentRule });
-        const tier = ruleTier(currentRule);
-        d.elm2Tier = String(tier);
-        rememberRow(row.key, { tier: String(tier) });
-        if (CFG.AUTO_APPLY_LEVEL >= tier) row.selectSide(side);
+        if (autoApplyThisPair) row.selectSide(side);
     }
     function getContactCards() {
         const form = getDiffForm();
@@ -1400,6 +1403,7 @@
         });
     }
     function runAutoResolution() {
+        computeAutoApplyForPair();
         autoResolveRows();
         autoDualPersonalEmails();
         autoResolveAddresses();
@@ -1473,13 +1477,13 @@
         }
         document.documentElement.style.setProperty('--elm2-nav-top', top + 'px');
     }
-    // When the Auto-Apply slider is raised mid-review, apply the suggestions the new level
-    // now covers (lowering it never undoes anything already applied).
+    // When the Auto-Apply slider is changed mid-review, apply our suggestions if the new
+    // level now covers this pair (lowering it never undoes anything already applied).
     function reapplyForLevel() {
-        const level = CFG.AUTO_APPLY_LEVEL;
+        if (!computeAutoApplyForPair()) return;
         getDiffRows().forEach(row => {
-            const d = row.element.dataset;
-            if (d.elm2ScriptSide && parseInt(d.elm2Tier || '4', 10) <= level) row.selectSide(d.elm2ScriptSide);
+            const side = row.element.dataset.elm2ScriptSide;
+            if (side) row.selectSide(side);
         });
     }
     function annotateApplicantSide() {
@@ -1599,11 +1603,8 @@
         else if (ours.length === 0) msg = `${conflicts} conflicting field(s); our rules had no opinion on any of them`;
         else if (differing > 0) msg = `⚠ ${differing} of ${ours.length} suggestions differ from Bolt's picks (${conflicts} conflicting of ${all.length} fields)`;
         else msg = `Our ${ours.length} suggestion(s) match Bolt's picks (${conflicts} conflicting of ${all.length} fields)`;
-        if (!blocked && ours.length > 0) {
-            const level = CFG.AUTO_APPLY_LEVEL;
-            const held = ours.filter(r => parseInt(r.element.dataset.elm2Tier || '4', 10) > level).length;
-            if (level === 0) msg += ' — suggestions only, not applied';
-            else if (held > 0) msg += ` — ${held} not auto-applied at this level`;
+        if (!blocked && ours.length > 0 && !autoApplyThisPair) {
+            msg += CFG.AUTO_APPLY_LEVEL === 0 ? ' — suggestions only, not applied' : ' — not auto-applied for this pair at this level';
         }
         document.getElementById('elm2-pick-compare-count').textContent = msg;
         document.getElementById('elm2-use-ai-btn').disabled = both.length === 0;
@@ -1848,6 +1849,7 @@
                     <input type="range" id="elm-apply-level" min="0" max="4" step="1" aria-label="Auto-apply level">
                     <div class="elm-slider-ticks"><span>None</span><span>Applicant</span><span>Low</span><span>Medium</span><span>High/All</span></div>
                 </div>
+                <div id="elm-apply-level-desc" class="elm-level-desc"></div>
                 <div class="setting-row"><label>Auto-Skip Blocked</label>${toggleHtml('elm-auto-skip-blocked')}</div>
                 <div class="settings-section-title">Display</div>
                 <div class="setting-row"><label>Highlight Rows</label>${toggleHtml('elm-highlight-rows')}</div>
@@ -1872,10 +1874,18 @@
         const levelSlider = document.getElementById('elm-apply-level');
         const levelLabel = document.getElementById('elm-apply-level-label');
         const levelNames = ['None', 'Applicant', 'Low', 'Medium', 'High / All'];
+        const levelDescs = [
+            'Never auto-applies. Use "Use our picks" to apply suggestions yourself.',
+            'Auto-applies only on pairs that have an applicant side.',
+            'Pairs with an applicant side, plus pairs with a Low Bolt score.',
+            'Pairs with an applicant side, plus Low and Medium Bolt scores.',
+            'Every pair, whatever the Bolt score.'
+        ];
         const syncLevel = () => {
             levelSlider.value = CFG.AUTO_APPLY_LEVEL;
             levelSlider.style.setProperty('--fill', (levelSlider.value / 4 * 100) + '%');
             levelLabel.textContent = levelNames[levelSlider.value];
+            document.getElementById('elm-apply-level-desc').textContent = levelDescs[levelSlider.value];
         };
         syncLevel();
         levelSlider.addEventListener('input', () => {

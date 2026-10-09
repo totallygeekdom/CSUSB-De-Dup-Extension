@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-51';
+    const BUILD = 'v2-build-52';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -42,7 +42,13 @@
     // merge-success signal to detect (see checkForMergeResult below) — both
     // need live investigation before they're worth exposing as settings.
     const CFG = Object.defineProperties({}, {
-        AUTO_RESOLVE_FIELDS:      { get() { return getBoolSetting('elm_auto_click_fab', true); } },
+        // 0 none, 1 applicant, 2 low, 3 medium, 4 high/all. Falls back to the old on/off
+        // toggle (elm_auto_click_fab) until the slider has been used.
+        AUTO_APPLY_LEVEL:         { get() {
+            const v = parseInt(localStorage.getItem('elm_auto_apply_level'), 10);
+            if (!isNaN(v)) return Math.max(0, Math.min(4, v));
+            return getBoolSetting('elm_auto_click_fab', true) ? 4 : 0;
+        } },
         HIGHLIGHT_ROWS:           { get() { return getBoolSetting('elm_highlight_rows', true); } },
         SHOW_MERGE_COUNTER:       { get() { return getBoolSetting('elm_show_merge_counter', true); } },
         AUTO_SKIP_BLOCKED:        { get() { return getBoolSetting('elm_auto_skip_blocked', true); } },
@@ -344,6 +350,25 @@
             content: ""; position: absolute; left: 24px; top: 4px; width: 4px; height: 8px;
             border: solid var(--elm2-bolt-blue, #1976d2); border-width: 0 2px 2px 0; transform: rotate(45deg);
         }
+        /* M3 slider (Auto-Apply level) */
+        #elm-settings-pane .elm-slider-head { min-height: 40px; }
+        #elm-settings-pane .elm-level-label { font-size: 14px; font-weight: 500; letter-spacing: .1px; color: var(--md-primary); }
+        #elm-settings-pane .elm-slider { padding: 0 2px 12px; }
+        #elm-settings-pane .elm-slider input[type=range] {
+            -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 20px; margin: 0; background: transparent; cursor: pointer; --fill: 0%;
+        }
+        #elm-settings-pane .elm-slider input[type=range]::-webkit-slider-runnable-track {
+            height: 4px; border-radius: 2px; background: linear-gradient(to right, var(--md-primary) var(--fill), #cac4d0 var(--fill));
+        }
+        #elm-settings-pane .elm-slider input[type=range]::-moz-range-track { height: 4px; border-radius: 2px; background: #cac4d0; }
+        #elm-settings-pane .elm-slider input[type=range]::-moz-range-progress { height: 4px; border-radius: 2px; background: var(--md-primary); }
+        #elm-settings-pane .elm-slider input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; width: 20px; height: 20px; margin-top: -8px; border-radius: 50%;
+            background: var(--md-primary); border: none; box-shadow: var(--md-elev-1); transition: box-shadow .2s var(--md-ease);
+        }
+        #elm-settings-pane .elm-slider input[type=range]::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; background: var(--md-primary); border: none; box-shadow: var(--md-elev-1); }
+        #elm-settings-pane .elm-slider input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 8px rgba(25, 118, 210, .16); }
+        #elm-settings-pane .elm-slider-ticks { display: flex; justify-content: space-between; margin-top: 6px; font-size: 12px; line-height: 16px; letter-spacing: .4px; color: var(--md-on-surface-variant); }
         .elm-toggle-switch input:focus-visible + .elm-toggle-slider { outline: 2px solid var(--elm2-bolt-blue, #1976d2); outline-offset: 2px; }
     `;
     if (typeof GM_addStyle === 'function') GM_addStyle(css);
@@ -778,7 +803,7 @@
     // pair, which would leave our per-row state (Bolt's pick, our pick, resolved
     // flags, colors) attached to a row that now shows different data. Tag each
     // row with the pair it was computed for and wipe anything stale.
-    const ROW_STATE_KEYS = ['elm2AiSide', 'elm2AiSeen', 'elm2ScriptSide', 'elm2AutoResolved', 'elm2DualPersonal', 'elm2DualResolved', 'elm2AddressResolved'];
+    const ROW_STATE_KEYS = ['elm2Tier', 'elm2AiSide', 'elm2AiSeen', 'elm2ScriptSide', 'elm2AutoResolved', 'elm2DualPersonal', 'elm2DualResolved', 'elm2AddressResolved'];
     // Bolt's original picks and our own picks, remembered in the script (not just
     // on the DOM nodes) for the current pair, so they survive Element451
     // re-rendering a row after the user or our script has changed the selection.
@@ -806,6 +831,7 @@
                 if (m.ai) el.dataset.elm2AiSide = m.ai;
                 if (m.script) el.dataset.elm2ScriptSide = m.script;
                 if (m.rule) el.dataset.elm2Rule = m.rule;
+                if (m.tier) el.dataset.elm2Tier = m.tier;
                 if (m.acted) el.dataset.elm2AiSeen = '1';
             }
         });
@@ -836,6 +862,16 @@
     // Every resolution rule below should call this instead of row.selectSide()
     // directly.
     let currentRule = '';
+    // How far up the Auto-Apply slider a rule's picks get applied automatically:
+    // 1 applicant side, 2 clear-cut field rules, 3 preference rules, 4 arbitrary defaults.
+    const RULE_TIERS = {
+        'follows applicant side (Application/Cal State Apply)': 1,
+        'date of birth validity': 2, 'first generation = yes': 2, 'later intended term': 2, 'name case': 2,
+        'personal email preferred': 3, 'csusb.major': 3, 'csusb.school': 3,
+        'address comparison': 3, 'dual personal email tiebreak': 3,
+        'Encoura/College Board ID -> left': 4, 'milestone type match -> left': 4, 'legacy default -> left': 4
+    };
+    const ruleTier = (rule) => RULE_TIERS[rule] || 4;
     function applyScriptPick(row, side) {
         const d = row.element.dataset;
         d.elm2Rule = currentRule;
@@ -843,7 +879,10 @@
         d.elm2AiSeen = '1'; // from here on, a selection on this row may be ours, not Bolt's
         d.elm2ScriptSide = side;
         rememberRow(row.key, { script: side, acted: true, rule: currentRule });
-        if (CFG.AUTO_RESOLVE_FIELDS) row.selectSide(side);
+        const tier = ruleTier(currentRule);
+        d.elm2Tier = String(tier);
+        rememberRow(row.key, { tier: String(tier) });
+        if (CFG.AUTO_APPLY_LEVEL >= tier) row.selectSide(side);
     }
     function getContactCards() {
         const form = getDiffForm();
@@ -1349,7 +1388,8 @@
             const leftText = row.values[0].textContent, rightText = row.values[1].textContent;
             if (!leftText || !rightText) return;
             row.element.dataset.elm2AddressResolved = 'true';
-            if (applicantSide) { applyScriptPick(row, applicantSide); return; }
+            if (applicantSide) { currentRule = 'follows applicant side (Application/Cal State Apply)'; applyScriptPick(row, applicantSide); return; }
+            currentRule = 'address comparison';
             const comparison = AddressComparer.compareAddresses(leftText, rightText);
             let winner = comparison.winner;
             if (winner === 'tie') {
@@ -1432,6 +1472,15 @@
             if (pos === 'sticky' || pos === 'fixed' || pos === 'absolute') top = Math.round(hdr.getBoundingClientRect().height);
         }
         document.documentElement.style.setProperty('--elm2-nav-top', top + 'px');
+    }
+    // When the Auto-Apply slider is raised mid-review, apply the suggestions the new level
+    // now covers (lowering it never undoes anything already applied).
+    function reapplyForLevel() {
+        const level = CFG.AUTO_APPLY_LEVEL;
+        getDiffRows().forEach(row => {
+            const d = row.element.dataset;
+            if (d.elm2ScriptSide && parseInt(d.elm2Tier || '4', 10) <= level) row.selectSide(d.elm2ScriptSide);
+        });
     }
     function annotateApplicantSide() {
         document.querySelectorAll('.elm2-applicant-card').forEach(el => el.classList.remove('elm2-applicant-card'));
@@ -1550,7 +1599,12 @@
         else if (ours.length === 0) msg = `${conflicts} conflicting field(s); our rules had no opinion on any of them`;
         else if (differing > 0) msg = `⚠ ${differing} of ${ours.length} suggestions differ from Bolt's picks (${conflicts} conflicting of ${all.length} fields)`;
         else msg = `Our ${ours.length} suggestion(s) match Bolt's picks (${conflicts} conflicting of ${all.length} fields)`;
-        if (!blocked && ours.length > 0 && !CFG.AUTO_RESOLVE_FIELDS) msg += ' — suggestions only, not applied';
+        if (!blocked && ours.length > 0) {
+            const level = CFG.AUTO_APPLY_LEVEL;
+            const held = ours.filter(r => parseInt(r.element.dataset.elm2Tier || '4', 10) > level).length;
+            if (level === 0) msg += ' — suggestions only, not applied';
+            else if (held > 0) msg += ` — ${held} not auto-applied at this level`;
+        }
         document.getElementById('elm2-pick-compare-count').textContent = msg;
         document.getElementById('elm2-use-ai-btn').disabled = both.length === 0;
         document.getElementById('elm2-use-script-btn').disabled = ours.length === 0;
@@ -1789,7 +1843,11 @@
             </div>
             <div class="settings-body">
                 <div class="settings-section-title">Automation</div>
-                <div class="setting-row"><label>Auto-Apply Suggestions</label>${toggleHtml('elm-auto-resolve-fields')}</div>
+                <div class="setting-row elm-slider-head"><label>Auto-Apply Suggestions</label><span id="elm-apply-level-label" class="elm-level-label"></span></div>
+                <div class="elm-slider">
+                    <input type="range" id="elm-apply-level" min="0" max="4" step="1" aria-label="Auto-apply level">
+                    <div class="elm-slider-ticks"><span>None</span><span>Applicant</span><span>Low</span><span>Medium</span><span>High/All</span></div>
+                </div>
                 <div class="setting-row"><label>Auto-Skip Blocked</label>${toggleHtml('elm-auto-skip-blocked')}</div>
                 <div class="settings-section-title">Display</div>
                 <div class="setting-row"><label>Highlight Rows</label>${toggleHtml('elm-highlight-rows')}</div>
@@ -1811,7 +1869,20 @@
         function toggleHtml(id) {
             return `<label class="elm-toggle-switch"><input type="checkbox" id="${id}"><span class="elm-toggle-slider"></span></label>`;
         }
-        setupToggle('elm-auto-resolve-fields', 'elm_auto_click_fab');
+        const levelSlider = document.getElementById('elm-apply-level');
+        const levelLabel = document.getElementById('elm-apply-level-label');
+        const levelNames = ['None', 'Applicant', 'Low', 'Medium', 'High / All'];
+        const syncLevel = () => {
+            levelSlider.value = CFG.AUTO_APPLY_LEVEL;
+            levelSlider.style.setProperty('--fill', (levelSlider.value / 4 * 100) + '%');
+            levelLabel.textContent = levelNames[levelSlider.value];
+        };
+        syncLevel();
+        levelSlider.addEventListener('input', () => {
+            localStorage.setItem('elm_auto_apply_level', levelSlider.value);
+            syncLevel();
+            reapplyForLevel();
+        });
         setupToggle('elm-auto-skip-blocked', 'elm_auto_skip_blocked');
         setupToggle('elm-highlight-rows', 'elm_highlight_rows');
         setupToggle('elm-show-merge-counter', 'elm_show_merge_counter', () => { document.getElementById('elm-controls-wrapper')?.remove(); injectMergeCounter(); });

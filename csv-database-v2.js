@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.8
+// @version      2.9
 // @description  Tracks duplicate entries in a CSV database stored in browser localStorage — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -50,6 +50,11 @@
             white-space: nowrap;
             vertical-align: middle;
         }
+        /* right-align the badges so they line up down the column whatever their width */
+        .cdk-column-flagged:has(> .csv-dept-badge),
+        .cdk-column-signals:has(> .csv-dept-badge) { display: flex; align-items: center; }
+        .cdk-column-flagged > .csv-dept-badge,
+        .cdk-column-signals > .csv-dept-badge { margin-left: auto; }
         .csv-dept-badge[data-dept="Grad/IA"]      { background: #e3f2fd; color: #1565c0; }
         .csv-dept-badge[data-dept="UnderGrad"]    { background: #f3e5f5; color: #6a1b9a; }
         .csv-dept-badge[data-dept="Forbidden"]    { background: #fce4ec; color: #c2185b; }
@@ -805,5 +810,5 @@
         updateDbSizeBadge();
     }, 1000);
 
-    console.log('%cCSV Database (new layout) v2.8 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
+    console.log('%cCSV Database (new layout) v2.9 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
 })();

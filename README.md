@@ -54,9 +54,11 @@ relying on them for unattended automation:**
 - The review queue URL is always `.../v2/data/duplicates/bolt/review-queue`
   and no longer changes per profile, so the v2 database is keyed on the
   Spark IDs of the pair (read from the "Spark Id:" row), not the URL. CSV
-  columns: Firstname, Lastname, Dept., Row Contents, Spark ID 1, Spark ID 2
-  (left/A and right/B contact). List-page badges match by Spark ID found in
-  the API record or row text, falling back to names. Old 5-column files
+  columns: Firstname, Lastname, Dept., Row Contents, Spark ID 1, Spark ID 2,
+  Firstname 2, Lastname 2 (the two contacts of the pair). List rows don't
+  show Spark IDs, so list-page badges match on names: both contacts' 3-letter
+  prefixes must appear in the row (Spark IDs are only used if the list API
+  happens to include them). Old 5-column files
   (Unique ID) still import and match by name only.
 - Names are stored obfuscated: only the first 3 letters of the first and last
   name are kept (existing entries are shortened automatically, and full names

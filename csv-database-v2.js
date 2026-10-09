@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.7
+// @version      2.8
 // @description  Tracks duplicate entries in a CSV database stored in browser localStorage — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -653,8 +653,8 @@
     function toCSV() {
         const db = getDatabase();
         if (db.length === 0) return '';
-        const headers = ['Firstname', 'Lastname', 'Dept.', 'Row Contents', 'Spark ID 1', 'Spark ID 2', 'Firstname 2', 'Lastname 2'];
-        const rows = db.map(e => [e.firstName, e.lastName, e.dept, e.rowContents, e.sparkId1, e.sparkId2, e.firstName2, e.lastName2]
+        const headers = ['Firstname', 'Lastname', 'Firstname 2', 'Lastname 2', 'Dept.', 'Row Contents', 'Spark ID 1', 'Spark ID 2'];
+        const rows = db.map(e => [e.firstName, e.lastName, e.firstName2, e.lastName2, e.dept, e.rowContents, e.sparkId1, e.sparkId2]
             .map(v => `"${(v || '').replace(/"/g, '""')}"`).join(','));
         return [headers.join(','), ...rows].join('\n');
     }
@@ -747,12 +747,27 @@
                     const lines = text.trim().split('\n');
                     if (lines.length < 2) { alert('CSV file is empty or has no data rows.'); uploadInput.value = ''; return; }
                     const entries = [];
+                    // Columns are found by header name, so files exported by any earlier
+                    // version (different column order, or the old 5-column "Unique ID"
+                    // format with no Spark IDs) still import.
+                    const header = parseCSVLine(lines[0]).map(h => h.trim().toLowerCase());
+                    const col = (name, fallback) => { const i = header.indexOf(name); return i !== -1 ? i : fallback; };
+                    const idx = {
+                        first: col('firstname', 0), last: col('lastname', 1),
+                        first2: col('firstname 2', -1), last2: col('lastname 2', -1),
+                        dept: col('dept.', 2), rows: col('row contents', 3),
+                        s1: col('spark id 1', -1), s2: col('spark id 2', -1)
+                    };
+                    const get = (cols, i) => (i >= 0 && i < cols.length ? cols[i] : '');
                     for (let i = 1; i < lines.length; i++) {
                         const cols = parseCSVLine(lines[i]);
-                        // 6 columns = Spark ID 1 / Spark ID 2. Old 5-column files (Unique ID) are
-                        // still accepted; those rows have no Spark IDs and match by name only.
-                        if (cols.length >= 6) entries.push({ firstName: trunc3(cols[0]), lastName: trunc3(cols[1]), dept: cols[2], rowContents: cols[3], sparkId1: cols[4], sparkId2: cols[5], firstName2: trunc3(cols[6]), lastName2: trunc3(cols[7]) });
-                        else if (cols.length >= 5) entries.push({ firstName: trunc3(cols[0]), lastName: trunc3(cols[1]), dept: cols[2], rowContents: cols[3], sparkId1: '', sparkId2: '' });
+                        if (cols.length < 4) continue;
+                        entries.push({
+                            firstName: trunc3(get(cols, idx.first)), lastName: trunc3(get(cols, idx.last)),
+                            firstName2: trunc3(get(cols, idx.first2)), lastName2: trunc3(get(cols, idx.last2)),
+                            dept: get(cols, idx.dept), rowContents: get(cols, idx.rows),
+                            sparkId1: get(cols, idx.s1), sparkId2: get(cols, idx.s2)
+                        });
                     }
                     if (entries.length === 0) { alert('No valid entries found in CSV file.'); uploadInput.value = ''; return; }
                     if (!confirm(`Replace current database with ${entries.length} entries from "${file.name}"?`)) { uploadInput.value = ''; return; }
@@ -790,5 +805,5 @@
         updateDbSizeBadge();
     }, 1000);
 
-    console.log('%cCSV Database (new layout) v2.7 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
+    console.log('%cCSV Database (new layout) v2.8 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
 })();

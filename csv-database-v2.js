@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.1
+// @version      2.2
 // @description  Tracks duplicate entries in a CSV database stored in browser localStorage — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -364,6 +364,15 @@
         return null;
     }
 
+    // Diagnostic: path + top-level key names only (no values, no query string).
+    function logApiShape(url, data) {
+        try {
+            const path = String(url).split('?')[0].replace(/^https?:\/\/[^/]+/, '').replace(/[a-f0-9]{24}/gi, ':id');
+            const top = Array.isArray(data) ? '[array of ' + data.length + ']' : Object.keys(data || {}).join(', ');
+            console.log('CSV Database: saw API response', path, '| top-level:', top);
+        } catch (e) { /* ignore */ }
+    }
+
     (function interceptXHR() {
         const origOpen = XMLHttpRequest.prototype.open;
         XMLHttpRequest.prototype.open = function (method, url) {
@@ -378,6 +387,7 @@
                     if (!/duplicate|dedup/i.test(this._csvDbUrl)) return;
                     if (this._csvDbUrl.match(/\/duplicates?\/[a-f0-9]{24}/i)) return;
                     const data = JSON.parse(this.responseText);
+                    logApiShape(this._csvDbUrl, data);
                     const entries = data.data || data.items || data.results || (Array.isArray(data) ? data : null);
                     if (!entries || !Array.isArray(entries) || entries.length === 0) return;
                     const parsed = parseApiEntries(entries);
@@ -396,6 +406,7 @@
                     if (!url || !/duplicate|dedup/i.test(url)) return response;
                     if (url.match(/\/duplicates?\/[a-f0-9]{24}/i)) return response;
                     response.clone().json().then(data => {
+                        logApiShape(url, data);
                         const entries = data.data || data.items || data.results || (Array.isArray(data) ? data : null);
                         if (!entries || !Array.isArray(entries) || entries.length === 0) return;
                         const parsed = parseApiEntries(entries);
@@ -421,6 +432,7 @@
             if (!match) return;
             console.log('CSV Database: Re-fetching first page data from', match.name);
             fetch(match.name).then(r => r.json()).then(data => {
+                logApiShape(match.name, data);
                 const entries2 = data.data || data.items || data.results || (Array.isArray(data) ? data : null);
                 if (!entries2 || !Array.isArray(entries2) || entries2.length === 0) return;
                 const parsed = parseApiEntries(entries2);
@@ -713,5 +725,5 @@
         updateDbSizeBadge();
     }, 1000);
 
-    console.log('%cCSV Database (new layout) loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
+    console.log('%cCSV Database (new layout) v2.2 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
 })();

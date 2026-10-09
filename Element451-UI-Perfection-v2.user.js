@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-50';
+    const BUILD = 'v2-build-51';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -52,6 +52,21 @@
     // CSS
     // =========================================================
     const css = `
+        /* --- Material 3 design tokens for OUR UI (gear, counter, settings pane, comparison
+               bar). Primary follows Element451's own blue. --- */
+        :root {
+            --md-primary: var(--elm2-bolt-blue, #1976d2);
+            --md-on-surface: #1d1b20;
+            --md-on-surface-variant: #49454f;
+            --md-outline: #79747e;
+            --md-surface-container-low: #f7f2fa;
+            --md-surface-container: #f3edf7;
+            --md-surface-container-highest: #e6e0e9;
+            --md-error: #b3261e;
+            --md-elev-1: 0 1px 2px rgba(0,0,0,.3), 0 1px 3px 1px rgba(0,0,0,.15);
+            --md-elev-3: 0 1px 3px rgba(0,0,0,.3), 0 4px 8px 3px rgba(0,0,0,.15);
+            --md-ease: cubic-bezier(.2, 0, 0, 1);
+        }
         /* --- LOCKDOWN: red "Merge Contacts" button + null symbol --- */
         body.elm2-blocked .review-queue-nav-visible ~ * .bolt-stackable-sidebar-header-actions button:last-of-type,
         body.elm2-blocked bolt-stackable-sidebar-header-actions button:last-of-type {
@@ -86,31 +101,25 @@
                button element instead of a shared row) --- */
         /* --- AI-vs-script pick comparison bar + per-row disagreement badges --- */
         #elm2-pick-compare-bar {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            flex-wrap: wrap;
-            padding: 10px 12px;
-            margin: 0 0 8px;
-            background: #f5f5f5;
-            border: 1px solid #ddd;
-            border-radius: 8px;
+            display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+            padding: 12px 16px; margin: 0 0 12px;
+            background: var(--md-surface-container); border: none; border-radius: 12px;
             font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif;
         }
-        #elm2-pick-compare-count { font-size: 13px; color: #555; flex: 1 1 auto; min-width: 160px; }
+        #elm2-pick-compare-count { font-size: 14px; line-height: 20px; letter-spacing: .25px; color: var(--md-on-surface-variant); flex: 1 1 auto; min-width: 160px; }
         #elm2-pick-compare-bar button {
-            border: 1px solid #ccc;
-            background: #fff;
-            border-radius: 6px;
-            padding: 6px 12px;
-            font-size: 13px;
-            cursor: pointer;
+            height: 40px; padding: 0 24px; border-radius: 20px; box-sizing: border-box;
+            background: transparent; border: 1px solid var(--md-outline); color: var(--md-primary);
+            font: 500 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .1px;
+            cursor: pointer; transition: background-color .2s var(--md-ease);
         }
-        #elm2-use-ai-btn { border: 2px solid var(--elm2-bolt-blue, #1976d2); color: var(--elm2-bolt-blue, #1976d2); }
-        #elm2-use-ai-btn:hover { background: rgba(25, 118, 210, 0.12); background: color-mix(in srgb, var(--elm2-bolt-blue, #1976d2) 12%, transparent); }
-        #elm2-use-script-btn { border: 2px solid #ef6c00; color: #ef6c00; }
-        #elm2-use-script-btn:hover { background: rgba(239, 108, 0, 0.12); }
-        #elm2-pick-compare-bar button:disabled { opacity: 0.45; cursor: default; }
+        #elm2-pick-compare-bar #elm2-use-ai-btn { border-color: var(--elm2-bolt-blue, #1976d2); color: var(--elm2-bolt-blue, #1976d2); }
+        #elm2-pick-compare-bar #elm2-use-ai-btn:hover { background: rgba(25, 118, 210, 0.08); background: color-mix(in srgb, var(--elm2-bolt-blue, #1976d2) 8%, transparent); }
+        #elm2-pick-compare-bar #elm2-use-script-btn { border-color: #ef6c00; color: #ef6c00; }
+        #elm2-pick-compare-bar #elm2-use-script-btn:hover { background: rgba(239, 108, 0, 0.08); }
+        #elm2-pick-compare-bar button:active { background-color: rgba(0, 0, 0, 0.1); }
+        #elm2-pick-compare-bar button:focus-visible { outline: 2px solid var(--md-primary); outline-offset: 2px; }
+        #elm2-pick-compare-bar button:disabled { opacity: .38; cursor: default; background: transparent; }
         /* --- Pick comparison colors (light semi-transparent fill + saturated border,
                replacing Element451's own blue; its overlay pseudo-elements are hidden).
                Agreement row: the value both agreed on stays green (even if you then select the other one,
@@ -281,22 +290,35 @@
                top navbar — .bolt-navigation-right / elm-universal-search — was not
                redesigned) --- */
         #elm-controls-wrapper { display: flex; align-items: center; gap: 12px; margin-right: 16px; position: relative; }
-        #elm-counter-wrapper { display: flex; align-items: center; background: #f5f5f5; border-radius: 20px; border: 1px solid #ddd; padding: 2px; transition: all 0.2s ease-out; }
-        #elm-reset-btn { background: transparent; border: none; color: #999; cursor: pointer; font-size: 14px; padding: 4px 8px; border-radius: 50%; transition: all 0.2s; line-height: 1; }
-        #elm-reset-btn:hover { color: #d32f2f; background-color: rgba(211, 47, 47, 0.1); }
-        #elm-merge-counter { font-weight: 600; font-size: 14px; color: #555; padding: 4px 12px 4px 4px; white-space: nowrap; }
-        #elm-settings-btn { background: transparent; border: 1px solid rgba(255,255,255,0.3); color: white; cursor: pointer; font-size: 18px; padding: 4px 8px; border-radius: 8px; transition: all 0.2s; line-height: 1; display: flex; align-items: center; justify-content: center; }
-        #elm-settings-btn:hover { background-color: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.5); }
-        #elm-settings-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.35); z-index: 9998; }
+        /* tonal assist-chip style pill (merge counter; the DB badge in csv-database-v2 matches) */
+        #elm-counter-wrapper { display: flex; align-items: center; gap: 4px; height: 32px; box-sizing: border-box; padding: 0 4px 0 12px; background: var(--md-surface-container-highest); border: none; border-radius: 8px; }
+        #elm-merge-counter { font: 500 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .1px; color: var(--md-on-surface); padding: 0; white-space: nowrap; }
+        #elm-reset-btn { width: 24px; height: 24px; padding: 0; display: flex; align-items: center; justify-content: center; background: transparent; border: none; border-radius: 50%; color: var(--md-on-surface-variant); cursor: pointer; font-size: 16px; line-height: 1; transition: background-color .2s var(--md-ease), color .2s var(--md-ease); }
+        #elm-reset-btn:hover { color: var(--md-error); background-color: rgba(179, 38, 30, .08); }
+        /* standard icon button (40px, state layer) */
+        #elm-settings-btn { width: 40px; height: 40px; padding: 0; display: flex; align-items: center; justify-content: center; background: transparent; border: none; border-radius: 50%; color: #fff; cursor: pointer; font-size: 22px; line-height: 1; transition: background-color .2s var(--md-ease); }
+        #elm-settings-btn:hover { background-color: rgba(255, 255, 255, .12); }
+        #elm-settings-btn:active { background-color: rgba(255, 255, 255, .18); }
+        #elm-settings-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+        /* modal side sheet */
+        #elm-settings-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, .32); z-index: 9998; }
         #elm-settings-overlay.open { display: block; }
-        #elm-settings-pane { position: fixed; top: 0; right: -360px; width: 340px; height: 100%; background: #fff; box-shadow: -4px 0 24px rgba(0,0,0,0.25); z-index: 9999; transition: right 0.25s ease-out; overflow-y: auto; font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+        #elm-settings-pane { position: fixed; top: 0; right: -400px; width: 360px; max-width: 100vw; height: 100%; box-sizing: border-box; background: var(--md-surface-container-low); color: var(--md-on-surface); border-radius: 28px 0 0 28px; box-shadow: var(--md-elev-3); z-index: 9999; transition: right .3s var(--md-ease); overflow-y: auto; font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; }
         #elm-settings-pane.open { right: 0; }
-        #elm-settings-pane .settings-header { padding: 20px; font-size: 18px; font-weight: 600; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
-        #elm-settings-pane .settings-body { padding: 16px 20px; }
-        #elm-settings-pane .settings-section-title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: #888; margin: 20px 0 8px; }
-        #elm-settings-pane .setting-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #f2f2f2; gap: 12px; }
-        #elm-settings-pane .setting-row label { font-size: 14px; color: #333; }
-        #elm-settings-pane select, #elm-settings-pane input[type=number] { padding: 4px 8px; border-radius: 6px; border: 1px solid #ccc; font-size: 13px; }
+        #elm-settings-pane .settings-header { padding: 24px 16px 16px 24px; display: flex; justify-content: space-between; align-items: flex-start; }
+        #elm-settings-pane .settings-title { font-size: 22px; line-height: 28px; font-weight: 400; }
+        #elm-settings-pane .settings-build { font-size: 12px; line-height: 16px; letter-spacing: .5px; color: var(--md-on-surface-variant); }
+        #elm-settings-close { width: 40px; height: 40px; padding: 0; display: flex; align-items: center; justify-content: center; background: transparent; border: none; border-radius: 50%; color: var(--md-on-surface-variant); font-size: 24px; line-height: 1; cursor: pointer; transition: background-color .2s var(--md-ease); }
+        #elm-settings-close:hover { background-color: rgba(29, 27, 32, .08); }
+        #elm-settings-close:focus-visible { outline: 2px solid var(--md-primary); }
+        #elm-settings-pane .settings-body { padding: 0 24px 24px; }
+        #elm-settings-pane .settings-section-title { font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: var(--md-primary); text-transform: none; margin: 24px 0 4px; }
+        #elm-settings-pane .setting-row { display: flex; justify-content: space-between; align-items: center; min-height: 56px; padding: 8px 0; border: none; gap: 16px; }
+        #elm-settings-pane .setting-row label { font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--md-on-surface); }
+        /* outlined select */
+        #elm-settings-pane select, #elm-settings-pane input[type=number] { height: 40px; padding: 0 12px; box-sizing: border-box; background: transparent; color: var(--md-on-surface); border: 1px solid var(--md-outline); border-radius: 8px; font: 400 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+        #elm-settings-pane select:hover { border-color: var(--md-on-surface); }
+        #elm-settings-pane select:focus { outline: none; border: 2px solid var(--md-primary); padding: 0 11px; }
         /* Material 3 style switches for the settings pane (same look as the restyled
                "Hide matching items" toggle): 40x24 pill, small thumb off, filled track
                with a white check thumb on. */
@@ -1759,8 +1781,11 @@
         pane.id = 'elm-settings-pane';
         pane.innerHTML = `
             <div class="settings-header">
-                <span>Settings (New Layout) · ${BUILD}</span>
-                <button id="elm-settings-close" style="background:none;border:none;font-size:20px;cursor:pointer;">&times;</button>
+                <div>
+                    <div class="settings-title">Settings</div>
+                    <div class="settings-build">New layout · ${BUILD}</div>
+                </div>
+                <button id="elm-settings-close" aria-label="Close settings">&times;</button>
             </div>
             <div class="settings-body">
                 <div class="settings-section-title">Automation</div>

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.5
+// @version      2.6
 // @description  Tracks duplicate entries in a CSV database stored in browser localStorage — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -361,6 +361,13 @@
                     if (typeof x === 'string' || typeof x === 'number') { out.push(String(x).trim()); found.keys.add(here); }
                 });
             }
+            // identities: [{ type: 'Spark_...', <value field>: '<id>' }] -> take the value from the siblings
+            if (typeof v === 'string' && /^spark/i.test(v) && !Array.isArray(obj)) {
+                found.ident.add(Object.keys(obj).join(', '));
+                ['value', 'id', 'identifier', 'external_id', 'identity', 'key', 'number', 'code'].forEach(f => {
+                    if (f !== k && (typeof obj[f] === 'string' || typeof obj[f] === 'number')) out.push(String(obj[f]).trim());
+                });
+            }
             if (typeof v === 'string' && /spark/i.test(v)) {
                 let m;
                 SPARK_TEXT.lastIndex = 0;
@@ -374,7 +381,7 @@
         const sample = entries[0];
         if (!sample || typeof sample !== 'object') return null;
         const idField = sample._id ? '_id' : sample.id ? 'id' : null;
-        const found = { keys: new Set(), text: new Set() };
+        const found = { keys: new Set(), text: new Set(), ident: new Set() };
         const parsed = entries.map((e, i) => {
             const sparks = [];
             collectSparkIds(e, '', sparks, found);
@@ -389,6 +396,7 @@
         // Diagnostics (paths and shapes only, never real values)
         console.log('CSV Database: Spark ID key fields in list API:', found.keys.size ? Array.from(found.keys).join(', ') : 'none',
             '| records with Spark IDs:', parsed.filter(x => x.sparks.length).length + '/' + parsed.length);
+        if (found.ident.size) console.log('CSV Database: Spark identity object fields:', Array.from(found.ident).slice(0, 3));
         if (found.text.size) console.log('CSV Database: "spark" text in list API values (shape only):', Array.from(found.text));
         ['master', 'duplicate'].forEach(k => {
             if (sample[k] && typeof sample[k] === 'object') console.log('CSV Database: list API ' + k + ' fields:', Object.keys(sample[k]).join(', '));
@@ -773,5 +781,5 @@
         updateDbSizeBadge();
     }, 1000);
 
-    console.log('%cCSV Database (new layout) v2.5 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
+    console.log('%cCSV Database (new layout) v2.6 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
 })();

@@ -51,6 +51,14 @@ relying on them for unattended automation:**
   it has nothing reliable to trigger off since there's no confirmed
   merge-success signal yet (see above).
 
+- The review queue URL is always `.../v2/data/duplicates/bolt/review-queue`
+  and no longer changes per profile, so the v2 database is keyed on the
+  Spark IDs of the pair (read from the "Spark Id:" row), not the URL. CSV
+  columns: Firstname, Lastname, Dept., Row Contents, Spark ID 1, Spark ID 2
+  (left/A and right/B contact). List-page badges match by Spark ID found in
+  the API record or row text, falling back to names. Old 5-column files
+  (Unique ID) still import and match by name only.
+
 The classic scripts remain unchanged for as long as the old layout is still
 reachable anywhere.
 

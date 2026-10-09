@@ -116,18 +116,28 @@
     // =========================================================
     // ID / NAME EXTRACTION (detail page)
     // =========================================================
-    function extractUniqueId() {
-        const url = window.location.href;
-        const patterns = [
-            /\/duplicates?\/([a-f0-9]{24})/i,
-            /\/deduplication[a-z-]*\/([a-f0-9]{24})/i,
-            /[?&](?:id|contactId|duplicateId)=([a-f0-9]{24})/i
-        ];
-        for (const p of patterns) {
-            const m = url.match(p);
-            if (m) return m[1].toLowerCase();
+    // The review queue URL never changes per profile, so the database is keyed on
+    // the Spark ID of each contact in the pair (Spark ID 1 = left/A, Spark ID 2 =
+    // right/B), read from the "Spark Id: ..." diff row.
+    function getDomSparkIds() {
+        const re = /Spark Id:\s*([^\s,|]+)/i;
+        const rows = document.querySelectorAll('elm-duplicate-field-diff-form .diff-row');
+        for (const row of rows) {
+            const btns = row.querySelectorAll(':scope > .diff-value-button');
+            const l = btns[0] && btns[0].textContent.match(re);
+            const r = btns[1] && btns[1].textContent.match(re);
+            if (l || r) return { a: l ? l[1] : '', b: r ? r[1] : '' };
         }
-        return null;
+        return { a: '', b: '' };
+    }
+    function sameSparkPair(e, a, b) {
+        const x = [e.sparkId1 || '', e.sparkId2 || ''].filter(Boolean).sort().join('|');
+        const y = [a, b].filter(Boolean).sort().join('|');
+        return !!x && x === y;
+    }
+    function escRe(t) { return t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+    function containsId(text, id) {
+        return !!id && id.length >= 4 && new RegExp('(^|[^A-Za-z0-9])' + escRe(id) + '($|[^A-Za-z0-9])').test(text);
     }
     function extractNames() {
         const form = document.querySelector('elm-duplicate-field-diff-form');
@@ -167,19 +177,20 @@
     }
     function recordEntry(dept) {
         if (!dept) return;
-        const uniqueId = extractUniqueId();
-        if (!uniqueId) return;
-        const bodyUid = document.body.dataset.csvUid;
-        if (bodyUid && bodyUid !== uniqueId) return; // stale signal mid-navigation
+        const sparks = getDomSparkIds();
+        if (!sparks.a && !sparks.b) return;
+        // stale signal mid-navigation: the main script's Spark IDs must match the page
+        if (document.body.dataset.csvSpark1 !== sparks.a || document.body.dataset.csvSpark2 !== sparks.b) return;
         const { firstName, lastName } = extractNames();
         if (!firstName && !lastName) return; // page content not ready
         const db = getDatabase();
         const rowContents = getBlockedRowText(dept);
-        const newEntry = { firstName, lastName, dept, rowContents, uniqueId };
-        const existingIdx = db.findIndex(entry => entry.uniqueId === uniqueId);
+        const newEntry = { firstName, lastName, dept, rowContents, sparkId1: sparks.a, sparkId2: sparks.b };
+        const existingIdx = db.findIndex(entry => sameSparkPair(entry, sparks.a, sparks.b));
         if (existingIdx !== -1) {
             const old = db[existingIdx];
-            if (old.dept === dept && old.firstName === firstName && old.lastName === lastName && old.rowContents === rowContents) return;
+            if (old.dept === dept && old.firstName === firstName && old.lastName === lastName && old.rowContents === rowContents
+                && old.sparkId1 === sparks.a && old.sparkId2 === sparks.b) return;
             db[existingIdx] = newEntry;
             saveDatabase(db);
             return;
@@ -218,6 +229,10 @@
         for (let i = 0; i < db.length; i++) {
             if (usedDbIndices.has(i)) continue;
             const entry = db[i];
+            if (containsId(row.textContent, entry.sparkId1) || containsId(row.textContent, entry.sparkId2)) {
+                usedDbIndices.add(i);
+                return entry;
+            }
             const first = (entry.firstName || '').trim().toLowerCase();
             const last = (entry.lastName || '').trim().toLowerCase();
             if (first.length > 1 && last.length > 1 && rowText.includes(first) && rowText.includes(last)) {
@@ -297,13 +312,22 @@
     }
     function parseApiEntries(entries) {
         const sample = entries[0];
+        if (!sample || typeof sample !== 'object') return null;
         const idField = sample._id ? '_id' : sample.id ? 'id' : null;
-        if (!idField) return null;
-        return entries.map(e => ({
-            uniqueId: (e[idField] || '').toLowerCase(),
+        // raw JSON is kept so Spark IDs can be matched without knowing the schema
+        return entries.map((e, i) => ({
+            uniqueId: ((idField && e[idField]) || 'api-' + i).toString().toLowerCase(),
             name: e.name || e.full_name || '',
-            duplicateName: e.duplicate_name || ''
+            duplicateName: e.duplicate_name || '',
+            raw: JSON.stringify(e)
         }));
+    }
+    function dbEntryForApi(api, db) {
+        if (!api || !api.raw) return null;
+        for (const entry of db) {
+            if (containsId(api.raw, entry.sparkId1) || containsId(api.raw, entry.sparkId2)) return entry;
+        }
+        return null;
     }
 
     (function interceptXHR() {
@@ -447,23 +471,22 @@
             lastAnnotationSource = 'api';
             showApiToast('API: data captured successfully', 'success');
         }
-        const dbMap = {};
-        db.forEach(entry => { dbMap[entry.uniqueId] = entry; });
         const usedApiIndices = new Set();
+        const usedDbIndices = new Set();
         const indexFallbackSafe = apiDuplicatesList && rows.length === apiDuplicatesList.length;
         rows.forEach((row, rowIndex) => {
             let uniqueId = row.getAttribute('data-csv-uid');
-            if (!uniqueId && apiDuplicatesList) {
-                const matched = matchRowToApiEntry(row, apiDuplicatesList, usedApiIndices);
-                if (matched) uniqueId = matched.uniqueId;
-                if (!uniqueId && indexFallbackSafe && apiDuplicatesList[rowIndex] && !usedApiIndices.has(rowIndex)) {
-                    uniqueId = apiDuplicatesList[rowIndex].uniqueId;
+            let api = uniqueId ? apiDuplicatesList.find(a => a.uniqueId === uniqueId) : null;
+            if (!api && apiDuplicatesList) {
+                api = matchRowToApiEntry(row, apiDuplicatesList, usedApiIndices);
+                if (!api && indexFallbackSafe && apiDuplicatesList[rowIndex] && !usedApiIndices.has(rowIndex)) {
+                    api = apiDuplicatesList[rowIndex];
                     usedApiIndices.add(rowIndex);
                 }
-                if (uniqueId) row.setAttribute('data-csv-uid', uniqueId);
+                if (api) row.setAttribute('data-csv-uid', api.uniqueId);
             }
-            if (!uniqueId) return;
-            const dbEntry = dbMap[uniqueId];
+            // Spark ID found in the API record first; otherwise name/ID text on the row
+            const dbEntry = dbEntryForApi(api, db) || matchRowToDbEntry(row, db, usedDbIndices);
             if (!dbEntry) {
                 const b = row.querySelector('.csv-dept-badge'); if (b) b.remove();
                 row.removeAttribute('data-csv-dept');
@@ -519,8 +542,8 @@
     function toCSV() {
         const db = getDatabase();
         if (db.length === 0) return '';
-        const headers = ['Firstname', 'Lastname', 'Dept.', 'Row Contents', 'Unique ID'];
-        const rows = db.map(e => [e.firstName, e.lastName, e.dept, e.rowContents, e.uniqueId]
+        const headers = ['Firstname', 'Lastname', 'Dept.', 'Row Contents', 'Spark ID 1', 'Spark ID 2'];
+        const rows = db.map(e => [e.firstName, e.lastName, e.dept, e.rowContents, e.sparkId1, e.sparkId2]
             .map(v => `"${(v || '').replace(/"/g, '""')}"`).join(','));
         return [headers.join(','), ...rows].join('\n');
     }
@@ -615,7 +638,10 @@
                     const entries = [];
                     for (let i = 1; i < lines.length; i++) {
                         const cols = parseCSVLine(lines[i]);
-                        if (cols.length >= 5) entries.push({ firstName: cols[0], lastName: cols[1], dept: cols[2], rowContents: cols[3], uniqueId: cols[4] });
+                        // 6 columns = Spark ID 1 / Spark ID 2. Old 5-column files (Unique ID) are
+                        // still accepted; those rows have no Spark IDs and match by name only.
+                        if (cols.length >= 6) entries.push({ firstName: cols[0], lastName: cols[1], dept: cols[2], rowContents: cols[3], sparkId1: cols[4], sparkId2: cols[5] });
+                        else if (cols.length >= 5) entries.push({ firstName: cols[0], lastName: cols[1], dept: cols[2], rowContents: cols[3], sparkId1: '', sparkId2: '' });
                     }
                     if (entries.length === 0) { alert('No valid entries found in CSV file.'); uploadInput.value = ''; return; }
                     if (!confirm(`Replace current database with ${entries.length} entries from "${file.name}"?`)) { uploadInput.value = ''; return; }

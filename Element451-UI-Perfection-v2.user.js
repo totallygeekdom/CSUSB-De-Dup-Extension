@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-54';
+    const BUILD = 'v2-build-55';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -956,21 +956,17 @@
         if (b) { b.click(); return true; }
         return false;
     }
-    // BEST EFFORT: the reference snapshot is a saved file with no address bar,
-    // so the new review page's URL scheme is unconfirmed. Tries the classic
-    // "/duplicates/<24-hex-id>" pattern plus a couple of plausible
-    // "deduplication" variants — verify against the live site and adjust.
-    function extractDuplicateId(url) {
-        const patterns = [
-            /\/duplicates?\/([a-f0-9]{24})/i,
-            /\/deduplication[a-z-]*\/([a-f0-9]{24})/i,
-            /[?&](?:id|contactId|duplicateId)=([a-f0-9]{24})/i
-        ];
-        for (const p of patterns) {
-            const m = url.match(p);
-            if (m) return m[1].toLowerCase();
+    // The review queue is a single URL (.../bolt/review-queue) that never changes per
+    // profile, so a pair is identified by the Spark ID of each contact, read from
+    // the "Spark Id: ..." row of the diff form. Returns { a, b } (either may be '').
+    function getSparkIds() {
+        const re = /Spark Id:\s*([^\s,|]+)/i;
+        for (const row of getDiffRows()) {
+            const l = row.values[0].textContent.match(re);
+            const r = row.values[1].textContent.match(re);
+            if (l || r) return { a: l ? l[1] : '', b: r ? r[1] : '' };
         }
-        return null;
+        return { a: '', b: '' };
     }
 
     // =========================================================
@@ -1086,7 +1082,7 @@
     // Signals the current entry's department/block status to csv-database-v2.js
     // via document.body.dataset, same contract as the classic script.
     function updateCsvSignal(blockers) {
-        const uid = extractDuplicateId(window.location.href);
+        const sparks = getSparkIds();
         const forbidden = blockers.some(b => b.type === 'forbidden' || b.type === 'student-id-mismatch');
         const appeal = blockers.find(b => b.type === 'appeal');
         const ignored = blockers.some(b => b.type === 'ignored');
@@ -1094,7 +1090,8 @@
         else if (appeal) document.body.dataset.csvDept = 'Appeal';
         else if (ignored) document.body.dataset.csvDept = 'Ignored';
         else document.body.dataset.csvDept = detectActualDepartment().dept;
-        if (uid) document.body.dataset.csvUid = uid;
+        if (sparks.a || sparks.b) { document.body.dataset.csvSpark1 = sparks.a; document.body.dataset.csvSpark2 = sparks.b; }
+        else { delete document.body.dataset.csvSpark1; delete document.body.dataset.csvSpark2; }
         if (appeal && !appealWarningShown) {
             appealWarningShown = true;
             const sideLabel = appeal.side === 'left' ? 'left side' : 'right side';
@@ -1664,7 +1661,8 @@
             conflictWarningShown = false;
             appealWarningShown = false;
             delete document.body.dataset.csvDept;
-            delete document.body.dataset.csvUid;
+            delete document.body.dataset.csvSpark1;
+            delete document.body.dataset.csvSpark2;
         }
         const blockers = getAllBlockers();
         applyBlockStyling(blockers);

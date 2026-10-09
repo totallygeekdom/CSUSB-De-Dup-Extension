@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-52';
+    const BUILD = 'v2-build-53';
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -976,6 +976,21 @@
     let awaitingMergeResult = false;
     let lastMergeContactNamesKey = '';
 
+    // Shows an alert at most once per pair, remembered on <body> (not in this script's
+    // variables) so it holds even if the pair key briefly changes while Element451
+    // re-renders, or if a second copy of this script is also running. The key is the
+    // pair's two names (sorted, so A/B order can't change it) plus its queue position.
+    function alertOncePerPair(kind, message) {
+        const names = getContactNames().filter(Boolean).slice().sort().join('|');
+        if (!names) return false;
+        const pos = getQueuePosition();
+        const key = names + '#' + (pos ? pos.current : '');   // position tells apart two pairs with identical names
+        const attr = 'elm2Alert' + kind;
+        if (document.body.dataset[attr] === key) return false;
+        document.body.dataset[attr] = key;
+        alert(message);
+        return true;
+    }
     function getPairKey() {
         // Prefer contact names (stable identity for the pair on screen); fall back
         // to the queue position counter if names aren't available yet.
@@ -1089,7 +1104,7 @@
         if (appeal && !appealWarningShown) {
             appealWarningShown = true;
             const sideLabel = appeal.side === 'left' ? 'left side' : 'right side';
-            alert('⚠️ Appeal keyword detected!\n\nReason: The word "appeal" was found on the ' + sideLabel + ' of this entry.\n\nThis merge is blocked and cannot be processed.');
+            alertOncePerPair('Appeal', '⚠️ Appeal keyword detected!\n\nReason: The word "appeal" was found on the ' + sideLabel + ' of this entry.\n\nThis merge is blocked and cannot be processed.');
         }
     }
 
@@ -1703,13 +1718,13 @@
                 const { conflictCount, shouldWarn, conflicts } = checkForConflictingRecords();
                 if (shouldWarn) {
                     conflictWarningShown = true;
-                    alert(`⚠️ Warning: ${conflictCount} conflicting signal(s) detected!\n\nConflicts found in: ${conflicts.join(', ')}\n\nThese entries might be twins or two different people. Please review carefully before merging.`);
+                    alertOncePerPair('Twins', `⚠️ Warning: ${conflictCount} conflicting signal(s) detected!\n\nConflicts found in: ${conflicts.join(', ')}\n\nThese entries might be twins or two different people. Please review carefully before merging.`);
                 }
             }
             const scoreLevel = getScoreChipLevel();
             if (scoreLevel === 'low' && !conflictWarningShown) {
                 conflictWarningShown = true;
-                alert('⚠️ Bolt confidence score is "Low" for this pair. Please review carefully before merging.');
+                alertOncePerPair('LowScore', '⚠️ Bolt confidence score is "Low" for this pair. Please review carefully before merging.');
             }
             // Resolution stops here. Reviewing the selections and clicking
             // "Merge Contacts" is always a human decision.

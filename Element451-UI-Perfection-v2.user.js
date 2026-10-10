@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      1
+// @version      2.60
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-7';
+    const BUILD = 'v2-build-60'; // keep in sync with @version (2.60)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -42,8 +42,15 @@
     // merge-success signal to detect (see checkForMergeResult below) — both
     // need live investigation before they're worth exposing as settings.
     const CFG = Object.defineProperties({}, {
-        AUTO_RESOLVE_FIELDS:      { get() { return getBoolSetting('elm_auto_click_fab', true); } },
-        SHOW_MERGE_COUNTER:       { get() { return getBoolSetting('elm_show_merge_counter', true); } },
+        // 0 none, 1 applicant, 2 low, 3 medium, 4 high/all. Falls back to the old on/off
+        // toggle (elm_auto_click_fab) until the slider has been used.
+        AUTO_APPLY_LEVEL:         { get() {
+            const v = parseInt(localStorage.getItem('elm_auto_apply_level'), 10);
+            if (!isNaN(v)) return Math.max(0, Math.min(4, v));
+            return getBoolSetting('elm_auto_click_fab', true) ? 4 : 0;
+        } },
+        HIGHLIGHT_ROWS:           { get() { return getBoolSetting('elm_highlight_rows', true); } },
+        SHOW_MERGE_COUNTER:       { get() { return getBoolSetting('elm_show_merge_counter', false); } },
         AUTO_SKIP_BLOCKED:        { get() { return getBoolSetting('elm_auto_skip_blocked', true); } },
         ALLOWED_DEPARTMENT:       { get() { return localStorage.getItem('elm_allowed_department') || 'UnderGrad'; } },
     });
@@ -51,6 +58,21 @@
     // CSS
     // =========================================================
     const css = `
+        /* --- Material 3 design tokens for OUR UI (gear, counter, settings pane, comparison
+               bar). Primary follows Element451's own blue. --- */
+        :root {
+            --md-primary: var(--elm2-bolt-blue, #1976d2);
+            --md-on-surface: #1d1b20;
+            --md-on-surface-variant: #49454f;
+            --md-outline: #79747e;
+            --md-surface-container-low: #f7f2fa;
+            --md-surface-container: #f3edf7;
+            --md-surface-container-highest: #e6e0e9;
+            --md-error: #b3261e;
+            --md-elev-1: 0 1px 2px rgba(0,0,0,.3), 0 1px 3px 1px rgba(0,0,0,.15);
+            --md-elev-3: 0 1px 3px rgba(0,0,0,.3), 0 4px 8px 3px rgba(0,0,0,.15);
+            --md-ease: cubic-bezier(.2, 0, 0, 1);
+        }
         /* --- LOCKDOWN: red "Merge Contacts" button + null symbol --- */
         body.elm2-blocked .review-queue-nav-visible ~ * .bolt-stackable-sidebar-header-actions button:last-of-type,
         body.elm2-blocked bolt-stackable-sidebar-header-actions button:last-of-type {
@@ -83,76 +105,281 @@
         /* --- Applicant-side driven resolution: light yellow tint (replaces the old
                pixel-overlay approach — much simpler now that each side is its own
                button element instead of a shared row) --- */
-        .diff-value-button.elm2-applicant-side {
-            background-color: #fff9c4 !important;
-            border-color: #f9a825 !important;
-        }
         /* --- AI-vs-script pick comparison bar + per-row disagreement badges --- */
         #elm2-pick-compare-bar {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            flex-wrap: wrap;
-            padding: 10px 12px;
-            margin: 0 0 8px;
-            background: #f5f5f5;
-            border: 1px solid #ddd;
-            border-radius: 8px;
+            display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+            padding: 12px 16px; margin: 0 0 12px;
+            background: var(--md-surface-container); border: none; border-radius: 12px;
             font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif;
         }
-        #elm2-pick-compare-count { font-size: 13px; color: #555; flex: 1 1 auto; min-width: 160px; }
+        #elm2-pick-compare-count { font-size: 14px; line-height: 20px; letter-spacing: .25px; color: var(--md-on-surface-variant); flex: 1 1 auto; min-width: 160px; }
         #elm2-pick-compare-bar button {
-            border: 1px solid #ccc;
-            background: #fff;
-            border-radius: 6px;
-            padding: 6px 12px;
-            font-size: 13px;
-            cursor: pointer;
+            height: 40px; padding: 0 24px; border-radius: 20px; box-sizing: border-box;
+            background: transparent; border: 1px solid var(--md-outline); color: var(--md-primary);
+            font: 500 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .1px;
+            cursor: pointer; transition: background-color .2s var(--md-ease);
         }
-        #elm2-use-ai-btn:hover, #elm2-use-script-btn:hover { background: #eee; }
-        #elm2-pick-compare-bar button:disabled { opacity: 0.45; cursor: default; }
-        .diff-row.elm2-agree-row { background-color: #e8f5e9; box-shadow: inset 4px 0 0 #43a047; }
-        .diff-row.elm2-disagree-row { background-color: #ffebee; box-shadow: inset 4px 0 0 #d32f2f; }
-        .diff-value-button.elm2-suggested { outline: 2px dashed #f9a825; outline-offset: -2px; }
-        .elm2-pick-badge:not(.elm2-pick-differs) { background: #e8f5e9; color: #2e7d32; }
-        .elm2-pick-badge {
-            display: inline-block;
-            margin-left: 8px;
-            padding: 1px 7px;
-            border-radius: 8px;
-            font-size: 11px;
-            font-weight: 600;
-            background: #fff3e0;
-            color: #e65100;
-            white-space: nowrap;
-            vertical-align: middle;
+        #elm2-pick-compare-bar #elm2-use-ai-btn { border-color: var(--elm2-bolt-blue, #1976d2); color: var(--elm2-bolt-blue, #1976d2); }
+        #elm2-pick-compare-bar #elm2-use-ai-btn:hover { background: rgba(25, 118, 210, 0.08); background: color-mix(in srgb, var(--elm2-bolt-blue, #1976d2) 8%, transparent); }
+        #elm2-pick-compare-bar #elm2-use-script-btn { border-color: #ef6c00; color: #ef6c00; }
+        #elm2-pick-compare-bar #elm2-use-script-btn:hover { background: rgba(239, 108, 0, 0.08); }
+        #elm2-pick-compare-bar button:active { background-color: rgba(0, 0, 0, 0.1); }
+        #elm2-pick-compare-bar button:focus-visible { outline: 2px solid var(--md-primary); outline-offset: 2px; }
+        #elm2-pick-compare-bar button:disabled { opacity: .38; cursor: default; background: transparent; }
+        /* --- Pick comparison colors (light semi-transparent fill + saturated border,
+               replacing Element451's own blue; its overlay pseudo-elements are hidden).
+               Agreement row: the value both agreed on stays green (even if you then select the other one,
+               which just gets Element451's normal blue).
+               Conflict row (our pick differs from Bolt's): the two values are colored by
+               who picked them — Element451's blue = Bolt's pick, orange = ours.
+               Rows where our rules have no opinion keep Element451's default styling. --- */
+        body .diff-row button.diff-value-button.elm2-agree-pick {
+            background: rgba(67, 160, 71, 0.22) !important;
+            border: 2px solid #2e7d32 !important;
+            box-shadow: none !important;
+            outline: none !important;
+            color: #212121 !important;
+        }
+        body .diff-row button.diff-value-button.elm2-agree-pick * {
+            background: transparent !important;
+            color: #212121 !important;
+        }
+        body .diff-row button.diff-value-button.elm2-agree-pick::before,
+        body .diff-row button.diff-value-button.elm2-agree-pick::after {
+            background: transparent !important;
+            border-color: #2e7d32 !important;
+            box-shadow: none !important;
+            opacity: 0 !important;
+        }
+        body .diff-row button.diff-value-button.elm2-pick-bolt {
+            background: rgba(25, 118, 210, 0.22) !important;
+            background: color-mix(in srgb, var(--elm2-bolt-blue, #1976d2) 22%, transparent) !important;
+            border: 2px solid var(--elm2-bolt-blue, #1976d2) !important;
+            box-shadow: none !important;
+            outline: none !important;
+            color: #212121 !important;
+        }
+        body .diff-row button.diff-value-button.elm2-pick-bolt * {
+            background: transparent !important;
+            color: #212121 !important;
+        }
+        body .diff-row button.diff-value-button.elm2-pick-bolt::before,
+        body .diff-row button.diff-value-button.elm2-pick-bolt::after {
+            background: transparent !important;
+            border-color: var(--elm2-bolt-blue, #1976d2) !important;
+            box-shadow: none !important;
+            opacity: 0 !important;
+        }
+        body .diff-row button.diff-value-button.elm2-pick-ours {
+            background: rgba(239, 108, 0, 0.22) !important;
+            border: 2px solid #ef6c00 !important;
+            box-shadow: none !important;
+            outline: none !important;
+            color: #212121 !important;
+        }
+        body .diff-row button.diff-value-button.elm2-pick-ours * {
+            background: transparent !important;
+            color: #212121 !important;
+        }
+        body .diff-row button.diff-value-button.elm2-pick-ours::before,
+        body .diff-row button.diff-value-button.elm2-pick-ours::after {
+            background: transparent !important;
+            border-color: #ef6c00 !important;
+            box-shadow: none !important;
+            opacity: 0 !important;
+        }
+        /* Applicant side (Application / Cal State Apply entries): when found, the
+               "follow the applicant" rule drives the picks, so mark that contact's card. */
+        .contact-card.elm2-applicant-card {
+            background-color: #fff9c4 !important;
+            outline: 3px solid #f9a825;
+            outline-offset: -3px;
+        }
+        #elm2-applicant-outline {
+            position: absolute;
+            box-sizing: border-box;
+            border: 2px solid #f9a825;
+            border-radius: 4px;
+            pointer-events: none;
+            z-index: 2;
+        }
+        /* --- Material 3 style "Hide matching items" switch.
+               40x24 pill track; off = outlined track with a small 12px thumb,
+               on = filled track with an 18px white thumb and a check mark.
+               Element451's own MDC track/thumb internals are hidden and the visuals are
+               drawn with the button's pseudo-elements; the button itself (click, keyboard,
+               aria) is untouched. --- */
+        bolt-slide-toggle.hide-matching-items-toggle button.mdc-switch {
+            position: relative !important;
+            width: 40px !important;
+            min-width: 40px !important;
+            height: 24px !important;
+            padding: 0 !important;
+            box-sizing: border-box !important;
+            border-radius: 12px !important;
+            border: 2px solid #79747e !important;
+            background: #e6e0e9 !important;
+            transition: background-color 0.2s, border-color 0.2s;
+        }
+        bolt-slide-toggle.hide-matching-items-toggle button.mdc-switch.mdc-switch--selected {
+            background: var(--elm2-bolt-blue, #1976d2) !important;
+            border-color: var(--elm2-bolt-blue, #1976d2) !important;
+        }
+        bolt-slide-toggle.hide-matching-items-toggle button.mdc-switch .mdc-switch__track,
+        bolt-slide-toggle.hide-matching-items-toggle button.mdc-switch .mdc-switch__handle-track {
+            display: none !important;
+        }
+        bolt-slide-toggle.hide-matching-items-toggle button.mdc-switch::before {
+            content: "";
+            position: absolute;
+            top: 50%;
+            left: 4px;
+            width: 12px;
+            height: 12px;
+            margin-top: -6px;
+            border-radius: 50%;
+            background: #79747e;
+            transition: left 0.2s, width 0.2s, height 0.2s, margin-top 0.2s, background-color 0.2s;
+        }
+        bolt-slide-toggle.hide-matching-items-toggle button.mdc-switch.mdc-switch--selected::before {
+            left: 17px;
+            width: 18px;
+            height: 18px;
+            margin-top: -9px;
+            background: #fff;
+        }
+        bolt-slide-toggle.hide-matching-items-toggle button.mdc-switch.mdc-switch--selected::after {
+            content: "";
+            position: absolute;
+            left: 24px;
+            top: 4px;
+            width: 4px;
+            height: 8px;
+            border: solid var(--elm2-bolt-blue, #1976d2);
+            border-width: 0 2px 2px 0;
+            transform: rotate(45deg);
+        }
+        /* Score chips: Medium and Low get the same solid look as High (which is left
+               exactly as Element451 draws it), in orange and red. Element451 sets each
+               level's fill with its own !important rule, so these selectors are
+               deliberately far more specific than that (the repeated
+               class only raises specificity). */
+        html body elm-deduplication-score-chip bolt-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip-medium {
+            background-color: #ef6c00 !important;
+            border-color: #ef6c00 !important;
+            color: #fff !important;
+        }
+        html body elm-deduplication-score-chip bolt-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip-low {
+            background-color: #d32f2f !important;
+            border-color: #d32f2f !important;
+            color: #fff !important;
+        }
+        html body elm-deduplication-score-chip bolt-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip-medium .bolt-chip-text,
+        html body elm-deduplication-score-chip bolt-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip-low .bolt-chip-text {
+            color: #fff !important;
+        }
+        bolt-slide-toggle.hide-matching-items-toggle label.mdc-label {
+            margin-left: 12px !important;
+            padding-left: 0 !important;
+        }
+        /* Pin the Previous / position / Next bar to the top of the review panel while the
+               field list scrolls. --elm2-nav-top leaves room for Element451's own title bar
+               when that is sticky too. */
+        .review-queue-nav {
+            position: sticky !important;
+            top: var(--elm2-nav-top, 0px);
+            z-index: 20;
+            background: #fff;
+            box-shadow: 0 1px 0 rgba(0, 0, 0, 0.08);
         }
         /* --- Merge counter / settings pane (unchanged from classic script; the
                top navbar — .bolt-navigation-right / elm-universal-search — was not
                redesigned) --- */
         #elm-controls-wrapper { display: flex; align-items: center; gap: 12px; margin-right: 16px; position: relative; }
-        #elm-counter-wrapper { display: flex; align-items: center; background: #f5f5f5; border-radius: 20px; border: 1px solid #ddd; padding: 2px; transition: all 0.2s ease-out; }
-        #elm-reset-btn { background: transparent; border: none; color: #999; cursor: pointer; font-size: 14px; padding: 4px 8px; border-radius: 50%; transition: all 0.2s; line-height: 1; }
-        #elm-reset-btn:hover { color: #d32f2f; background-color: rgba(211, 47, 47, 0.1); }
-        #elm-merge-counter { font-weight: 600; font-size: 14px; color: #555; padding: 4px 12px 4px 4px; white-space: nowrap; }
-        #elm-settings-btn { background: transparent; border: 1px solid rgba(255,255,255,0.3); color: white; cursor: pointer; font-size: 18px; padding: 4px 8px; border-radius: 8px; transition: all 0.2s; line-height: 1; display: flex; align-items: center; justify-content: center; }
-        #elm-settings-btn:hover { background-color: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.5); }
-        #elm-settings-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.35); z-index: 9998; }
+        /* tonal assist-chip style pill (merge counter; the DB badge in csv-database-v2 matches) */
+        #elm-counter-wrapper { display: flex; align-items: center; gap: 4px; height: 32px; box-sizing: border-box; padding: 0 4px 0 12px; background: var(--md-surface-container-highest); border: none; border-radius: 8px; }
+        #elm-merge-counter { font: 500 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .1px; color: var(--md-on-surface); padding: 0; white-space: nowrap; }
+        #elm-reset-btn { width: 24px; height: 24px; padding: 0; display: flex; align-items: center; justify-content: center; background: transparent; border: none; border-radius: 50%; color: var(--md-on-surface-variant); cursor: pointer; font-size: 16px; line-height: 1; transition: background-color .2s var(--md-ease), color .2s var(--md-ease); }
+        #elm-reset-btn:hover { color: var(--md-error); background-color: rgba(179, 38, 30, .08); }
+        /* standard icon button (40px, state layer) */
+        #elm-settings-btn { width: 40px; height: 40px; padding: 0; display: flex; align-items: center; justify-content: center; background: transparent; border: none; border-radius: 50%; color: #fff; cursor: pointer; font-size: 22px; line-height: 1; transition: background-color .2s var(--md-ease); }
+        #elm-settings-btn:hover { background-color: rgba(255, 255, 255, .12); }
+        #elm-settings-btn:active { background-color: rgba(255, 255, 255, .18); }
+        #elm-settings-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+        /* modal side sheet */
+        #elm-settings-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, .32); z-index: 9998; }
         #elm-settings-overlay.open { display: block; }
-        #elm-settings-pane { position: fixed; top: 0; right: -360px; width: 340px; height: 100%; background: #fff; box-shadow: -4px 0 24px rgba(0,0,0,0.25); z-index: 9999; transition: right 0.25s ease-out; overflow-y: auto; font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+        #elm-settings-pane { position: fixed; top: 0; right: -400px; width: 360px; max-width: 100vw; height: 100%; box-sizing: border-box; background: var(--md-surface-container-low); color: var(--md-on-surface); border-radius: 28px 0 0 28px; box-shadow: var(--md-elev-3); z-index: 9999; transition: right .3s var(--md-ease); overflow-y: auto; font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; }
         #elm-settings-pane.open { right: 0; }
-        #elm-settings-pane .settings-header { padding: 20px; font-size: 18px; font-weight: 600; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
-        #elm-settings-pane .settings-body { padding: 16px 20px; }
-        #elm-settings-pane .settings-section-title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: #888; margin: 20px 0 8px; }
-        #elm-settings-pane .setting-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #f2f2f2; gap: 12px; }
-        #elm-settings-pane .setting-row label { font-size: 14px; color: #333; }
-        #elm-settings-pane select, #elm-settings-pane input[type=number] { padding: 4px 8px; border-radius: 6px; border: 1px solid #ccc; font-size: 13px; }
-        .elm-toggle-switch { position: relative; width: 40px; height: 22px; flex-shrink: 0; }
-        .elm-toggle-switch input { opacity: 0; width: 0; height: 0; }
-        .elm-toggle-slider { position: absolute; cursor: pointer; inset: 0; background-color: #ccc; transition: 0.2s; border-radius: 22px; }
-        .elm-toggle-slider::before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: white; transition: 0.2s; border-radius: 50%; }
-        .elm-toggle-switch input:checked + .elm-toggle-slider { background-color: #43a047; }
-        .elm-toggle-switch input:checked + .elm-toggle-slider::before { transform: translateX(18px); }
+        #elm-settings-pane .settings-header { padding: 24px 16px 16px 24px; display: flex; justify-content: space-between; align-items: flex-start; }
+        #elm-settings-pane .settings-title { font-size: 22px; line-height: 28px; font-weight: 400; }
+        #elm-settings-pane .settings-build { font-size: 12px; line-height: 16px; letter-spacing: .5px; color: var(--md-on-surface-variant); }
+        #elm-settings-close { width: 40px; height: 40px; padding: 0; display: flex; align-items: center; justify-content: center; background: transparent; border: none; border-radius: 50%; color: var(--md-on-surface-variant); font-size: 24px; line-height: 1; cursor: pointer; transition: background-color .2s var(--md-ease); }
+        #elm-settings-close:hover { background-color: rgba(29, 27, 32, .08); }
+        #elm-settings-close:focus-visible { outline: 2px solid var(--md-primary); }
+        #elm-settings-pane .settings-body { padding: 0 24px 24px; }
+        #elm-settings-pane .settings-section-title { font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: var(--md-primary); text-transform: none; margin: 24px 0 4px; }
+        #elm-settings-pane .setting-row { display: flex; justify-content: space-between; align-items: center; min-height: 56px; padding: 8px 0; border: none; gap: 16px; }
+        #elm-settings-pane .setting-row label { font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--md-on-surface); }
+        /* outlined select */
+        #elm-settings-pane select, #elm-settings-pane input[type=number] { height: 40px; padding: 0 12px; box-sizing: border-box; background: transparent; color: var(--md-on-surface); border: 1px solid var(--md-outline); border-radius: 8px; font: 400 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+        #elm-settings-pane select:hover { border-color: var(--md-on-surface); }
+        #elm-settings-pane select:focus { outline: none; border: 2px solid var(--md-primary); padding: 0 11px; }
+        /* Material 3 style switches for the settings pane (same look as the restyled
+               "Hide matching items" toggle): 40x24 pill, small thumb off, filled track
+               with a white check thumb on. */
+        .elm-toggle-switch { position: relative; width: 40px; height: 24px; flex-shrink: 0; }
+        .elm-toggle-switch input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; z-index: 1; }
+        .elm-toggle-slider {
+            position: absolute; inset: 0; box-sizing: border-box;
+            border: 2px solid #79747e; border-radius: 12px; background: #e6e0e9;
+            transition: background-color 0.2s, border-color 0.2s;
+        }
+        .elm-toggle-slider::before {
+            content: ""; position: absolute; top: 50%; left: 4px;
+            width: 12px; height: 12px; margin-top: -6px; border-radius: 50%; background: #79747e;
+            transition: left 0.2s, width 0.2s, height 0.2s, margin-top 0.2s, background-color 0.2s;
+        }
+        .elm-toggle-switch input:checked + .elm-toggle-slider {
+            background: var(--elm2-bolt-blue, #1976d2); border-color: var(--elm2-bolt-blue, #1976d2);
+        }
+        .elm-toggle-switch input:checked + .elm-toggle-slider::before {
+            left: 17px; width: 18px; height: 18px; margin-top: -9px; background: #fff;
+        }
+        .elm-toggle-switch input:checked + .elm-toggle-slider::after {
+            content: ""; position: absolute; left: 24px; top: 4px; width: 4px; height: 8px;
+            border: solid var(--elm2-bolt-blue, #1976d2); border-width: 0 2px 2px 0; transform: rotate(45deg);
+        }
+        /* M3 discrete slider (Auto-Apply level): 16px rounded track split by a 4px pill handle
+               with a 6px gap either side, stop dots on the track, a value bubble while
+               focused/pressed. The real <input type=range> sits on top, invisible, so
+               dragging, clicking and keyboard use are native. */
+        #elm-settings-pane .elm-slider-head { min-height: 40px; }
+        #elm-settings-pane .elm-level-label { font-size: 14px; font-weight: 500; letter-spacing: .1px; color: var(--md-primary); }
+        #elm-settings-pane .elm-slider { padding: 22px 2px 12px; }
+        #elm-settings-pane .m3s { position: relative; height: 44px; --p: 0; --gap: 6px; }
+        #elm-settings-pane .m3s input[type=range] { -webkit-appearance: none; appearance: none; position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; z-index: 3; }
+        #elm-settings-pane .m3s input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 4px; height: 44px; }
+        #elm-settings-pane .m3s input[type=range]::-moz-range-thumb { width: 4px; height: 44px; border: none; }
+        #elm-settings-pane .m3s-active, #elm-settings-pane .m3s-inactive { position: absolute; top: 14px; height: 16px; transition: width .2s var(--md-ease), left .2s var(--md-ease); }
+        #elm-settings-pane .m3s-active { left: 0; width: max(0px, calc((100% - 4px) * var(--p) - var(--gap))); background: var(--md-primary); border-radius: 8px 2px 2px 8px; }
+        #elm-settings-pane .m3s-inactive { right: 0; left: calc((100% - 4px) * var(--p) + 4px + var(--gap)); background: #cfe0f8; border-radius: 2px 8px 8px 2px; }
+        #elm-settings-pane .m3s-dots span { position: absolute; top: 20px; width: 4px; height: 4px; border-radius: 50%; left: calc(6px + (100% - 16px) * var(--i) / 4); }
+        #elm-settings-pane .m3s-dots span.on { background: #fff; }
+        #elm-settings-pane .m3s-dots span.off { background: var(--md-primary); }
+        #elm-settings-pane .m3s-dots span.here { display: none; }
+        #elm-settings-pane .m3s-handle { position: absolute; top: 0; width: 4px; height: 44px; border-radius: 2px; background: var(--md-primary); left: calc((100% - 4px) * var(--p)); pointer-events: none; z-index: 2; transition: left .2s var(--md-ease), width .15s var(--md-ease); }
+        #elm-settings-pane .m3s input[type=range]:active ~ .m3s-handle { width: 2px; margin-left: 1px; }
+        #elm-settings-pane .m3s-bubble { position: absolute; bottom: calc(100% + 4px); left: 50%; transform: translateX(-50%); background: #322f35; color: #f5eff7; font-size: 12px; line-height: 16px; letter-spacing: .4px; padding: 6px 12px; border-radius: 16px; white-space: nowrap; opacity: 0; transition: opacity .15s var(--md-ease); }
+        #elm-settings-pane .m3s input[type=range]:focus-visible ~ .m3s-handle .m3s-bubble,
+        #elm-settings-pane .m3s input[type=range]:active ~ .m3s-handle .m3s-bubble { opacity: 1; }
+        #elm-settings-pane .m3s-labels { position: relative; height: 16px; margin-top: 4px; font-size: 12px; line-height: 16px; letter-spacing: .4px; color: var(--md-on-surface-variant); }
+        #elm-settings-pane .m3s-labels span { position: absolute; top: 0; white-space: nowrap; left: calc((100% - 4px) * var(--i) / 4 + 2px); transform: translateX(-50%); transition: color .2s var(--md-ease); }
+        #elm-settings-pane .m3s-labels span:first-child { left: 0; transform: none; }
+        #elm-settings-pane .m3s-labels span:last-child { left: 100%; transform: translateX(-100%); }
+        #elm-settings-pane .m3s-labels span.sel { color: var(--md-primary); font-weight: 500; }
+        #elm-settings-pane .elm-level-desc { font-size: 13px; line-height: 18px; letter-spacing: .25px; color: var(--md-on-surface-variant); margin: 0 0 8px; }
+        .elm-toggle-switch input:focus-visible + .elm-toggle-slider { outline: 2px solid var(--elm2-bolt-blue, #1976d2); outline-offset: 2px; }
     `;
     if (typeof GM_addStyle === 'function') GM_addStyle(css);
     else { const styleEl = document.createElement('style'); styleEl.textContent = css; document.head.appendChild(styleEl); }
@@ -526,6 +753,7 @@
     function getDiffRows() {
         const form = getDiffForm();
         if (!form) return [];
+        const labelCounts = {};
         return Array.from(form.querySelectorAll('.diff-row')).map(row => {
             const buttons = row.querySelectorAll(':scope > .diff-value-button');
             const titleEl = row.querySelector(':scope > .diff-title');
@@ -535,9 +763,24 @@
             const leftText = leftBtn ? leftBtn.textContent.trim() : '';
             const rightText = rightBtn ? rightBtn.textContent.trim() : '';
             const norm = (t) => t.toLowerCase().replace(/\s+/g, ' ').trim();
+            // Which side Element451 itself has selected. Bolt AI marks its default
+            // pick on the "Keep Contact A/B" arrow buttons (and a user overrides it by
+            // clicking an arrow), so the arrows are the primary signal; the value
+            // buttons' aria-checked/diff-option-selected are only a fallback.
+            const isSel = (b) => !!b && (b.getAttribute('aria-checked') === 'true' || b.classList.contains('diff-option-selected'));
+            const arrowA = row.querySelector(':scope > .diff-actions > .diff-action-button[title="Keep Contact A"]');
+            const arrowB = row.querySelector(':scope > .diff-actions > .diff-action-button[title="Keep Contact B"]');
+            const nativeSide = (isSel(arrowA) && !isSel(arrowB)) ? 'left'
+                : (isSel(arrowB) && !isSel(arrowA)) ? 'right'
+                : isSel(leftBtn) ? 'left' : isSel(rightBtn) ? 'right' : null;
+            // Stable identity for this row within the current pair (survives
+            // Element451 re-rendering the DOM node): field label + nth occurrence + both values.
+            const occ = labelCounts[label] = (labelCounts[label] || 0) + 1;
             return {
                 element: row,
+                key: `${label}#${occ}|${norm(leftText)}|${norm(rightText)}`,
                 label,
+                nativeSide,
                 // Element451 doesn't flag conflicting rows (it just hides matching
                 // ones), so we detect them ourselves: the two sides differ.
                 isConflict: norm(leftText) !== norm(rightText),
@@ -546,8 +789,17 @@
                 leftSelected: !!(leftBtn && leftBtn.classList.contains('diff-option-selected')),
                 rightSelected: !!(rightBtn && rightBtn.classList.contains('diff-option-selected')),
                 selectSide(side) {
-                    const btn = side === 'left' ? leftBtn : rightBtn;
-                    if (btn && !btn.classList.contains('diff-option-selected')) btn.click();
+                    const arrow = side === 'left' ? arrowA : arrowB;
+                    const value = side === 'left' ? leftBtn : rightBtn;
+                    if (isSel(arrow) || (!arrow && isSel(value))) return; // already selected
+                    // The arrows are the real control; fall back to the value button
+                    // if clicking the arrow didn't register.
+                    if (arrow) {
+                        arrow.click();
+                        if (value) setTimeout(() => { if (!isSel(value) && !isSel(arrow)) value.click(); }, 80);
+                    } else if (value) {
+                        value.click();
+                    }
                 }
             };
         });
@@ -557,24 +809,92 @@
         const needle = labelSubstr.toLowerCase();
         return getDiffRows().filter(r => r.label.toLowerCase().includes(needle));
     }
+    // Element451 may reuse the same .diff-row elements when moving to the next
+    // pair, which would leave our per-row state (Bolt's pick, our pick, resolved
+    // flags, colors) attached to a row that now shows different data. Tag each
+    // row with the pair it was computed for and wipe anything stale.
+    const ROW_STATE_KEYS = ['elm2AiSide', 'elm2AiSeen', 'elm2ScriptSide', 'elm2AutoResolved', 'elm2DualPersonal', 'elm2DualResolved', 'elm2AddressResolved'];
+    // Bolt's original picks and our own picks, remembered in the script (not just
+    // on the DOM nodes) for the current pair, so they survive Element451
+    // re-rendering a row after the user or our script has changed the selection.
+    // Entry: { ai: 'left'|'right', script: 'left'|'right', acted: bool }.
+    const rowMemory = new Map();
+    let memoryPairKey = '';
+    function rememberRow(key, patch) {
+        rowMemory.set(key, Object.assign(rowMemory.get(key) || {}, patch));
+    }
+    function resetStaleRows() {
+        const pairKey = getPairKey();
+        if (!pairKey) return;
+        if (memoryPairKey !== pairKey) { rowMemory.clear(); memoryPairKey = pairKey; }
+        getDiffRows().forEach(row => {
+            const el = row.element;
+            if (el.dataset.elm2Pair !== pairKey) {
+                ROW_STATE_KEYS.forEach(k => delete el.dataset[k]);
+                el.classList.remove('elm2-blocked-row');
+                el.removeAttribute('title');
+                el.querySelectorAll(':scope > .diff-value-button').forEach(b => b.classList.remove('elm2-agree-pick', 'elm2-pick-bolt', 'elm2-pick-ours'));
+                el.dataset.elm2Pair = pairKey;
+            }
+            const m = rowMemory.get(row.key);
+            if (m) {
+                if (m.ai) el.dataset.elm2AiSide = m.ai;
+                if (m.script) el.dataset.elm2ScriptSide = m.script;
+                if (m.rule) el.dataset.elm2Rule = m.rule;
+                if (m.acted) el.dataset.elm2AiSeen = '1';
+            }
+        });
+    }
+    // Element451's default blue outline color, read from one of its own
+    // outlined accent buttons (e.g. "Save for later") so our Bolt-side styling
+    // matches it exactly instead of relying on a guessed hex value.
+    function syncBoltBlue() {
+        const ref = document.querySelector('bolt-stackable-sidebar-header-actions button.bolt-button-outlined.bolt-button-color-accent');
+        if (!ref) return;
+        const c = getComputedStyle(ref).borderTopColor;
+        if (!c || c === 'rgba(0, 0, 0, 0)' || c === 'transparent') return;
+        document.documentElement.style.setProperty('--elm2-bolt-blue', c);
+    }
     // Records the side Bolt had pre-selected before our script touched the
     // row, the first time each row is seen (idempotent — a no-op on rows
     // already stamped). Must run before runAutoResolution() so it captures
     // Bolt's actual default rather than our own prior click.
     function snapshotNativeSelections() {
         getDiffRows().forEach(row => {
-            if (row.element.dataset.elm2AiSide) return; // already captured
-            if (row.leftSelected) row.element.dataset.elm2AiSide = 'left';
-            else if (row.rightSelected) row.element.dataset.elm2AiSide = 'right';
+            const d = row.element.dataset;
+            if (d.elm2AiSide || d.elm2AiSeen) return; // already captured, or we've already acted on this row
+            if (row.nativeSide) { d.elm2AiSide = row.nativeSide; rememberRow(row.key, { ai: row.nativeSide }); }
         });
     }
     // Selects a side AND records it as our script's pick, so the AI-vs-script
     // comparison bar can show both and let a human bulk-switch between them.
     // Every resolution rule below should call this instead of row.selectSide()
     // directly.
+    let currentRule = '';
+    // Whether the Auto-Apply slider covers the pair on screen. Cumulative:
+    // 0 none, 1 pairs with an applicant side, 2 + Bolt score Low, 3 + Medium, 4 every pair.
+    let autoApplyThisPair = false;
+    function computeAutoApplyForPair() {
+        const level = CFG.AUTO_APPLY_LEVEL;
+        let allowed = false;
+        if (level >= 4) allowed = true;
+        else if (level >= 1) {
+            const score = getScoreChipLevel();
+            allowed = !!findApplicantSide()
+                || (level >= 2 && score === 'low')
+                || (level >= 3 && score === 'medium');
+        }
+        autoApplyThisPair = allowed;
+        return allowed;
+    }
     function applyScriptPick(row, side) {
-        row.element.dataset.elm2ScriptSide = side;
-        row.selectSide(side);
+        const d = row.element.dataset;
+        d.elm2Rule = currentRule;
+        if (!d.elm2AiSide && !d.elm2AiSeen && row.nativeSide) { d.elm2AiSide = row.nativeSide; rememberRow(row.key, { ai: row.nativeSide }); }
+        d.elm2AiSeen = '1'; // from here on, a selection on this row may be ours, not Bolt's
+        d.elm2ScriptSide = side;
+        rememberRow(row.key, { script: side, acted: true, rule: currentRule });
+        if (autoApplyThisPair) row.selectSide(side);
     }
     function getContactCards() {
         const form = getDiffForm();
@@ -636,27 +956,24 @@
         if (b) { b.click(); return true; }
         return false;
     }
-    // BEST EFFORT: the reference snapshot is a saved file with no address bar,
-    // so the new review page's URL scheme is unconfirmed. Tries the classic
-    // "/duplicates/<24-hex-id>" pattern plus a couple of plausible
-    // "deduplication" variants — verify against the live site and adjust.
-    function extractDuplicateId(url) {
-        const patterns = [
-            /\/duplicates?\/([a-f0-9]{24})/i,
-            /\/deduplication[a-z-]*\/([a-f0-9]{24})/i,
-            /[?&](?:id|contactId|duplicateId)=([a-f0-9]{24})/i
-        ];
-        for (const p of patterns) {
-            const m = url.match(p);
-            if (m) return m[1].toLowerCase();
+    // The review queue is a single URL (.../bolt/review-queue) that never changes per
+    // profile, so a pair is identified by the Spark ID of each contact, read from
+    // the "Spark Id: ..." row of the diff form. Returns { a, b } (either may be '').
+    function getSparkIds() {
+        const re = /Spark Id:\s*([^\s,|]+)/i;
+        for (const row of getDiffRows()) {
+            const l = row.values[0].textContent.match(re);
+            const r = row.values[1].textContent.match(re);
+            if (l || r) return { a: l ? l[1] : '', b: r ? r[1] : '' };
         }
-        return null;
+        return { a: '', b: '' };
     }
 
     // =========================================================
     // STATE
     // =========================================================
     let currentQueuePositionKey = '';   // "current/total" — used to detect navigation to a new pair
+    let pairFirstSeenAt = 0;            // when the current pair was first seen
     let resolutionAttempted = false;    // resolution ran for the current pair
     let mergeClickPending = false;      // waiting on the two-phase verification delay
     let conflictWarningShown = false;
@@ -716,6 +1033,8 @@
                 return { dept: 'Grad/IA', row };
             }
         }
+        // Like the classic script: with no Grad/IA row, the first row is highlighted red
+        // as the marker for a blocked UnderGrad entry.
         return { dept: 'UnderGrad', row: rows[0] || null };
     }
     function isWrongDepartment() {
@@ -762,10 +1081,16 @@
             getContactCards().forEach(c => c.classList.add('elm2-blocked-card'));
         }
     }
+    // Database-scan mode: allowed department "None" blocks every pair and Auto-Skip moves
+    // on from each one, so warning popups (which need a click) are suppressed to let the
+    // scan run uninterrupted. Entries are still recorded and skipped as usual.
+    function isScanMode() {
+        return CFG.ALLOWED_DEPARTMENT.toLowerCase() === 'none' && CFG.AUTO_SKIP_BLOCKED;
+    }
     // Signals the current entry's department/block status to csv-database-v2.js
     // via document.body.dataset, same contract as the classic script.
     function updateCsvSignal(blockers) {
-        const uid = extractDuplicateId(window.location.href);
+        const sparks = getSparkIds();
         const forbidden = blockers.some(b => b.type === 'forbidden' || b.type === 'student-id-mismatch');
         const appeal = blockers.find(b => b.type === 'appeal');
         const ignored = blockers.some(b => b.type === 'ignored');
@@ -773,8 +1098,9 @@
         else if (appeal) document.body.dataset.csvDept = 'Appeal';
         else if (ignored) document.body.dataset.csvDept = 'Ignored';
         else document.body.dataset.csvDept = detectActualDepartment().dept;
-        if (uid) document.body.dataset.csvUid = uid;
-        if (appeal && !appealWarningShown) {
+        if (sparks.a || sparks.b) { document.body.dataset.csvSpark1 = sparks.a; document.body.dataset.csvSpark2 = sparks.b; }
+        else { delete document.body.dataset.csvSpark1; delete document.body.dataset.csvSpark2; }
+        if (appeal && !appealWarningShown && !isScanMode()) {
             appealWarningShown = true;
             const sideLabel = appeal.side === 'left' ? 'left side' : 'right side';
             alert('⚠️ Appeal keyword detected!\n\nReason: The word "appeal" was found on the ' + sideLabel + ' of this entry.\n\nThis merge is blocked and cannot be processed.');
@@ -854,6 +1180,7 @@
     }
     function getSelectedEmailSide() {
         for (const row of getDiffRowsByLabel('email')) {
+            if (row.element.dataset.elm2ScriptSide) return row.element.dataset.elm2ScriptSide;
             if (row.leftSelected) return 'left';
             if (row.rightSelected) return 'right';
         }
@@ -902,13 +1229,22 @@
             const leftText = row.values[0].textContent, rightText = row.values[1].textContent;
             if (!leftText || !rightText) return;
             if (applicantSide) {
+                currentRule = 'follows applicant side (Application/Cal State Apply)';
                 row.element.dataset.elm2AutoResolved = 'true';
                 applyScriptPick(row, applicantSide);
-                const btn = row.element.querySelectorAll(':scope > .diff-value-button')[applicantSide === 'left' ? 0 : 1];
-                if (btn) btn.classList.add('elm2-applicant-side');
+                return;
+            }
+            // One side blank ("-"), the other has data: nothing to decide, so we have no
+            // opinion and leave Bolt's pick alone. Runs AFTER the applicant-side rule
+            // (which outranks everything) but before the pattern rules below, so the
+            // legacy default-to-left can never pick an empty side.
+            const isBlank = (t) => !t || /^[-\u2013\u2014\s]+$/.test(t);
+            if (isBlank(leftText) !== isBlank(rightText)) {
+                row.element.dataset.elm2AutoResolved = 'true';
                 return;
             }
             // Milestone type matching (no applicant context)
+            currentRule = 'milestone type match -> left';
             if (text.match(/type:\s*\w+,\s*\w{3}\s+\d{1,2},\s*\d{4}/i)) {
                 const typePattern = /type:\s*(\w+),/i;
                 const leftTypeMatch = leftText.match(typePattern), rightTypeMatch = rightText.match(typePattern);
@@ -919,6 +1255,7 @@
                 }
             }
             // Email preference
+            currentRule = 'personal email preferred';
             if (row.label.toLowerCase().includes('email')) {
                 const personalDomains = ['gmail.com', 'yahoo.com', 'icloud.com', 'hotmail.com', 'aol.com', 'me.com', 'outlook.com', 'live.com', 'msn.com', 'protonmail.com', 'proton.me'];
                 const leftIsPersonal = personalDomains.some(d => leftText.toLowerCase().includes('@' + d));
@@ -928,6 +1265,7 @@
                 if (leftIsPersonal && rightIsPersonal) { row.element.dataset.elm2AutoResolved = 'true'; row.element.dataset.elm2DualPersonal = 'true'; return; }
             }
             // csusb.major preference
+            currentRule = 'csusb.major';
             if (/csusb\.major\./i.test(text)) {
                 const leftHas = /csusb\.major\./i.test(leftText), rightHas = /csusb\.major\./i.test(rightText);
                 if (leftHas && !rightHas) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'left'); return; }
@@ -939,6 +1277,7 @@
                 }
             }
             // Encoura / College Board ID — default left when both sides have it
+            currentRule = 'Encoura/College Board ID -> left';
             if (/Encoura Id:/i.test(leftText) && /Encoura Id:/i.test(rightText)) {
                 row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'left'); return;
             }
@@ -946,6 +1285,7 @@
                 row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'left'); return;
             }
             // csusb.school preference (Student Type rows)
+            currentRule = 'csusb.school';
             if (text.includes('Student Type') && /csusb\.school\.\d+/i.test(text)) {
                 const schoolPattern = /csusb\.school\.\d+/i;
                 const leftHas = schoolPattern.test(leftText), rightHas = schoolPattern.test(rightText);
@@ -959,6 +1299,7 @@
                 }
             }
             // Date of Birth — reject invalid years
+            currentRule = 'date of birth validity';
             if (row.label.toLowerCase().includes('birth')) {
                 const leftYear = leftText.match(/\b(\d{4})\b/), rightYear = rightText.match(/\b(\d{4})\b/);
                 const leftInvalid = leftYear && (leftYear[1].startsWith('0') || parseInt(leftYear[1]) < 1900);
@@ -967,6 +1308,7 @@
                 if (rightInvalid && !leftInvalid) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'left'); return; }
             }
             // First Generation Student — prefer Yes over No
+            currentRule = 'first generation = yes';
             if (row.label.toLowerCase().includes('first generation')) {
                 const leftYes = /\byes\b/i.test(leftText), rightYes = /\byes\b/i.test(rightText);
                 const leftNo = /\bno\b/i.test(leftText), rightNo = /\bno\b/i.test(rightText);
@@ -974,6 +1316,7 @@
                 if (rightYes && leftNo) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'right'); return; }
             }
             // Intended Term — prefer later term code
+            currentRule = 'later intended term';
             if (row.label.toLowerCase().includes('intended term')) {
                 const termCodePattern = /\((\d{4})\)/;
                 const leftCodeMatch = leftText.match(termCodePattern), rightCodeMatch = rightText.match(termCodePattern);
@@ -984,6 +1327,7 @@
                 }
             }
             // Name case preference — Title Case over ALL CAPS / all lowercase
+            currentRule = 'name case';
             if (row.label.toLowerCase().includes('name') && !row.label.toLowerCase().includes('email')) {
                 if (leftText.toLowerCase() === rightText.toLowerCase() && leftText !== rightText) {
                     const isAllUpper = (s) => s === s.toUpperCase() && s !== s.toLowerCase();
@@ -1003,6 +1347,9 @@
                 /\[ACUx\]/i,
                 /Outreach_UGRD_/i
             ];
+            // Matches on the whole row, as in the classic script. A blank left side
+            // never reaches here: the blank-side rule above picks the filled side first.
+            currentRule = 'legacy default -> left';
             if (legacyPatterns.some(p => p.test(text))) {
                 row.element.dataset.elm2AutoResolved = 'true';
                 applyScriptPick(row, 'left');
@@ -1012,6 +1359,7 @@
     // Dual-personal-email tiebreak (name/DOB-in-email). Email-open-count tier
     // dropped — no "User Activity" section found in the new layout.
     function autoDualPersonalEmails() {
+        currentRule = 'dual personal email tiebreak';
         const rows = getDiffRows().filter(r => r.isConflict && r.element.dataset.elm2DualPersonal && !r.element.dataset.elm2DualResolved);
         const names = getContactNames();
         const [firstA = '', ...restA] = (names[0] || '').toLowerCase().split(/\s+/);
@@ -1050,13 +1398,15 @@
         });
     }
     function autoResolveAddresses() {
+        currentRule = 'address comparison';
         const applicantSide = findApplicantSide();
         const rows = getDiffRowsByLabel('address').filter(r => r.isConflict && !r.element.dataset.elm2AddressResolved);
         rows.forEach(row => {
             const leftText = row.values[0].textContent, rightText = row.values[1].textContent;
             if (!leftText || !rightText) return;
             row.element.dataset.elm2AddressResolved = 'true';
-            if (applicantSide) { applyScriptPick(row, applicantSide); return; }
+            if (applicantSide) { currentRule = 'follows applicant side (Application/Cal State Apply)'; applyScriptPick(row, applicantSide); return; }
+            currentRule = 'address comparison';
             const comparison = AddressComparer.compareAddresses(leftText, rightText);
             let winner = comparison.winner;
             if (winner === 'tie') {
@@ -1067,6 +1417,7 @@
         });
     }
     function runAutoResolution() {
+        computeAutoApplyForPair();
         autoResolveRows();
         autoDualPersonalEmails();
         autoResolveAddresses();
@@ -1084,34 +1435,137 @@
     function getPickComparisonRows() {
         return getDiffRows().filter(r => r.element.dataset.elm2AiSide && r.element.dataset.elm2ScriptSide);
     }
-    function annotateRowPickBadges() {
+    function clearPickClasses(root) {
+        root.querySelectorAll('.elm2-agree-pick, .elm2-pick-bolt, .elm2-pick-ours').forEach(el => el.classList.remove('elm2-agree-pick', 'elm2-pick-bolt', 'elm2-pick-ours'));
+    }
+    // Yellow background behind the applicant side across the whole field list, as in
+    // the classic layout: from the field label through that side's value and arrows,
+    // including the header row. It's painted as each row's own background, so the
+    // entries on top keep their green/blue/orange colors. Plus a yellow contact card.
+    function clearApplicantBand() {
+        document.querySelectorAll('[data-elm2-band]').forEach(el => {
+            el.style.backgroundImage = '';
+            el.removeAttribute('data-elm2-band');
+        });
+        const o = document.getElementById('elm2-applicant-outline');
+        if (o) o.remove();
+    }
+    // Medium and Low score chips get a solid orange / red fill with white text, like High.
+    // Applied as inline !important on the chip because Element451's own per-level fill
+    // rules beat any stylesheet rule we can write (e.g. an !important rule inside a
+    // cascade layer outranks an unlayered one regardless of specificity); inline
+    // !important outranks all of them.
+    function colorScoreChips() {
+        const colors = { medium: '#ef6c00', low: '#d32f2f' };
+        document.querySelectorAll('elm-deduplication-score-chip bolt-chip').forEach(chip => {
+            const level = chip.classList.contains('score-chip-medium') ? 'medium'
+                : chip.classList.contains('score-chip-low') ? 'low' : '';
+            if (!level) return;
+            const c = colors[level];
+            chip.style.setProperty('background-color', c, 'important');
+            chip.style.setProperty('border-color', c, 'important');
+            chip.style.setProperty('color', '#fff', 'important');
+            const label = chip.querySelector('.bolt-chip-text');
+            if (label) label.style.setProperty('color', '#fff', 'important');
+        });
+    }
+    // Keeps the pinned queue nav below Element451's own header if that is sticky/fixed.
+    function pinReviewQueueNav() {
+        if (!document.querySelector('.review-queue-nav')) return;
+        const hdr = document.querySelector('.bolt-stackable-sidebar-header-wrapper');
+        let top = 0;
+        if (hdr) {
+            const pos = getComputedStyle(hdr).position;
+            if (pos === 'sticky' || pos === 'fixed' || pos === 'absolute') top = Math.round(hdr.getBoundingClientRect().height);
+        }
+        document.documentElement.style.setProperty('--elm2-nav-top', top + 'px');
+    }
+    // When the Auto-Apply slider is changed mid-review, apply our suggestions if the new
+    // level now covers this pair (lowering it never undoes anything already applied).
+    function reapplyForLevel() {
+        if (!computeAutoApplyForPair()) return;
+        getDiffRows().forEach(row => {
+            const side = row.element.dataset.elm2ScriptSide;
+            if (side) row.selectSide(side);
+        });
+    }
+    function annotateApplicantSide() {
+        document.querySelectorAll('.elm2-applicant-card').forEach(el => el.classList.remove('elm2-applicant-card'));
+        if (!CFG.HIGHLIGHT_ROWS || document.body.classList.contains('elm2-blocked')) { clearApplicantBand(); return; }
+        const side = findApplicantSide();
+        const form = getDiffForm();
+        const formEl = form ? form.querySelector('form.diff-form') : null;
+        if (!side || !formEl) { clearApplicantBand(); return; }
+        const card = getContactCards()[side === 'left' ? 0 : 1];
+        if (card) card.classList.add('elm2-applicant-card');
+
+        // The band ends at the applicant contact's OWN arrow button (not the whole
+        // arrow group, which also contains the other contact's arrow).
+        const arrowSel = side === 'left' ? '[title="Keep Contact A"]' : '[title="Keep Contact B"]';
+        const ref = Array.from(formEl.querySelectorAll('.diff-row')).find(r => r.querySelector(':scope > .diff-actions > .diff-action-button' + arrowSel));
+        if (!ref) { clearApplicantBand(); return; }
+        const arrow = ref.querySelector(':scope > .diff-actions > .diff-action-button' + arrowSel).getBoundingClientRect();
+        const pad = 10;
+        const boundary = side === 'left' ? arrow.right + pad : arrow.left - pad;
+        const yellow = '#fff9c4';
+        const targets = Array.from(formEl.querySelectorAll('.diff-header, .diff-row')).filter(el => el.getBoundingClientRect().width);
+        if (targets.length === 0) { clearApplicantBand(); return; }
+        targets.forEach(el => {
+            const r = el.getBoundingClientRect();
+            const n = Math.round(boundary - r.left);
+            const img = side === 'left'
+                ? `linear-gradient(to right, ${yellow} 0, ${yellow} ${n}px, transparent ${n}px)`
+                : `linear-gradient(to right, transparent ${n}px, ${yellow} ${n}px)`;
+            if (el.dataset.elm2Band === side && el.style.backgroundImage === img) return;
+            el.style.backgroundImage = img;
+            el.dataset.elm2Band = side;
+        });
+
+        // Amber outline around the whole applicant side, from the header row to the last
+        // row. Transparent inside, so it never tints the entries.
+        if (getComputedStyle(formEl).position === 'static') formEl.style.position = 'relative';
+        let outline = document.getElementById('elm2-applicant-outline');
+        if (!outline) { outline = document.createElement('div'); outline.id = 'elm2-applicant-outline'; }
+        if (outline.parentElement !== formEl) formEl.appendChild(outline);
+        const formRect = formEl.getBoundingClientRect();
+        const rects = targets.map(el => el.getBoundingClientRect());
+        const top = Math.min(...rects.map(r => r.top));
+        const bottom = Math.max(...rects.map(r => r.bottom));
+        const left = side === 'left' ? Math.min(...rects.map(r => r.left)) : boundary;
+        const right = side === 'left' ? boundary : Math.max(...rects.map(r => r.right));
+        outline.style.left = (left - formRect.left + formEl.scrollLeft) + 'px';
+        outline.style.top = (top - formRect.top + formEl.scrollTop) + 'px';
+        outline.style.width = (right - left) + 'px';
+        outline.style.height = (bottom - top) + 'px';
+    }
+    function annotateRowColors() {
+        resetStaleRows();
+        if (!CFG.HIGHLIGHT_ROWS) {
+            clearPickClasses(document);
+            document.querySelectorAll('.diff-row[title]').forEach(el => el.removeAttribute('title'));
+            return;
+        }
         const label = (side) => (side === 'left' ? 'A' : 'B');
         getDiffRows().forEach(row => {
             const ai = row.element.dataset.elm2AiSide;
             const script = row.element.dataset.elm2ScriptSide;
-            // Green = Bolt's original pick matches ours, red = it doesn't.
-            // Rows where our rules have no opinion (or Bolt had no default) stay plain.
-            row.element.classList.toggle('elm2-agree-row', !!ai && !!script && ai === script);
-            row.element.classList.toggle('elm2-disagree-row', !!ai && !!script && ai !== script);
-            let badge = row.element.querySelector(':scope > .elm2-pick-badge');
+            const both = !!ai && !!script;
+            const agree = both && ai === script;
+            const conflict = both && ai !== script;
+            // Conflict rows: color the two value buttons by who picked them.
             const btns = row.element.querySelectorAll(':scope > .diff-value-button');
-            btns.forEach(b => b.classList.remove('elm2-suggested'));
-            if (!script) { if (badge) badge.remove(); return; }
-            const suggestedBtn = btns[script === 'left' ? 0 : 1];
-            if (suggestedBtn) suggestedBtn.classList.add('elm2-suggested');
-            if (!badge) {
-                badge = document.createElement('span');
-                badge.className = 'elm2-pick-badge';
-                const titleEl = row.element.querySelector(':scope > .diff-title');
-                if (titleEl) titleEl.insertAdjacentElement('afterend', badge);
-                else row.element.appendChild(badge);
+            ['left', 'right'].forEach((side, idx) => {
+                const btn = btns[idx];
+                if (!btn) return;
+                btn.classList.toggle('elm2-agree-pick', agree && ai === side);
+                btn.classList.toggle('elm2-pick-bolt', conflict && ai === side);
+                btn.classList.toggle('elm2-pick-ours', conflict && script === side);
+            });
+            if (both) {
+                row.element.title = 'Our rules suggest Contact ' + label(script) + (row.element.dataset.elm2Rule ? ' (' + row.element.dataset.elm2Rule + ')' : '') + '; Bolt picked Contact ' + label(ai);
+            } else {
+                row.element.removeAttribute('title');
             }
-            const differs = !!ai && ai !== script;
-            badge.classList.toggle('elm2-pick-differs', differs);
-            badge.textContent = differs
-                ? `⚠ Bolt: ${label(ai)} · Ours: ${label(script)}`
-                : `⚙ Ours: ${label(script)}${ai ? ' ✓ matches Bolt' : ''}`;
-            badge.title = 'Our rules suggest Contact ' + label(script) + (ai ? '; Bolt picked Contact ' + label(ai) : '');
         });
     }
     function applyAllPicks(sourceAttr) {
@@ -1119,7 +1573,7 @@
             const side = row.element.dataset[sourceAttr];
             if (side) row.selectSide(side);
         });
-        annotateRowPickBadges();
+        annotateRowColors();
         injectPickComparisonBar();
     }
     function injectPickComparisonBar() {
@@ -1149,10 +1603,12 @@
         const blocked = document.body.classList.contains('elm2-blocked');
         let msg;
         if (blocked) msg = `Blocked entry — no suggestions made (${conflicts} conflicting of ${all.length} fields)`;
-        else if (!CFG.AUTO_RESOLVE_FIELDS) msg = `Auto-Resolve Fields is OFF — no suggestions (${conflicts} conflicting of ${all.length} fields)`;
         else if (ours.length === 0) msg = `${conflicts} conflicting field(s); our rules had no opinion on any of them`;
         else if (differing > 0) msg = `⚠ ${differing} of ${ours.length} suggestions differ from Bolt's picks (${conflicts} conflicting of ${all.length} fields)`;
         else msg = `Our ${ours.length} suggestion(s) match Bolt's picks (${conflicts} conflicting of ${all.length} fields)`;
+        if (!blocked && ours.length > 0 && !autoApplyThisPair) {
+            msg += CFG.AUTO_APPLY_LEVEL === 0 ? ' — suggestions only, not applied' : ' — not auto-applied for this pair at this level';
+        }
         document.getElementById('elm2-pick-compare-count').textContent = msg;
         document.getElementById('elm2-use-ai-btn').disabled = both.length === 0;
         document.getElementById('elm2-use-script-btn').disabled = ours.length === 0;
@@ -1192,15 +1648,18 @@
     function attemptAutoResolve() {
         if (!isDedupReviewPage()) return;
         if (!getContactNames().filter(Boolean).length) return; // page still loading
+        resetStaleRows();
         snapshotNativeSelections(); // capture Bolt's defaults before anything below can click a row
         const pairKey = getPairKey();
         if (pairKey !== currentQueuePositionKey) {
             currentQueuePositionKey = pairKey;
+            pairFirstSeenAt = Date.now();
             resolutionAttempted = false;
             conflictWarningShown = false;
             appealWarningShown = false;
             delete document.body.dataset.csvDept;
-            delete document.body.dataset.csvUid;
+            delete document.body.dataset.csvSpark1;
+            delete document.body.dataset.csvSpark2;
         }
         const blockers = getAllBlockers();
         applyBlockStyling(blockers);
@@ -1220,7 +1679,15 @@
         }
         if (!resolutionAttempted) console.log('[elm2] Not blocked — allowed dept:', CFG.ALLOWED_DEPARTMENT, '| detected:', detectActualDepartment().dept);
         if (resolutionAttempted) return;
-        if (!CFG.AUTO_RESOLVE_FIELDS) return;
+        // Wait for Element451 to apply its own default picks before we touch
+        // anything, so we can record them first (give up after 3s in case Bolt
+        // made no picks on this pair).
+        const bolt = getDiffRows().filter(r => r.element.dataset.elm2AiSide).length;
+        if (bolt === 0 && Date.now() - pairFirstSeenAt < 3000) return;
+        // At the Low / Medium Auto-Apply levels the decision depends on Bolt's score, which can
+        // render a moment after the field rows: wait for it (up to 3s) before deciding.
+        const lvl = CFG.AUTO_APPLY_LEVEL;
+        if (lvl >= 2 && lvl < 4 && !getScoreChipLevel() && Date.now() - pairFirstSeenAt < 3000) return;
         resolutionAttempted = true;
         // Two-phase, mirroring the classic script: resolve now, then re-verify
         // shortly after in case more Workflow/Source rows loaded in the meantime.
@@ -1237,7 +1704,10 @@
             console.log('[elm2] Resolution done —', _rows.length, 'fields,',
                 _rows.filter(r => r.element.dataset.elm2ScriptSide).length, 'with our suggestion,',
                 _rows.filter(r => r.element.dataset.elm2AiSide).length, 'with a Bolt default captured');
-            if (!conflictWarningShown && CONFLICT_ROW_THRESHOLD > 0) {
+            const _byRule = {};
+            _rows.forEach(r => { const rl = r.element.dataset.elm2Rule; if (r.element.dataset.elm2ScriptSide) _byRule[rl || '(unknown)'] = (_byRule[rl || '(unknown)'] || 0) + 1; });
+            console.log('[elm2] Suggestions by rule:', JSON.stringify(_byRule));
+            if (!conflictWarningShown && CONFLICT_ROW_THRESHOLD > 0 && !isScanMode()) {
                 const { conflictCount, shouldWarn, conflicts } = checkForConflictingRecords();
                 if (shouldWarn) {
                     conflictWarningShown = true;
@@ -1245,7 +1715,7 @@
                 }
             }
             const scoreLevel = getScoreChipLevel();
-            if (scoreLevel === 'low' && !conflictWarningShown) {
+            if (scoreLevel === 'low' && !conflictWarningShown && !isScanMode()) {
                 conflictWarningShown = true;
                 alert('⚠️ Bolt confidence score is "Low" for this pair. Please review carefully before merging.');
             }
@@ -1289,8 +1759,12 @@
         bindMergeButtonTracking();
         checkForMergeResult();
         injectMergeCounter();
+        colorScoreChips();
         if (isDedupReviewPage()) {
-            annotateRowPickBadges();
+            syncBoltBlue();
+            annotateRowColors();
+            pinReviewQueueNav();
+            annotateApplicantSide();
             injectPickComparisonBar();
         }
     }, 750);
@@ -1370,14 +1844,29 @@
         pane.id = 'elm-settings-pane';
         pane.innerHTML = `
             <div class="settings-header">
-                <span>Settings (New Layout) · ${BUILD}</span>
-                <button id="elm-settings-close" style="background:none;border:none;font-size:20px;cursor:pointer;">&times;</button>
+                <div>
+                    <div class="settings-title">Settings</div>
+                    <div class="settings-build">New layout · ${BUILD}</div>
+                </div>
+                <button id="elm-settings-close" aria-label="Close settings">&times;</button>
             </div>
             <div class="settings-body">
                 <div class="settings-section-title">Automation</div>
-                <div class="setting-row"><label>Auto-Resolve Fields</label>${toggleHtml('elm-auto-resolve-fields')}</div>
+                <div class="setting-row elm-slider-head"><label>Auto-Apply Suggestions</label><span id="elm-apply-level-label" class="elm-level-label"></span></div>
+                <div class="elm-slider">
+                    <div class="m3s" id="elm-m3s">
+                        <input type="range" id="elm-apply-level" min="0" max="4" step="1" aria-label="Auto-apply level">
+                        <div class="m3s-active"></div>
+                        <div class="m3s-inactive"></div>
+                        <div class="m3s-dots"><span style="--i:0"></span><span style="--i:1"></span><span style="--i:2"></span><span style="--i:3"></span><span style="--i:4"></span></div>
+                        <div class="m3s-handle"><span class="m3s-bubble" id="elm-m3s-bubble"></span></div>
+                    </div>
+                    <div class="m3s-labels"><span style="--i:0">None</span><span style="--i:1">Applicant</span><span style="--i:2">Low</span><span style="--i:3">Medium</span><span style="--i:4">High/All</span></div>
+                </div>
+                <div id="elm-apply-level-desc" class="elm-level-desc"></div>
                 <div class="setting-row"><label>Auto-Skip Blocked</label>${toggleHtml('elm-auto-skip-blocked')}</div>
                 <div class="settings-section-title">Display</div>
+                <div class="setting-row"><label>Highlight Rows</label>${toggleHtml('elm-highlight-rows')}</div>
                 <div class="setting-row"><label>Show Merge Counter</label>${toggleHtml('elm-show-merge-counter')}</div>
                 <div class="settings-section-title">Department</div>
                 <div class="setting-row">
@@ -1396,8 +1885,36 @@
         function toggleHtml(id) {
             return `<label class="elm-toggle-switch"><input type="checkbox" id="${id}"><span class="elm-toggle-slider"></span></label>`;
         }
-        setupToggle('elm-auto-resolve-fields', 'elm_auto_click_fab');
+        const levelSlider = document.getElementById('elm-apply-level');
+        const levelLabel = document.getElementById('elm-apply-level-label');
+        const levelNames = ['None', 'Applicant', 'Low', 'Medium', 'High / All'];
+        const levelDescs = [
+            'Never auto-applies. Use "Use our picks" to apply suggestions yourself.',
+            'Auto-applies only on pairs that have an applicant side.',
+            'Pairs with an applicant side, plus pairs with a Low Bolt score.',
+            'Pairs with an applicant side, plus Low and Medium Bolt scores.',
+            'Every pair, whatever the Bolt score.'
+        ];
+        const syncLevel = () => {
+            levelSlider.value = CFG.AUTO_APPLY_LEVEL;
+            const v = parseInt(levelSlider.value, 10);
+            document.getElementById('elm-m3s').style.setProperty('--p', v / 4);
+            document.querySelectorAll('#elm-m3s .m3s-dots span').forEach((d, i) => {
+                d.className = i < v ? 'on' : i > v ? 'off' : 'here';
+            });
+            document.querySelectorAll('#elm-settings-pane .m3s-labels span').forEach((l, i) => l.classList.toggle('sel', i === v));
+            document.getElementById('elm-m3s-bubble').textContent = levelNames[v];
+            levelLabel.textContent = levelNames[levelSlider.value];
+            document.getElementById('elm-apply-level-desc').textContent = levelDescs[levelSlider.value];
+        };
+        syncLevel();
+        levelSlider.addEventListener('input', () => {
+            localStorage.setItem('elm_auto_apply_level', levelSlider.value);
+            syncLevel();
+            reapplyForLevel();
+        });
         setupToggle('elm-auto-skip-blocked', 'elm_auto_skip_blocked');
+        setupToggle('elm-highlight-rows', 'elm_highlight_rows');
         setupToggle('elm-show-merge-counter', 'elm_show_merge_counter', () => { document.getElementById('elm-controls-wrapper')?.remove(); injectMergeCounter(); });
         function setupToggle(elementId, storageKey, onChange) {
             const el = document.getElementById(elementId);

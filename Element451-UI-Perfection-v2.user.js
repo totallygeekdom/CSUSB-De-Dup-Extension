@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.69
+// @version      2.70
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-69'; // keep in sync with @version (2.69)
+    const BUILD = 'v2-build-70'; // keep in sync with @version (2.70)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -41,22 +41,22 @@
     // and auto-navigate can't be done safely until there's a real
     // merge-success signal to detect (see checkForMergeResult below) — both
     // need live investigation before they're worth exposing as settings.
-    function rawApplyLevel() {
-        const v = parseInt(localStorage.getItem('elm_auto_apply_level'), 10);
-        if (!isNaN(v)) return Math.max(0, Math.min(4, v));
-        return getBoolSetting('elm_auto_click_fab', true) ? 4 : 0;
+    // Slider position, 0..5: None, Applicant, High, Medium, Low, All (each adds to the one before).
+    // Stored under a new key; the old slider (0 none, 1 applicant, 2 low, 3 medium, 4 all) is mapped once.
+    function rangeLevel() {
+        const v = parseInt(localStorage.getItem('elm_range_level'), 10);
+        if (!isNaN(v)) return Math.max(0, Math.min(5, v));
+        const old = parseInt(localStorage.getItem('elm_auto_apply_level'), 10);
+        if (!isNaN(old)) return [0, 1, 4, 3, 5][Math.max(0, Math.min(4, old))];
+        return getBoolSetting('elm_auto_click_fab', true) ? 5 : 0;
     }
     const CFG = Object.defineProperties({}, {
-        // Slider = which pairs are in range: 1 applicant, 2 low, 3 medium, 4 high/all (every pair).
-        // A stored 0 (the old "None" position) means high/all here, with Bolt's picks kept (see USE_PICKS).
-        AUTO_APPLY_LEVEL:         { get() { const v = rawApplyLevel(); return v === 0 ? 4 : v; } },
+        // Slider = which pairs are in range (0 None = automation off, 1 Applicant, 2 + High score,
+        // 3 + Medium, 4 + Low, 5 All).
+        RANGE_LEVEL:              { get() { return rangeLevel(); } },
         // Whose picks are used on pairs in range: 'ours' (our rules, incl. the applicant rule) or
         // 'bolt' (leave Bolt's picks; ours only fills rows Bolt left unselected).
-        USE_PICKS:                { get() {
-            const v = localStorage.getItem('elm_use_picks');
-            if (v === 'ours' || v === 'bolt') return v;
-            return rawApplyLevel() === 0 ? 'bolt' : 'ours';
-        } },
+        USE_PICKS:                { get() { return localStorage.getItem('elm_use_picks') === 'bolt' ? 'bolt' : 'ours'; } },
         // What happens once a pair in range is decided: 'wait' for you, or 'merge'. Kept per browser
         // session only, so a new session always starts on 'wait'.
         WHEN_DONE:                { get() { try { return sessionStorage.getItem('elm_when_done') === 'merge' ? 'merge' : 'wait'; } catch (e) { return 'wait'; } } },
@@ -407,7 +407,7 @@
         #elm-settings-pane .m3s-active, #elm-settings-pane .m3s-inactive { position: absolute; top: 14px; height: 16px; transition: width .2s var(--md-ease), left .2s var(--md-ease); }
         #elm-settings-pane .m3s-active { left: 0; width: max(0px, calc((100% - 4px) * var(--p) - var(--gap))); background: var(--md-primary); border-radius: 8px 2px 2px 8px; }
         #elm-settings-pane .m3s-inactive { right: 0; left: calc((100% - 4px) * var(--p) + 4px + var(--gap)); background: #cfe0f8; border-radius: 2px 8px 8px 2px; }
-        #elm-settings-pane .m3s-dots span { position: absolute; top: 20px; width: 4px; height: 4px; border-radius: 50%; left: calc(6px + (100% - 16px) * var(--i) / 3); }
+        #elm-settings-pane .m3s-dots span { position: absolute; top: 20px; width: 4px; height: 4px; border-radius: 50%; left: calc(6px + (100% - 16px) * var(--i) / 5); }
         #elm-settings-pane .m3s-dots span.on { background: #fff; }
         #elm-settings-pane .m3s-dots span.off { background: var(--md-primary); }
         #elm-settings-pane .m3s-dots span.here { display: none; }
@@ -417,12 +417,14 @@
         #elm-settings-pane .m3s input[type=range]:focus-visible ~ .m3s-handle .m3s-bubble,
         #elm-settings-pane .m3s input[type=range]:active ~ .m3s-handle .m3s-bubble { opacity: 1; }
         #elm-settings-pane .m3s-labels { position: relative; height: 16px; margin-top: 4px; font-size: 12px; line-height: 16px; letter-spacing: .4px; color: var(--md-on-surface-variant); }
-        #elm-settings-pane .m3s-labels span { position: absolute; top: 0; white-space: nowrap; left: calc((100% - 4px) * var(--i) / 3 + 2px); transform: translateX(-50%); transition: color .2s var(--md-ease); }
+        #elm-settings-pane .m3s-labels span { position: absolute; top: 0; white-space: nowrap; left: calc((100% - 4px) * var(--i) / 5 + 2px); transform: translateX(-50%); transition: color .2s var(--md-ease); }
         #elm-settings-pane .m3s-labels span:first-child { left: 0; transform: none; }
         #elm-settings-pane .m3s-labels span:last-child { left: 100%; transform: translateX(-100%); }
         #elm-settings-pane .m3s-labels span.sel { color: var(--md-primary); font-weight: 500; }
         #elm-settings-pane .elm-seg { display: flex; height: 40px; margin: 4px 0 8px; border: 1px solid var(--md-outline); border-radius: 20px; overflow: hidden; }
         #elm-settings-pane .elm-seg button { flex: 1; display: flex; align-items: center; justify-content: center; border: none; border-left: 1px solid var(--md-outline); background: transparent; color: var(--md-on-surface); font: 500 14px/20px inherit; letter-spacing: .1px; cursor: pointer; transition: background-color .2s var(--md-ease); }
+        #elm-settings-pane .elm-seg.elm-seg-disabled { opacity: .38; }
+        #elm-settings-pane .elm-seg button:disabled { cursor: default; }
         #elm-settings-pane .elm-seg button:first-child { border-left: none; }
         #elm-settings-pane .elm-seg button:hover { background: rgba(0, 0, 0, .06); }
         #elm-settings-pane .elm-seg button[aria-checked="true"] { background: #dce8f9; color: #0b2a4a; }
@@ -922,17 +924,18 @@
     // directly.
     let currentRule = '';
     // pairInRange: whether the slider covers the pair on screen. Cumulative:
-    // 1 pairs with an applicant side, 2 + Bolt score Low, 3 + Medium, 4 every pair.
+    // 1 pairs with an applicant side, 2 + Bolt score High, 3 + Medium, 4 + Low, 5 every pair.
     // autoApplyThisPair: in range AND "Use picks from" is Ours (so our picks get applied).
     let pairInRange = false;
     let autoApplyThisPair = false;
     function computeAutoApplyForPair() {
-        const level = CFG.AUTO_APPLY_LEVEL;
+        const level = CFG.RANGE_LEVEL;
         const score = getScoreChipLevel();
-        pairInRange = level >= 4
-            || !!findApplicantSide()
-            || (level >= 2 && score === 'low')
-            || (level >= 3 && score === 'medium');
+        pairInRange = level >= 5
+            || (level >= 1 && !!findApplicantSide())
+            || (level >= 2 && score === 'high')
+            || (level >= 3 && score === 'medium')
+            || (level >= 4 && score === 'low');
         autoApplyThisPair = pairInRange && CFG.USE_PICKS === 'ours';
         return autoApplyThisPair;
     }
@@ -1672,7 +1675,7 @@
         else if (differing > 0) msg = `⚠ ${differing} of ${ours.length} suggestions differ from Bolt's picks (${conflicts} conflicting of ${all.length} fields)`;
         else msg = `Our ${ours.length} suggestion(s) match Bolt's picks (${conflicts} conflicting of ${all.length} fields)`;
         if (!blocked && ours.length > 0 && !autoApplyThisPair) {
-            msg += CFG.USE_PICKS === 'bolt' ? " — using Bolt's picks" : ' — not auto-applied for this pair (outside the slider range)';
+            msg += CFG.RANGE_LEVEL === 0 ? ' — automation is off (slider on None)' : CFG.USE_PICKS === 'bolt' ? " — using Bolt's picks" : ' — not auto-applied for this pair (outside the slider range)';
         }
         document.getElementById('elm2-pick-compare-count').textContent = msg;
         document.getElementById('elm2-use-ai-btn').disabled = both.length === 0;
@@ -1851,8 +1854,8 @@
         if (bolt === 0 && Date.now() - pairFirstSeenAt < 3000) return;
         // At the Low / Medium Auto-Apply levels the decision depends on Bolt's score, which can
         // render a moment after the field rows: wait for it (up to 3s) before deciding.
-        const lvl = CFG.AUTO_APPLY_LEVEL;
-        if (lvl >= 2 && lvl < 4 && !getScoreChipLevel() && Date.now() - pairFirstSeenAt < 3000) return;
+        const lvl = CFG.RANGE_LEVEL;
+        if (lvl >= 2 && lvl < 5 && !getScoreChipLevel() && Date.now() - pairFirstSeenAt < 3000) return;
         resolutionAttempted = true;
         // Two-phase, mirroring the classic script: resolve now, then re-verify
         // shortly after in case more Workflow/Source rows loaded in the meantime.
@@ -1876,7 +1879,8 @@
             console.log('[elm2] Suggestions by rule:', JSON.stringify(_byRule));
             computeAutoApplyForPair();
             // Outside the slider range: skipped with Auto-Skip on (no popup), otherwise left for you.
-            if (!pairInRange && CFG.AUTO_SKIP_BLOCKED) {
+            // (Slider on None = automation off, so there is no range to be outside of.)
+            if (!pairInRange && CFG.RANGE_LEVEL > 0 && CFG.AUTO_SKIP_BLOCKED) {
                 console.log('[elm2] Outside the slider range — skipping');
                 clickNextDuplicate();
                 return;
@@ -2035,13 +2039,13 @@
                 <div class="setting-row elm-slider-head"><label>Pairs in range</label><span id="elm-apply-level-label" class="elm-level-label"></span></div>
                 <div class="elm-slider">
                     <div class="m3s" id="elm-m3s">
-                        <input type="range" id="elm-apply-level" min="1" max="4" step="1" aria-label="Pairs in range">
+                        <input type="range" id="elm-apply-level" min="0" max="5" step="1" aria-label="Pairs in range">
                         <div class="m3s-active"></div>
                         <div class="m3s-inactive"></div>
-                        <div class="m3s-dots"><span style="--i:0"></span><span style="--i:1"></span><span style="--i:2"></span><span style="--i:3"></span></div>
+                        <div class="m3s-dots"><span style="--i:0"></span><span style="--i:1"></span><span style="--i:2"></span><span style="--i:3"></span><span style="--i:4"></span><span style="--i:5"></span></div>
                         <div class="m3s-handle"><span class="m3s-bubble" id="elm-m3s-bubble"></span></div>
                     </div>
-                    <div class="m3s-labels"><span style="--i:0">Applicant</span><span style="--i:1">Low</span><span style="--i:2">Medium</span><span style="--i:3">High/All</span></div>
+                    <div class="m3s-labels"><span style="--i:0">None</span><span style="--i:1">Applicant</span><span style="--i:2">High</span><span style="--i:3">Medium</span><span style="--i:4">Low</span><span style="--i:5">All</span></div>
                 </div>
                 <div id="elm-apply-level-desc" class="elm-level-desc"></div>
                 <div class="setting-row elm-seg-head"><label>Use picks from</label></div>
@@ -2079,17 +2083,19 @@
         }
         const levelSlider = document.getElementById('elm-apply-level');
         const levelLabel = document.getElementById('elm-apply-level-label');
-        const levelNames = ['Applicant', 'Low', 'Medium', 'High / All'];
+        const levelNames = ['None', 'Applicant', 'High', 'Medium', 'Low', 'All'];
         const levelDescs = [
-            'Pairs that have an applicant side.',
-            'Pairs with an applicant side, plus Low Bolt scores.',
-            'Pairs with an applicant side, plus Low and Medium Bolt scores.',
-            'Every pair, whatever the Bolt score.'
+            'Automation off: nothing is applied or merged. Use the buttons yourself.',
+            'Only pairs that have an applicant side.',
+            'Applicant pairs, plus pairs with a High Bolt score.',
+            'Applicant pairs, plus High and Medium Bolt scores.',
+            'Applicant pairs, plus High, Medium and Low Bolt scores.',
+            'Every pair, even one with no Bolt score.'
         ];
         const syncLevel = () => {
-            levelSlider.value = CFG.AUTO_APPLY_LEVEL;
-            const idx = parseInt(levelSlider.value, 10) - 1;
-            document.getElementById('elm-m3s').style.setProperty('--p', idx / 3);
+            levelSlider.value = CFG.RANGE_LEVEL;
+            const idx = parseInt(levelSlider.value, 10);
+            document.getElementById('elm-m3s').style.setProperty('--p', idx / 5);
             document.querySelectorAll('#elm-m3s .m3s-dots span').forEach((d, i) => {
                 d.className = i < idx ? 'on' : i > idx ? 'off' : 'here';
             });
@@ -2097,11 +2103,19 @@
             document.getElementById('elm-m3s-bubble').textContent = levelNames[idx];
             levelLabel.textContent = levelNames[idx];
             document.getElementById('elm-apply-level-desc').textContent = levelDescs[idx];
+            // With the slider on None, "Use picks from" and "When done" have nothing to act on.
+            ['elm-use-picks', 'elm-when-done'].forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.classList.toggle('elm-seg-disabled', idx === 0);
+                el.querySelectorAll('button').forEach(b => { b.disabled = idx === 0; });
+            });
         };
         syncLevel();
         levelSlider.addEventListener('input', () => {
-            localStorage.setItem('elm_auto_apply_level', levelSlider.value);
+            localStorage.setItem('elm_range_level', levelSlider.value);
             syncLevel();
+            if (CFG.RANGE_LEVEL === 0) cancelAutoMerge('Auto-merge cancelled');
             reapplyForLevel();
         });
         function setupSegmented(id, get, set, describe, onChange) {
@@ -2126,6 +2140,7 @@
         setupSegmented('elm-when-done', () => CFG.WHEN_DONE, v => { try { sessionStorage.setItem('elm_when_done', v); } catch (e) { /* ignore */ } },
             v => v === 'merge' ? 'Merges decided pairs after a 4-second countdown with a Cancel button. Resets to "Wait for me" each browser session.' : 'You review the picks and click Merge Contacts yourself.',
             () => { if (CFG.WHEN_DONE !== 'merge') cancelAutoMerge('Auto-merge cancelled'); });
+        syncLevel();
         setupToggle('elm-auto-skip-blocked', 'elm_auto_skip_blocked');
         setupToggle('elm-highlight-rows', 'elm_highlight_rows');
         function setupToggle(elementId, storageKey, onChange) {

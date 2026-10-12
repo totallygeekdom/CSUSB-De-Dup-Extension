@@ -41,7 +41,7 @@ relying on them for unattended automation:**
   ignored block says nothing about whether a pair is actually a duplicate,
   so skipping only ever moves to the next entry, leaving the blocked pair
   untouched for a human to review.
-- The script never auto-clicks "Merge Contacts" — that's a deliberate,
+- By default the script does not click "Merge Contacts" (see "When done" above for the opt-in): it's a deliberate,
   permanent action with no undo, and this UI needs only one click to commit
   it (unlike the classic merge page, where the FAB's auto-clicked first
   press only *revealed* conflicts; the second, merge-committing click always
@@ -68,6 +68,23 @@ relying on them for unattended automation:**
   name are kept, followed by "..." when a name was cut (e.g. "Jon...") (existing entries are shortened automatically, and full names
   are masked out of the Row Contents text too). Name matching on the list
   page is therefore a weak fallback; Spark IDs are the real key.
+
+**Automation settings (v2):**
+- **Pairs in range** (slider: Applicant / Low / Medium / High/All): which pairs
+  automation covers. Cumulative: Applicant = pairs with an applicant side, Low and
+  Medium add pairs by Bolt score, High/All = every pair.
+- **Use picks from** (Bolt's / Ours): applies to every pair in range. Ours includes
+  the applicant rule; Bolt's keeps Element's pre-selected picks (ours only fills a
+  row Bolt left unselected).
+- **When done** (Wait for me / Merge): Merge shows a 4-second countdown bar with a
+  short written overview and a Cancel button (also Esc), then re-checks that the pair
+  is unblocked, unchanged, every conflicting field has a pick and there is no
+  possible-twins warning before clicking Merge Contacts. This setting is kept per
+  browser session, so a new session always starts on Wait for me.
+- **Auto-Skip**: skips blocked, out-of-range and possible-twins pairs with no
+  popup (clicks "Next duplicate" only, never Dismiss). Off: the script stops on
+  them, showing the appeal / possible-twins popups, and never merges them.
+- The old "Bolt score is Low" popup is gone; the twins warning covers it.
 
 The classic scripts remain unchanged for as long as the old layout is still
 reachable anywhere.

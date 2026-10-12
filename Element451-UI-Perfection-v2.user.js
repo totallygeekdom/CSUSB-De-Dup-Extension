@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.79
+// @version      2.80
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-79'; // keep in sync with @version (2.79)
+    const BUILD = 'v2-build-80'; // keep in sync with @version (2.80)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -72,15 +72,19 @@
     // =========================================================
     const css = `
         /* --- Material 3 design tokens for OUR UI (gear, counter, settings pane, comparison
-               bar). Primary follows Element451's own blue. --- */
+               bar). Primary is Element451's orange header colour (sampled; #ef6c00 until found). --- */
         :root {
-            --md-primary: var(--elm2-bolt-blue, #1976d2);
+            --md-primary: var(--elm2-header-color, #ef6c00);
+            --md-primary-text: color-mix(in srgb, var(--md-primary) 76%, #000);
+            --md-primary-container: color-mix(in srgb, var(--md-primary) 18%, #fff);
+            --md-on-primary-container: color-mix(in srgb, var(--md-primary) 30%, #000);
+            --md-primary-track: color-mix(in srgb, var(--md-primary) 26%, #fff);
             --md-on-surface: #1a1c20;
             --md-on-surface-variant: #434750;
             --md-outline: #73777f;
-            --md-surface-container-low: #f3f6fb;
-            --md-surface-container: #edf1f8;
-            --md-surface-container-highest: #e0e5ee;
+            --md-surface-container-low: #f7f4f1;
+            --md-surface-container: #f1ede8;
+            --md-surface-container-highest: #e6e1db;
             --md-error: #b3261e;
             --md-elev-1: 0 1px 2px rgba(0,0,0,.3), 0 1px 3px 1px rgba(0,0,0,.15);
             --md-elev-3: 0 1px 3px rgba(0,0,0,.3), 0 4px 8px 3px rgba(0,0,0,.15);
@@ -135,7 +139,7 @@
         #elm2-merge-overlay.visible { opacity: 1; pointer-events: auto; }
         #elm2-merge-overlay .elm2-merge-card {
             box-sizing: border-box; width: min(360px, calc(100vw - 32px)); padding: 40px 16px 16px; border-radius: 40px;
-            background: #e9edf4; color: #1a1c20; box-shadow: var(--md-elev-3); text-align: center;
+            background: #efebe6; color: #1a1c20; box-shadow: var(--md-elev-3); text-align: center;
             font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif;
             transform: scale(.85); opacity: 0; transition: transform .25s cubic-bezier(.05, .7, .1, 1), opacity .15s linear;
         }
@@ -286,12 +290,12 @@
             box-sizing: border-box !important;
             border-radius: 12px !important;
             border: 2px solid #73777f !important;
-            background: #e0e5ee !important;
+            background: #e6e1db !important;
             transition: background-color 0.2s, border-color 0.2s;
         }
         bolt-slide-toggle.hide-matching-items-toggle button.mdc-switch.mdc-switch--selected {
-            background: var(--elm2-bolt-blue, #1976d2) !important;
-            border-color: var(--elm2-bolt-blue, #1976d2) !important;
+            background: var(--md-primary) !important;
+            border-color: var(--md-primary) !important;
         }
         bolt-slide-toggle.hide-matching-items-toggle button.mdc-switch .mdc-switch__track,
         bolt-slide-toggle.hide-matching-items-toggle button.mdc-switch .mdc-switch__handle-track {
@@ -323,7 +327,7 @@
             top: 4px;
             width: 4px;
             height: 8px;
-            border: solid var(--elm2-bolt-blue, #1976d2);
+            border: solid var(--md-primary);
             border-width: 0 2px 2px 0;
             transform: rotate(45deg);
         }
@@ -386,7 +390,7 @@
         #elm-settings-close:hover { background-color: rgba(29, 27, 32, .08); }
         #elm-settings-close:focus-visible { outline: 2px solid var(--md-primary); }
         #elm-settings-pane .settings-body { padding: 0 24px 24px; }
-        #elm-settings-pane .settings-section-title { font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: var(--md-primary); text-transform: none; margin: 24px 0 4px; }
+        #elm-settings-pane .settings-section-title { font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: var(--md-primary-text); text-transform: none; margin: 24px 0 4px; }
         #elm-settings-pane .setting-row { display: flex; justify-content: space-between; align-items: center; min-height: 56px; padding: 8px 0; border: none; gap: 16px; }
         #elm-settings-pane .setting-row label { font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--md-on-surface); }
         /* outlined select */
@@ -400,7 +404,7 @@
         .elm-toggle-switch input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; z-index: 1; }
         .elm-toggle-slider {
             position: absolute; inset: 0; box-sizing: border-box;
-            border: 2px solid #73777f; border-radius: 12px; background: #e0e5ee;
+            border: 2px solid #73777f; border-radius: 12px; background: #e6e1db;
             transition: background-color 0.2s, border-color 0.2s;
         }
         .elm-toggle-slider::before {
@@ -409,14 +413,14 @@
             transition: left 0.2s, width 0.2s, height 0.2s, margin-top 0.2s, background-color 0.2s;
         }
         .elm-toggle-switch input:checked + .elm-toggle-slider {
-            background: var(--elm2-bolt-blue, #1976d2); border-color: var(--elm2-bolt-blue, #1976d2);
+            background: var(--md-primary); border-color: var(--md-primary);
         }
         .elm-toggle-switch input:checked + .elm-toggle-slider::before {
             left: 17px; width: 18px; height: 18px; margin-top: -9px; background: #fff;
         }
         .elm-toggle-switch input:checked + .elm-toggle-slider::after {
             content: ""; position: absolute; left: 24px; top: 4px; width: 4px; height: 8px;
-            border: solid var(--elm2-bolt-blue, #1976d2); border-width: 0 2px 2px 0; transform: rotate(45deg);
+            border: solid var(--md-primary); border-width: 0 2px 2px 0; transform: rotate(45deg);
         }
         /* M3 discrete slider (Auto-Apply level): 16px rounded track split by a 4px pill handle
                with a 6px gap either side, stop dots on the track, a value bubble while
@@ -424,7 +428,7 @@
                dragging, clicking and keyboard use are native. */
         #elm-settings-pane .elm-slider-head { min-height: 40px; }
         #elm-settings-pane .setting-row.elm-seg-head { min-height: 32px; padding-bottom: 0; }
-        #elm-settings-pane .elm-level-label { font-size: 14px; font-weight: 500; letter-spacing: .1px; color: var(--md-primary); }
+        #elm-settings-pane .elm-level-label { font-size: 14px; font-weight: 500; letter-spacing: .1px; color: var(--md-primary-text); }
         #elm-settings-pane .elm-slider { padding: 22px 2px 12px; }
         #elm-settings-pane .m3s { position: relative; height: 44px; --p: 0; --gap: 6px; }
         #elm-settings-pane .m3s input[type=range] { -webkit-appearance: none; appearance: none; position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; z-index: 3; }
@@ -432,7 +436,7 @@
         #elm-settings-pane .m3s input[type=range]::-moz-range-thumb { width: 4px; height: 44px; border: none; }
         #elm-settings-pane .m3s-active, #elm-settings-pane .m3s-inactive { position: absolute; top: 14px; height: 16px; transition: width .2s var(--md-ease), left .2s var(--md-ease); }
         #elm-settings-pane .m3s-active { left: 0; width: max(0px, calc((100% - 4px) * var(--p) - var(--gap))); background: var(--md-primary); border-radius: 8px 2px 2px 8px; }
-        #elm-settings-pane .m3s-inactive { right: 0; left: calc((100% - 4px) * var(--p) + 4px + var(--gap)); background: #cfe0f8; border-radius: 2px 8px 8px 2px; }
+        #elm-settings-pane .m3s-inactive { right: 0; left: calc((100% - 4px) * var(--p) + 4px + var(--gap)); background: var(--md-primary-track); border-radius: 2px 8px 8px 2px; }
         #elm-settings-pane .m3s-dots span { position: absolute; top: 20px; width: 4px; height: 4px; border-radius: 50%; left: calc(6px + (100% - 16px) * var(--i) / 5); }
         #elm-settings-pane .m3s-dots span.on { background: #fff; }
         #elm-settings-pane .m3s-dots span.off { background: var(--md-primary); }
@@ -446,18 +450,18 @@
         #elm-settings-pane .m3s-labels span { position: absolute; top: 0; white-space: nowrap; left: calc((100% - 4px) * var(--i) / 5 + 2px); transform: translateX(-50%); transition: color .2s var(--md-ease); }
         #elm-settings-pane .m3s-labels span:first-child { left: 0; transform: none; }
         #elm-settings-pane .m3s-labels span:last-child { left: 100%; transform: translateX(-100%); }
-        #elm-settings-pane .m3s-labels span.sel { color: var(--md-primary); font-weight: 500; }
+        #elm-settings-pane .m3s-labels span.sel { color: var(--md-primary-text); font-weight: 500; }
         #elm-settings-pane .elm-seg { display: flex; height: 40px; margin: 4px 0 8px; border: 1px solid var(--md-outline); border-radius: 20px; overflow: hidden; }
         #elm-settings-pane .elm-seg button { flex: 1; display: flex; align-items: center; justify-content: center; border: none; border-left: 1px solid var(--md-outline); background: transparent; color: var(--md-on-surface); font-family: inherit; font-weight: 500; font-size: 14px; line-height: 20px; letter-spacing: .1px; cursor: pointer; transition: background-color .2s var(--md-ease); }
         #elm-settings-pane .elm-seg.elm-seg-disabled { opacity: .38; }
         #elm-settings-pane .elm-seg button:disabled { cursor: default; }
         #elm-settings-pane .elm-seg button:first-child { border-left: none; }
         #elm-settings-pane .elm-seg button:hover { background: rgba(0, 0, 0, .06); }
-        #elm-settings-pane .elm-seg button[aria-checked="true"] { background: #dce8f9; color: #0b2a4a; }
+        #elm-settings-pane .elm-seg button[aria-checked="true"] { background: var(--md-primary-container); color: var(--md-on-primary-container); }
         #elm-settings-pane .elm-seg button[aria-checked="true"]::before { content: ''; width: 10px; height: 5px; margin: -3px 8px 0 0; border-left: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(-45deg); }
         #elm-settings-pane #elm-when-done-desc { min-height: 54px; }
         #elm-settings-pane .elm-level-desc { min-height: 36px; /* two lines reserved so the controls below do not jump */ font-size: 13px; line-height: 18px; letter-spacing: .25px; color: var(--md-on-surface-variant); margin: 0 0 8px; }
-        .elm-toggle-switch input:focus-visible + .elm-toggle-slider { outline: 2px solid var(--elm2-bolt-blue, #1976d2); outline-offset: 2px; }
+        .elm-toggle-switch input:focus-visible + .elm-toggle-slider { outline: 2px solid var(--md-primary); outline-offset: 2px; }
     `;
     if (typeof GM_addStyle === 'function') GM_addStyle(css);
     else { const styleEl = document.createElement('style'); styleEl.textContent = css; document.head.appendChild(styleEl); }
@@ -932,6 +936,23 @@
         const c = getComputedStyle(ref).borderTopColor;
         if (!c || c === 'rgba(0, 0, 0, 0)' || c === 'transparent') return;
         document.documentElement.style.setProperty('--elm2-bolt-blue', c);
+    }
+    // Element451's orange header colour, read from the header bar itself, for our own UI accents.
+    function syncHeaderColor() {
+        let el = document.querySelector('.bolt-navigation-right');
+        while (el && el !== document.documentElement) {
+            const c = getComputedStyle(el).backgroundColor;
+            const m = c.match(/rgba?\(([^)]+)\)/);
+            if (m) {
+                const [r, g, b, a = 1] = m[1].split(',').map(parseFloat);
+                // opaque and not white/near-white/grey: that is the header colour
+                if (a > 0.9 && Math.max(r, g, b) - Math.min(r, g, b) > 40) {
+                    document.documentElement.style.setProperty('--elm2-header-color', c);
+                    return;
+                }
+            }
+            el = el.parentElement;
+        }
     }
     // Records the side Bolt had pre-selected before our script touched the
     // row, the first time each row is seen (idempotent — a no-op on rows
@@ -2029,6 +2050,7 @@
         checkForMergeResult();
         injectMergeCounter();
         colorScoreChips();
+        syncHeaderColor(); // the header is on every page, not just the review page
         if (isDedupReviewPage()) {
             syncBoltBlue();
             annotateRowColors();

@@ -61,7 +61,7 @@ relying on them for unattended automation:**
   happens to include them). Import reads columns by header name, so
   files from earlier versions (other column order, or the old 5-column
   Unique ID format) still import and match by name only.
-- A "Show Database UI" toggle in the settings pane hides the header `DB:`
+- A "Show Database UI" toggle (settings pane, under Display) hides the header `DB:`
   counter and the list-view department chips (Download / Upload / Clear stay
   available; recording still happens either way).
 - Names are stored obfuscated: only the first 3 letters of the first and last

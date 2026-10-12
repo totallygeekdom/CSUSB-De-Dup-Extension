@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.72
+// @version      2.73
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-72'; // keep in sync with @version (2.72)
+    const BUILD = 'v2-build-73'; // keep in sync with @version (2.73)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -130,17 +130,17 @@
         }
         #elm2-merge-overlay.visible { opacity: 1; pointer-events: auto; }
         #elm2-merge-overlay .elm2-merge-card {
-            box-sizing: border-box; width: min(340px, calc(100vw - 32px)); padding: 28px 24px 24px; border-radius: 28px; background: #fff; color: #1a1c20;
+            box-sizing: border-box; width: min(360px, calc(100vw - 32px)); padding: 44px 20px 20px; border-radius: 36px; background: #fff; color: #1a1c20;
             box-shadow: var(--md-elev-3); text-align: center; font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif;
         }
-        #elm2-merge-overlay .elm2-ring { position: relative; width: 120px; height: 120px; margin: 0 auto 20px; }
+        #elm2-merge-overlay .elm2-ring { position: relative; width: 168px; height: 168px; margin: 0 auto 32px; }
         #elm2-merge-overlay .elm2-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
         #elm2-merge-overlay .elm2-ring-arc { fill: none; stroke: #d32f2f; stroke-width: 8; stroke-linecap: round; stroke-dasharray: 276.46; stroke-dashoffset: 0; }
-        #elm2-merge-overlay #elm2-merge-count { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 40px; font-weight: 500; color: #d32f2f; }
-        #elm2-merge-overlay #elm2-merge-summary { margin: 0 0 24px; font-size: 16px; line-height: 24px; letter-spacing: .5px; }
-        #elm2-merge-overlay #elm2-merge-cancel { width: 100%; height: 48px; border: none; border-radius: 24px; background: #d32f2f; color: #fff; font-family: inherit; font-weight: 500; font-size: 16px; line-height: 24px; letter-spacing: .1px; cursor: pointer; transition: box-shadow .2s var(--md-ease), background-color .2s var(--md-ease); }
+        #elm2-merge-overlay #elm2-merge-count { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 60px; font-weight: 500; color: #d32f2f; }
+        #elm2-merge-overlay #elm2-merge-summary { margin: 0 4px 36px; font-size: 16px; line-height: 24px; letter-spacing: .5px; }
+        #elm2-merge-overlay #elm2-merge-cancel { width: 100%; height: 52px; border: none; border-radius: 16px; background: #d32f2f; color: #fff; font-family: inherit; font-weight: 500; font-size: 16px; line-height: 24px; letter-spacing: .1px; cursor: pointer; transition: box-shadow .2s var(--md-ease), background-color .2s var(--md-ease); }
         #elm2-merge-overlay #elm2-merge-cancel:hover { background: #b71c1c; box-shadow: var(--md-elev-1); }
-        #elm2-merge-overlay #elm2-merge-cancel:focus-visible { outline: 2px solid #1a1c20; outline-offset: 2px; }
+        #elm2-merge-overlay #elm2-merge-cancel:focus-visible { outline: 3px solid rgba(211, 47, 47, .4); outline-offset: 2px; }
         @keyframes elm2-ring-drain { from { stroke-dashoffset: 0; } to { stroke-dashoffset: 276.46; } }
         #elm2-pick-compare-bar {
             display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
@@ -1834,7 +1834,6 @@
         void arc.getBoundingClientRect();
         arc.style.animation = `elm2-ring-drain ${MERGE_COUNTDOWN_S}s linear forwards`;
         ov.classList.add('visible');
-        document.getElementById('elm2-merge-cancel').focus({ focusVisible: false });
         mergeTimer = setInterval(() => {
             if (getPairKey() !== key) { cancelAutoMerge(); return; }
             left--;

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.12
+// @version      2.13
 // @description  Tracks duplicate entries in a CSV database stored in browser localStorage — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -34,6 +34,9 @@
 
     const STORAGE_KEY = 'elm_csv_database';
     const SHOW_API_STATUS_TOAST = true;
+    const UI_KEY = 'elm_show_db_ui';
+    function showDbUi() { try { return localStorage.getItem(UI_KEY) !== 'false'; } catch (e) { return true; } }
+    function applyDbUiSetting() { if (document.body) document.body.classList.toggle('csv-db-ui-off', !showDbUi()); }
 
     // =========================================================
     // CSS
@@ -98,6 +101,8 @@
         .settings-action-btn.danger { background: transparent; border: 1px solid #79747e; color: #b3261e; }
         .settings-action-btn.danger:hover { background: rgba(179, 38, 30, .08); box-shadow: none; }
         #elm-db-upload-input { display: none; }
+        /* "Show Database UI" off: hide the header counter and the list-view chips only */
+        body.csv-db-ui-off #elm-db-size-badge, body.csv-db-ui-off .csv-dept-badge { display: none !important; }
     `;
     const styleEl = document.createElement('style');
     styleEl.textContent = dbCss;
@@ -691,12 +696,19 @@
         section.id = 'elm-settings-db-section';
         section.innerHTML = `
             <div class="settings-section-title">Database</div>
+            <div class="setting-row"><label>Show Database UI</label><label class="elm-toggle-switch"><input type="checkbox" id="elm-show-db-ui"><span class="elm-toggle-slider"></span></label></div>
             <button id="elm-settings-download-btn" class="settings-action-btn"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/></svg> Download Database</button>
             <button id="elm-settings-upload-btn" class="settings-action-btn"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M5 20h14v-2H5v2zm0-10h4v6h6v-6h4l-7-7-7 7z"/></svg> Upload &amp; Replace Database</button>
             <input type="file" id="elm-db-upload-input" accept=".csv">
             <button id="elm-settings-clear-btn" class="settings-action-btn danger"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg> Clear Database</button>
         `;
         settingsBody.appendChild(section);
+        const uiToggle = document.getElementById('elm-show-db-ui');
+        uiToggle.checked = showDbUi();
+        uiToggle.addEventListener('change', () => {
+            try { localStorage.setItem(UI_KEY, String(uiToggle.checked)); } catch (e) { /* ignore */ }
+            applyDbUiSetting();
+        });
         document.getElementById('elm-settings-download-btn').onclick = () => {
             const csvContent = toCSV();
             if (!csvContent) { alert('CSV Database is empty — no entries have been recorded yet.'); return; }
@@ -770,7 +782,7 @@
             }
         };
     }
-    setInterval(() => { injectDbBadge(); injectDbSettingsSection(); }, 1000);
+    setInterval(() => { applyDbUiSetting(); injectDbBadge(); injectDbSettingsSection(); }, 1000);
 
     // =========================================================
     // AUTO-RECORD: poll body[data-csv-dept] set by UI-Perfection-v2
@@ -781,5 +793,5 @@
         updateDbSizeBadge();
     }, 1000);
 
-    console.log('%cCSV Database (new layout) v2.12 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
+    console.log('%cCSV Database (new layout) v2.13 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
 })();

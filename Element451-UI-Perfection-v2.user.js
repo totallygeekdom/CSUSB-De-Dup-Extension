@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.80
+// @version      2.81
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-80'; // keep in sync with @version (2.80)
+    const BUILD = 'v2-build-81'; // keep in sync with @version (2.81)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -1048,16 +1048,34 @@
     function clickSaveForLater() { const b = getSidebarActionButton('Save for later'); if (b) b.click(); return !!b; }
     // Skips to the next pair, but first has the CSV database script (if installed) record this
     // one, retrying for up to 3s until it confirms, so a fast skip never loses an entry.
+    let skipInFlightKey = '';
     function skipToNext(reason) {
         const key = getPairKey();
+        if (skipInFlightKey === key) return; // already skipping this pair
+        skipInFlightKey = key;
         const startedAt = Date.now();
+        let clicks = 0;
+        // Next duplicate can be disabled for a moment while Element loads the following pair, so a
+        // failed click is retried; a click that worked but hasn't moved on after 3s is retried too.
+        const clickLoop = () => {
+            if (getPairKey() !== key) { skipInFlightKey = ''; return; } // moved on
+            if (clicks >= 10) {
+                skipInFlightKey = '';
+                console.warn('[elm2] Could not move to the next pair after', clicks, 'tries');
+                showMergeNotice('Auto-skip stopped: there is no next pair to move to.');
+                return;
+            }
+            const ok = clickNextDuplicate();
+            clicks++;
+            setTimeout(clickLoop, ok ? 3000 : 500);
+        };
         const attempt = () => {
-            if (getPairKey() !== key) return; // already moved on
+            if (getPairKey() !== key) { skipInFlightKey = ''; return; } // already moved on
             const detail = {};
             document.dispatchEvent(new CustomEvent('elm2-record-pair', { detail }));
             if (detail.handled && !detail.recorded && Date.now() - startedAt < 3000) { setTimeout(attempt, 250); return; }
             console.log('[elm2] Skipping to next pair:', reason);
-            clickNextDuplicate();
+            clickLoop();
         };
         attempt();
     }
@@ -1099,9 +1117,11 @@
     function getPairKey() {
         // Prefer contact names (stable identity for the pair on screen); fall back
         // to the queue position counter if names aren't available yet.
+        // The queue position is part of the key: consecutive pairs can have identical names, and
+        // with names alone the script would think it was still on the same pair and stall.
         const names = getContactNames();
-        if (names.length === 2 && names[0] && names[1]) return names.join('|');
         const pos = getQueuePosition();
+        if (names.length === 2 && names[0] && names[1]) return names.join('|') + (pos ? '#' + pos.current : '');
         return pos ? `${pos.current}/${pos.total}` : '';
     }
 

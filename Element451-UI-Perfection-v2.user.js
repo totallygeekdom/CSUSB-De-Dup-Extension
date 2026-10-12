@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.64
+// @version      2.65
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-64'; // keep in sync with @version (2.64)
+    const BUILD = 'v2-build-65'; // keep in sync with @version (2.65)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -41,14 +41,25 @@
     // and auto-navigate can't be done safely until there's a real
     // merge-success signal to detect (see checkForMergeResult below) — both
     // need live investigation before they're worth exposing as settings.
+    function rawApplyLevel() {
+        const v = parseInt(localStorage.getItem('elm_auto_apply_level'), 10);
+        if (!isNaN(v)) return Math.max(0, Math.min(4, v));
+        return getBoolSetting('elm_auto_click_fab', true) ? 4 : 0;
+    }
     const CFG = Object.defineProperties({}, {
-        // 0 none, 1 applicant, 2 low, 3 medium, 4 high/all. Falls back to the old on/off
-        // toggle (elm_auto_click_fab) until the slider has been used.
-        AUTO_APPLY_LEVEL:         { get() {
-            const v = parseInt(localStorage.getItem('elm_auto_apply_level'), 10);
-            if (!isNaN(v)) return Math.max(0, Math.min(4, v));
-            return getBoolSetting('elm_auto_click_fab', true) ? 4 : 0;
+        // Slider = which pairs are in range: 1 applicant, 2 low, 3 medium, 4 high/all (every pair).
+        // A stored 0 (the old "None" position) means high/all here, with Bolt's picks kept (see USE_PICKS).
+        AUTO_APPLY_LEVEL:         { get() { const v = rawApplyLevel(); return v === 0 ? 4 : v; } },
+        // Whose picks are used on pairs in range: 'ours' (our rules, incl. the applicant rule) or
+        // 'bolt' (leave Bolt's picks; ours only fills rows Bolt left unselected).
+        USE_PICKS:                { get() {
+            const v = localStorage.getItem('elm_use_picks');
+            if (v === 'ours' || v === 'bolt') return v;
+            return rawApplyLevel() === 0 ? 'bolt' : 'ours';
         } },
+        // What happens once a pair in range is decided: 'wait' for you, or 'merge'. Kept per browser
+        // session only, so a new session always starts on 'wait'.
+        WHEN_DONE:                { get() { try { return sessionStorage.getItem('elm_when_done') === 'merge' ? 'merge' : 'wait'; } catch (e) { return 'wait'; } } },
         HIGHLIGHT_ROWS:           { get() { return getBoolSetting('elm_highlight_rows', true); } },
         SHOW_MERGE_COUNTER:       { get() { return getBoolSetting('elm_show_merge_counter', false); } },
         AUTO_SKIP_BLOCKED:        { get() { return getBoolSetting('elm_auto_skip_blocked', true); } },
@@ -106,6 +117,17 @@
                pixel-overlay approach — much simpler now that each side is its own
                button element instead of a shared row) --- */
         /* --- AI-vs-script pick comparison bar + per-row disagreement badges --- */
+        #elm2-merge-bar {
+            position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 16px); z-index: 10000;
+            display: flex; align-items: center; gap: 16px; max-width: min(640px, calc(100vw - 32px)); box-sizing: border-box;
+            padding: 12px 8px 12px 16px; border-radius: 4px; background: #322f35; color: #f5eff7;
+            font: 400 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .25px;
+            box-shadow: var(--md-elev-3); opacity: 0; pointer-events: none; transition: opacity .2s var(--md-ease), transform .2s var(--md-ease);
+        }
+        #elm2-merge-bar.visible { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+        #elm2-merge-bar.notice #elm2-merge-cancel { display: none; }
+        #elm2-merge-bar #elm2-merge-cancel { flex-shrink: 0; height: 40px; padding: 0 12px; border: none; border-radius: 20px; background: transparent; color: #d0bcff; font: 500 14px/20px inherit; letter-spacing: .1px; cursor: pointer; }
+        #elm2-merge-bar #elm2-merge-cancel:hover { background: rgba(208, 188, 255, .12); }
         #elm2-pick-compare-bar {
             display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
             padding: 12px 16px; margin: 0 0 12px;
@@ -355,6 +377,7 @@
                focused/pressed. The real <input type=range> sits on top, invisible, so
                dragging, clicking and keyboard use are native. */
         #elm-settings-pane .elm-slider-head { min-height: 40px; }
+        #elm-settings-pane .setting-row.elm-seg-head { min-height: 32px; padding-bottom: 0; }
         #elm-settings-pane .elm-level-label { font-size: 14px; font-weight: 500; letter-spacing: .1px; color: var(--md-primary); }
         #elm-settings-pane .elm-slider { padding: 22px 2px 12px; }
         #elm-settings-pane .m3s { position: relative; height: 44px; --p: 0; --gap: 6px; }
@@ -364,7 +387,7 @@
         #elm-settings-pane .m3s-active, #elm-settings-pane .m3s-inactive { position: absolute; top: 14px; height: 16px; transition: width .2s var(--md-ease), left .2s var(--md-ease); }
         #elm-settings-pane .m3s-active { left: 0; width: max(0px, calc((100% - 4px) * var(--p) - var(--gap))); background: var(--md-primary); border-radius: 8px 2px 2px 8px; }
         #elm-settings-pane .m3s-inactive { right: 0; left: calc((100% - 4px) * var(--p) + 4px + var(--gap)); background: #cfe0f8; border-radius: 2px 8px 8px 2px; }
-        #elm-settings-pane .m3s-dots span { position: absolute; top: 20px; width: 4px; height: 4px; border-radius: 50%; left: calc(6px + (100% - 16px) * var(--i) / 4); }
+        #elm-settings-pane .m3s-dots span { position: absolute; top: 20px; width: 4px; height: 4px; border-radius: 50%; left: calc(6px + (100% - 16px) * var(--i) / 3); }
         #elm-settings-pane .m3s-dots span.on { background: #fff; }
         #elm-settings-pane .m3s-dots span.off { background: var(--md-primary); }
         #elm-settings-pane .m3s-dots span.here { display: none; }
@@ -374,11 +397,18 @@
         #elm-settings-pane .m3s input[type=range]:focus-visible ~ .m3s-handle .m3s-bubble,
         #elm-settings-pane .m3s input[type=range]:active ~ .m3s-handle .m3s-bubble { opacity: 1; }
         #elm-settings-pane .m3s-labels { position: relative; height: 16px; margin-top: 4px; font-size: 12px; line-height: 16px; letter-spacing: .4px; color: var(--md-on-surface-variant); }
-        #elm-settings-pane .m3s-labels span { position: absolute; top: 0; white-space: nowrap; left: calc((100% - 4px) * var(--i) / 4 + 2px); transform: translateX(-50%); transition: color .2s var(--md-ease); }
+        #elm-settings-pane .m3s-labels span { position: absolute; top: 0; white-space: nowrap; left: calc((100% - 4px) * var(--i) / 3 + 2px); transform: translateX(-50%); transition: color .2s var(--md-ease); }
         #elm-settings-pane .m3s-labels span:first-child { left: 0; transform: none; }
         #elm-settings-pane .m3s-labels span:last-child { left: 100%; transform: translateX(-100%); }
         #elm-settings-pane .m3s-labels span.sel { color: var(--md-primary); font-weight: 500; }
-        #elm-settings-pane .elm-level-desc { min-height: 36px; /* two lines reserved so the toggles below do not jump */ font-size: 13px; line-height: 18px; letter-spacing: .25px; color: var(--md-on-surface-variant); margin: 0 0 8px; }
+        #elm-settings-pane .elm-seg { display: flex; height: 40px; margin: 4px 0 8px; border: 1px solid var(--md-outline); border-radius: 20px; overflow: hidden; }
+        #elm-settings-pane .elm-seg button { flex: 1; display: flex; align-items: center; justify-content: center; border: none; border-left: 1px solid var(--md-outline); background: transparent; color: var(--md-on-surface); font: 500 14px/20px inherit; letter-spacing: .1px; cursor: pointer; transition: background-color .2s var(--md-ease); }
+        #elm-settings-pane .elm-seg button:first-child { border-left: none; }
+        #elm-settings-pane .elm-seg button:hover { background: rgba(0, 0, 0, .06); }
+        #elm-settings-pane .elm-seg button[aria-checked="true"] { background: #dce8f9; color: #0b2a4a; }
+        #elm-settings-pane .elm-seg button[aria-checked="true"]::before { content: ''; width: 10px; height: 5px; margin: -3px 8px 0 0; border-left: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(-45deg); }
+        #elm-settings-pane #elm-when-done-desc { min-height: 54px; }
+        #elm-settings-pane .elm-level-desc { min-height: 36px; /* two lines reserved so the controls below do not jump */ font-size: 13px; line-height: 18px; letter-spacing: .25px; color: var(--md-on-surface-variant); margin: 0 0 8px; }
         .elm-toggle-switch input:focus-visible + .elm-toggle-slider { outline: 2px solid var(--elm2-bolt-blue, #1976d2); outline-offset: 2px; }
     `;
     if (typeof GM_addStyle === 'function') GM_addStyle(css);
@@ -871,21 +901,20 @@
     // Every resolution rule below should call this instead of row.selectSide()
     // directly.
     let currentRule = '';
-    // Whether the Auto-Apply slider covers the pair on screen. Cumulative:
-    // 0 none, 1 pairs with an applicant side, 2 + Bolt score Low, 3 + Medium, 4 every pair.
+    // pairInRange: whether the slider covers the pair on screen. Cumulative:
+    // 1 pairs with an applicant side, 2 + Bolt score Low, 3 + Medium, 4 every pair.
+    // autoApplyThisPair: in range AND "Use picks from" is Ours (so our picks get applied).
+    let pairInRange = false;
     let autoApplyThisPair = false;
     function computeAutoApplyForPair() {
         const level = CFG.AUTO_APPLY_LEVEL;
-        let allowed = false;
-        if (level >= 4) allowed = true;
-        else if (level >= 1) {
-            const score = getScoreChipLevel();
-            allowed = !!findApplicantSide()
-                || (level >= 2 && score === 'low')
-                || (level >= 3 && score === 'medium');
-        }
-        autoApplyThisPair = allowed;
-        return allowed;
+        const score = getScoreChipLevel();
+        pairInRange = level >= 4
+            || !!findApplicantSide()
+            || (level >= 2 && score === 'low')
+            || (level >= 3 && score === 'medium');
+        autoApplyThisPair = pairInRange && CFG.USE_PICKS === 'ours';
+        return autoApplyThisPair;
     }
     function applyScriptPick(row, side) {
         const d = row.element.dataset;
@@ -894,7 +923,9 @@
         d.elm2AiSeen = '1'; // from here on, a selection on this row may be ours, not Bolt's
         d.elm2ScriptSide = side;
         rememberRow(row.key, { script: side, acted: true, rule: currentRule });
-        if (autoApplyThisPair) row.selectSide(side);
+        // With Bolt's picks kept, ours only fills a row Bolt left unselected.
+        const fillsGap = pairInRange && CFG.USE_PICKS === 'bolt' && !row.nativeSide;
+        if (autoApplyThisPair || fillsGap) row.selectSide(side);
     }
     function getContactCards() {
         const form = getDiffForm();
@@ -934,8 +965,7 @@
             b => b.textContent.trim().toLowerCase() === text.toLowerCase()
         ) || null;
     }
-    // No clickMergeContacts() helper — merging is never automated (see the
-    // MAIN AUTOMATION LOOP notes below).
+    // Merging is only ever clicked by startAutoMerge() ("When done" = Merge), after a countdown.
     // IMPORTANT: "Dismiss" is NOT the equivalent of the classic script's
     // auto-skip (which just moved to the next entry). In this UI it opens a
     // "Not a duplicate?" feedback dialog and, once confirmed, permanently
@@ -1602,7 +1632,7 @@
         else if (differing > 0) msg = `⚠ ${differing} of ${ours.length} suggestions differ from Bolt's picks (${conflicts} conflicting of ${all.length} fields)`;
         else msg = `Our ${ours.length} suggestion(s) match Bolt's picks (${conflicts} conflicting of ${all.length} fields)`;
         if (!blocked && ours.length > 0 && !autoApplyThisPair) {
-            msg += CFG.AUTO_APPLY_LEVEL === 0 ? ' — suggestions only, not applied' : ' — not auto-applied for this pair at this level';
+            msg += CFG.USE_PICKS === 'bolt' ? " — using Bolt's picks" : ' — not auto-applied for this pair (outside the slider range)';
         }
         document.getElementById('elm2-pick-compare-count').textContent = msg;
         document.getElementById('elm2-use-ai-btn').disabled = both.length === 0;
@@ -1631,14 +1661,112 @@
     }, true);
 
     // =========================================================
+    // AUTO-MERGE ("When done" = Merge)
+    // Merging is permanent, so it only happens after a visible countdown with a Cancel
+    // button and a short written overview, and only after a final re-check that the pair
+    // is still unblocked, still the same pair, and every conflicting field has a pick.
+    // Dismiss is never clicked (see the click guard above).
+    // =========================================================
+    const MERGE_COUNTDOWN_S = 4;
+    let mergeTimer = null;
+    let mergeBarTimer = null;
+    let mergedPairKey = '';
+    function mergeBar() {
+        let bar = document.getElementById('elm2-merge-bar');
+        if (!bar) {
+            bar = document.createElement('div');
+            bar.id = 'elm2-merge-bar';
+            bar.setAttribute('role', 'status');
+            bar.innerHTML = '<span id="elm2-merge-text"></span><button type="button" id="elm2-merge-cancel">Cancel</button>';
+            document.body.appendChild(bar);
+            document.getElementById('elm2-merge-cancel').addEventListener('click', () => cancelAutoMerge('Auto-merge cancelled'));
+        }
+        return bar;
+    }
+    function hideMergeBar() {
+        const bar = document.getElementById('elm2-merge-bar');
+        if (bar) bar.classList.remove('visible');
+    }
+    function showMergeNotice(text) {
+        const bar = mergeBar();
+        document.getElementById('elm2-merge-text').textContent = text;
+        bar.classList.add('visible', 'notice');
+        clearTimeout(mergeBarTimer);
+        mergeBarTimer = setTimeout(hideMergeBar, 6000);
+    }
+    function cancelAutoMerge(message) {
+        const wasRunning = !!mergeTimer;
+        clearInterval(mergeTimer);
+        mergeTimer = null;
+        hideMergeBar();
+        if (wasRunning && message) showMergeNotice(message);
+    }
+    // Short written overview of what is about to be merged.
+    function mergeOverview() {
+        const names = getContactNames().filter(Boolean);
+        const rows = getDiffRows().filter(r => r.isConflict);
+        let bolt = 0, ours = 0;
+        const rules = new Set();
+        rows.forEach(r => {
+            const d = r.element.dataset;
+            if (d.elm2ScriptSide && r.nativeSide === d.elm2ScriptSide && d.elm2ScriptSide !== d.elm2AiSide) {
+                ours++;
+                if (d.elm2Rule) rules.add(d.elm2Rule);
+            } else bolt++;
+        });
+        const who = names.length === 2 ? names.join(' + ') : 'this pair';
+        const ruleText = rules.size ? ' (' + Array.from(rules).slice(0, 4).join(', ') + (rules.size > 4 ? ', …' : '') + ')' : '';
+        return `Merging ${who}: ${rows.length} conflicting field(s), ${bolt} Bolt's pick(s) and ${ours} of ours${ruleText}.`;
+    }
+    // Final gate before the merge click. Returns { ok, reason }.
+    function mergeReadiness(key) {
+        if (getPairKey() !== key) return { ok: false, reason: 'the pair changed' };
+        if (getAllBlockers().length > 0) return { ok: false, reason: 'the pair is blocked' };
+        const unresolved = getDiffRows().filter(r => r.isConflict && !r.nativeSide).length;
+        if (unresolved > 0) return { ok: false, reason: unresolved + ' field(s) have no pick' };
+        if (CONFLICT_ROW_THRESHOLD > 0 && checkForConflictingRecords().shouldWarn) return { ok: false, reason: 'possible twins' };
+        const btn = getSidebarActionButton('Merge Contacts');
+        if (!btn || btn.disabled || btn.getAttribute('aria-disabled') === 'true') return { ok: false, reason: 'the Merge Contacts button is unavailable' };
+        return { ok: true, btn };
+    }
+    function startAutoMerge(key) {
+        if (mergedPairKey === key || getPairKey() !== key) return;
+        cancelAutoMerge();
+        const bar = mergeBar();
+        bar.classList.remove('notice');
+        let left = MERGE_COUNTDOWN_S;
+        const render = () => {
+            document.getElementById('elm2-merge-text').textContent = `${mergeOverview()} Merging in ${left}s.`;
+        };
+        render();
+        bar.classList.add('visible');
+        mergeTimer = setInterval(() => {
+            if (getPairKey() !== key) { cancelAutoMerge(); return; }
+            left--;
+            if (left > 0) { render(); return; }
+            clearInterval(mergeTimer);
+            mergeTimer = null;
+            hideMergeBar();
+            const ready = mergeReadiness(key);
+            if (!ready.ok) {
+                console.log('[elm2] Auto-merge not done:', ready.reason);
+                if (ready.reason === 'the pair changed') return;
+                if (CFG.AUTO_SKIP_BLOCKED) { clickNextDuplicate(); }
+                else showMergeNotice('Auto-merge stopped: ' + ready.reason + '.');
+                return;
+            }
+            mergedPairKey = key;
+            console.log('[elm2] Auto-merging pair');
+            ready.btn.click();
+        }, 1000);
+    }
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && mergeTimer) cancelAutoMerge('Auto-merge cancelled'); });
+
+    // =========================================================
     // MAIN AUTOMATION LOOP
     //
-    // IMPORTANT: this only ever fills in field selections. It never clicks
-    // "Merge Contacts" itself. The classic script worked the same way — its
-    // "Auto-Click FAB" setting only fired the FAB's *first* click (which
-    // triggers conflict detection/auto-resolution); the FAB's second click,
-    // the one that actually commits the merge, always required a human,
-    // even with that setting on. Merging here stays exactly as manual.
+    // Each pair: blockers -> (skip or stop) -> apply picks per "Use picks from" if the pair is
+    // inside the slider range -> twins check -> optional auto-merge (cancel window above).
     // =========================================================
     function attemptAutoResolve() {
         if (!isDedupReviewPage()) return;
@@ -1652,6 +1780,7 @@
             resolutionAttempted = false;
             conflictWarningShown = false;
             appealWarningShown = false;
+            cancelAutoMerge();
             delete document.body.dataset.csvDept;
             delete document.body.dataset.csvSpark1;
             delete document.body.dataset.csvSpark2;
@@ -1687,7 +1816,9 @@
         // Two-phase, mirroring the classic script: resolve now, then re-verify
         // shortly after in case more Workflow/Source rows loaded in the meantime.
         runAutoResolution();
+        const phaseOnePairKey = pairKey;
         setTimeout(() => {
+            if (getPairKey() !== phaseOnePairKey) return; // moved on already
             const laterBlockers = getAllBlockers();
             applyBlockStyling(laterBlockers);
             if (laterBlockers.length > 0) {
@@ -1702,8 +1833,16 @@
             const _byRule = {};
             _rows.forEach(r => { const rl = r.element.dataset.elm2Rule; if (r.element.dataset.elm2ScriptSide) _byRule[rl || '(unknown)'] = (_byRule[rl || '(unknown)'] || 0) + 1; });
             console.log('[elm2] Suggestions by rule:', JSON.stringify(_byRule));
+            computeAutoApplyForPair();
+            // Outside the slider range: skipped with Auto-Skip on (no popup), otherwise left for you.
+            if (!pairInRange && CFG.AUTO_SKIP_BLOCKED) {
+                console.log('[elm2] Outside the slider range — skipping');
+                clickNextDuplicate();
+                return;
+            }
             // Possible twins: with Auto-Skip on the pair is skipped with no popup; otherwise it is
-            // left for you with a warning popup. (There is no separate "Low score" popup.)
+            // left for you with a warning popup. A twins pair is never auto-merged.
+            // (There is no separate "Low score" popup.)
             if (!conflictWarningShown && CONFLICT_ROW_THRESHOLD > 0) {
                 const { conflictCount, shouldWarn, conflicts } = checkForConflictingRecords();
                 if (shouldWarn) {
@@ -1714,10 +1853,12 @@
                     } else {
                         alert(`⚠️ Warning: ${conflictCount} conflicting signal(s) detected!\n\nConflicts found in: ${conflicts.join(', ')}\n\nThese entries might be twins or two different people. Please review carefully before merging.`);
                     }
+                    return;
                 }
             }
-            // Resolution stops here. Reviewing the selections and clicking
-            // "Merge Contacts" is always a human decision.
+            // "When done" = Merge: start the cancel window (the merge itself is clicked there,
+            // after a final safety re-check).
+            if (pairInRange && CFG.WHEN_DONE === 'merge') setTimeout(() => startAutoMerge(phaseOnePairKey), 500);
         }, 600);
     }
     // Tracks merges regardless of who clicks "Merge Contacts" (always a
@@ -1850,19 +1991,32 @@
             </div>
             <div class="settings-body">
                 <div class="settings-section-title">Automation</div>
-                <div class="setting-row elm-slider-head"><label>Auto-Apply Suggestions</label><span id="elm-apply-level-label" class="elm-level-label"></span></div>
+                <div class="setting-row elm-slider-head"><label>Pairs in range</label><span id="elm-apply-level-label" class="elm-level-label"></span></div>
                 <div class="elm-slider">
                     <div class="m3s" id="elm-m3s">
-                        <input type="range" id="elm-apply-level" min="0" max="4" step="1" aria-label="Auto-apply level">
+                        <input type="range" id="elm-apply-level" min="1" max="4" step="1" aria-label="Pairs in range">
                         <div class="m3s-active"></div>
                         <div class="m3s-inactive"></div>
-                        <div class="m3s-dots"><span style="--i:0"></span><span style="--i:1"></span><span style="--i:2"></span><span style="--i:3"></span><span style="--i:4"></span></div>
+                        <div class="m3s-dots"><span style="--i:0"></span><span style="--i:1"></span><span style="--i:2"></span><span style="--i:3"></span></div>
                         <div class="m3s-handle"><span class="m3s-bubble" id="elm-m3s-bubble"></span></div>
                     </div>
-                    <div class="m3s-labels"><span style="--i:0">None</span><span style="--i:1">Applicant</span><span style="--i:2">Low</span><span style="--i:3">Medium</span><span style="--i:4">High/All</span></div>
+                    <div class="m3s-labels"><span style="--i:0">Applicant</span><span style="--i:1">Low</span><span style="--i:2">Medium</span><span style="--i:3">High/All</span></div>
                 </div>
                 <div id="elm-apply-level-desc" class="elm-level-desc"></div>
-                <div class="setting-row"><label>Auto-Skip Blocked</label>${toggleHtml('elm-auto-skip-blocked')}</div>
+                <div class="setting-row elm-seg-head"><label>Use picks from</label></div>
+                <div class="elm-seg" id="elm-use-picks" role="radiogroup" aria-label="Use picks from">
+                    <button type="button" role="radio" data-v="bolt">Bolt's</button>
+                    <button type="button" role="radio" data-v="ours">Ours</button>
+                </div>
+                <div id="elm-use-picks-desc" class="elm-level-desc"></div>
+                <div class="setting-row elm-seg-head"><label>When done</label></div>
+                <div class="elm-seg" id="elm-when-done" role="radiogroup" aria-label="When done">
+                    <button type="button" role="radio" data-v="wait">Wait for me</button>
+                    <button type="button" role="radio" data-v="merge">Merge</button>
+                </div>
+                <div id="elm-when-done-desc" class="elm-level-desc"></div>
+                <div class="setting-row"><label>Auto-Skip</label>${toggleHtml('elm-auto-skip-blocked')}</div>
+                <div class="elm-level-desc elm-skip-desc">Skips blocked, out-of-range and possible-twins pairs with no popup. Off: stops on them instead.</div>
                 <div class="settings-section-title">Display</div>
                 <div class="setting-row"><label>Highlight Rows</label>${toggleHtml('elm-highlight-rows')}</div>
                 <div class="settings-section-title">Department</div>
@@ -1884,25 +2038,24 @@
         }
         const levelSlider = document.getElementById('elm-apply-level');
         const levelLabel = document.getElementById('elm-apply-level-label');
-        const levelNames = ['None', 'Applicant', 'Low', 'Medium', 'High / All'];
+        const levelNames = ['Applicant', 'Low', 'Medium', 'High / All'];
         const levelDescs = [
-            'Never auto-applies. Use "Use our picks" to apply suggestions yourself.',
-            'Auto-applies only on pairs that have an applicant side.',
-            'Pairs with an applicant side, plus pairs with a Low Bolt score.',
+            'Pairs that have an applicant side.',
+            'Pairs with an applicant side, plus Low Bolt scores.',
             'Pairs with an applicant side, plus Low and Medium Bolt scores.',
             'Every pair, whatever the Bolt score.'
         ];
         const syncLevel = () => {
             levelSlider.value = CFG.AUTO_APPLY_LEVEL;
-            const v = parseInt(levelSlider.value, 10);
-            document.getElementById('elm-m3s').style.setProperty('--p', v / 4);
+            const idx = parseInt(levelSlider.value, 10) - 1;
+            document.getElementById('elm-m3s').style.setProperty('--p', idx / 3);
             document.querySelectorAll('#elm-m3s .m3s-dots span').forEach((d, i) => {
-                d.className = i < v ? 'on' : i > v ? 'off' : 'here';
+                d.className = i < idx ? 'on' : i > idx ? 'off' : 'here';
             });
-            document.querySelectorAll('#elm-settings-pane .m3s-labels span').forEach((l, i) => l.classList.toggle('sel', i === v));
-            document.getElementById('elm-m3s-bubble').textContent = levelNames[v];
-            levelLabel.textContent = levelNames[levelSlider.value];
-            document.getElementById('elm-apply-level-desc').textContent = levelDescs[levelSlider.value];
+            document.querySelectorAll('#elm-settings-pane .m3s-labels span').forEach((l, i) => l.classList.toggle('sel', i === idx));
+            document.getElementById('elm-m3s-bubble').textContent = levelNames[idx];
+            levelLabel.textContent = levelNames[idx];
+            document.getElementById('elm-apply-level-desc').textContent = levelDescs[idx];
         };
         syncLevel();
         levelSlider.addEventListener('input', () => {
@@ -1910,6 +2063,28 @@
             syncLevel();
             reapplyForLevel();
         });
+        function setupSegmented(id, get, set, describe, onChange) {
+            const el = document.getElementById(id);
+            const desc = document.getElementById(id + '-desc');
+            const sync = () => {
+                el.querySelectorAll('button').forEach(b => b.setAttribute('aria-checked', String(b.dataset.v === get())));
+                desc.textContent = describe(get());
+            };
+            sync();
+            el.addEventListener('click', (e) => {
+                const b = e.target.closest('button');
+                if (!b) return;
+                set(b.dataset.v);
+                sync();
+                if (onChange) onChange();
+            });
+        }
+        setupSegmented('elm-use-picks', () => CFG.USE_PICKS, v => localStorage.setItem('elm_use_picks', v),
+            v => v === 'ours' ? 'Our rules are applied on pairs in range, including the applicant rule.' : "Bolt's picks are kept on pairs in range. Ours only fills rows Bolt left unselected.",
+            reapplyForLevel);
+        setupSegmented('elm-when-done', () => CFG.WHEN_DONE, v => { try { sessionStorage.setItem('elm_when_done', v); } catch (e) { /* ignore */ } },
+            v => v === 'merge' ? 'Merges decided pairs after a 4-second countdown with a Cancel button. Resets to "Wait for me" each browser session.' : 'You review the picks and click Merge Contacts yourself.',
+            () => { if (CFG.WHEN_DONE !== 'merge') cancelAutoMerge('Auto-merge cancelled'); });
         setupToggle('elm-auto-skip-blocked', 'elm_auto_skip_blocked');
         setupToggle('elm-highlight-rows', 'elm_highlight_rows');
         function setupToggle(elementId, storageKey, onChange) {

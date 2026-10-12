@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.70
+// @version      2.71
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-70'; // keep in sync with @version (2.70)
+    const BUILD = 'v2-build-71'; // keep in sync with @version (2.71)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -1675,7 +1675,7 @@
         else if (differing > 0) msg = `⚠ ${differing} of ${ours.length} suggestions differ from Bolt's picks (${conflicts} conflicting of ${all.length} fields)`;
         else msg = `Our ${ours.length} suggestion(s) match Bolt's picks (${conflicts} conflicting of ${all.length} fields)`;
         if (!blocked && ours.length > 0 && !autoApplyThisPair) {
-            msg += CFG.RANGE_LEVEL === 0 ? ' — automation is off (slider on None)' : CFG.USE_PICKS === 'bolt' ? " — using Bolt's picks" : ' — not auto-applied for this pair (outside the slider range)';
+            msg += CFG.RANGE_LEVEL === 0 ? ' — no pairs are in range (slider on None)' : CFG.USE_PICKS === 'bolt' ? " — using Bolt's picks" : ' — not auto-applied for this pair (outside the slider range)';
         }
         document.getElementById('elm2-pick-compare-count').textContent = msg;
         document.getElementById('elm2-use-ai-btn').disabled = both.length === 0;
@@ -1879,8 +1879,8 @@
             console.log('[elm2] Suggestions by rule:', JSON.stringify(_byRule));
             computeAutoApplyForPair();
             // Outside the slider range: skipped with Auto-Skip on (no popup), otherwise left for you.
-            // (Slider on None = automation off, so there is no range to be outside of.)
-            if (!pairInRange && CFG.RANGE_LEVEL > 0 && CFG.AUTO_SKIP_BLOCKED) {
+            // (Slider on None = no pair is in range, so with Auto-Skip on every pair is skipped.)
+            if (!pairInRange && CFG.AUTO_SKIP_BLOCKED) {
                 console.log('[elm2] Outside the slider range — skipping');
                 clickNextDuplicate();
                 return;
@@ -2085,7 +2085,7 @@
         const levelLabel = document.getElementById('elm-apply-level-label');
         const levelNames = ['None', 'Applicant', 'High', 'Medium', 'Low', 'All'];
         const levelDescs = [
-            'Automation off: nothing is applied or merged. Use the buttons yourself.',
+            'No pairs in range. Auto-Skip on skips every pair (a scan); off leaves them for you.',
             'Only pairs that have an applicant side.',
             'Applicant pairs, plus pairs with a High Bolt score.',
             'Applicant pairs, plus High and Medium Bolt scores.',

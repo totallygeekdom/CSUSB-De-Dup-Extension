@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.71
+// @version      2.72
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-71'; // keep in sync with @version (2.71)
+    const BUILD = 'v2-build-72'; // keep in sync with @version (2.72)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -119,15 +119,29 @@
         /* --- AI-vs-script pick comparison bar + per-row disagreement badges --- */
         #elm2-merge-bar {
             position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 16px); z-index: 10000;
-            display: flex; align-items: center; gap: 16px; max-width: min(640px, calc(100vw - 32px)); box-sizing: border-box;
-            padding: 12px 8px 12px 16px; border-radius: 4px; background: #2f3236; color: #f1f3f7;
-            font: 400 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .25px;
+            max-width: min(640px, calc(100vw - 32px)); box-sizing: border-box; padding: 14px 16px; border-radius: 4px;
+            background: #2f3236; color: #f1f3f7; font: 400 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .25px;
             box-shadow: var(--md-elev-3); opacity: 0; pointer-events: none; transition: opacity .2s var(--md-ease), transform .2s var(--md-ease);
         }
-        #elm2-merge-bar.visible { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
-        #elm2-merge-bar.notice #elm2-merge-cancel { display: none; }
-        #elm2-merge-bar #elm2-merge-cancel { flex-shrink: 0; height: 40px; padding: 0 12px; border: none; border-radius: 20px; background: transparent; color: #a8c8ff; font: 500 14px/20px inherit; letter-spacing: .1px; cursor: pointer; }
-        #elm2-merge-bar #elm2-merge-cancel:hover { background: rgba(168, 200, 255, .12); }
+        #elm2-merge-bar.visible { opacity: 1; transform: translate(-50%, 0); }
+        #elm2-merge-overlay {
+            position: fixed; inset: 0; z-index: 10001; display: flex; align-items: center; justify-content: center;
+            background: rgba(0, 0, 0, .5); opacity: 0; pointer-events: none; transition: opacity .2s var(--md-ease);
+        }
+        #elm2-merge-overlay.visible { opacity: 1; pointer-events: auto; }
+        #elm2-merge-overlay .elm2-merge-card {
+            box-sizing: border-box; width: min(340px, calc(100vw - 32px)); padding: 28px 24px 24px; border-radius: 28px; background: #fff; color: #1a1c20;
+            box-shadow: var(--md-elev-3); text-align: center; font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        }
+        #elm2-merge-overlay .elm2-ring { position: relative; width: 120px; height: 120px; margin: 0 auto 20px; }
+        #elm2-merge-overlay .elm2-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+        #elm2-merge-overlay .elm2-ring-arc { fill: none; stroke: #d32f2f; stroke-width: 8; stroke-linecap: round; stroke-dasharray: 276.46; stroke-dashoffset: 0; }
+        #elm2-merge-overlay #elm2-merge-count { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 40px; font-weight: 500; color: #d32f2f; }
+        #elm2-merge-overlay #elm2-merge-summary { margin: 0 0 24px; font-size: 16px; line-height: 24px; letter-spacing: .5px; }
+        #elm2-merge-overlay #elm2-merge-cancel { width: 100%; height: 48px; border: none; border-radius: 24px; background: #d32f2f; color: #fff; font-family: inherit; font-weight: 500; font-size: 16px; line-height: 24px; letter-spacing: .1px; cursor: pointer; transition: box-shadow .2s var(--md-ease), background-color .2s var(--md-ease); }
+        #elm2-merge-overlay #elm2-merge-cancel:hover { background: #b71c1c; box-shadow: var(--md-elev-1); }
+        #elm2-merge-overlay #elm2-merge-cancel:focus-visible { outline: 2px solid #1a1c20; outline-offset: 2px; }
+        @keyframes elm2-ring-drain { from { stroke-dashoffset: 0; } to { stroke-dashoffset: 276.46; } }
         #elm2-pick-compare-bar {
             display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
             padding: 12px 16px; margin: 0 0 12px;
@@ -422,7 +436,7 @@
         #elm-settings-pane .m3s-labels span:last-child { left: 100%; transform: translateX(-100%); }
         #elm-settings-pane .m3s-labels span.sel { color: var(--md-primary); font-weight: 500; }
         #elm-settings-pane .elm-seg { display: flex; height: 40px; margin: 4px 0 8px; border: 1px solid var(--md-outline); border-radius: 20px; overflow: hidden; }
-        #elm-settings-pane .elm-seg button { flex: 1; display: flex; align-items: center; justify-content: center; border: none; border-left: 1px solid var(--md-outline); background: transparent; color: var(--md-on-surface); font: 500 14px/20px inherit; letter-spacing: .1px; cursor: pointer; transition: background-color .2s var(--md-ease); }
+        #elm-settings-pane .elm-seg button { flex: 1; display: flex; align-items: center; justify-content: center; border: none; border-left: 1px solid var(--md-outline); background: transparent; color: var(--md-on-surface); font-family: inherit; font-weight: 500; font-size: 14px; line-height: 20px; letter-spacing: .1px; cursor: pointer; transition: background-color .2s var(--md-ease); }
         #elm-settings-pane .elm-seg.elm-seg-disabled { opacity: .38; }
         #elm-settings-pane .elm-seg button:disabled { cursor: default; }
         #elm-settings-pane .elm-seg button:first-child { border-left: none; }
@@ -1714,15 +1728,15 @@
     let mergeTimer = null;
     let mergeBarTimer = null;
     let mergedPairKey = '';
+    // Small snackbar, used only for notices ("Auto-merge cancelled", "Auto-merge stopped: ...").
     function mergeBar() {
         let bar = document.getElementById('elm2-merge-bar');
         if (!bar) {
             bar = document.createElement('div');
             bar.id = 'elm2-merge-bar';
             bar.setAttribute('role', 'status');
-            bar.innerHTML = '<span id="elm2-merge-text"></span><button type="button" id="elm2-merge-cancel">Cancel</button>';
+            bar.innerHTML = '<span id="elm2-merge-notice"></span>';
             document.body.appendChild(bar);
-            document.getElementById('elm2-merge-cancel').addEventListener('click', () => cancelAutoMerge('Auto-merge cancelled'));
         }
         return bar;
     }
@@ -1732,19 +1746,46 @@
     }
     function showMergeNotice(text) {
         const bar = mergeBar();
-        document.getElementById('elm2-merge-text').textContent = text;
-        bar.classList.add('visible', 'notice');
+        document.getElementById('elm2-merge-notice').textContent = text;
+        bar.classList.add('visible');
         clearTimeout(mergeBarTimer);
         mergeBarTimer = setTimeout(hideMergeBar, 6000);
+    }
+    // The countdown itself: a centred dialog over a dimmed page, with a draining ring around the
+    // seconds left, a plain-language summary and a Cancel button. The overlay also stops stray
+    // clicks while the countdown runs.
+    function mergeModal() {
+        let ov = document.getElementById('elm2-merge-overlay');
+        if (!ov) {
+            ov = document.createElement('div');
+            ov.id = 'elm2-merge-overlay';
+            ov.innerHTML = `
+                <div class="elm2-merge-card" role="alertdialog" aria-live="polite" aria-labelledby="elm2-merge-summary">
+                    <div class="elm2-ring">
+                        <svg viewBox="0 0 100 100" aria-hidden="true"><circle class="elm2-ring-arc" cx="50" cy="50" r="44"></circle></svg>
+                        <span id="elm2-merge-count"></span>
+                    </div>
+                    <p id="elm2-merge-summary"></p>
+                    <button type="button" id="elm2-merge-cancel">Cancel</button>
+                </div>`;
+            document.body.appendChild(ov);
+            document.getElementById('elm2-merge-cancel').addEventListener('click', () => cancelAutoMerge('Auto-merge cancelled'));
+        }
+        return ov;
+    }
+    function hideMergeModal() {
+        const ov = document.getElementById('elm2-merge-overlay');
+        if (ov) ov.classList.remove('visible');
     }
     function cancelAutoMerge(message) {
         const wasRunning = !!mergeTimer;
         clearInterval(mergeTimer);
         mergeTimer = null;
+        hideMergeModal();
         hideMergeBar();
         if (wasRunning && message) showMergeNotice(message);
     }
-    // Short written overview of what is about to be merged.
+    // Plain-language overview of what is about to be merged.
     function mergeOverview() {
         const names = getContactNames().filter(Boolean);
         const rows = getDiffRows().filter(r => r.isConflict);
@@ -1757,9 +1798,15 @@
                 if (d.elm2Rule) rules.add(d.elm2Rule);
             } else bolt++;
         });
-        const who = names.length === 2 ? names.join(' + ') : 'this pair';
-        const ruleText = rules.size ? ' (' + Array.from(rules).slice(0, 4).join(', ') + (rules.size > 4 ? ', …' : '') + ')' : '';
-        return `Merging ${who}: ${rows.length} conflicting field(s), ${bolt} Bolt's pick(s) and ${ours} of ours${ruleText}.`;
+        const who = names.length === 2 ? `${names[0]} and ${names[1]}` : 'these two contacts';
+        const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+        let detail;
+        if (rows.length === 0) detail = 'They have no conflicting fields.';
+        else {
+            const ruleText = rules.size ? ' (' + Array.from(rules).slice(0, 4).join(', ') + (rules.size > 4 ? ', …' : '') + ')' : '';
+            detail = `${plural(rows.length, 'field')} conflict: ${bolt} follow${bolt === 1 ? 's' : ''} Bolt's pick and ${ours} follow${ours === 1 ? 's' : ''} ours${ruleText}.`;
+        }
+        return `About to merge ${who}. ${detail}`;
     }
     // Final gate before the merge click. Returns { ok, reason }.
     function mergeReadiness(key) {
@@ -1775,21 +1822,26 @@
     function startAutoMerge(key) {
         if (mergedPairKey === key || getPairKey() !== key) return;
         cancelAutoMerge();
-        const bar = mergeBar();
-        bar.classList.remove('notice');
+        const ov = mergeModal();
+        hideMergeBar();
         let left = MERGE_COUNTDOWN_S;
-        const render = () => {
-            document.getElementById('elm2-merge-text').textContent = `${mergeOverview()} Merging in ${left}s.`;
-        };
+        const arc = ov.querySelector('.elm2-ring-arc');
+        document.getElementById('elm2-merge-summary').textContent = mergeOverview();
+        const render = () => { document.getElementById('elm2-merge-count').textContent = String(left); };
         render();
-        bar.classList.add('visible');
+        // restart the ring animation (drains over the whole countdown)
+        arc.style.animation = 'none';
+        void arc.getBoundingClientRect();
+        arc.style.animation = `elm2-ring-drain ${MERGE_COUNTDOWN_S}s linear forwards`;
+        ov.classList.add('visible');
+        document.getElementById('elm2-merge-cancel').focus({ focusVisible: false });
         mergeTimer = setInterval(() => {
             if (getPairKey() !== key) { cancelAutoMerge(); return; }
             left--;
             if (left > 0) { render(); return; }
             clearInterval(mergeTimer);
             mergeTimer = null;
-            hideMergeBar();
+            hideMergeModal();
             const ready = mergeReadiness(key);
             if (!ready.ok) {
                 console.log('[elm2] Auto-merge not done:', ready.reason);

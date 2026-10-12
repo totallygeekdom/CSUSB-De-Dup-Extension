@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.74
+// @version      2.76
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-74'; // keep in sync with @version (2.74)
+    const BUILD = 'v2-build-76'; // keep in sync with @version (2.76)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -1013,6 +1013,21 @@
     // Skipping a blocked entry must only ever move to the next pair via
     // clickNextDuplicate() below, leaving the pair untouched in the queue.
     function clickSaveForLater() { const b = getSidebarActionButton('Save for later'); if (b) b.click(); return !!b; }
+    // Skips to the next pair, but first has the CSV database script (if installed) record this
+    // one, retrying for up to 3s until it confirms, so a fast skip never loses an entry.
+    function skipToNext(reason) {
+        const key = getPairKey();
+        const startedAt = Date.now();
+        const attempt = () => {
+            if (getPairKey() !== key) return; // already moved on
+            const detail = {};
+            document.dispatchEvent(new CustomEvent('elm2-record-pair', { detail }));
+            if (detail.handled && !detail.recorded && Date.now() - startedAt < 3000) { setTimeout(attempt, 250); return; }
+            console.log('[elm2] Skipping to next pair:', reason);
+            clickNextDuplicate();
+        };
+        attempt();
+    }
     function clickNextDuplicate() {
         const b = document.querySelector('.review-queue-nav [aria-label="Next duplicate"]:not([disabled])');
         if (b) { b.click(); return true; }
@@ -1180,6 +1195,7 @@
         if (CONFLICT_ROW_THRESHOLD === 0) return { conflictCount: 0, shouldWarn: false, conflicts: [] };
         const conflicts = [];
         let conflictCount = 0;
+        let boltFlagged = false;
         const names = getContactNames();
         if (names.length === 2 && names[0] && names[1]) {
             const norm = (n) => n.toLowerCase().replace(/[\s-]/g, '');
@@ -1212,10 +1228,11 @@
         // these are different people. Treat that as a strong extra conflict.
         const summary = getAnalysisSummaryText().toLowerCase();
         if (summary && /different (people|person|individuals?)/i.test(summary)) {
-            conflictCount += CONFLICT_ROW_THRESHOLD; // force a warning regardless of threshold
+            boltFlagged = true; // forces a warning regardless of the threshold, without inflating the count
+            conflictCount++;
             conflicts.push('Bolt Analysis (flagged as different people)');
         }
-        const shouldWarn = conflictCount >= CONFLICT_ROW_THRESHOLD;
+        const shouldWarn = boltFlagged || conflictCount >= CONFLICT_ROW_THRESHOLD;
         return { conflictCount, shouldWarn, conflicts };
     }
 
@@ -1845,7 +1862,7 @@
             if (!ready.ok) {
                 console.log('[elm2] Auto-merge not done:', ready.reason);
                 if (ready.reason === 'the pair changed') return;
-                if (CFG.AUTO_SKIP_BLOCKED) { clickNextDuplicate(); }
+                if (CFG.AUTO_SKIP_BLOCKED) { skipToNext('auto-merge not ready: ' + ready.reason); }
                 else showMergeNotice('Auto-merge stopped: ' + ready.reason + '.');
                 return;
             }
@@ -1889,10 +1906,7 @@
             console.log('[elm2] Blocked:', blockers.map(b => b.type + (b.reason ? ' (' + b.reason + ')' : '')).join(', '),
                 '| auto-skip', CFG.AUTO_SKIP_BLOCKED ? 'ON' : 'OFF');
             if (CFG.AUTO_SKIP_BLOCKED) {
-                setTimeout(() => {
-                    const ok = clickNextDuplicate();
-                    console.log('[elm2] Clicked Next duplicate:', ok);
-                }, 1200);
+                setTimeout(() => skipToNext('blocked'), 1200);
             }
             return;
         }
@@ -1917,7 +1931,7 @@
             const laterBlockers = getAllBlockers();
             applyBlockStyling(laterBlockers);
             if (laterBlockers.length > 0) {
-                if (CFG.AUTO_SKIP_BLOCKED) { clickNextDuplicate(); }
+                if (CFG.AUTO_SKIP_BLOCKED) { skipToNext('blocked'); }
                 return;
             }
             runAutoResolution();
@@ -1932,8 +1946,7 @@
             // Outside the slider range: skipped with Auto-Skip on (no popup), otherwise left for you.
             // (Slider on None = no pair is in range, so with Auto-Skip on every pair is skipped.)
             if (!pairInRange && CFG.AUTO_SKIP_BLOCKED) {
-                console.log('[elm2] Outside the slider range — skipping');
-                clickNextDuplicate();
+                skipToNext('outside the slider range');
                 return;
             }
             // Possible twins: with Auto-Skip on the pair is skipped with no popup; otherwise it is
@@ -1944,10 +1957,9 @@
                 if (shouldWarn) {
                     conflictWarningShown = true;
                     if (CFG.AUTO_SKIP_BLOCKED) {
-                        console.log('[elm2] Possible twins — skipping:', conflicts.join(', '));
-                        clickNextDuplicate();
+                        skipToNext('possible twins: ' + conflicts.join(', '));
                     } else {
-                        alert(`⚠️ Warning: ${conflictCount} conflicting signal(s) detected!\n\nConflicts found in: ${conflicts.join(', ')}\n\nThese entries might be twins or two different people. Please review carefully before merging.`);
+                        alert(`⚠️ Warning: ${conflictCount} conflicting signal${conflictCount === 1 ? '' : 's'} detected!\n\nConflicts found in: ${conflicts.join(', ')}\n\nThese entries might be twins or two different people. Please review carefully before merging.`);
                     }
                     return;
                 }

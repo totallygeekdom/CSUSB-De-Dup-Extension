@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.15
+// @version      2.16
 // @description  Tracks duplicate entries in a CSV database stored in browser localStorage — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -228,13 +228,13 @@
         catch (e) { console.error('CSV Database: Error saving database', e); }
     }
     function recordEntry(dept) {
-        if (!dept) return;
+        if (!dept) return false;
         const sparks = getDomSparkIds();
-        if (!sparks.a && !sparks.b) return;
+        if (!sparks.a && !sparks.b) return false;
         // stale signal mid-navigation: the main script's Spark IDs must match the page
-        if (document.body.dataset.csvSpark1 !== sparks.a || document.body.dataset.csvSpark2 !== sparks.b) return;
+        if (document.body.dataset.csvSpark1 !== sparks.a || document.body.dataset.csvSpark2 !== sparks.b) return false;
         const { firstName, lastName, firstName2, lastName2, full } = extractNames();
-        if (!firstName && !lastName) return; // page content not ready
+        if (!firstName && !lastName) return false; // page content not ready
         const db = getDatabase();
         const rowContents = maskNames(getBlockedRowText(dept), ...full);
         const newEntry = { firstName, lastName, firstName2, lastName2, dept, rowContents, sparkId1: sparks.a, sparkId2: sparks.b };
@@ -243,14 +243,22 @@
             const old = db[existingIdx];
             if (old.dept === dept && old.firstName === firstName && old.lastName === lastName
                 && old.firstName2 === firstName2 && old.lastName2 === lastName2 && old.rowContents === rowContents
-                && old.sparkId1 === sparks.a && old.sparkId2 === sparks.b) return;
+                && old.sparkId1 === sparks.a && old.sparkId2 === sparks.b) return true;
             db[existingIdx] = newEntry;
             saveDatabase(db);
-            return;
+            return true;
         }
         db.push(newEntry);
         saveDatabase(db);
+        return true;
     }
+    // The main script asks for the current pair to be recorded right before it skips it, so a
+    // fast skip can't beat the 1-second poll. It keeps asking until this reports success.
+    document.addEventListener('elm2-record-pair', (e) => {
+        if (!e.detail) return;
+        e.detail.handled = true;
+        e.detail.recorded = recordEntry(document.body.dataset.csvDept);
+    });
 
     // =========================================================
     // API STATUS TOAST
@@ -803,5 +811,5 @@
         updateDbSizeBadge();
     }, 1000);
 
-    console.log('%cCSV Database (new layout) v2.15 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
+    console.log('%cCSV Database (new layout) v2.16 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
 })();

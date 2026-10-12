@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.65
+// @version      2.66
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-65'; // keep in sync with @version (2.65)
+    const BUILD = 'v2-build-66'; // keep in sync with @version (2.66)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -73,12 +73,12 @@
                bar). Primary follows Element451's own blue. --- */
         :root {
             --md-primary: var(--elm2-bolt-blue, #1976d2);
-            --md-on-surface: #1d1b20;
-            --md-on-surface-variant: #49454f;
-            --md-outline: #79747e;
-            --md-surface-container-low: #f7f2fa;
-            --md-surface-container: #f3edf7;
-            --md-surface-container-highest: #e6e0e9;
+            --md-on-surface: #1a1c20;
+            --md-on-surface-variant: #434750;
+            --md-outline: #73777f;
+            --md-surface-container-low: #f3f6fb;
+            --md-surface-container: #edf1f8;
+            --md-surface-container-highest: #e0e5ee;
             --md-error: #b3261e;
             --md-elev-1: 0 1px 2px rgba(0,0,0,.3), 0 1px 3px 1px rgba(0,0,0,.15);
             --md-elev-3: 0 1px 3px rgba(0,0,0,.3), 0 4px 8px 3px rgba(0,0,0,.15);
@@ -120,14 +120,14 @@
         #elm2-merge-bar {
             position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 16px); z-index: 10000;
             display: flex; align-items: center; gap: 16px; max-width: min(640px, calc(100vw - 32px)); box-sizing: border-box;
-            padding: 12px 8px 12px 16px; border-radius: 4px; background: #322f35; color: #f5eff7;
+            padding: 12px 8px 12px 16px; border-radius: 4px; background: #2f3236; color: #f1f3f7;
             font: 400 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .25px;
             box-shadow: var(--md-elev-3); opacity: 0; pointer-events: none; transition: opacity .2s var(--md-ease), transform .2s var(--md-ease);
         }
         #elm2-merge-bar.visible { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
         #elm2-merge-bar.notice #elm2-merge-cancel { display: none; }
-        #elm2-merge-bar #elm2-merge-cancel { flex-shrink: 0; height: 40px; padding: 0 12px; border: none; border-radius: 20px; background: transparent; color: #d0bcff; font: 500 14px/20px inherit; letter-spacing: .1px; cursor: pointer; }
-        #elm2-merge-bar #elm2-merge-cancel:hover { background: rgba(208, 188, 255, .12); }
+        #elm2-merge-bar #elm2-merge-cancel { flex-shrink: 0; height: 40px; padding: 0 12px; border: none; border-radius: 20px; background: transparent; color: #a8c8ff; font: 500 14px/20px inherit; letter-spacing: .1px; cursor: pointer; }
+        #elm2-merge-bar #elm2-merge-cancel:hover { background: rgba(168, 200, 255, .12); }
         #elm2-pick-compare-bar {
             display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
             padding: 12px 16px; margin: 0 0 12px;
@@ -239,8 +239,8 @@
             padding: 0 !important;
             box-sizing: border-box !important;
             border-radius: 12px !important;
-            border: 2px solid #79747e !important;
-            background: #e6e0e9 !important;
+            border: 2px solid #73777f !important;
+            background: #e0e5ee !important;
             transition: background-color 0.2s, border-color 0.2s;
         }
         bolt-slide-toggle.hide-matching-items-toggle button.mdc-switch.mdc-switch--selected {
@@ -260,7 +260,7 @@
             height: 12px;
             margin-top: -6px;
             border-radius: 50%;
-            background: #79747e;
+            background: #73777f;
             transition: left 0.2s, width 0.2s, height 0.2s, margin-top 0.2s, background-color 0.2s;
         }
         bolt-slide-toggle.hide-matching-items-toggle button.mdc-switch.mdc-switch--selected::before {
@@ -354,12 +354,12 @@
         .elm-toggle-switch input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; z-index: 1; }
         .elm-toggle-slider {
             position: absolute; inset: 0; box-sizing: border-box;
-            border: 2px solid #79747e; border-radius: 12px; background: #e6e0e9;
+            border: 2px solid #73777f; border-radius: 12px; background: #e0e5ee;
             transition: background-color 0.2s, border-color 0.2s;
         }
         .elm-toggle-slider::before {
             content: ""; position: absolute; top: 50%; left: 4px;
-            width: 12px; height: 12px; margin-top: -6px; border-radius: 50%; background: #79747e;
+            width: 12px; height: 12px; margin-top: -6px; border-radius: 50%; background: #73777f;
             transition: left 0.2s, width 0.2s, height 0.2s, margin-top 0.2s, background-color 0.2s;
         }
         .elm-toggle-switch input:checked + .elm-toggle-slider {
@@ -393,7 +393,7 @@
         #elm-settings-pane .m3s-dots span.here { display: none; }
         #elm-settings-pane .m3s-handle { position: absolute; top: 0; width: 4px; height: 44px; border-radius: 2px; background: var(--md-primary); left: calc((100% - 4px) * var(--p)); pointer-events: none; z-index: 2; transition: left .2s var(--md-ease), width .15s var(--md-ease); }
         #elm-settings-pane .m3s input[type=range]:active ~ .m3s-handle { width: 2px; margin-left: 1px; }
-        #elm-settings-pane .m3s-bubble { position: absolute; bottom: calc(100% + 4px); left: 50%; transform: translateX(-50%); background: #322f35; color: #f5eff7; font-size: 12px; line-height: 16px; letter-spacing: .4px; padding: 6px 12px; border-radius: 16px; white-space: nowrap; opacity: 0; transition: opacity .15s var(--md-ease); }
+        #elm-settings-pane .m3s-bubble { position: absolute; bottom: calc(100% + 4px); left: 50%; transform: translateX(-50%); background: #2f3236; color: #f1f3f7; font-size: 12px; line-height: 16px; letter-spacing: .4px; padding: 6px 12px; border-radius: 16px; white-space: nowrap; opacity: 0; transition: opacity .15s var(--md-ease); }
         #elm-settings-pane .m3s input[type=range]:focus-visible ~ .m3s-handle .m3s-bubble,
         #elm-settings-pane .m3s input[type=range]:active ~ .m3s-handle .m3s-bubble { opacity: 1; }
         #elm-settings-pane .m3s-labels { position: relative; height: 16px; margin-top: 4px; font-size: 12px; line-height: 16px; letter-spacing: .4px; color: var(--md-on-surface-variant); }

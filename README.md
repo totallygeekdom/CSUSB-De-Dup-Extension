@@ -78,8 +78,9 @@ relying on them for unattended automation:**
 - **Use picks from** (Bolt's / Ours): applies to every pair in range. Ours includes
   the applicant rule; Bolt's keeps Element's pre-selected picks (ours only fills a
   row Bolt left unselected).
-- **When done** (Wait for me / Merge): Merge shows a 4-second countdown bar with a
-  short written overview and a Cancel button (also Esc), then re-checks that the pair
+- **When done** (Wait for me / Merge): Merge shows a 4-second countdown dialog (a
+  draining ring around the seconds left, a plain-language summary and a Cancel
+  button; Esc also cancels), then re-checks that the pair
   is unblocked, unchanged, every conflicting field has a pick and there is no
   possible-twins warning before clicking Merge Contacts. This setting is kept per
   browser session, so a new session always starts on Wait for me.

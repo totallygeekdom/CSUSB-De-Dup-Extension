@@ -71,8 +71,8 @@ relying on them for unattended automation:**
 
 **Automation settings (v2):**
 - **Pairs in range** (slider: None / Applicant / High / Medium / Low / All): which pairs
-  automation covers, each position adding to the one before. None = automation off
-  (nothing applied or merged, no range-based skipping). Applicant = pairs with an
+  automation covers, each position adding to the one before. None = no pair is in
+  range (nothing applied or merged; with Auto-Skip on every pair is skipped, which makes it a scan). Applicant = pairs with an
   applicant side; High, Medium and Low add pairs by Bolt score; All = every pair, even
   one with no score.
 - **Use picks from** (Bolt's / Ours): applies to every pair in range. Ours includes

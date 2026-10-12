@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.61
+// @version      2.62
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-61'; // keep in sync with @version (2.61)
+    const BUILD = 'v2-build-62'; // keep in sync with @version (2.62)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -378,7 +378,7 @@
         #elm-settings-pane .m3s-labels span:first-child { left: 0; transform: none; }
         #elm-settings-pane .m3s-labels span:last-child { left: 100%; transform: translateX(-100%); }
         #elm-settings-pane .m3s-labels span.sel { color: var(--md-primary); font-weight: 500; }
-        #elm-settings-pane .elm-level-desc { font-size: 13px; line-height: 18px; letter-spacing: .25px; color: var(--md-on-surface-variant); margin: 0 0 8px; }
+        #elm-settings-pane .elm-level-desc { min-height: 36px; /* two lines reserved so the toggles below do not jump */ font-size: 13px; line-height: 18px; letter-spacing: .25px; color: var(--md-on-surface-variant); margin: 0 0 8px; }
         .elm-toggle-switch input:focus-visible + .elm-toggle-slider { outline: 2px solid var(--elm2-bolt-blue, #1976d2); outline-offset: 2px; }
     `;
     if (typeof GM_addStyle === 'function') GM_addStyle(css);

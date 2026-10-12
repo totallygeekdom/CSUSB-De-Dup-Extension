@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.10
+// @version      2.11
 // @description  Tracks duplicate entries in a CSV database stored in browser localStorage — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -728,10 +728,10 @@
         section.id = 'elm-settings-db-section';
         section.innerHTML = `
             <div class="settings-section-title">Database</div>
-            <button id="elm-settings-download-btn" class="settings-action-btn">⬇ Download Database</button>
-            <button id="elm-settings-upload-btn" class="settings-action-btn">⬆ Upload &amp; Replace Database</button>
+            <button id="elm-settings-download-btn" class="settings-action-btn"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/></svg> Download Database</button>
+            <button id="elm-settings-upload-btn" class="settings-action-btn"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M5 20h14v-2H5v2zm0-10h4v6h6v-6h4l-7-7-7 7z"/></svg> Upload &amp; Replace Database</button>
             <input type="file" id="elm-db-upload-input" accept=".csv">
-            <button id="elm-settings-clear-btn" class="settings-action-btn danger">✖ Clear Database</button>
+            <button id="elm-settings-clear-btn" class="settings-action-btn danger"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg> Clear Database</button>
         `;
         settingsBody.appendChild(section);
         document.getElementById('elm-settings-download-btn').onclick = () => {
@@ -818,5 +818,5 @@
         updateDbSizeBadge();
     }, 1000);
 
-    console.log('%cCSV Database (new layout) v2.10 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
+    console.log('%cCSV Database (new layout) v2.11 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
 })();

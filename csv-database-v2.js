@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.14
+// @version      2.15
 // @description  Tracks duplicate entries in a CSV database stored in browser localStorage — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -68,7 +68,7 @@
         #csv-api-toast {
             position: fixed; bottom: 16px; left: 16px; display: flex; align-items: center; gap: 12px;
             min-height: 48px; box-sizing: border-box; padding: 8px 16px 8px 12px; border-radius: 4px;
-            background: #322f35; color: #f5eff7; font: 400 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .25px;
+            background: #2f3236; color: #f1f3f7; font: 400 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .25px;
             z-index: 9999; opacity: 0; transition: opacity .3s cubic-bezier(.2, 0, 0, 1);
             pointer-events: none; max-width: 340px;
             box-shadow: 0 1px 3px rgba(0,0,0,.3), 0 4px 8px 3px rgba(0,0,0,.15);
@@ -86,8 +86,8 @@
         @keyframes csvPulse { 0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.6; } 50% { transform: translate(-50%, -50%) scale(1.5); opacity: 0.2; } }
 
         /* tonal assist-chip style pill, matches the merge counter */
-        #elm-db-size-badge { display: flex; align-items: center; height: 32px; box-sizing: border-box; padding: 0 12px; background: #e6e0e9; border: none; border-radius: 8px; white-space: nowrap; cursor: default; }
-        #elm-db-size-label { font: 500 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .1px; color: #1d1b20; padding: 0; }
+        #elm-db-size-badge { display: flex; align-items: center; height: 32px; box-sizing: border-box; padding: 0 12px; background: #e0e5ee; border: none; border-radius: 8px; white-space: nowrap; cursor: default; }
+        #elm-db-size-label { font: 500 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .1px; color: #1a1c20; padding: 0; }
         /* Material 3 buttons: Download/Upload are tonal, Clear is an outlined error button */
         .settings-action-btn {
             display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; height: 40px; margin: 8px 0; padding: 0 24px; box-sizing: border-box;
@@ -98,7 +98,7 @@
         .settings-action-btn:hover { box-shadow: 0 1px 2px rgba(0,0,0,.3), 0 1px 3px 1px rgba(0,0,0,.15); background: #d2e1f6; }
         .settings-action-btn:active { background: #c6d8f1; box-shadow: none; }
         .settings-action-btn:focus-visible { outline: 2px solid #1976d2; outline-offset: 2px; }
-        .settings-action-btn.danger { background: transparent; border: 1px solid #79747e; color: #b3261e; }
+        .settings-action-btn.danger { background: transparent; border: 1px solid #73777f; color: #b3261e; }
         .settings-action-btn.danger:hover { background: rgba(179, 38, 30, .08); box-shadow: none; }
         #elm-db-upload-input { display: none; }
         /* "Show Database UI" off: hide the header counter and the list-view chips only */
@@ -803,5 +803,5 @@
         updateDbSizeBadge();
     }, 1000);
 
-    console.log('%cCSV Database (new layout) v2.14 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
+    console.log('%cCSV Database (new layout) v2.15 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
 })();

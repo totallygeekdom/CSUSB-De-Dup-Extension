@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.62
+// @version      2.63
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-62'; // keep in sync with @version (2.62)
+    const BUILD = 'v2-build-63'; // keep in sync with @version (2.63)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -106,6 +106,10 @@
                pixel-overlay approach — much simpler now that each side is its own
                button element instead of a shared row) --- */
         /* --- AI-vs-script pick comparison bar + per-row disagreement badges --- */
+        #elm2-pair-note {
+            margin: 8px 0; padding: 12px 16px; border-radius: 12px; border-left: 4px solid #ef6c00;
+            background: #fff4e0; color: #4a2c00; font-size: 14px; line-height: 20px; letter-spacing: .25px;
+        }
         #elm2-pick-compare-bar {
             display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
             padding: 12px 16px; margin: 0 0 12px;
@@ -976,8 +980,7 @@
     let pairFirstSeenAt = 0;            // when the current pair was first seen
     let resolutionAttempted = false;    // resolution ran for the current pair
     let mergeClickPending = false;      // waiting on the two-phase verification delay
-    let conflictWarningShown = false;
-    let appealWarningShown = false;
+    let currentPairNote = '';          // non-blocking note shown above the fields (replaces warning popups)
     let awaitingMergeResult = false;
     let lastMergeContactNamesKey = '';
 
@@ -1081,12 +1084,6 @@
             getContactCards().forEach(c => c.classList.add('elm2-blocked-card'));
         }
     }
-    // Database-scan mode: allowed department "None" blocks every pair and Auto-Skip moves
-    // on from each one, so warning popups (which need a click) are suppressed to let the
-    // scan run uninterrupted. Entries are still recorded and skipped as usual.
-    function isScanMode() {
-        return CFG.ALLOWED_DEPARTMENT.toLowerCase() === 'none' && CFG.AUTO_SKIP_BLOCKED;
-    }
     // Signals the current entry's department/block status to csv-database-v2.js
     // via document.body.dataset, same contract as the classic script.
     function updateCsvSignal(blockers) {
@@ -1100,10 +1097,9 @@
         else document.body.dataset.csvDept = detectActualDepartment().dept;
         if (sparks.a || sparks.b) { document.body.dataset.csvSpark1 = sparks.a; document.body.dataset.csvSpark2 = sparks.b; }
         else { delete document.body.dataset.csvSpark1; delete document.body.dataset.csvSpark2; }
-        if (appeal && !appealWarningShown && !isScanMode()) {
-            appealWarningShown = true;
-            const sideLabel = appeal.side === 'left' ? 'left side' : 'right side';
-            alert('⚠️ Appeal keyword detected!\n\nReason: The word "appeal" was found on the ' + sideLabel + ' of this entry.\n\nThis merge is blocked and cannot be processed.');
+        if (appeal) {
+            currentPairNote = 'Appeal keyword found on the ' + (appeal.side === 'left' ? 'left' : 'right') + ' side. This merge is blocked.';
+            injectPairNote();
         }
     }
 
@@ -1576,6 +1572,21 @@
         annotateRowColors();
         injectPickComparisonBar();
     }
+    // Non-blocking replacement for the old warning popups.
+    function injectPairNote() {
+        const formEl = (getDiffForm() || document).querySelector('form.diff-form');
+        let note = document.getElementById('elm2-pair-note');
+        if (!formEl || !currentPairNote) { if (note) note.remove(); return; }
+        if (!note) {
+            note = document.createElement('div');
+            note.id = 'elm2-pair-note';
+            note.setAttribute('role', 'status');
+            const bar = document.getElementById('elm2-pick-compare-bar');
+            if (bar) bar.insertAdjacentElement('beforebegin', note);
+            else formEl.insertBefore(note, formEl.firstChild);
+        }
+        if (note.textContent !== currentPairNote) note.textContent = currentPairNote;
+    }
     function injectPickComparisonBar() {
         const form = getDiffForm();
         const formEl = form ? form.querySelector('form.diff-form') : null;
@@ -1612,6 +1623,7 @@
         document.getElementById('elm2-pick-compare-count').textContent = msg;
         document.getElementById('elm2-use-ai-btn').disabled = both.length === 0;
         document.getElementById('elm2-use-script-btn').disabled = ours.length === 0;
+        injectPairNote();
     }
 
 
@@ -1655,8 +1667,7 @@
             currentQueuePositionKey = pairKey;
             pairFirstSeenAt = Date.now();
             resolutionAttempted = false;
-            conflictWarningShown = false;
-            appealWarningShown = false;
+            currentPairNote = '';
             delete document.body.dataset.csvDept;
             delete document.body.dataset.csvSpark1;
             delete document.body.dataset.csvSpark2;
@@ -1707,17 +1718,14 @@
             const _byRule = {};
             _rows.forEach(r => { const rl = r.element.dataset.elm2Rule; if (r.element.dataset.elm2ScriptSide) _byRule[rl || '(unknown)'] = (_byRule[rl || '(unknown)'] || 0) + 1; });
             console.log('[elm2] Suggestions by rule:', JSON.stringify(_byRule));
-            if (!conflictWarningShown && CONFLICT_ROW_THRESHOLD > 0 && !isScanMode()) {
+            // No popups: a possible-twins warning is shown as a note above the fields.
+            // (The old "Bolt score is Low" popup is gone; the twins check covers it.)
+            if (CONFLICT_ROW_THRESHOLD > 0) {
                 const { conflictCount, shouldWarn, conflicts } = checkForConflictingRecords();
-                if (shouldWarn) {
-                    conflictWarningShown = true;
-                    alert(`⚠️ Warning: ${conflictCount} conflicting signal(s) detected!\n\nConflicts found in: ${conflicts.join(', ')}\n\nThese entries might be twins or two different people. Please review carefully before merging.`);
-                }
-            }
-            const scoreLevel = getScoreChipLevel();
-            if (scoreLevel === 'low' && !conflictWarningShown && !isScanMode()) {
-                conflictWarningShown = true;
-                alert('⚠️ Bolt confidence score is "Low" for this pair. Please review carefully before merging.');
+                currentPairNote = shouldWarn
+                    ? `Possible twins / different people: ${conflictCount} conflicting signal(s) (${conflicts.join(', ')}). Review before merging.`
+                    : '';
+                injectPairNote();
             }
             // Resolution stops here. Reviewing the selections and clicking
             // "Merge Contacts" is always a human decision.

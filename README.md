@@ -70,9 +70,11 @@ relying on them for unattended automation:**
   page is therefore a weak fallback; Spark IDs are the real key.
 
 **Automation settings (v2):**
-- **Pairs in range** (slider: Applicant / Low / Medium / High/All): which pairs
-  automation covers. Cumulative: Applicant = pairs with an applicant side, Low and
-  Medium add pairs by Bolt score, High/All = every pair.
+- **Pairs in range** (slider: None / Applicant / High / Medium / Low / All): which pairs
+  automation covers, each position adding to the one before. None = automation off
+  (nothing applied or merged, no range-based skipping). Applicant = pairs with an
+  applicant side; High, Medium and Low add pairs by Bolt score; All = every pair, even
+  one with no score.
 - **Use picks from** (Bolt's / Ours): applies to every pair in range. Ours includes
   the applicant rule; Bolt's keeps Element's pre-selected picks (ours only fills a
   row Bolt left unselected).

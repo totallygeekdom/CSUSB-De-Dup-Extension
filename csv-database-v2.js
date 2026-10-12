@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.11
+// @version      2.12
 // @description  Tracks duplicate entries in a CSV database stored in browser localStorage — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -357,14 +357,9 @@
     }
     // Collects Spark IDs from an API record, wherever they live: scalars under a key
     // containing "spark" (e.g. master.spark_id), and "Spark Id: <id>" text inside any
-    // string value. Also records shapes (never real values) for diagnosis.
+    // string value.
     const SPARK_TEXT = /spark[\s_-]*id\W{0,3}([A-Za-z0-9-]{4,})/gi;
-    function sparkShape(str, idx) {
-        // letters -> x, digits -> 9, except the word "spark"
-        return str.slice(Math.max(0, idx - 15), idx + 40).replace(/spark/gi, '\u0001')
-            .replace(/[A-Za-z]/g, 'x').replace(/\d/g, '9').replace(/\u0001/g, 'Spark');
-    }
-    function collectSparkIds(obj, path, out, found) {
+    function collectSparkIds(obj, path, out) {
         if (obj === null || typeof obj !== 'object') return;
         for (const k of Object.keys(obj)) {
             if (!path && (k === 'ai_analysis' || k === 'feedback')) continue; // free text, not profile data
@@ -372,12 +367,11 @@
             const here = (path ? path + '.' + k : k).replace(/\.\d+/g, '[]');
             if (/spark/i.test(k)) {
                 (Array.isArray(v) ? v : [v]).forEach(x => {
-                    if (typeof x === 'string' || typeof x === 'number') { out.push(String(x).trim()); found.keys.add(here); }
+                    if (typeof x === 'string' || typeof x === 'number') { out.push(String(x).trim()); }
                 });
             }
             // identities: [{ type: 'Spark_...', <value field>: '<id>' }] -> take the value from the siblings
             if (typeof v === 'string' && /^spark/i.test(v) && !Array.isArray(obj)) {
-                found.ident.add(Object.keys(obj).join(', '));
                 ['value', 'id', 'identifier', 'external_id', 'identity', 'key', 'number', 'code'].forEach(f => {
                     if (f !== k && (typeof obj[f] === 'string' || typeof obj[f] === 'number')) out.push(String(obj[f]).trim());
                 });
@@ -386,19 +380,17 @@
                 let m;
                 SPARK_TEXT.lastIndex = 0;
                 while ((m = SPARK_TEXT.exec(v))) out.push(m[1]);
-                if (found.text.size < 4) found.text.add(here + ' -> ' + sparkShape(v, v.search(/spark/i)));
             }
-            if (v && typeof v === 'object') collectSparkIds(v, here, out, found);
+            if (v && typeof v === 'object') collectSparkIds(v, here, out);
         }
     }
     function parseApiEntries(entries) {
         const sample = entries[0];
         if (!sample || typeof sample !== 'object') return null;
         const idField = sample._id ? '_id' : sample.id ? 'id' : null;
-        const found = { keys: new Set(), text: new Set(), ident: new Set() };
         const parsed = entries.map((e, i) => {
             const sparks = [];
-            collectSparkIds(e, '', sparks, found);
+            collectSparkIds(e, '', sparks);
             return {
                 uniqueId: ((idField && e[idField]) || 'api-' + i).toString().toLowerCase(),
                 name: e.name || e.full_name || '',
@@ -406,14 +398,6 @@
                 sparks: sparks.filter(Boolean),
                 raw: JSON.stringify(e)
             };
-        });
-        // Diagnostics (paths and shapes only, never real values)
-        console.log('CSV Database: Spark ID key fields in list API:', found.keys.size ? Array.from(found.keys).join(', ') : 'none',
-            '| records with Spark IDs:', parsed.filter(x => x.sparks.length).length + '/' + parsed.length);
-        if (found.ident.size) console.log('CSV Database: Spark identity object fields:', Array.from(found.ident).slice(0, 3));
-        if (found.text.size) console.log('CSV Database: "spark" text in list API values (shape only):', Array.from(found.text));
-        ['master', 'duplicate'].forEach(k => {
-            if (sample[k] && typeof sample[k] === 'object') console.log('CSV Database: list API ' + k + ' fields:', Object.keys(sample[k]).join(', '));
         });
         return parsed;
     }
@@ -434,15 +418,6 @@
         return null;
     }
 
-    // Diagnostic: path + top-level key names only (no values, no query string).
-    function logApiShape(url, data) {
-        try {
-            const path = String(url).split('?')[0].replace(/^https?:\/\/[^/]+/, '').replace(/[a-f0-9]{24}/gi, ':id');
-            const top = Array.isArray(data) ? '[array of ' + data.length + ']' : Object.keys(data || {}).join(', ');
-            console.log('CSV Database: saw API response', path, '| top-level:', top);
-        } catch (e) { /* ignore */ }
-    }
-
     (function interceptXHR() {
         const origOpen = XMLHttpRequest.prototype.open;
         XMLHttpRequest.prototype.open = function (method, url) {
@@ -457,7 +432,6 @@
                     if (!/duplicate|dedup/i.test(this._csvDbUrl)) return;
                     if (this._csvDbUrl.match(/\/duplicates?\/[a-f0-9]{24}/i)) return;
                     const data = JSON.parse(this.responseText);
-                    logApiShape(this._csvDbUrl, data);
                     const entries = data.data || data.items || data.results || (Array.isArray(data) ? data : null);
                     if (!entries || !Array.isArray(entries) || entries.length === 0) return;
                     const parsed = parseApiEntries(entries);
@@ -476,7 +450,6 @@
                     if (!url || !/duplicate|dedup/i.test(url)) return response;
                     if (url.match(/\/duplicates?\/[a-f0-9]{24}/i)) return response;
                     response.clone().json().then(data => {
-                        logApiShape(url, data);
                         const entries = data.data || data.items || data.results || (Array.isArray(data) ? data : null);
                         if (!entries || !Array.isArray(entries) || entries.length === 0) return;
                         const parsed = parseApiEntries(entries);
@@ -500,9 +473,7 @@
             const entries = performance.getEntriesByType('resource');
             const match = entries.slice().reverse().find(e => /duplicate|dedup/i.test(e.name) && !e.name.match(/\/duplicates?\/[a-f0-9]{24}/i));
             if (!match) return;
-            console.log('CSV Database: Re-fetching first page data from', match.name);
             fetch(match.name).then(r => r.json()).then(data => {
-                logApiShape(match.name, data);
                 const entries2 = data.data || data.items || data.results || (Array.isArray(data) ? data : null);
                 if (!entries2 || !Array.isArray(entries2) || entries2.length === 0) return;
                 const parsed = parseApiEntries(entries2);
@@ -515,7 +486,6 @@
     // row itself as a fallback) rather than assuming/rewriting existing
     // content there, since that cell's real markup is unknown (redacted in
     // the reference snapshot).
-    let badgeDiagLogged = false;
     function applyBadge(row, dept) {
         if (dept === 'Ignored') { const b = row.querySelector('.csv-dept-badge'); if (b) b.remove(); row.removeAttribute('data-csv-dept'); return; }
         const chipIsIgnored = Array.from(row.querySelectorAll('.bolt-chip, elm-chip')).some(el => el.textContent.trim().toLowerCase() === 'ignored');
@@ -528,13 +498,6 @@
             badge.className = 'csv-dept-badge';
             const target = row.querySelector('.cdk-column-flagged') || row.querySelector('.cdk-column-signals') || row;
             target.appendChild(badge);
-            if (!badgeDiagLogged) {
-                badgeDiagLogged = true;
-                // Diagnostic (tag/class names and sizes only): where did the badge land?
-                const chain = [];
-                for (let el = target, n = 0; el && n < 3; el = el.parentElement, n++) chain.push(el.tagName.toLowerCase() + '.' + String(el.className).split(/\s+/).slice(0, 3).join('.') + '[' + getComputedStyle(el).display + ' ' + el.clientWidth + 'px]');
-                console.log('CSV Database: badge placed in', chain.join(' < '));
-            }
         }
         badge.dataset.dept = dept;
         const labels = { 'Grad/IA': 'Grad/IA', 'UnderGrad': 'UnderGrad', 'Forbidden': 'Forbidden', 'Appeal': 'Appeal' };
@@ -818,5 +781,5 @@
         updateDbSizeBadge();
     }, 1000);
 
-    console.log('%cCSV Database (new layout) v2.11 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
+    console.log('%cCSV Database (new layout) v2.12 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
 })();

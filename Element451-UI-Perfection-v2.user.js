@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.67
+// @version      2.68
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-67'; // keep in sync with @version (2.67)
+    const BUILD = 'v2-build-68'; // keep in sync with @version (2.68)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -209,6 +209,26 @@
             border-color: #ef6c00 !important;
             box-shadow: none !important;
             opacity: 0 !important;
+        }
+        /* Hover preview of "Use Bolt AI picks" / "Use our picks": on the rows that button would
+               change, every value is neutral and the value it would select gets the blue
+               highlight (the green / blue / orange pick colours are hidden meanwhile). */
+        body.elm2-previewing .diff-row.elm2-preview-row button.diff-value-button {
+            background: transparent !important;
+            border: 2px solid rgba(0, 0, 0, 0.12) !important;
+            box-shadow: none !important;
+            outline: none !important;
+            color: #212121 !important;
+        }
+        body.elm2-previewing .diff-row.elm2-preview-row button.diff-value-button * { background: transparent !important; color: #212121 !important; }
+        body.elm2-previewing .diff-row.elm2-preview-row button.diff-value-button::before,
+        body.elm2-previewing .diff-row.elm2-preview-row button.diff-value-button::after {
+            background: transparent !important; box-shadow: none !important; opacity: 0 !important;
+        }
+        body.elm2-previewing .diff-row.elm2-preview-row button.diff-value-button.elm2-preview-pick {
+            background: rgba(25, 118, 210, 0.22) !important;
+            background: color-mix(in srgb, var(--elm2-bolt-blue, #1976d2) 22%, transparent) !important;
+            border: 2px solid var(--elm2-bolt-blue, #1976d2) !important;
         }
         /* Applicant side (Application / Cal State Apply entries): when found, the
                "follow the applicant" rule drives the picks, so mark that contact's card. */
@@ -1593,6 +1613,19 @@
             }
         });
     }
+    // Hover preview: highlights, in blue, what "Use Bolt AI picks" (elm2AiSide) or "Use our
+    // picks" (elm2ScriptSide) would select. previewPicks(null) clears it.
+    function previewPicks(attr) {
+        getDiffRows().forEach(row => {
+            const el = row.element;
+            const side = attr ? el.dataset[attr] : null;
+            el.classList.toggle('elm2-preview-row', !!side);
+            el.querySelectorAll(':scope > .diff-value-button').forEach((b, i) => {
+                b.classList.toggle('elm2-preview-pick', !!side && (side === 'left' ? 0 : 1) === i);
+            });
+        });
+        document.body.classList.toggle('elm2-previewing', !!attr);
+    }
     function applyAllPicks(sourceAttr) {
         getDiffRows().forEach(row => {
             const side = row.element.dataset[sourceAttr];
@@ -1605,7 +1638,7 @@
         const form = getDiffForm();
         const formEl = form ? form.querySelector('form.diff-form') : null;
         let bar = document.getElementById('elm2-pick-compare-bar');
-        if (!formEl) { if (bar) bar.remove(); return; }
+        if (!formEl) { if (bar) bar.remove(); previewPicks(null); return; }
         if (!bar) {
             bar = document.createElement('div');
             bar.id = 'elm2-pick-compare-bar';
@@ -1617,8 +1650,14 @@
             const header = formEl.querySelector(':scope > .diff-contacts-header');
             if (header) header.insertAdjacentElement('afterend', bar);
             else formEl.insertBefore(bar, formEl.firstChild);
-            document.getElementById('elm2-use-ai-btn').addEventListener('click', () => applyAllPicks('elm2AiSide'));
-            document.getElementById('elm2-use-script-btn').addEventListener('click', () => applyAllPicks('elm2ScriptSide'));
+            [['elm2-use-ai-btn', 'elm2AiSide'], ['elm2-use-script-btn', 'elm2ScriptSide']].forEach(([id, attr]) => {
+                const btn = document.getElementById(id);
+                btn.addEventListener('click', () => applyAllPicks(attr));
+                btn.addEventListener('mouseenter', () => previewPicks(attr));
+                btn.addEventListener('focus', () => previewPicks(attr));
+                btn.addEventListener('mouseleave', () => previewPicks(null));
+                btn.addEventListener('blur', () => previewPicks(null));
+            });
         }
         const all = getDiffRows();
         const conflicts = all.filter(r => r.isConflict).length;
@@ -1780,6 +1819,7 @@
             resolutionAttempted = false;
             conflictWarningShown = false;
             appealWarningShown = false;
+            previewPicks(null);
             cancelAutoMerge();
             delete document.body.dataset.csvDept;
             delete document.body.dataset.csvSpark1;

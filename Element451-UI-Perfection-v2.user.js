@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.76
+// @version      2.77
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-76'; // keep in sync with @version (2.76)
+    const BUILD = 'v2-build-77'; // keep in sync with @version (2.77)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -124,24 +124,33 @@
             box-shadow: var(--md-elev-3); opacity: 0; pointer-events: none; transition: opacity .2s var(--md-ease), transform .2s var(--md-ease);
         }
         #elm2-merge-bar.visible { opacity: 1; transform: translate(-50%, 0); }
+        /* Material 3 dialog: 32% scrim, tonal container, hero indicator, headline + supporting text,
+           filled error button. Container radius = button radius (24) + gap (16) so the corners nest. */
         #elm2-merge-overlay {
             position: fixed; inset: 0; z-index: 10001; display: flex; align-items: center; justify-content: center;
-            background: rgba(0, 0, 0, .5); opacity: 0; pointer-events: none; transition: opacity .2s var(--md-ease);
+            background: rgba(0, 0, 0, .32); opacity: 0; pointer-events: none; transition: opacity .2s var(--md-ease);
         }
         #elm2-merge-overlay.visible { opacity: 1; pointer-events: auto; }
         #elm2-merge-overlay .elm2-merge-card {
-            box-sizing: border-box; width: min(360px, calc(100vw - 32px)); padding: 44px 16px 16px; border-radius: 42px; background: #fff; color: #1a1c20;
-            box-shadow: var(--md-elev-3); text-align: center; font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            box-sizing: border-box; width: min(360px, calc(100vw - 32px)); padding: 40px 16px 16px; border-radius: 40px;
+            background: #e9edf4; color: #1a1c20; box-shadow: var(--md-elev-3); text-align: center;
+            font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            transform: scale(.85); opacity: 0; transition: transform .25s cubic-bezier(.05, .7, .1, 1), opacity .15s linear;
         }
-        #elm2-merge-overlay .elm2-ring { position: relative; width: 168px; height: 168px; margin: 0 auto 32px; }
+        #elm2-merge-overlay.visible .elm2-merge-card { transform: scale(1); opacity: 1; }
+        #elm2-merge-overlay .elm2-ring { position: relative; width: 160px; height: 160px; margin: 0 auto 24px; }
         #elm2-merge-overlay .elm2-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
-        #elm2-merge-overlay .elm2-ring-arc { fill: none; stroke: #d32f2f; stroke-width: 8; stroke-linecap: round; stroke-dasharray: 276.46; stroke-dashoffset: 0; }
-        #elm2-merge-overlay #elm2-merge-count { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 60px; font-weight: 500; color: #d32f2f; }
-        #elm2-merge-overlay #elm2-merge-summary { margin: 0 8px 36px; font-size: 16px; line-height: 24px; letter-spacing: .5px; }
-        #elm2-merge-overlay #elm2-merge-cancel { width: 100%; height: 52px; border: none; border-radius: 26px; background: #d32f2f; color: #fff; font-family: inherit; font-weight: 500; font-size: 16px; line-height: 24px; letter-spacing: .1px; cursor: pointer; transition: box-shadow .2s var(--md-ease), background-color .2s var(--md-ease); }
-        #elm2-merge-overlay #elm2-merge-cancel:hover { background: #b71c1c; box-shadow: var(--md-elev-1); }
-        #elm2-merge-overlay #elm2-merge-cancel:focus-visible { outline: 3px solid rgba(211, 47, 47, .4); outline-offset: 2px; }
-        @keyframes elm2-ring-drain { from { stroke-dashoffset: 0; } to { stroke-dashoffset: 276.46; } }
+        #elm2-merge-overlay .elm2-ring-track { fill: none; stroke: #f9dedc; stroke-width: 8; }
+        #elm2-merge-overlay .elm2-ring-arc { fill: none; stroke: #b3261e; stroke-width: 8; stroke-linecap: round; stroke-dasharray: 276.46; stroke-dashoffset: 0; transition: stroke-dashoffset .3s cubic-bezier(.2, 0, 0, 1); }
+        #elm2-merge-overlay #elm2-merge-count { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 57px; line-height: 64px; font-weight: 400; color: #b3261e; }
+        #elm2-merge-overlay #elm2-merge-title { margin: 0 8px 8px; font-size: 24px; line-height: 32px; font-weight: 400; color: #1a1c20; }
+        #elm2-merge-overlay #elm2-merge-summary { margin: 0 12px 32px; font-size: 14px; line-height: 20px; letter-spacing: .25px; color: #434750; }
+        #elm2-merge-overlay #elm2-merge-cancel { position: relative; width: 100%; height: 48px; border: none; border-radius: 24px; background: #b3261e; color: #fff; font-family: inherit; font-weight: 500; font-size: 14px; line-height: 20px; letter-spacing: .1px; cursor: pointer; overflow: hidden; transition: box-shadow .2s var(--md-ease); }
+        #elm2-merge-overlay #elm2-merge-cancel::after { content: ''; position: absolute; inset: 0; background: #fff; opacity: 0; transition: opacity .2s var(--md-ease); }
+        #elm2-merge-overlay #elm2-merge-cancel:hover { box-shadow: var(--md-elev-1); }
+        #elm2-merge-overlay #elm2-merge-cancel:hover::after { opacity: .08; }
+        #elm2-merge-overlay #elm2-merge-cancel:active::after { opacity: .12; }
+        #elm2-merge-overlay #elm2-merge-cancel:focus-visible { outline: 3px solid rgba(179, 38, 30, .4); outline-offset: 2px; }
         #elm2-pick-compare-bar {
             display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
             padding: 12px 16px; margin: 0 0 12px;
@@ -1777,11 +1786,12 @@
             ov = document.createElement('div');
             ov.id = 'elm2-merge-overlay';
             ov.innerHTML = `
-                <div class="elm2-merge-card" role="alertdialog" aria-live="polite" aria-labelledby="elm2-merge-summary">
+                <div class="elm2-merge-card" role="alertdialog" aria-live="polite" aria-labelledby="elm2-merge-title" aria-describedby="elm2-merge-summary">
                     <div class="elm2-ring">
-                        <svg viewBox="0 0 100 100" aria-hidden="true"><circle class="elm2-ring-arc" cx="50" cy="50" r="44"></circle></svg>
+                        <svg viewBox="0 0 100 100" aria-hidden="true"><circle class="elm2-ring-track" cx="50" cy="50" r="44"></circle><circle class="elm2-ring-arc" cx="50" cy="50" r="44"></circle></svg>
                         <span id="elm2-merge-count"></span>
                     </div>
+                    <h2 id="elm2-merge-title">Merging automatically</h2>
                     <p id="elm2-merge-summary"></p>
                     <button type="button" id="elm2-merge-cancel">Cancel</button>
                 </div>`;
@@ -1844,12 +1854,17 @@
         let left = MERGE_COUNTDOWN_S;
         const arc = ov.querySelector('.elm2-ring-arc');
         document.getElementById('elm2-merge-summary').textContent = mergeOverview();
-        const render = () => { document.getElementById('elm2-merge-count').textContent = String(left); };
-        render();
-        // restart the ring animation (drains over the whole countdown)
-        arc.style.animation = 'none';
+        // The ring drains one step per second, in time with the number.
+        const CIRC = 276.46;
+        const render = () => {
+            document.getElementById('elm2-merge-count').textContent = String(left);
+            arc.style.strokeDashoffset = String(CIRC * (1 - left / MERGE_COUNTDOWN_S));
+        };
+        arc.style.transition = 'none';
+        arc.style.strokeDashoffset = '0';
         void arc.getBoundingClientRect();
-        arc.style.animation = `elm2-ring-drain ${MERGE_COUNTDOWN_S}s linear forwards`;
+        arc.style.transition = '';
+        render();
         ov.classList.add('visible');
         mergeTimer = setInterval(() => {
             if (getPairKey() !== key) { cancelAutoMerge(); return; }

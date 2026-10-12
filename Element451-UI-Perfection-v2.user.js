@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.68
+// @version      2.69
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-68'; // keep in sync with @version (2.68)
+    const BUILD = 'v2-build-69'; // keep in sync with @version (2.69)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -1616,6 +1616,7 @@
     // Hover preview: highlights, in blue, what "Use Bolt AI picks" (elm2AiSide) or "Use our
     // picks" (elm2ScriptSide) would select. previewPicks(null) clears it.
     function previewPicks(attr) {
+        if (document.body.classList.contains('elm2-blocked')) attr = null; // no preview on blocked entries
         getDiffRows().forEach(row => {
             const el = row.element;
             const side = attr ? el.dataset[attr] : null;

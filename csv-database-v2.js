@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.16
+// @version      2.17
 // @description  Tracks duplicate entries in a CSV database stored in browser localStorage — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -86,18 +86,18 @@
         @keyframes csvPulse { 0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.6; } 50% { transform: translate(-50%, -50%) scale(1.5); opacity: 0.2; } }
 
         /* tonal assist-chip style pill, matches the merge counter */
-        #elm-db-size-badge { display: flex; align-items: center; height: 32px; box-sizing: border-box; padding: 0 12px; background: #e0e5ee; border: none; border-radius: 8px; white-space: nowrap; cursor: default; }
+        #elm-db-size-badge { display: flex; align-items: center; height: 32px; box-sizing: border-box; padding: 0 12px; background: #e6e1db; border: none; border-radius: 8px; white-space: nowrap; cursor: default; }
         #elm-db-size-label { font: 500 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .1px; color: #1a1c20; padding: 0; }
         /* Material 3 buttons: Download/Upload are tonal, Clear is an outlined error button */
         .settings-action-btn {
             display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; height: 40px; margin: 8px 0; padding: 0 24px; box-sizing: border-box;
-            border: none; border-radius: 20px; background: #dce8f9; color: #0b2a4a;
+            border: none; border-radius: 20px; background: var(--md-primary-container, #fde3cc); color: var(--md-on-primary-container, #5a2800);
             font: 500 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .1px; cursor: pointer;
             transition: box-shadow .2s cubic-bezier(.2, 0, 0, 1), background-color .2s cubic-bezier(.2, 0, 0, 1);
         }
-        .settings-action-btn:hover { box-shadow: 0 1px 2px rgba(0,0,0,.3), 0 1px 3px 1px rgba(0,0,0,.15); background: #d2e1f6; }
-        .settings-action-btn:active { background: #c6d8f1; box-shadow: none; }
-        .settings-action-btn:focus-visible { outline: 2px solid #1976d2; outline-offset: 2px; }
+        .settings-action-btn:hover { box-shadow: 0 1px 2px rgba(0,0,0,.3), 0 1px 3px 1px rgba(0,0,0,.15); background: color-mix(in srgb, var(--md-primary, #ef6c00) 24%, #fff); }
+        .settings-action-btn:active { background: color-mix(in srgb, var(--md-primary, #ef6c00) 30%, #fff); box-shadow: none; }
+        .settings-action-btn:focus-visible { outline: 2px solid var(--md-primary, #ef6c00); outline-offset: 2px; }
         .settings-action-btn.danger { background: transparent; border: 1px solid #73777f; color: #b3261e; }
         .settings-action-btn.danger:hover { background: rgba(179, 38, 30, .08); box-shadow: none; }
         #elm-db-upload-input { display: none; }
@@ -811,5 +811,5 @@
         updateDbSizeBadge();
     }, 1000);
 
-    console.log('%cCSV Database (new layout) v2.16 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
+    console.log('%cCSV Database (new layout) v2.17 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
 })();

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.60
+// @version      2.61
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-60'; // keep in sync with @version (2.60)
+    const BUILD = 'v2-build-61'; // keep in sync with @version (2.61)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -1796,7 +1796,8 @@
 
         const settingsBtn = document.createElement('button');
         settingsBtn.id = 'elm-settings-btn';
-        settingsBtn.innerHTML = '⚙';
+        // Inline SVG (Material "settings" icon): a "⚙" text glyph renders as a colour emoji on macOS
+        settingsBtn.innerHTML = '<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>';
         settingsBtn.title = 'Settings';
         settingsBtn.onclick = (e) => { e.stopPropagation(); toggleSettingsPane(); };
         controlsWrapper.appendChild(settingsBtn);
@@ -1867,7 +1868,6 @@
                 <div class="setting-row"><label>Auto-Skip Blocked</label>${toggleHtml('elm-auto-skip-blocked')}</div>
                 <div class="settings-section-title">Display</div>
                 <div class="setting-row"><label>Highlight Rows</label>${toggleHtml('elm-highlight-rows')}</div>
-                <div class="setting-row"><label>Show Merge Counter</label>${toggleHtml('elm-show-merge-counter')}</div>
                 <div class="settings-section-title">Department</div>
                 <div class="setting-row">
                     <label>Allowed Department</label>
@@ -1915,7 +1915,6 @@
         });
         setupToggle('elm-auto-skip-blocked', 'elm_auto_skip_blocked');
         setupToggle('elm-highlight-rows', 'elm_highlight_rows');
-        setupToggle('elm-show-merge-counter', 'elm_show_merge_counter', () => { document.getElementById('elm-controls-wrapper')?.remove(); injectMergeCounter(); });
         function setupToggle(elementId, storageKey, onChange) {
             const el = document.getElementById(elementId);
             if (!el) return;

@@ -78,7 +78,7 @@ relying on them for unattended automation:**
 - **Use picks from** (Bolt's / Ours): applies to every pair in range. Ours includes
   the applicant rule; Bolt's keeps Element's pre-selected picks (ours only fills a
   row Bolt left unselected).
-- **When done** (Wait for me / Merge): Merge shows a 4-second countdown dialog (a
+- **When done** (Wait for me / Merge): Merge shows a countdown dialog (4 seconds by default; "Merge countdown" sets 2-15) (a
   draining ring around the seconds left, a plain-language summary and a Cancel
   button; Esc also cancels), then re-checks that the pair
   is unblocked, unchanged, every conflicting field has a pick and there is no

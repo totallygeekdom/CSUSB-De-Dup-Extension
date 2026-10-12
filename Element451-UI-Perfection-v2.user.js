@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.78
+// @version      2.79
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-78'; // keep in sync with @version (2.78)
+    const BUILD = 'v2-build-79'; // keep in sync with @version (2.79)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -59,6 +59,8 @@
         USE_PICKS:                { get() { return localStorage.getItem('elm_use_picks') === 'bolt' ? 'bolt' : 'ours'; } },
         // What happens once a pair in range is decided: 'wait' for you, or 'merge'. Kept per browser
         // session only, so a new session always starts on 'wait'.
+        // Seconds of the auto-merge cancel window (never below 2: the window is required).
+        MERGE_COUNTDOWN:          { get() { const v = parseInt(localStorage.getItem('elm_merge_countdown'), 10); return isNaN(v) ? 4 : Math.max(2, Math.min(15, v)); } },
         WHEN_DONE:                { get() { try { return sessionStorage.getItem('elm_when_done') === 'merge' ? 'merge' : 'wait'; } catch (e) { return 'wait'; } } },
         HIGHLIGHT_ROWS:           { get() { return getBoolSetting('elm_highlight_rows', true); } },
         SHOW_MERGE_COUNTER:       { get() { return getBoolSetting('elm_show_merge_counter', false); } },
@@ -1751,7 +1753,6 @@
     // is still unblocked, still the same pair, and every conflicting field has a pick.
     // Dismiss is never clicked (see the click guard above).
     // =========================================================
-    const MERGE_COUNTDOWN_S = 4;
     let mergeTimer = null;
     let mergeBarTimer = null;
     let mergedPairKey = '';
@@ -1852,7 +1853,8 @@
         cancelAutoMerge();
         const ov = mergeModal();
         hideMergeBar();
-        let left = MERGE_COUNTDOWN_S;
+        const total = CFG.MERGE_COUNTDOWN;
+        let left = total;
         const arc = ov.querySelector('.elm2-ring-arc');
         document.getElementById('elm2-merge-summary').textContent = mergeOverview();
         // The ring drains one step per second, in time with the number.
@@ -1864,7 +1866,7 @@
             count.style.animation = 'none';
             void count.getBoundingClientRect();
             count.style.animation = 'elm2-count-in .5s cubic-bezier(.05, .7, .1, 1)';
-            arc.style.strokeDashoffset = String(CIRC * (1 - left / MERGE_COUNTDOWN_S));
+            arc.style.strokeDashoffset = String(CIRC * (1 - left / total));
         };
         arc.style.transition = 'none';
         arc.style.strokeDashoffset = '0';
@@ -2144,6 +2146,14 @@
                     <button type="button" role="radio" data-v="merge">Merge</button>
                 </div>
                 <div id="elm-when-done-desc" class="elm-level-desc"></div>
+                <div class="setting-row" id="elm-countdown-row">
+                    <label for="elm-merge-countdown">Merge countdown</label>
+                    <select id="elm-merge-countdown">
+                        <option value="2">2 seconds</option><option value="3">3 seconds</option><option value="4">4 seconds</option>
+                        <option value="5">5 seconds</option><option value="6">6 seconds</option><option value="8">8 seconds</option>
+                        <option value="10">10 seconds</option><option value="15">15 seconds</option>
+                    </select>
+                </div>
                 <div class="setting-row"><label>Auto-Skip</label>${toggleHtml('elm-auto-skip-blocked')}</div>
                 <div class="elm-level-desc elm-skip-desc">Skips blocked, out-of-range and possible-twins pairs with no popup. Off: stops on them instead.</div>
                 <div class="settings-section-title">Display</div>
@@ -2222,9 +2232,22 @@
             v => v === 'ours' ? 'Our rules are applied on pairs in range, including the applicant rule.' : "Bolt's picks are kept on pairs in range. Ours only fills rows Bolt left unselected.",
             reapplyForLevel);
         setupSegmented('elm-when-done', () => CFG.WHEN_DONE, v => { try { sessionStorage.setItem('elm_when_done', v); } catch (e) { /* ignore */ } },
-            v => v === 'merge' ? 'Merges decided pairs after a 4-second countdown with a Cancel button. Resets to "Wait for me" each browser session.' : 'You review the picks and click Merge Contacts yourself.',
+            v => v === 'merge' ? 'Merges decided pairs after a countdown with a Cancel button. Resets to "Wait for me" each browser session.' : 'You review the picks and click Merge Contacts yourself.',
             () => { if (CFG.WHEN_DONE !== 'merge') cancelAutoMerge('Auto-merge cancelled'); });
+        const countdownSelect = document.getElementById('elm-merge-countdown');
+        const countdownRow = document.getElementById('elm-countdown-row');
+        const syncCountdown = () => {
+            // only relevant when merging is on and the slider isn't on None
+            const active = CFG.WHEN_DONE === 'merge' && CFG.RANGE_LEVEL > 0;
+            countdownSelect.disabled = !active;
+            countdownRow.style.opacity = active ? '' : '.38';
+        };
+        countdownSelect.value = String(CFG.MERGE_COUNTDOWN);
+        countdownSelect.addEventListener('change', () => localStorage.setItem('elm_merge_countdown', countdownSelect.value));
+        document.getElementById('elm-when-done').addEventListener('click', syncCountdown);
+        levelSlider.addEventListener('input', syncCountdown);
         syncLevel();
+        syncCountdown();
         setupToggle('elm-auto-skip-blocked', 'elm_auto_skip_blocked');
         setupToggle('elm-highlight-rows', 'elm_highlight_rows');
         function setupToggle(elementId, storageKey, onChange) {

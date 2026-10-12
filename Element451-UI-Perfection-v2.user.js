@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.77
+// @version      2.78
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-77'; // keep in sync with @version (2.77)
+    const BUILD = 'v2-build-78'; // keep in sync with @version (2.78)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -141,7 +141,7 @@
         #elm2-merge-overlay .elm2-ring { position: relative; width: 160px; height: 160px; margin: 0 auto 24px; }
         #elm2-merge-overlay .elm2-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
         #elm2-merge-overlay .elm2-ring-track { fill: none; stroke: #f9dedc; stroke-width: 8; }
-        #elm2-merge-overlay .elm2-ring-arc { fill: none; stroke: #b3261e; stroke-width: 8; stroke-linecap: round; stroke-dasharray: 276.46; stroke-dashoffset: 0; transition: stroke-dashoffset .3s cubic-bezier(.2, 0, 0, 1); }
+        #elm2-merge-overlay .elm2-ring-arc { fill: none; stroke: #b3261e; stroke-width: 8; stroke-linecap: round; stroke-dasharray: 276.46; stroke-dashoffset: 0; transition: stroke-dashoffset .8s cubic-bezier(.2, 0, 0, 1); }
         #elm2-merge-overlay #elm2-merge-count { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 57px; line-height: 64px; font-weight: 400; color: #b3261e; }
         #elm2-merge-overlay #elm2-merge-title { margin: 0 8px 8px; font-size: 24px; line-height: 32px; font-weight: 400; color: #1a1c20; }
         #elm2-merge-overlay #elm2-merge-summary { margin: 0 12px 32px; font-size: 14px; line-height: 20px; letter-spacing: .25px; color: #434750; }
@@ -150,6 +150,7 @@
         #elm2-merge-overlay #elm2-merge-cancel:hover { box-shadow: var(--md-elev-1); }
         #elm2-merge-overlay #elm2-merge-cancel:hover::after { opacity: .08; }
         #elm2-merge-overlay #elm2-merge-cancel:active::after { opacity: .12; }
+        @keyframes elm2-count-in { from { opacity: 0; transform: scale(.7); } to { opacity: 1; transform: scale(1); } }
         #elm2-merge-overlay #elm2-merge-cancel:focus-visible { outline: 3px solid rgba(179, 38, 30, .4); outline-offset: 2px; }
         #elm2-pick-compare-bar {
             display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
@@ -1857,7 +1858,12 @@
         // The ring drains one step per second, in time with the number.
         const CIRC = 276.46;
         const render = () => {
-            document.getElementById('elm2-merge-count').textContent = String(left);
+            const count = document.getElementById('elm2-merge-count');
+            count.textContent = String(left);
+            // each new number eases in (scale + fade) while the ring eases down one step
+            count.style.animation = 'none';
+            void count.getBoundingClientRect();
+            count.style.animation = 'elm2-count-in .5s cubic-bezier(.05, .7, .1, 1)';
             arc.style.strokeDashoffset = String(CIRC * (1 - left / MERGE_COUNTDOWN_S));
         };
         arc.style.transition = 'none';

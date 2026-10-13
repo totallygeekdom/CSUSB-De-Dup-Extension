@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.101
+// @version      2.102
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-101'; // keep in sync with @version (2.101)
+    const BUILD = 'v2-build-102'; // keep in sync with @version (2.102)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -243,6 +243,19 @@
         elm-review-queue-filters-sidebar bolt-field { display: grid !important; grid-template-columns: 128px minmax(0, 1fr); align-items: center !important; column-gap: 8px !important; row-gap: 0 !important; }
         elm-review-queue-filters-sidebar .bolt-chip-list-wrapper { gap: 8px !important; }
         elm-review-queue-filters-sidebar bolt-chip-check.bolt-chip { height: 32px !important; padding: 0 12px !important; font-size: 14px !important; }
+        /* the chip list / form field wrappers must never draw their own hover or focus background (only the chips do) */
+        elm-review-queue-filters-sidebar bolt-chip-list:not(#elm2x),
+        elm-review-queue-filters-sidebar bolt-chip-list:not(#elm2x):hover,
+        elm-review-queue-filters-sidebar bolt-chip-list:not(#elm2x):focus,
+        elm-review-queue-filters-sidebar bolt-chip-list:not(#elm2x):focus-within,
+        elm-review-queue-filters-sidebar bolt-form-field:not(#elm2x),
+        elm-review-queue-filters-sidebar bolt-form-field:not(#elm2x):hover,
+        elm-review-queue-filters-sidebar bolt-form-field:not(#elm2x):focus-within,
+        elm-review-queue-filters-sidebar .bolt-form-field-wrapper:not(#elm2x),
+        elm-review-queue-filters-sidebar .bolt-form-field-input-wrapper:not(#elm2x),
+        elm-review-queue-filters-sidebar .bolt-form-field-infix:not(#elm2x),
+        elm-review-queue-filters-sidebar .bolt-chip-list-wrapper:not(#elm2x),
+        elm-review-queue-filters-sidebar .bolt-chip-list-wrapper:not(#elm2x):hover { background: transparent !important; box-shadow: none !important; outline: none !important; }
         elm-review-queue-filters-sidebar .bolt-field-range-controls { display: flex !important; flex-wrap: nowrap !important; justify-content: flex-start !important; gap: 8px 16px !important; }
         elm-review-queue-filters-sidebar bolt-field .bolt-field-input { display: block !important; }
         elm-review-queue-filters-sidebar .bolt-field-range-controls bolt-form-field { flex: 0 0 auto !important; }
@@ -1148,6 +1161,13 @@
         box.querySelector('.elm2-pager-total').textContent = 'of ' + st.pages;
     }
     function injectPager() { document.querySelectorAll('mat-paginator').forEach(injectPagerInto); }
+    // Each filter section carries a title="..." attribute that pops a native tooltip on hover
+    // anywhere inside it; the section already shows its title, so the attribute is removed.
+    function stripFilterTooltips() {
+        document.querySelectorAll('elm-review-queue-filters-sidebar [title]').forEach(el => {
+            if (el.tagName === 'BOLT-STACKABLE-SIDEBAR-SECTION' || el.closest('bolt-stackable-sidebar-section')) el.removeAttribute('title');
+        });
+    }
     // Element451's orange header colour, read from the header bar itself, for our own UI accents.
     function syncHeaderColor() {
         let el = document.querySelector('.bolt-navigation-right');
@@ -2281,6 +2301,7 @@
         colorScoreChips();
         syncHeaderColor(); // the header is on every page, not just the review page
         injectPager();
+        stripFilterTooltips();
         if (isDedupReviewPage()) {
             syncBoltBlue();
             annotateRowColors();

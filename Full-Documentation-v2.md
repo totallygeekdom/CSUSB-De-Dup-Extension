@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.106`, shown in the settings pane and console as `v2-build-106` |
+| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.107`, shown in the settings pane and console as `v2-build-107` |
 | CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.22` |
 
 The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
@@ -301,7 +301,7 @@ All of these are CSS/DOM additions made by the main script. Colours use a Materi
 
 ### 10.1 Review pair
 
-- **Pick colours** (Highlight Rows): on a row where Bolt and we agree, the chosen value is **green**; on a row where we differ, Bolt's pick is **blue** and ours is **orange**; rows where our rules have no opinion keep Element's default styling. There are no legends or text badges, and arrows are never restyled.
+- **Pick colours** (Highlight Rows): on a row where Bolt and we agree, the chosen value is **green**; on a row where we differ, Bolt's pick is **blue** and ours is **orange**; rows where our rules have no opinion keep Element's default styling. A suggestion that only comes from the **Auxiliary logic** "more recent profile" tie-breaker is never green when it agrees with Bolt (it is a tie-breaker, not a rule match); it shows blue/orange only when it differs. There are no legends or text badges, and arrows are never restyled.
 - **Applicant band**: with an applicant side, that contact's card is outlined and a yellow band marks that side's column of values (disabled on blocked pairs).
 - **Comparison bar** under the contact header: a one-line status ("Our N suggestion(s) match Bolt's picks (x conflicting of y fields)" / "⚠ n of N suggestions differ from Bolt's picks" / "automation is off", etc.) plus two buttons: **Use Bolt AI picks** and **Use our picks**.
 - **Hover preview**: hovering (or focusing) either button highlights in blue exactly what it would select on the rows it would change, with the other values neutral; the green/blue/orange pick colours are hidden meanwhile. Disabled on blocked pairs.

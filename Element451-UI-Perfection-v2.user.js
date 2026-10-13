@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.93
+// @version      2.94
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-93'; // keep in sync with @version (2.93)
+    const BUILD = 'v2-build-94'; // keep in sync with @version (2.94)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -156,6 +156,22 @@
         #elm2-merge-overlay #elm2-merge-cancel:active::after { opacity: .12; }
         @keyframes elm2-count-in { from { opacity: 0; transform: scale(.7); } to { opacity: 1; transform: scale(1); } }
         #elm2-merge-overlay #elm2-merge-cancel:focus-visible { outline: 3px solid rgba(179, 38, 30, .4); outline-offset: 2px; }
+        /* --- Review Queue / History tabs: Material 3 primary tabs ---
+           48px, label-medium text, indicator = 3px rounded-top bar as wide as the label,
+           1px divider under the whole bar, hover/press state layers. --- */
+        .mat-mdc-tab-link-container:not(#elm2x) { background: transparent !important; border-bottom: 1px solid color-mix(in srgb, var(--md-outline) 35%, transparent) !important; }
+        .mat-mdc-tab-link-container:not(#elm2x) .mat-mdc-tab-links { border: none !important; justify-content: flex-start !important; }
+        .mat-mdc-tab-link-container:not(#elm2x) .mdc-tab.mat-mdc-tab-link { flex: 0 0 auto !important; height: 48px !important; min-width: 90px !important; padding: 0 24px !important; opacity: 1 !important; background: transparent !important; transition: background-color .2s var(--md-ease); }
+        .mat-mdc-tab-link-container:not(#elm2x) .mdc-tab.mat-mdc-tab-link .mdc-tab__text-label { color: var(--md-on-surface-variant) !important; font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif !important; font-size: 14px !important; line-height: 20px !important; font-weight: 500 !important; letter-spacing: .1px !important; text-transform: none !important; }
+        .mat-mdc-tab-link-container:not(#elm2x) .mdc-tab.mat-mdc-tab-link:hover { background: color-mix(in srgb, var(--md-on-surface) 8%, transparent) !important; }
+        .mat-mdc-tab-link-container:not(#elm2x) .mdc-tab.mat-mdc-tab-link:active { background: color-mix(in srgb, var(--md-on-surface) 12%, transparent) !important; }
+        .mat-mdc-tab-link-container:not(#elm2x) .mdc-tab.mat-mdc-tab-link:focus-visible { outline: 2px solid var(--md-primary) !important; outline-offset: -2px; }
+        .mat-mdc-tab-link-container:not(#elm2x) .mdc-tab--active.mat-mdc-tab-link .mdc-tab__text-label { color: var(--md-primary-text) !important; }
+        .mat-mdc-tab-link-container:not(#elm2x) .mdc-tab--active.mat-mdc-tab-link:hover { background: color-mix(in srgb, var(--md-primary) 8%, transparent) !important; }
+        .mat-mdc-tab-link-container:not(#elm2x) .mdc-tab.mat-mdc-tab-link .mdc-tab__ripple,
+        .mat-mdc-tab-link-container:not(#elm2x) .mdc-tab.mat-mdc-tab-link .mat-mdc-tab-ripple { display: none !important; }
+        .mat-mdc-tab-link-container:not(#elm2x) .mdc-tab.mat-mdc-tab-link .mdc-tab-indicator { left: 24px !important; right: 24px !important; width: auto !important; }
+        .mat-mdc-tab-link-container:not(#elm2x) .mdc-tab.mat-mdc-tab-link .mdc-tab-indicator__content--underline { border-top-width: 3px !important; border-radius: 3px 3px 0 0 !important; border-color: var(--md-primary) !important; }
         /* --- Advanced Filters sidebar (list page): compact, Material 3 --- */
         elm-review-queue-filters-sidebar .bolt-stackable-sidebar-content { background: #ebe5de !important; color: var(--md-on-surface); font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; }
         elm-review-queue-filters-sidebar .bolt-stackable-sidebar-header-wrapper { display: flex !important; flex-wrap: nowrap !important; padding: 12px 16px 12px 8px !important; min-height: 0 !important; gap: 8px !important; align-items: center !important; border-bottom: 1px solid color-mix(in srgb, var(--md-outline) 25%, transparent) !important; background: transparent !important; }

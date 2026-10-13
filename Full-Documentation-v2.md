@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.102`, shown in the settings pane and console as `v2-build-102` |
+| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.103`, shown in the settings pane and console as `v2-build-103` |
 | CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.21` |
 
 The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
@@ -170,6 +170,10 @@ Skips pairs the script will not handle, with **no popup**, by clicking **Next du
 
 Off: the script stops on those pairs and leaves them on screen, showing the popups that apply ([section 8](#8-warnings-and-popups)). A twins pair is never auto-merged either way. Before every skip the CSV script is asked to record the pair first ([11.3](#113-recording)). Storage: `elm_auto_skip_blocked` (default on).
 
+### 4.5b Auxiliary logic
+
+A switch (default **off**) for the extra tie-breakers that mattered more in the classic layout and matter less now that Bolt AI makes the default picks: milestone entries, `csusb.major` / `csusb.school` when **both** sides have it, Encoura / College Board IDs, and system-generated entries. With it **on**, those rows pick the **more recent profile**, meaning the contact whose card shows the later **Created** date (`Created 9/4/2026` on the contact card). With it **off**, those rows get no suggestion and Bolt's pick stays. If the card dates are missing or equal, there is no suggestion either way. A `csusb.major` / `csusb.school` value on only one side is still decided by the core rule. Storage: `elm_aux_logic`.
+
 ### 4.6 Display
 
 - **Highlight Rows** (`elm_highlight_rows`, default on): the pick colours on rows and the applicant band.
@@ -245,16 +249,16 @@ Only rows where the two sides differ (conflicts) are considered. Rules run **in 
 | 0 | Blank side | If either value is empty, the row is skipped (no opinion) |
 | 1 | **Applicant side** (outranks everything) | If an applicant side exists, every conflict row follows it. Detection: a *Cal State Apply Application* entry on only one side wins; if on both, the later application date wins (left on a tie/no date); otherwise an `Application Start/Submit/Complete` or `Admit` type entry on one side; if both, the side with more such entries, then the later date. Only used for UnderGrad pairs |
 | 2 | Blank-vs-data | One side blank ("-") and the other has data: no opinion, Bolt's pick stays |
-| 3 | Milestone type match | Rows like `type: X, Mon dd, yyyy` where both sides have the same type: left |
+| 3 | Milestone type match *(auxiliary logic)* | Rows like `type: X, Mon dd, yyyy` where both sides have the same type: the **more recent profile** (auxiliary logic on); no suggestion when it is off |
 | 4 | **Personal email preferred** | Email rows: the side with a personal-domain address (gmail, yahoo, icloud, hotmail, aol, me.com, outlook, live, msn, protonmail, proton.me) wins when only one side is personal. Both personal: flagged for the tiebreak below |
-| 5 | **csusb.major** | The side with `csusb.major.` wins; if both, follow the selected email side |
-| 6 | Encoura / College Board ID | Both sides present: left |
-| 7 | **csusb.school** | Student Type rows: the side with `csusb.school.<n>` wins; if both, follow the selected email side |
+| 5 | **csusb.major** | The side with `csusb.major.` wins; if both have it: the **more recent profile** (auxiliary logic on), otherwise no suggestion |
+| 6 | Encoura / College Board ID *(auxiliary logic)* | Both sides present: the **more recent profile** (auxiliary logic on); no suggestion when it is off |
+| 7 | **csusb.school** | Student Type rows: the side with `csusb.school.<n>` wins; if both have it: the **more recent profile** (auxiliary logic on), otherwise no suggestion |
 | 8 | Date of birth validity | Reject a year that starts with 0 or is below 1900 |
 | 9 | First generation | Prefer `Yes` over `No` |
 | 10 | Intended term | Prefer the later term code in parentheses, e.g. `(2274)` |
 | 11 | Name case | If the values differ only by case, prefer Title Case over ALL CAPS or all lower-case |
-| 12 | Legacy default → left | Any row whose text matches `Spark Id:`, `type: Created, name: Record Created`, `type: Custom`, `type: … name:`, `type: Web`, `[ACUx]` or `Outreach_UGRD_` defaults to the left side (never an empty side) |
+| 12 | System entries *(auxiliary logic)* | Any row whose text matches `Spark Id:`, `type: Created, name: Record Created`, `type: Custom`, `type: … name:`, `type: Web`, `[ACUx]` or `Outreach_UGRD_`: the **more recent profile** (auxiliary logic on); no suggestion when it is off |
 
 **Dual personal-email tiebreak** (both emails personal): prefer the address containing a first name, then a last name (parts of 3+ letters of either contact's name), then the birth year (or its last 3/2 digits) from the DOB rows. If none separates them there is **no pick** (the row is left for you), exactly as in the classic script.
 
@@ -400,6 +404,7 @@ Header `DB: N` pill, the Database section of the settings pane, the **Show Datab
 | `elm_range_level`, `elm_auto_apply_level`, `elm_auto_click_fab` | main | Legacy slider values, read once to initialise `elm_range_level2` |
 | `elm_csv_database` | CSV | Recorded pairs (JSON array) |
 | `elm_show_db_ui` | CSV | Show Database UI |
+| `elm_aux_logic` | main | Auxiliary logic (default off) |
 
 ### 12.3 Console output (page console, F12 → filter `elm2` or `CSV Database`)
 

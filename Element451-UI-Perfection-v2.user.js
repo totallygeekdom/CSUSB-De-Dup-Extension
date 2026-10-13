@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.88
+// @version      2.89
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-88'; // keep in sync with @version (2.88)
+    const BUILD = 'v2-build-89'; // keep in sync with @version (2.89)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -1019,14 +1019,48 @@
     // Rows per page can only be set through (1).
     // =========================================================
     const PAGER_RANGE = /(\d[\d,]*)\s*[\u2013\u2014-]\s*(\d[\d,]*)\s+of\s+(\d[\d,]*)/i;
+    // The MatPaginator instance is not exposed by Angular in production builds. It is reachable
+    // through the DOM's __ngContext__ (an Angular "LView" array that holds the directive
+    // instances of the view the element was created in): search this element's context and its
+    // ancestors', also one level into any component instance found there (e.g. a parent component
+    // holding the paginator as a ViewChild).
+    const isPaginatorLike = (o) => !!o && typeof o === 'object' && !(o instanceof Node) &&
+        typeof o.nextPage === 'function' && typeof o._emitPageEvent === 'function' && 'pageIndex' in o;
     function getPaginatorInstance(pag) {
-        let ctx = pag && pag.__ngContext__;
-        if (ctx && !Array.isArray(ctx) && Array.isArray(ctx.lView)) ctx = ctx.lView;
-        if (!Array.isArray(ctx)) return null;
-        for (const o of ctx) {
-            if (o && typeof o === 'object' && typeof o.nextPage === 'function' && typeof o._emitPageEvent === 'function' && 'pageIndex' in o) return o;
+        if (!pag) return null;
+        if (pag.__elm2Paginator && isPaginatorLike(pag.__elm2Paginator)) return pag.__elm2Paginator;
+        let el = pag;
+        for (let depth = 0; el && depth < 10; depth++, el = el.parentElement) {
+            let ctx = el.__ngContext__;
+            if (ctx && !Array.isArray(ctx) && Array.isArray(ctx.lView)) ctx = ctx.lView;
+            if (!Array.isArray(ctx)) continue;
+            const items = ctx.length > 3000 ? ctx.slice(0, 3000) : ctx;
+            for (const o of items) {
+                if (isPaginatorLike(o)) { pag.__elm2Paginator = o; return o; }
+            }
+            for (const o of items) {
+                if (!o || typeof o !== 'object' || o instanceof Node || Array.isArray(o)) continue;
+                let keys;
+                try { keys = Object.keys(o); } catch (e) { continue; }
+                for (const k of keys.slice(0, 80)) {
+                    let v; try { v = o[k]; } catch (e) { continue; }
+                    if (isPaginatorLike(v)) { pag.__elm2Paginator = v; return v; }
+                }
+            }
         }
         return null;
+    }
+    // For the console when the component can't be found: what the context looks like (no data).
+    function describePaginatorContext(pag) {
+        const ctx = pag && pag.__ngContext__;
+        const out = { ctxType: typeof ctx, isArray: Array.isArray(ctx), length: Array.isArray(ctx) ? ctx.length : null };
+        if (Array.isArray(ctx)) {
+            const names = new Set();
+            ctx.forEach(o => { if (o && typeof o === 'object' && !(o instanceof Node) && !Array.isArray(o) && o.constructor && o.constructor.name) names.add(o.constructor.name); });
+            out.constructors = Array.from(names).slice(0, 40);
+            out.withPageIndex = ctx.filter(o => o && typeof o === 'object' && 'pageIndex' in o).length;
+        }
+        return out;
     }
     const rangeLabelText = (pag) => ((pag.querySelector('.mat-mdc-paginator-range-label') || {}).textContent || '').trim();
     function readPagerState(pag) {
@@ -1072,7 +1106,7 @@
         const info = { foundComponent: !!inst, hasChangePageSize: !!(inst && typeof inst._changePageSize === 'function'),
             sizeBefore: inst && inst.pageSize, options: inst && inst.pageSizeOptions, requested: rows };
         if (!inst || !info.hasChangePageSize) {
-            console.log('[elm2] rows per page: not possible', JSON.stringify(info));
+            console.log('[elm2] rows per page: not possible', JSON.stringify(Object.assign(info, { context: describePaginatorContext(pag) })));
             showMergeNotice('Rows per page can’t be changed here.');
             return false;
         }

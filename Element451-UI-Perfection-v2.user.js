@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.95
+// @version      2.97
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-95'; // keep in sync with @version (2.95)
+    const BUILD = 'v2-build-97'; // keep in sync with @version (2.97)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -217,7 +217,7 @@
         elm-review-queue-filters-sidebar .bolt-field-range-controls { display: grid !important; grid-template-columns: 1fr 1fr; gap: 8px !important; }
         elm-review-queue-filters-sidebar .bolt-field-range-controls .bolt-form-field-label-wrapper { display: block; margin: 0 0 2px !important; }
         elm-review-queue-filters-sidebar .bolt-field-range-controls bolt-label { font-size: 12px !important; line-height: 16px !important; letter-spacing: .4px; color: var(--md-on-surface-variant) !important; }
-        elm-review-queue-filters-sidebar input[boltinput][type="date"]:not(#elm2x) { box-sizing: border-box; width: 100%; height: 40px; padding: 0 12px; border: 1px solid var(--md-outline); border-radius: 8px; background: transparent; color: var(--md-on-surface); font-family: inherit; font-size: 14px; line-height: 20px; }
+        elm-review-queue-filters-sidebar input[boltinput][type="date"]:not(#elm2x) { box-sizing: border-box; width: 140px; max-width: 100%; height: 40px; padding: 0 12px; border: 1px solid var(--md-outline); border-radius: 8px; background: transparent; color: var(--md-on-surface); font-family: inherit; font-size: 14px; line-height: 20px; }
         elm-review-queue-filters-sidebar input[boltinput][type="date"]:not(#elm2x):hover { border-color: var(--md-on-surface); }
         elm-review-queue-filters-sidebar input[boltinput][type="date"]:not(#elm2x):focus { outline: none; border: 2px solid var(--md-primary); padding: 0 11px; }
         /* tighter vertical rhythm: one-line section headers, labels beside their controls */
@@ -233,7 +233,9 @@
         elm-review-queue-filters-sidebar bolt-field { display: grid !important; grid-template-columns: 132px minmax(0, 1fr); align-items: center !important; column-gap: 8px !important; row-gap: 0 !important; }
         elm-review-queue-filters-sidebar .bolt-chip-list-wrapper { gap: 8px !important; }
         elm-review-queue-filters-sidebar bolt-chip-check.bolt-chip { height: 32px !important; padding: 0 12px !important; font-size: 14px !important; }
-        elm-review-queue-filters-sidebar .bolt-field-range-controls { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important; gap: 12px !important; }
+        elm-review-queue-filters-sidebar .bolt-field-range-controls { display: flex !important; flex-wrap: nowrap !important; justify-content: flex-start !important; gap: 8px 16px !important; }
+        elm-review-queue-filters-sidebar bolt-field .bolt-field-input { display: block !important; }
+        elm-review-queue-filters-sidebar .bolt-field-range-controls bolt-form-field { flex: 0 0 auto !important; }
         elm-review-queue-filters-sidebar .bolt-field-range-controls bolt-form-field,
         elm-review-queue-filters-sidebar .bolt-field-range-controls .bolt-form-field-wrapper,
         elm-review-queue-filters-sidebar .bolt-field-range-controls .bolt-form-field-input-wrapper,
@@ -242,7 +244,7 @@
         elm-review-queue-filters-sidebar .bolt-field-range-controls bolt-label { text-transform: none !important; }
         elm-review-queue-filters-sidebar .bolt-field-range-controls .bolt-form-field-wrapper { display: flex !important; align-items: center !important; gap: 6px !important; }
         elm-review-queue-filters-sidebar .bolt-field-range-controls .bolt-form-field-label-wrapper { margin: 0 !important; flex: 0 0 auto; }
-        elm-review-queue-filters-sidebar .bolt-field-range-controls .bolt-form-field-input-wrapper { flex: 1 1 auto; min-width: 0; }
+        elm-review-queue-filters-sidebar .bolt-field-range-controls .bolt-form-field-input-wrapper { flex: 0 0 auto; min-width: 0; }
         elm-review-queue-filters-sidebar input[boltinput][type="date"]:not(#elm2x) { height: 40px; padding: 0 12px; font-size: 14px; }
         elm-review-queue-filters-sidebar input[boltinput][type="date"]:not(#elm2x):focus { padding: 0 11px; }
         .elm2-pager { display: inline-flex; align-items: center; gap: 8px; margin-right: 12px; font: 400 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; color: var(--md-on-surface-variant); }

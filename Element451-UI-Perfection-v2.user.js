@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.104
+// @version      2.105
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-104'; // keep in sync with @version (2.104)
+    const BUILD = 'v2-build-105'; // keep in sync with @version (2.105)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -2273,6 +2273,17 @@
             _rows.forEach(r => { const rl = r.element.dataset.elm2Rule; if (r.element.dataset.elm2ScriptSide) _byRule[rl || '(unknown)'] = (_byRule[rl || '(unknown)'] || 0) + 1; });
             console.log('[elm2] Suggestions by rule:', JSON.stringify(_byRule));
             computeAutoApplyForPair();
+            // Why a pick did / did not land: range inputs now, then each of our rows' state once the clicks have settled.
+            console.log('[elm2] Range check — slider level', CFG.RANGE_LEVEL, '| score chip:', getScoreChipLevel() || '(not read)',
+                '| in range:', pairInRange, '| use picks from:', CFG.USE_PICKS, '| applying:', autoApplyThisPair);
+            setTimeout(() => {
+                if (getPairKey() !== phaseOnePairKey) return;
+                getDiffRows().filter(r => r.element.dataset.elm2ScriptSide).forEach(r => {
+                    const landed = r.nativeSide === r.element.dataset.elm2ScriptSide;
+                    console.log('[elm2] Pick check —', r.label, '| ours:', r.element.dataset.elm2ScriptSide, '| selected now:', r.nativeSide || '(none)',
+                        '| rule:', r.element.dataset.elm2Rule, landed ? '| OK' : '| NOT APPLIED');
+                });
+            }, 1200);
             // Outside the slider range: skipped with Auto-Skip on (no popup), otherwise left for you.
             // (Slider on None = no pair is in range, so with Auto-Skip on every pair is skipped.)
             if (!pairInRange && CFG.AUTO_SKIP_BLOCKED) {

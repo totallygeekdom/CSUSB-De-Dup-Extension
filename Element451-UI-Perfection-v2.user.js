@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.112
+// @version      2.113
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-112'; // keep in sync with @version (2.112)
+    const BUILD = 'v2-build-113'; // keep in sync with @version (2.113)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -157,7 +157,14 @@
         #elm2-merge-overlay .elm2-ring-arc { fill: none; stroke: #b3261e; stroke-width: 8; stroke-linecap: round; stroke-dasharray: 276.46; stroke-dashoffset: 0; transition: stroke-dashoffset .8s cubic-bezier(.2, 0, 0, 1); }
         #elm2-merge-overlay #elm2-merge-count { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 57px; line-height: 64px; font-weight: 400; color: #b3261e; }
         #elm2-merge-overlay #elm2-merge-title { margin: 0 8px 8px; font-size: 24px; line-height: 32px; font-weight: 400; color: #1a1c20; }
-        #elm2-merge-overlay #elm2-merge-summary { margin: 0 12px 32px; font-size: 14px; line-height: 20px; letter-spacing: .25px; color: #434750; }
+        #elm2-merge-overlay #elm2-merge-summary { margin: 0 12px 32px; font-size: 15px; line-height: 22px; letter-spacing: .15px; color: #434750; }
+        #elm2-merge-overlay #elm2-merge-summary .brief-line { margin: 0 0 6px; }
+        #elm2-merge-overlay #elm2-merge-summary .brief-names { font-size: 17px; line-height: 24px; font-weight: 600; color: #1a1c20; margin-bottom: 10px; }
+        #elm2-merge-overlay #elm2-merge-summary .brief-note { font-size: 13px; }
+        #elm2-merge-overlay #elm2-merge-summary b { font-weight: 700; color: #1a1c20; }
+        #elm2-merge-overlay #elm2-merge-summary .brief-score-high { color: #2e7d32; }
+        #elm2-merge-overlay #elm2-merge-summary .brief-score-medium { color: #ef6c00; }
+        #elm2-merge-overlay #elm2-merge-summary .brief-score-low { color: #d32f2f; }
         #elm2-merge-overlay #elm2-merge-cancel { position: relative; width: 100%; height: 48px; border: none; border-radius: 24px; background: #b3261e; color: #fff; font-family: inherit; font-weight: 500; font-size: 14px; line-height: 20px; letter-spacing: .1px; cursor: pointer; overflow: hidden; transition: box-shadow .2s var(--md-ease); }
         #elm2-merge-overlay #elm2-merge-cancel::after { content: ''; position: absolute; inset: 0; background: #fff; opacity: 0; transition: opacity .2s var(--md-ease); }
         #elm2-merge-overlay #elm2-merge-cancel:hover { box-shadow: var(--md-elev-1); }
@@ -2202,7 +2209,7 @@
                         <span id="elm2-merge-count"></span>
                     </div>
                     <h2 id="elm2-merge-title">Merging automatically</h2>
-                    <p id="elm2-merge-summary"></p>
+                    <div id="elm2-merge-summary"></div>
                     <button type="button" id="elm2-merge-cancel">Cancel</button>
                 </div>`;
             document.body.appendChild(ov);
@@ -2222,28 +2229,44 @@
         hideMergeBar();
         if (wasRunning && message) showMergeNotice(message);
     }
-    // Plain-language overview of what is about to be merged.
-    function mergeOverview() {
+    // The auto-merge brief: who, Bolt's score, how often the script agrees with Bolt, and what it
+    // chose over Bolt. Built from DOM nodes (no HTML strings, so contact names are never parsed as markup).
+    function renderMergeBrief(box) {
+        const line = (cls) => { const d = document.createElement('div'); d.className = 'brief-line ' + (cls || ''); box.appendChild(d); return d; };
+        const text = (parent, t) => parent.appendChild(document.createTextNode(t));
+        const strong = (parent, t, cls) => { const b = document.createElement('b'); if (cls) b.className = cls; b.textContent = t; parent.appendChild(b); };
+        box.textContent = '';
         const names = getContactNames().filter(Boolean);
-        const rows = getDiffRows().filter(r => r.isConflict);
-        let bolt = 0, ours = 0;
-        const rules = new Set();
-        rows.forEach(r => {
-            const d = r.element.dataset;
-            if (d.elm2ScriptSide && r.nativeSide === d.elm2ScriptSide && d.elm2ScriptSide !== d.elm2AiSide) {
-                ours++;
-                if (d.elm2Rule) rules.add(d.elm2Rule);
-            } else bolt++;
-        });
-        const who = names.length === 2 ? `${names[0]} and ${names[1]}` : 'these two contacts';
-        const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
-        let detail;
-        if (rows.length === 0) detail = 'They have no conflicting fields.';
-        else {
-            const ruleText = rules.size ? ' (' + Array.from(rules).slice(0, 4).join(', ') + (rules.size > 4 ? ', …' : '') + ')' : '';
-            detail = `${plural(rows.length, 'field')} conflict: ${bolt} follow${bolt === 1 ? 's' : ''} Bolt's pick and ${ours} follow${ours === 1 ? 's' : ''} ours${ruleText}.`;
+        text(line('brief-names'), names.length === 2 ? names.join(' | ') : 'These two contacts');
+        const score = getScoreChipLevel();
+        if (score) {
+            const l = line();
+            text(l, 'Bolt score: ');
+            strong(l, score.charAt(0).toUpperCase() + score.slice(1), 'brief-score brief-score-' + score);
         }
-        return `About to merge ${who}. ${detail}`;
+        const picks = getDiffRows().filter(r => r.isConflict && r.element.dataset.elm2ScriptSide && r.element.dataset.elm2AiSide);
+        const over = picks.filter(r => r.element.dataset.elm2ScriptSide !== r.element.dataset.elm2AiSide);
+        if (picks.length === 0) { text(line(), "No script picks; Bolt's picks stand."); return; }
+        const agree = line();
+        text(agree, 'Script agrees with ');
+        strong(agree, (picks.length - over.length) + '/' + picks.length);
+        if (over.length === 0) return;
+        const l = line();
+        const ours = CFG.USE_PICKS === 'ours';
+        if (findApplicantSide()) {
+            text(l, 'Script found ');
+            strong(l, 'applicant');
+            text(l, ours ? ' and chose ' : ' and differs on ');
+        } else {
+            text(l, ours ? 'Script chose ' : 'Script differs on ');
+        }
+        strong(l, String(over.length));
+        if (ours) text(l, ' over Bolt');
+        if (!findApplicantSide()) {
+            const labels = Array.from(new Set(over.map(r => r.label).filter(Boolean)));
+            text(l, ': ' + labels.slice(0, 4).join(', ') + (labels.length > 4 ? ' +' + (labels.length - 4) + ' more' : ''));
+        } else text(l, '.');
+        if (!ours) { const n = line('brief-note'); text(n, "Bolt's picks are used."); }
     }
     // Final gate before the merge click. Returns { ok, reason }.
     function mergeReadiness(key) {
@@ -2264,7 +2287,7 @@
         const total = CFG.MERGE_COUNTDOWN;
         let left = total;
         const arc = ov.querySelector('.elm2-ring-arc');
-        document.getElementById('elm2-merge-summary').textContent = mergeOverview();
+        renderMergeBrief(document.getElementById('elm2-merge-summary'));
         // The ring drains one step per second, in time with the number.
         const CIRC = 276.46;
         const render = () => {

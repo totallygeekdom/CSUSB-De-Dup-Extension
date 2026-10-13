@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.100`, shown in the settings pane and console as `v2-build-100` |
+| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.101`, shown in the settings pane and console as `v2-build-101` |
 | CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.21` |
 
 The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
@@ -121,18 +121,18 @@ All settings are in the gear (⚙) pane. Settings are stored in `localStorage` u
 
 ### 4.1 Pairs in range (slider)
 
-Six positions, **each adding to the one before**:
+Five positions, chosen by **Bolt score**, **each adding to the one before**:
 
 | Position | Pairs in range |
 |---|---|
 | **None** | no pair is in range |
-| **Applicant** | pairs with an applicant side |
-| **High** | applicant pairs plus Bolt score **High** |
-| **Medium** | those plus **Medium** |
-| **Low** | those plus **Low** |
+| **High** | Bolt score **High** |
+| **Medium** | **High** and **Medium** |
+| **Low** | **High**, **Medium** and **Low** |
 | **All** | every pair, even one with no score chip |
 
-A pair with an applicant side is in range at every position except None. On Low/Medium/High the script waits up to 3 seconds for the score chip to render before deciding.
+An applicant side does **not** put a pair in range (applicants can have any score); the applicant rule only
+affects *which side is picked* when **Use picks from = Ours** ([section 7](#7-field-resolution-rules)). On High, Medium and Low the script waits up to 3 seconds for the score chip to render before deciding.
 
 What "in range" means:
 
@@ -140,7 +140,7 @@ What "in range" means:
 - Out of range: with **Auto-Skip on** the pair is skipped (no popup); with Auto-Skip off it is left for you untouched.
 - **None with Auto-Skip on skips every pair** (see [scan mode](#53-scan-mode)).
 
-Storage: `elm_range_level` (0–5). A value saved by the older slider (`elm_auto_apply_level`: 0 none, 1 applicant, 2 low, 3 medium, 4 all) is mapped once to the nearest new position, and the older boolean `elm_auto_click_fab` is honoured as a final fallback.
+Storage: `elm_range_level2` (0-4). Earlier builds had an *Applicant* stop and used `elm_range_level` (0-5); that value is mapped once (Applicant becomes High), and the oldest `elm_auto_apply_level` and `elm_auto_click_fab` are honoured as fallbacks.
 
 ### 4.2 Use picks from
 
@@ -195,7 +195,7 @@ Download / Upload & Replace / Clear Database (added by the CSV script, [section 
 
 1. **Blockers** ([section 6](#6-blockers-lockdowns)). If any apply: red lockdown styling; the pair is recorded; then **Auto-Skip on** → skip, **off** → stop (the appeal popup shows if it is an appeal pair).
 2. Wait for Bolt's defaults to be captured (up to 3 s) and, on Low/Medium/High, the score chip (up to 3 s).
-3. Compute whether the pair is **in range**.
+3. Compute whether the pair is **in range** (by Bolt score only).
 4. Run field resolution ([section 7](#7-field-resolution-rules)); apply per **Use picks from**.
 5. About 0.6 s later, re-check blockers (more rows may have loaded) and run resolution again.
 6. If out of range and Auto-Skip on → skip. (Otherwise continue.)
@@ -388,7 +388,7 @@ Header `DB: N` pill, the Database section of the settings pane, the **Show Datab
 
 | Key | Used by | Purpose |
 |---|---|---|
-| `elm_range_level` | main | Slider position 0–5 |
+| `elm_range_level2` | main | Slider position 0–4 (None, High, Medium, Low, All) |
 | `elm_use_picks` | main | `ours` / `bolt` |
 | `elm_when_done` (**sessionStorage**) | main | `wait` / `merge`, reset every browser session |
 | `elm_merge_countdown` | main | Cancel window seconds (2–15) |
@@ -397,7 +397,7 @@ Header `DB: N` pill, the Database section of the settings pane, the **Show Datab
 | `elm_allowed_department` | main | Allowed Department |
 | `elm_show_merge_counter` | main | Hidden: show the merge counter |
 | `elm_merge_count` | main | Merge counter value |
-| `elm_auto_apply_level`, `elm_auto_click_fab` | main | Legacy, read once to initialise `elm_range_level` |
+| `elm_range_level`, `elm_auto_apply_level`, `elm_auto_click_fab` | main | Legacy slider values, read once to initialise `elm_range_level2` |
 | `elm_csv_database` | CSV | Recorded pairs (JSON array) |
 | `elm_show_db_ui` | CSV | Show Database UI |
 
@@ -446,7 +446,7 @@ Header `DB: N` pill, the Database section of the settings pane, the **Show Datab
 - **Initial port**: both classic scripts copied and adapted to the new layout (diff-form rows, queue table).
 - **Safety**: auto-skip never clicks Dismiss; Dismiss/Confirm click guard; Merge Contacts is never clicked unless auto-merge is enabled.
 - **Colours and AI**: Bolt-pick recording, green/blue/orange pick colours, applicant yellow band, comparison bar with *Use Bolt AI picks / Use our picks*, score-chip colours, pinned queue nav, Material 3 restyle of the gear, settings pane, toggles and slider.
-- **Automation rework**: slider None → Applicant → High → Medium → Low → All, **Use picks from**, **When done** with the cancel countdown (dialog with draining stepped ring), **Merge countdown** setting, Auto-Skip covering blocked / out-of-range / twins pairs, no popups for skipped pairs, scan mode.
+- **Automation rework**: slider None → High → Medium → Low → All (an earlier build had an Applicant stop, removed because applicants can have any score), **Use picks from**, **When done** with the cancel countdown (dialog with draining stepped ring), **Merge countdown** setting, Auto-Skip covering blocked / out-of-range / twins pairs, no popups for skipped pairs, scan mode.
 - **CSV Database v2**: keyed on Spark IDs (the URL no longer changes), names stored as 3-letter prefixes, two-contact columns, header-based import, list matching via the list API's `identities[]`, record-before-skip handshake, right-aligned badges, Show Database UI toggle, shared toast stack.
 - **Website restyles**: orange Material 3 palette sampled from Element's header, Material 3 tabs, compact Advanced Filters panel, list pager (Page box + Go), hover preview on the comparison buttons, gear icon as an SVG.
 - **Fixes along the way**: stall on identical consecutive names / disabled Next button, twins warning signal count, cut-off date text in filters, clipped filters panel, selected-chip colour specificity.

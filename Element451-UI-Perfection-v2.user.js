@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.102
+// @version      2.103
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-102'; // keep in sync with @version (2.102)
+    const BUILD = 'v2-build-103'; // keep in sync with @version (2.103)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -66,6 +66,10 @@
         // Seconds of the auto-merge cancel window (never below 2: the window is required).
         MERGE_COUNTDOWN:          { get() { const v = parseInt(localStorage.getItem('elm_merge_countdown'), 10); return isNaN(v) ? 4 : Math.max(2, Math.min(15, v)); } },
         WHEN_DONE:                { get() { try { return sessionStorage.getItem('elm_when_done') === 'merge' ? 'merge' : 'wait'; } catch (e) { return 'wait'; } } },
+        // Auxiliary logic: extra tie-breaking rules (milestone entries, csusb.major / csusb.school when both
+        // sides have it, Encoura / College Board IDs, legacy system entries) that pick the more recent
+        // profile. Off (default): those rows get no suggestion and Bolt's pick stays.
+        AUX_LOGIC:                { get() { return getBoolSetting('elm_aux_logic', false); } },
         HIGHLIGHT_ROWS:           { get() { return getBoolSetting('elm_highlight_rows', true); } },
         SHOW_MERGE_COUNTER:       { get() { return getBoolSetting('elm_show_merge_counter', false); } },
         AUTO_SKIP_BLOCKED:        { get() { return getBoolSetting('elm_auto_skip_blocked', true); } },
@@ -1584,6 +1588,21 @@
         }
         return null;
     }
+    // The profile that was created later, from the "Created <date>" line on each contact card (A = left,
+    // B = right). Returns 'left' / 'right', or null if either date is missing or they are equal.
+    function getMostRecentProfileSide() {
+        const created = getContactCards().map(card => {
+            const item = Array.from(card.querySelectorAll('.contact-card-meta-item')).find(it => {
+                const l = it.querySelector('.contact-card-meta-label');
+                return l && /created/i.test(l.textContent);
+            });
+            const v = item && item.querySelector('.contact-card-meta-value');
+            const m = v && v.textContent.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+            return m ? new Date(parseInt(m[3], 10), parseInt(m[1], 10) - 1, parseInt(m[2], 10)).getTime() : null;
+        });
+        if (created.length < 2 || created[0] === null || created[1] === null || created[0] === created[1]) return null;
+        return created[0] > created[1] ? 'left' : 'right';
+    }
     function autoResolveRows() {
         const applicantSide = findApplicantSide();
         const rows = getDiffRows().filter(r => r.isConflict && !r.element.dataset.elm2AutoResolved);
@@ -1607,13 +1626,15 @@
                 return;
             }
             // Milestone type matching (no applicant context)
-            currentRule = 'milestone type match -> left';
+            // (Auxiliary logic: picks the more recent profile; with it off the row gets no suggestion.)
+            currentRule = 'milestone type match -> more recent profile';
             if (text.match(/type:\s*\w+,\s*\w{3}\s+\d{1,2},\s*\d{4}/i)) {
                 const typePattern = /type:\s*(\w+),/i;
                 const leftTypeMatch = leftText.match(typePattern), rightTypeMatch = rightText.match(typePattern);
                 if (leftTypeMatch && rightTypeMatch && leftTypeMatch[1].toLowerCase() === rightTypeMatch[1].toLowerCase()) {
                     row.element.dataset.elm2AutoResolved = 'true';
-                    applyScriptPick(row, 'left');
+                    const recent = CFG.AUX_LOGIC ? getMostRecentProfileSide() : null;
+                    if (recent) applyScriptPick(row, recent);
                     return;
                 }
             }
@@ -1634,18 +1655,21 @@
                 if (leftHas && !rightHas) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'left'); return; }
                 if (rightHas && !leftHas) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'right'); return; }
                 if (leftHas && rightHas) {
-                    const emailSide = getSelectedEmailSide();
-                    if (emailSide) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, emailSide); }
+                    // both have it: auxiliary logic -> more recent profile; off -> Bolt's pick stays
+                    row.element.dataset.elm2AutoResolved = 'true';
+                    const recent = CFG.AUX_LOGIC ? getMostRecentProfileSide() : null;
+                    if (recent) { currentRule = 'csusb.major (both) -> more recent profile'; applyScriptPick(row, recent); }
                     return;
                 }
             }
             // Encoura / College Board ID — default left when both sides have it
-            currentRule = 'Encoura/College Board ID -> left';
-            if (/Encoura Id:/i.test(leftText) && /Encoura Id:/i.test(rightText)) {
-                row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'left'); return;
-            }
-            if (/College Board Id:/i.test(leftText) && /College Board Id:/i.test(rightText)) {
-                row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'left'); return;
+            // (Auxiliary logic: more recent profile; off -> no suggestion.)
+            currentRule = 'Encoura/College Board ID -> more recent profile';
+            if ((/Encoura Id:/i.test(leftText) && /Encoura Id:/i.test(rightText)) || (/College Board Id:/i.test(leftText) && /College Board Id:/i.test(rightText))) {
+                row.element.dataset.elm2AutoResolved = 'true';
+                const recent = CFG.AUX_LOGIC ? getMostRecentProfileSide() : null;
+                if (recent) applyScriptPick(row, recent);
+                return;
             }
             // csusb.school preference (Student Type rows)
             currentRule = 'csusb.school';
@@ -1656,8 +1680,10 @@
                 if (rightHas && !leftHas) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'right'); return; }
                 if (!leftHas && !rightHas) return;
                 if (leftHas && rightHas) {
-                    const emailSide = getSelectedEmailSide();
-                    if (emailSide) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, emailSide); }
+                    // both have it: auxiliary logic -> more recent profile; off -> Bolt's pick stays
+                    row.element.dataset.elm2AutoResolved = 'true';
+                    const recent = CFG.AUX_LOGIC ? getMostRecentProfileSide() : null;
+                    if (recent) { currentRule = 'csusb.school (both) -> more recent profile'; applyScriptPick(row, recent); }
                     return;
                 }
             }
@@ -1700,7 +1726,7 @@
                     if (isTitleCase(leftText) && !isTitleCase(rightText)) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'left'); return; }
                 }
             }
-            // Legacy default-to-left patterns (only reached with no applicant context)
+            // System-generated entries (only reached with no applicant context)
             const legacyPatterns = [
                 /Spark Id:/i,
                 /type:\s*Created,\s*name:\s*Record Created/i,
@@ -1712,10 +1738,12 @@
             ];
             // Matches on the whole row, as in the classic script. A blank left side
             // never reaches here: the blank-side rule above picks the filled side first.
-            currentRule = 'legacy default -> left';
+            // (Auxiliary logic: more recent profile; off -> no suggestion.)
+            currentRule = 'system entry -> more recent profile';
             if (legacyPatterns.some(p => p.test(text))) {
                 row.element.dataset.elm2AutoResolved = 'true';
-                applyScriptPick(row, 'left');
+                const recent = CFG.AUX_LOGIC ? getMostRecentProfileSide() : null;
+                if (recent) applyScriptPick(row, recent);
             }
         });
     }
@@ -2429,6 +2457,8 @@
                 </div>
                 <div class="setting-row"><label>Auto-Skip</label>${toggleHtml('elm-auto-skip-blocked')}</div>
                 <div class="elm-level-desc elm-skip-desc">Skips blocked, out-of-range and possible-twins pairs with no popup. Off: stops on them instead.</div>
+                <div class="setting-row"><label>Auxiliary logic</label>${toggleHtml('elm-aux-logic')}</div>
+                <div class="elm-level-desc elm-aux-desc">Extra tie-breakers for milestone entries, csusb.major / csusb.school (both sides), Encoura / College Board IDs and system entries: picks the more recent profile (card "Created" date). Off: Bolt's pick stays.</div>
                 <div class="settings-section-title">Display</div>
                 <div class="setting-row"><label>Highlight Rows</label>${toggleHtml('elm-highlight-rows')}</div>
                 <div class="settings-section-title">Department</div>
@@ -2522,10 +2552,11 @@
         syncCountdown();
         setupToggle('elm-auto-skip-blocked', 'elm_auto_skip_blocked');
         setupToggle('elm-highlight-rows', 'elm_highlight_rows');
-        function setupToggle(elementId, storageKey, onChange) {
+        setupToggle('elm-aux-logic', 'elm_aux_logic', null, false);
+        function setupToggle(elementId, storageKey, onChange, defaultValue = true) {
             const el = document.getElementById(elementId);
             if (!el) return;
-            el.checked = getBoolSetting(storageKey, true);
+            el.checked = getBoolSetting(storageKey, defaultValue);
             el.addEventListener('change', () => {
                 localStorage.setItem(storageKey, String(el.checked));
                 if (onChange) onChange();

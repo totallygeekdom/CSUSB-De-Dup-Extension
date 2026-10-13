@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.107`, shown in the settings pane and console as `v2-build-107` |
+| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.108`, shown in the settings pane and console as `v2-build-108` |
 | CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.22` |
 
 The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
@@ -405,6 +405,7 @@ Header `DB: N` pill, the Database section of the settings pane, the **Show Datab
 | `elm_csv_database` | CSV | Recorded pairs (JSON array) |
 | `elm_show_db_ui` | CSV | Show Database UI |
 | `elm_aux_logic` | main | Auxiliary logic (default off) |
+| `elm2_bolt_picks` | main | Bolt's original pick per conflicting row (hashed ids, `l`/`r` + timestamp, capped at 2,500 entries). Element451 saves the selection on a pair, so on a second visit the screen shows the last selection rather than Bolt's pick; this keeps Bolt's real pick for the colours and *Use Bolt AI picks* |
 
 ### 12.3 Console output (page console, F12 → filter `elm2` or `CSV Database`)
 

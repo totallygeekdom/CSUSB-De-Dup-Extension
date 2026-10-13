@@ -12,7 +12,7 @@ chip). Two v2 scripts target it:
 
 | Script | File | Current version |
 |---|---|---|
-| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.107` (`v2-build-107`, shown in the settings pane) |
+| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.108` (`v2-build-108`, shown in the settings pane) |
 | CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.22` |
 
 **Full documentation: [`Full-Documentation-v2.md`](Full-Documentation-v2.md)** (architecture, every setting,
@@ -337,3 +337,4 @@ The CSV Database script depends on UI Perfection for DOM structure and signals. 
 | `elm_csv_database` | CSV Database v2 | Recorded pairs (JSON array, Spark-ID keyed) |
 | `elm_show_db_ui` | CSV Database v2 | Show Database UI |
 | `elm_aux_logic` | UI Perfection v2 | Auxiliary logic (default off) |
+| `elm2_bolt_picks` | UI Perfection v2 | Bolt's original pick per conflicting row, hashed (no names or emails), so a revisited pair still shows what Bolt picked |

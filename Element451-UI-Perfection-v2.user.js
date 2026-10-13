@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.86
+// @version      2.88
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-86'; // keep in sync with @version (2.86)
+    const BUILD = 'v2-build-88'; // keep in sync with @version (2.88)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -157,7 +157,6 @@
         @keyframes elm2-count-in { from { opacity: 0; transform: scale(.7); } to { opacity: 1; transform: scale(1); } }
         #elm2-merge-overlay #elm2-merge-cancel:focus-visible { outline: 3px solid rgba(179, 38, 30, .4); outline-offset: 2px; }
         /* --- Advanced Filters sidebar (list page): compact, Material 3 --- */
-        .cdk-overlay-pane:has(elm-review-queue-filters-sidebar) { width: min(480px, 100vw) !important; }
         elm-review-queue-filters-sidebar .bolt-stackable-sidebar-content { background: var(--md-surface-container-low) !important; color: var(--md-on-surface); font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; }
         elm-review-queue-filters-sidebar .bolt-stackable-sidebar-header-wrapper { display: flex !important; flex-wrap: nowrap !important; padding: 12px 16px 12px 8px !important; min-height: 0 !important; gap: 8px !important; align-items: center !important; border-bottom: 1px solid color-mix(in srgb, var(--md-outline) 25%, transparent) !important; background: transparent !important; }
         elm-review-queue-filters-sidebar .bolt-stackable-sidebar-header-wrapper bolt-stackable-sidebar-header { flex: 1 1 auto !important; min-width: 0 !important; }
@@ -172,7 +171,7 @@
         elm-review-queue-filters-sidebar .bolt-stackable-sidebar-header-actions button.bolt-button-disabled { background: rgba(26, 28, 32, .12) !important; color: rgba(26, 28, 32, .38) !important; box-shadow: none !important; }
         elm-review-queue-filters-sidebar .bolt-copilot-button { display: none !important; }
         elm-review-queue-filters-sidebar bolt-stackable-sidebar-body { padding: 12px 16px 16px !important; }
-        elm-review-queue-filters-sidebar bolt-stackable-sidebar-section { display: block; margin: 0 0 8px !important; padding: 12px 16px 14px !important; border-radius: 16px; background: var(--md-surface-container); }
+        elm-review-queue-filters-sidebar bolt-stackable-sidebar-section { display: block; margin: 0 0 8px !important; padding: 12px 16px 14px !important; border: none !important; border-radius: 16px !important; box-shadow: none !important; background: var(--md-surface-container) !important; }
         elm-review-queue-filters-sidebar bolt-stackable-sidebar-section .title { margin: 0 0 10px !important; padding: 0 !important; }
         elm-review-queue-filters-sidebar bolt-stackable-sidebar-section .title-content h3 { margin: 0 !important; font-size: 14px !important; line-height: 20px !important; font-weight: 500 !important; letter-spacing: .1px; color: var(--md-on-surface) !important; }
         elm-review-queue-filters-sidebar bolt-stackable-sidebar-section .description { margin: 2px 0 0 !important; font-size: 12px !important; line-height: 16px !important; letter-spacing: .4px; color: var(--md-on-surface-variant) !important; }
@@ -200,23 +199,30 @@
         elm-review-queue-filters-sidebar input[boltinput][type="date"]:hover { border-color: var(--md-on-surface); }
         elm-review-queue-filters-sidebar input[boltinput][type="date"]:focus { outline: none; border: 2px solid var(--md-primary); padding: 0 11px; }
         /* tighter vertical rhythm: one-line section headers, labels beside their controls */
-        elm-review-queue-filters-sidebar .bolt-stackable-sidebar-header-wrapper { padding: 8px 12px 8px 4px !important; }
-        elm-review-queue-filters-sidebar bolt-stackable-sidebar-body { padding: 8px 12px 12px !important; }
-        elm-review-queue-filters-sidebar bolt-stackable-sidebar-section { margin: 0 0 6px !important; padding: 8px 12px 10px !important; border-radius: 12px; }
-        elm-review-queue-filters-sidebar bolt-stackable-sidebar-section .title { margin: 0 0 6px !important; }
+        elm-review-queue-filters-sidebar .bolt-stackable-sidebar-header-wrapper { padding: 12px 16px 12px 6px !important; }
+        elm-review-queue-filters-sidebar bolt-stackable-sidebar-body { padding: 12px 16px 16px !important; }
+        elm-review-queue-filters-sidebar bolt-stackable-sidebar-section { margin: 0 0 10px !important; padding: 14px 16px 16px !important; border-radius: 16px; }
+        elm-review-queue-filters-sidebar bolt-stackable-sidebar-section .title { margin: 0 0 12px !important; }
         elm-review-queue-filters-sidebar bolt-stackable-sidebar-section .title-content { display: flex !important; align-items: baseline !important; gap: 8px !important; min-width: 0; }
         elm-review-queue-filters-sidebar bolt-stackable-sidebar-section .title-content h3 { flex: 0 0 auto; }
         elm-review-queue-filters-sidebar bolt-stackable-sidebar-section .description { margin: 0 !important; flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        elm-review-queue-filters-sidebar bolt-fields { gap: 6px !important; }
+        elm-review-queue-filters-sidebar bolt-fields { gap: 14px !important; }
+        elm-review-queue-filters-sidebar bolt-fields, elm-review-queue-filters-sidebar bolt-field, elm-review-queue-filters-sidebar bolt-stackable-sidebar-section-content { border: none !important; box-shadow: none !important; background: transparent !important; }
         elm-review-queue-filters-sidebar bolt-field { display: grid !important; grid-template-columns: 132px minmax(0, 1fr); align-items: center !important; column-gap: 8px !important; row-gap: 0 !important; }
-        elm-review-queue-filters-sidebar .bolt-chip-list-wrapper { gap: 6px !important; }
-        elm-review-queue-filters-sidebar bolt-chip-check.bolt-chip { height: 28px !important; padding: 0 10px !important; font-size: 13px !important; }
-        elm-review-queue-filters-sidebar .bolt-field-range-controls { gap: 6px !important; }
+        elm-review-queue-filters-sidebar .bolt-chip-list-wrapper { gap: 8px !important; }
+        elm-review-queue-filters-sidebar bolt-chip-check.bolt-chip { height: 32px !important; padding: 0 12px !important; font-size: 14px !important; }
+        elm-review-queue-filters-sidebar .bolt-field-range-controls { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important; gap: 12px !important; }
+        elm-review-queue-filters-sidebar .bolt-field-range-controls bolt-form-field,
+        elm-review-queue-filters-sidebar .bolt-field-range-controls .bolt-form-field-wrapper,
+        elm-review-queue-filters-sidebar .bolt-field-range-controls .bolt-form-field-input-wrapper,
+        elm-review-queue-filters-sidebar .bolt-field-range-controls .bolt-form-field-infix { min-width: 0 !important; width: auto !important; max-width: 100% !important; }
+        elm-review-queue-filters-sidebar bolt-field .bolt-field-input { min-width: 0 !important; }
+        elm-review-queue-filters-sidebar .bolt-field-range-controls bolt-label { text-transform: none !important; }
         elm-review-queue-filters-sidebar .bolt-field-range-controls .bolt-form-field-wrapper { display: flex !important; align-items: center !important; gap: 6px !important; }
         elm-review-queue-filters-sidebar .bolt-field-range-controls .bolt-form-field-label-wrapper { margin: 0 !important; flex: 0 0 auto; }
         elm-review-queue-filters-sidebar .bolt-field-range-controls .bolt-form-field-input-wrapper { flex: 1 1 auto; min-width: 0; }
-        elm-review-queue-filters-sidebar input[boltinput][type="date"] { height: 34px; padding: 0 8px; font-size: 13px; }
-        elm-review-queue-filters-sidebar input[boltinput][type="date"]:focus { padding: 0 7px; }
+        elm-review-queue-filters-sidebar input[boltinput][type="date"] { height: 40px; padding: 0 12px; font-size: 14px; }
+        elm-review-queue-filters-sidebar input[boltinput][type="date"]:focus { padding: 0 11px; }
         .elm2-pager { display: inline-flex; align-items: center; gap: 8px; margin-right: 12px; font: 400 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; color: var(--md-on-surface-variant); }
         .elm2-pager label { display: inline-flex; align-items: center; gap: 6px; }
         .elm2-pager-input { box-sizing: border-box; width: 64px; height: 32px; padding: 0 8px; border: 1px solid var(--md-outline); border-radius: 8px; background: transparent; color: var(--md-on-surface); font: inherit; text-align: center; }

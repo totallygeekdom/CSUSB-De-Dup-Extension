@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.85
+// @version      2.86
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-85'; // keep in sync with @version (2.85)
+    const BUILD = 'v2-build-86'; // keep in sync with @version (2.86)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -123,13 +123,11 @@
                pixel-overlay approach — much simpler now that each side is its own
                button element instead of a shared row) --- */
         /* --- AI-vs-script pick comparison bar + per-row disagreement badges --- */
-        #elm2-merge-bar {
-            position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 16px); z-index: 10000;
-            max-width: min(640px, calc(100vw - 32px)); box-sizing: border-box; padding: 14px 16px; border-radius: 4px;
-            background: #2f3236; color: #f1f3f7; font: 400 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .25px;
-            box-shadow: var(--md-elev-3); opacity: 0; pointer-events: none; transition: opacity .2s var(--md-ease), transform .2s var(--md-ease);
-        }
-        #elm2-merge-bar.visible { opacity: 1; transform: translate(-50%, 0); }
+        /* Shared toast stack (also used by csv-database-v2.js): bottom-left, stacks upward. */
+        #elm2-toast-stack { position: fixed; left: 16px; bottom: 16px; z-index: 10000; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+        .elm2-toast { display: flex; align-items: center; gap: 12px; box-sizing: border-box; min-height: 48px; max-width: 340px; padding: 8px 16px 8px 12px; border-radius: 4px; background: #2f3236; color: #f1f3f7; font: 400 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .25px; box-shadow: var(--md-elev-3); opacity: 0; transform: translateY(8px); transition: opacity .25s var(--md-ease), transform .25s var(--md-ease); }
+        .elm2-toast.visible { opacity: 1; transform: none; }
+        .elm2-toast.elm2-notice { padding-left: 16px; }
         /* Material 3 dialog: 32% scrim, tonal container, hero indicator, headline + supporting text,
            filled error button. Container radius = button radius (24) + gap (16) so the corners nest. */
         #elm2-merge-overlay {
@@ -219,13 +217,13 @@
         elm-review-queue-filters-sidebar .bolt-field-range-controls .bolt-form-field-input-wrapper { flex: 1 1 auto; min-width: 0; }
         elm-review-queue-filters-sidebar input[boltinput][type="date"] { height: 34px; padding: 0 8px; font-size: 13px; }
         elm-review-queue-filters-sidebar input[boltinput][type="date"]:focus { padding: 0 7px; }
-        #elm2-pager { display: inline-flex; align-items: center; gap: 8px; margin-right: 12px; font: 400 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; color: var(--md-on-surface-variant); }
-        #elm2-pager label { display: inline-flex; align-items: center; gap: 6px; }
-        #elm2-pager input { box-sizing: border-box; width: 64px; height: 32px; padding: 0 8px; border: 1px solid var(--md-outline); border-radius: 8px; background: transparent; color: var(--md-on-surface); font: inherit; text-align: center; }
-        #elm2-pager input:hover { border-color: var(--md-on-surface); }
-        #elm2-pager input:focus { outline: none; border: 2px solid var(--md-primary); padding: 0 7px; }
-        #elm2-pager #elm2-pager-go { height: 32px; padding: 0 16px; border: none; border-radius: 16px; background: var(--md-primary-container); color: var(--md-on-primary-container); font-family: inherit; font-weight: 500; font-size: 14px; line-height: 20px; cursor: pointer; transition: box-shadow .2s var(--md-ease); }
-        #elm2-pager #elm2-pager-go:hover { box-shadow: var(--md-elev-1); }
+        .elm2-pager { display: inline-flex; align-items: center; gap: 8px; margin-right: 12px; font: 400 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; color: var(--md-on-surface-variant); }
+        .elm2-pager label { display: inline-flex; align-items: center; gap: 6px; }
+        .elm2-pager-input { box-sizing: border-box; width: 64px; height: 32px; padding: 0 8px; border: 1px solid var(--md-outline); border-radius: 8px; background: transparent; color: var(--md-on-surface); font: inherit; text-align: center; }
+        .elm2-pager-input:hover { border-color: var(--md-on-surface); }
+        .elm2-pager-input:focus { outline: none; border: 2px solid var(--md-primary); padding: 0 7px; }
+        .elm2-pager .elm2-pager-go { height: 32px; padding: 0 16px; border: none; border-radius: 16px; background: var(--md-primary-container); color: var(--md-on-primary-container); font-family: inherit; font-weight: 500; font-size: 14px; line-height: 20px; cursor: pointer; transition: box-shadow .2s var(--md-ease); }
+        .elm2-pager .elm2-pager-go:hover { box-shadow: var(--md-elev-1); }
         #elm2-pick-compare-bar {
             display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
             padding: 12px 16px; margin: 0 0 12px;
@@ -1015,7 +1013,6 @@
     // Rows per page can only be set through (1).
     // =========================================================
     const PAGER_RANGE = /(\d[\d,]*)\s*[\u2013\u2014-]\s*(\d[\d,]*)\s+of\s+(\d[\d,]*)/i;
-    function getPaginatorEl() { return document.querySelector('mat-paginator'); }
     function getPaginatorInstance(pag) {
         let ctx = pag && pag.__ngContext__;
         if (ctx && !Array.isArray(ctx) && Array.isArray(ctx.lView)) ctx = ctx.lView;
@@ -1025,9 +1022,9 @@
         }
         return null;
     }
+    const rangeLabelText = (pag) => ((pag.querySelector('.mat-mdc-paginator-range-label') || {}).textContent || '').trim();
     function readPagerState(pag) {
-        const label = pag.querySelector('.mat-mdc-paginator-range-label');
-        const m = label && label.textContent.replace(/\u00a0/g, ' ').match(PAGER_RANGE);
+        const m = rangeLabelText(pag).replace(/\u00a0/g, ' ').match(PAGER_RANGE);
         if (!m) return null;
         const num = (t) => parseInt(t.replace(/,/g, ''), 10);
         const start = num(m[1]), end = num(m[2]), total = num(m[3]);
@@ -1037,14 +1034,12 @@
     }
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     async function waitForRangeChange(pag, before, ms) {
-        const label = () => (pag.querySelector('.mat-mdc-paginator-range-label') || {}).textContent;
         const t0 = Date.now();
-        while (Date.now() - t0 < ms) { if (label() !== before) return true; await sleep(100); }
+        while (Date.now() - t0 < ms) { if (rangeLabelText(pag) !== before) return true; await sleep(100); }
         return false;
     }
-    async function pagerGoToPage(page) {
-        const pag = getPaginatorEl();
-        const st = pag && readPagerState(pag);
+    async function pagerGoToPage(pag, page) {
+        const st = readPagerState(pag);
         if (!st) return;
         const target = Math.max(0, Math.min(st.pages - 1, page - 1));
         if (target === st.index) return;
@@ -1056,57 +1051,75 @@
             return;
         }
         // Fallback: walk with the real buttons.
-        const btn = (name) => pag.querySelector('button[aria-label="' + name + '"]:not([disabled])');
-        const label = () => (pag.querySelector('.mat-mdc-paginator-range-label') || {}).textContent;
+        const btn = (name) => pag.querySelector('button[aria-label="' + name + '"]:not([disabled]):not([aria-disabled="true"])');
         let cur = st.index;
-        const click = async (b) => { const before = label(); b.click(); return waitForRangeChange(pag, before, 4000); };
+        const click = async (b) => { const before = rangeLabelText(pag); b.click(); return waitForRangeChange(pag, before, 4000); };
         if (target === 0) { const b = btn('First page'); if (b) await click(b); return; }
         if (target < cur) { const b = btn('First page'); if (!b || !(await click(b))) return; cur = 0; }
         showMergeNotice('Going to page ' + (target + 1) + '…');
         while (cur < target) { const b = btn('Next page'); if (!b || !(await click(b))) break; cur++; }
     }
-    function pagerSetRows(rows) {
-        const pag = getPaginatorEl();
-        const inst = pag && getPaginatorInstance(pag);
-        if (!inst || typeof inst._changePageSize !== 'function') { showMergeNotice('Rows per page can’t be changed from here on this page.'); return; }
+    // Returns true if the page size change was handed to the paginator.
+    async function pagerSetRows(pag, rows) {
+        const inst = getPaginatorInstance(pag);
+        const before = rangeLabelText(pag);
+        const info = { foundComponent: !!inst, hasChangePageSize: !!(inst && typeof inst._changePageSize === 'function'),
+            sizeBefore: inst && inst.pageSize, options: inst && inst.pageSizeOptions, requested: rows };
+        if (!inst || !info.hasChangePageSize) {
+            console.log('[elm2] rows per page: not possible', JSON.stringify(info));
+            showMergeNotice('Rows per page can’t be changed here.');
+            return false;
+        }
         inst._changePageSize(Math.max(1, Math.min(500, rows)));
+        const changed = await waitForRangeChange(pag, before, 3500);
+        console.log('[elm2] rows per page:', JSON.stringify(Object.assign(info, { sizeAfter: inst.pageSize, labelChanged: changed, labelBefore: before, labelAfter: rangeLabelText(pag) })));
+        if (!changed) showMergeNotice('Rows per page didn’t change — the list ignored the new size.');
+        return true;
     }
-    function injectPager() {
-        const pag = getPaginatorEl();
-        if (!pag) { const old = document.getElementById('elm2-pager'); if (old) old.remove(); return; }
+    function injectPagerInto(pag) {
         const label = pag.querySelector('.mat-mdc-paginator-range-label');
         if (!label) return;
-        let box = document.getElementById('elm2-pager');
+        let box = pag.querySelector('.elm2-pager');
         if (!box) {
+            // Rows: our input replaces the "50" text (hidden, not removed, so Angular's bindings stay intact).
+            const valueEl = pag.querySelector('.mat-mdc-paginator-page-size-value');
+            const rowsEl = document.createElement('input');
+            rowsEl.type = 'number'; rowsEl.min = '1'; rowsEl.max = '500';
+            rowsEl.className = 'elm2-pager-input elm2-pager-rows';
+            rowsEl.setAttribute('aria-label', 'Rows per page');
+            if (valueEl) { valueEl.style.display = 'none'; valueEl.insertAdjacentElement('afterend', rowsEl); }
+            else { const sz = pag.querySelector('.mat-mdc-paginator-page-size'); if (sz) sz.appendChild(rowsEl); }
+            // Page: [n] of N + Go, just before the range label.
             box = document.createElement('div');
-            box.id = 'elm2-pager';
-            box.innerHTML = '<label>Rows <input id="elm2-pager-rows" type="number" min="1" max="500"></label>' +
-                '<label>Page <input id="elm2-pager-page" type="number" min="1"></label><span id="elm2-pager-total"></span>' +
-                '<button type="button" id="elm2-pager-go">Go</button>';
+            box.className = 'elm2-pager';
+            box.innerHTML = '<label>Page <input type="number" min="1" class="elm2-pager-input elm2-pager-page" aria-label="Page"></label>' +
+                '<span class="elm2-pager-total"></span><button type="button" class="elm2-pager-go">Go</button>';
             label.parentElement.insertBefore(box, label);
+            const pageEl = box.querySelector('.elm2-pager-page');
             const go = async () => {
                 const st = readPagerState(pag) || {};
-                const rows = parseInt(document.getElementById('elm2-pager-rows').value, 10);
-                const page = parseInt(document.getElementById('elm2-pager-page').value, 10);
+                const rows = parseInt(rowsEl.value, 10);
+                const page = parseInt(pageEl.value, 10);
                 if (rows > 0 && rows !== st.size) {
-                    const before = (pag.querySelector('.mat-mdc-paginator-range-label') || {}).textContent;
-                    pagerSetRows(rows);
-                    // let the new page size load before jumping to the requested page
-                    if (page > 0) await waitForRangeChange(pag, before, 4000);
+                    const ok = await pagerSetRows(pag, rows);
+                    if (!ok) return;
                 }
-                if (page > 0) pagerGoToPage(page);
+                if (page > 0) pagerGoToPage(pag, page);
             };
-            document.getElementById('elm2-pager-go').addEventListener('click', go);
-            box.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
+            box.querySelector('.elm2-pager-go').addEventListener('click', go);
+            const onEnter = (e) => { if (e.key === 'Enter') { e.preventDefault(); go(); } };
+            box.addEventListener('keydown', onEnter);
+            rowsEl.addEventListener('keydown', onEnter);
         }
         const st = readPagerState(pag);
         if (!st) return;
-        const rowsEl = document.getElementById('elm2-pager-rows'), pageEl = document.getElementById('elm2-pager-page');
-        if (document.activeElement !== rowsEl) rowsEl.value = String(st.size);
+        const rowsEl = pag.querySelector('.elm2-pager-rows'), pageEl = box.querySelector('.elm2-pager-page');
+        if (rowsEl && document.activeElement !== rowsEl) rowsEl.value = String(st.size);
         if (document.activeElement !== pageEl) pageEl.value = String(st.index + 1);
         pageEl.max = String(st.pages);
-        document.getElementById('elm2-pager-total').textContent = 'of ' + st.pages;
+        box.querySelector('.elm2-pager-total').textContent = 'of ' + st.pages;
     }
+    function injectPager() { document.querySelectorAll('mat-paginator').forEach(injectPagerInto); }
     // Element451's orange header colour, read from the header bar itself, for our own UI accents.
     function syncHeaderColor() {
         let el = document.querySelector('.bolt-navigation-right');
@@ -1967,28 +1980,26 @@
     let mergeTimer = null;
     let mergeBarTimer = null;
     let mergedPairKey = '';
-    // Small snackbar, used only for notices ("Auto-merge cancelled", "Auto-merge stopped: ...").
-    function mergeBar() {
-        let bar = document.getElementById('elm2-merge-bar');
-        if (!bar) {
-            bar = document.createElement('div');
-            bar.id = 'elm2-merge-bar';
-            bar.setAttribute('role', 'status');
-            bar.innerHTML = '<span id="elm2-merge-notice"></span>';
-            document.body.appendChild(bar);
-        }
-        return bar;
+    // Notices ("Auto-merge cancelled", "Rows per page ...") use the shared toast stack that
+    // csv-database-v2.js also uses for its API toast: bottom-left, newest at the bottom.
+    function toastStack() {
+        let st = document.getElementById('elm2-toast-stack');
+        if (!st) { st = document.createElement('div'); st.id = 'elm2-toast-stack'; document.body.appendChild(st); }
+        return st;
     }
     function hideMergeBar() {
-        const bar = document.getElementById('elm2-merge-bar');
-        if (bar) bar.classList.remove('visible');
+        document.querySelectorAll('#elm2-toast-stack .elm2-notice').forEach(t => t.remove());
     }
     function showMergeNotice(text) {
-        const bar = mergeBar();
-        document.getElementById('elm2-merge-notice').textContent = text;
-        bar.classList.add('visible');
-        clearTimeout(mergeBarTimer);
-        mergeBarTimer = setTimeout(hideMergeBar, 6000);
+        const st = toastStack();
+        const el = document.createElement('div');
+        el.className = 'elm2-toast elm2-notice';
+        el.setAttribute('role', 'status');
+        el.textContent = text;
+        st.appendChild(el);
+        requestAnimationFrame(() => el.classList.add('visible'));
+        setTimeout(() => { el.classList.remove('visible'); setTimeout(() => el.remove(), 250); }, 6000);
+        while (st.children.length > 4) st.firstChild.remove();
     }
     // The countdown itself: a centred dialog over a dimmed page, with a draining ring around the
     // seconds left, a plain-language summary and a Cancel button. The overlay also stops stray

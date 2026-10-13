@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.20
+// @version      2.21
 // @description  Tracks duplicate entries in a CSV database stored in browser localStorage — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -64,25 +64,19 @@
         .csv-dept-badge[data-dept="Appeal"]       { background: #fff8e1; color: #f57f17; }
         .csv-dept-badge[data-dept="Ignored"]      { background: #f5f5f5; color: #616161; }
 
-        /* Material 3 snackbar */
-        #csv-api-toast {
-            position: fixed; bottom: 16px; left: 16px; display: flex; align-items: center; gap: 12px;
-            min-height: 48px; box-sizing: border-box; padding: 8px 16px 8px 12px; border-radius: 4px;
-            background: #2f3236; color: #f1f3f7; font: 400 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .25px;
-            z-index: 9999; opacity: 0; transition: opacity .3s cubic-bezier(.2, 0, 0, 1);
-            pointer-events: none; max-width: 340px;
-            box-shadow: 0 1px 3px rgba(0,0,0,.3), 0 4px 8px 3px rgba(0,0,0,.15);
-        }
-        #csv-api-toast.visible { opacity: 1; }
+        /* Shared toast stack (same rules as in the main script; whichever loads first creates it) */
+        #elm2-toast-stack { position: fixed; left: 16px; bottom: 16px; z-index: 10000; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+        .elm2-toast { display: flex; align-items: center; gap: 12px; box-sizing: border-box; min-height: 48px; max-width: 340px; padding: 8px 16px 8px 12px; border-radius: 4px; background: #2f3236; color: #f1f3f7; font: 400 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .25px; box-shadow: 0 1px 3px rgba(0,0,0,.3), 0 4px 8px 3px rgba(0,0,0,.15); opacity: 0; transform: translateY(8px); transition: opacity .25s cubic-bezier(.2, 0, 0, 1), transform .25s cubic-bezier(.2, 0, 0, 1); }
+        .elm2-toast.visible { opacity: 1; transform: none; }
         .csv-toast-dot { position: relative; width: 18px; height: 18px; flex-shrink: 0; }
         .csv-toast-dot-inner { position: absolute; top: 50%; left: 50%; width: 8px; height: 8px; border-radius: 50%; transform: translate(-50%, -50%); }
         .csv-toast-dot-outer { position: absolute; top: 50%; left: 50%; width: 16px; height: 16px; border-radius: 50%; transform: translate(-50%, -50%); animation: csvPulse 1.8s ease-in-out infinite; }
-        #csv-api-toast.success .csv-toast-dot-inner { background: #2e7d32; }
-        #csv-api-toast.success .csv-toast-dot-outer { background: rgba(46, 125, 50, 0.3); }
-        #csv-api-toast.fallback .csv-toast-dot-inner { background: #e65100; }
-        #csv-api-toast.fallback .csv-toast-dot-outer { background: rgba(230, 81, 0, 0.3); }
-        #csv-api-toast.error .csv-toast-dot-inner { background: #c62828; }
-        #csv-api-toast.error .csv-toast-dot-outer { background: rgba(198, 40, 40, 0.3); }
+          .csv-toast.success .csv-toast-dot-inner { background: #2e7d32; }
+          .csv-toast.success .csv-toast-dot-outer { background: rgba(46, 125, 50, 0.3); }
+          .csv-toast.fallback .csv-toast-dot-inner { background: #e65100; }
+          .csv-toast.fallback .csv-toast-dot-outer { background: rgba(230, 81, 0, 0.3); }
+          .csv-toast.error .csv-toast-dot-inner { background: #c62828; }
+          .csv-toast.error .csv-toast-dot-outer { background: rgba(198, 40, 40, 0.3); }
         @keyframes csvPulse { 0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.6; } 50% { transform: translate(-50%, -50%) scale(1.5); opacity: 0.2; } }
 
         /* tonal assist-chip style pill, matches the merge counter */
@@ -263,22 +257,31 @@
     // =========================================================
     // API STATUS TOAST
     // =========================================================
-    let toastEl = null;
-    let toastTimer = null;
+    // Shared toast stack with the main script (bottom-left, newest at the bottom, stacks upward).
+    function toastStack() {
+        let st = document.getElementById('elm2-toast-stack');
+        if (!st) { st = document.createElement('div'); st.id = 'elm2-toast-stack'; document.body.appendChild(st); }
+        return st;
+    }
     function showApiToast(message, type) {
         if (!SHOW_API_STATUS_TOAST) return;
-        if (!toastEl) {
-            toastEl = document.createElement('div');
-            toastEl.id = 'csv-api-toast';
-            document.body.appendChild(toastEl);
+        const st = toastStack();
+        // the same message again just refreshes the existing toast instead of stacking a copy
+        let el = Array.from(st.children).find(c => c.dataset.key === 'csv:' + message);
+        if (!el) {
+            el = document.createElement('div');
+            el.dataset.key = 'csv:' + message;
+            st.appendChild(el);
+            requestAnimationFrame(() => el.classList.add('visible'));
+            while (st.children.length > 4) st.firstChild.remove();
         }
-        toastEl.innerHTML =
+        el.className = 'elm2-toast csv-toast ' + type + ' visible';
+        el.innerHTML =
             '<span class="csv-toast-dot"><span class="csv-toast-dot-outer"></span><span class="csv-toast-dot-inner"></span></span>' +
             '<span class="csv-toast-text"></span>';
-        toastEl.querySelector('.csv-toast-text').textContent = message;
-        toastEl.className = type + ' visible';
-        if (toastTimer) clearTimeout(toastTimer);
-        toastTimer = setTimeout(() => { toastEl.classList.remove('visible'); }, 4000);
+        el.querySelector('.csv-toast-text').textContent = message;
+        clearTimeout(el._t);
+        el._t = setTimeout(() => { el.classList.remove('visible'); setTimeout(() => el.remove(), 250); }, 4000);
     }
     let lastAnnotationSource = null; // 'api' | 'db-fallback' | null
 
@@ -817,5 +820,5 @@
         updateDbSizeBadge();
     }, 1000);
 
-    console.log('%cCSV Database (new layout) v2.20 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
+    console.log('%cCSV Database (new layout) v2.21 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
 })();

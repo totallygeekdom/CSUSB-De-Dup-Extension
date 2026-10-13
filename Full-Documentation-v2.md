@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.110`, shown in the settings pane and console as `v2-build-110` |
+| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.111`, shown in the settings pane and console as `v2-build-111` |
 | CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.22` |
 
 The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
@@ -247,8 +247,8 @@ Only rows where the two sides differ (conflicts) are considered. Rules run **in 
 | # | Rule | Behaviour |
 |---|---|---|
 | 0 | Blank side | If either value is empty, the row is skipped (no opinion) |
-| 1 | **Applicant side** (outranks everything) | If an applicant side exists, every conflict row follows it. Detection: a *Cal State Apply Application* entry on only one side wins; if on both, the later application date wins (left on a tie/no date); otherwise an `Application Start/Submit/Complete` or `Admit` type entry on one side; if both, the side with more such entries, then the later date. Only used for UnderGrad pairs |
-| 2 | Blank-vs-data | One side blank ("-") and the other has data: no opinion, Bolt's pick stays |
+| 1 | **Applicant side** (outranks everything) | If an applicant side exists, every conflict row follows it, **except** a row where the applicant side is blank ("-") and the other side has data: that row picks the side with data. Detection: a *Cal State Apply Application* entry on only one side wins; if on both, the later application date wins (left on a tie/no date); otherwise an `Application Start/Submit/Complete` or `Admit` type entry on one side; if both, the side with more such entries, then the later date. Only used for UnderGrad pairs |
+| 2 | Blank-vs-data | One side blank ("-") and the other has data (no applicant side): no opinion, Bolt's pick stays |
 | 3 | Milestone type match *(auxiliary logic)* | Rows like `type: X, Mon dd, yyyy` where both sides have the same type: the **more recent profile** (auxiliary logic on); no suggestion when it is off |
 | 4 | **Personal email preferred** | Email rows: the side with a personal-domain address (gmail, yahoo, icloud, hotmail, aol, me.com, outlook, live, msn, protonmail, proton.me) wins when only one side is personal. Both personal: flagged for the tiebreak below |
 | 5 | **csusb.major** | The side with `csusb.major.` wins; if both have it: the **more recent profile** (auxiliary logic on), otherwise no suggestion |
@@ -262,7 +262,7 @@ Only rows where the two sides differ (conflicts) are considered. Rules run **in 
 
 **Dual personal-email tiebreak** (both emails personal): prefer the address containing a first name, then a last name (parts of 3+ letters of either contact's name), then the birth year (or its last 3/2 digits) from the DOB rows. If none separates them there is **no pick** (the row is left for you), exactly as in the classic script.
 
-**Addresses**: with an applicant side the applicant rule wins. Otherwise address rows compare with the built-in `AddressComparer`: a duplicated-component address loses, and for the same address the more complete one wins. Ties are **not** picked (left to Bolt or you): the same address with equal completeness, different addresses, or both addresses having duplicated parts. With **Auxiliary logic** on, a same-address tie goes to the more recent profile (by Created date) and a different-address tie follows the selected email side.
+**Addresses**: with an applicant side the applicant rule wins (unless the applicant's address is blank and the other has one). Otherwise address rows compare with the built-in `AddressComparer`: a duplicated-component address loses, and for the same address the more complete one wins. Ties are **not** picked (left to Bolt or you): the same address with equal completeness, different addresses, or both addresses having duplicated parts. With **Auxiliary logic** on, a same-address tie goes to the more recent profile (by Created date) and a different-address tie follows the selected email side.
 
 Not ported: the classic "email open count" tiebreaker (its "User Activity" section does not exist in the new layout).
 

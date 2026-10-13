@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.110
+// @version      2.111
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-110'; // keep in sync with @version (2.110)
+    const BUILD = 'v2-build-111'; // keep in sync with @version (2.111)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -1660,6 +1660,7 @@
         if (created.length < 2 || created[0] === null || created[1] === null || created[0] === created[1]) return null;
         return created[0] > created[1] ? 'left' : 'right';
     }
+    const isBlankValue = (t) => !t || /^[-\u2013\u2014\s]+$/.test(t);
     function autoResolveRows() {
         const applicantSide = findApplicantSide();
         const rows = getDiffRows().filter(r => r.isConflict && !r.element.dataset.elm2AutoResolved);
@@ -1668,8 +1669,17 @@
             const leftText = row.values[0].textContent, rightText = row.values[1].textContent;
             if (!leftText || !rightText) return;
             if (applicantSide) {
-                currentRule = 'follows applicant side (Application/Cal State Apply)';
                 row.element.dataset.elm2AutoResolved = 'true';
+                // The applicant side wins, except where it has nothing ("-") and the other side does.
+                const otherSide = applicantSide === 'left' ? 'right' : 'left';
+                const appText = applicantSide === 'left' ? leftText : rightText;
+                const otherText = applicantSide === 'left' ? rightText : leftText;
+                if (isBlankValue(appText) && !isBlankValue(otherText)) {
+                    currentRule = 'applicant side is blank -> side with data';
+                    applyScriptPick(row, otherSide);
+                    return;
+                }
+                currentRule = 'follows applicant side (Application/Cal State Apply)';
                 applyScriptPick(row, applicantSide);
                 return;
             }
@@ -1677,8 +1687,7 @@
             // opinion and leave Bolt's pick alone. Runs AFTER the applicant-side rule
             // (which outranks everything) but before the pattern rules below, so the
             // legacy default-to-left can never pick an empty side.
-            const isBlank = (t) => !t || /^[-\u2013\u2014\s]+$/.test(t);
-            if (isBlank(leftText) !== isBlank(rightText)) {
+            if (isBlankValue(leftText) !== isBlankValue(rightText)) {
                 row.element.dataset.elm2AutoResolved = 'true';
                 return;
             }
@@ -1853,7 +1862,18 @@
             const leftText = row.values[0].textContent, rightText = row.values[1].textContent;
             if (!leftText || !rightText) return;
             row.element.dataset.elm2AddressResolved = 'true';
-            if (applicantSide) { currentRule = 'follows applicant side (Application/Cal State Apply)'; applyScriptPick(row, applicantSide); return; }
+            if (applicantSide) {
+                const appText = applicantSide === 'left' ? leftText : rightText;
+                const otherText = applicantSide === 'left' ? rightText : leftText;
+                if (isBlankValue(appText) && !isBlankValue(otherText)) {
+                    currentRule = 'applicant side is blank -> side with data';
+                    applyScriptPick(row, applicantSide === 'left' ? 'right' : 'left');
+                    return;
+                }
+                currentRule = 'follows applicant side (Application/Cal State Apply)';
+                applyScriptPick(row, applicantSide);
+                return;
+            }
             currentRule = 'address comparison';
             const comparison = AddressComparer.compareAddresses(leftText, rightText);
             let winner = comparison.winner;

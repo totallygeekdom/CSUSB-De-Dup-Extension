@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.81
+// @version      2.82
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-81'; // keep in sync with @version (2.81)
+    const BUILD = 'v2-build-82'; // keep in sync with @version (2.82)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -158,6 +158,49 @@
         #elm2-merge-overlay #elm2-merge-cancel:active::after { opacity: .12; }
         @keyframes elm2-count-in { from { opacity: 0; transform: scale(.7); } to { opacity: 1; transform: scale(1); } }
         #elm2-merge-overlay #elm2-merge-cancel:focus-visible { outline: 3px solid rgba(179, 38, 30, .4); outline-offset: 2px; }
+        /* --- Advanced Filters sidebar (list page): compact, Material 3 --- */
+        .cdk-overlay-pane:has(elm-review-queue-filters-sidebar) { width: min(480px, 100vw) !important; }
+        elm-review-queue-filters-sidebar .bolt-stackable-sidebar-content { background: var(--md-surface-container-low) !important; color: var(--md-on-surface); font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+        elm-review-queue-filters-sidebar .bolt-stackable-sidebar-header-wrapper { display: flex !important; flex-wrap: nowrap !important; padding: 12px 16px 12px 8px !important; min-height: 0 !important; gap: 8px !important; align-items: center !important; border-bottom: 1px solid color-mix(in srgb, var(--md-outline) 25%, transparent) !important; background: transparent !important; }
+        elm-review-queue-filters-sidebar .bolt-stackable-sidebar-header-wrapper bolt-stackable-sidebar-header { flex: 1 1 auto !important; min-width: 0 !important; }
+        elm-review-queue-filters-sidebar .bolt-stackable-sidebar-close-button { width: 40px !important; height: 40px !important; padding: 0 !important; border: none !important; border-radius: 50% !important; flex: 0 0 auto !important; color: var(--md-on-surface-variant) !important; background: transparent !important; }
+        elm-review-queue-filters-sidebar .bolt-stackable-sidebar-header-title { margin: 0 !important; font-size: 22px !important; line-height: 28px !important; font-weight: 400 !important; color: var(--md-on-surface) !important; }
+        elm-review-queue-filters-sidebar .bolt-stackable-sidebar-header-actions { display: flex !important; gap: 8px !important; }
+        elm-review-queue-filters-sidebar .bolt-stackable-sidebar-header-actions button { height: 40px !important; min-width: 0 !important; padding: 0 20px !important; border: none !important; border-radius: 20px !important; box-shadow: none !important; font-size: 14px !important; line-height: 20px !important; font-weight: 500 !important; letter-spacing: .1px !important; text-transform: none !important; }
+        elm-review-queue-filters-sidebar .bolt-stackable-sidebar-header-actions button.bolt-button-color-accent { background: transparent !important; color: var(--md-primary-text) !important; }
+        elm-review-queue-filters-sidebar .bolt-stackable-sidebar-header-actions button.bolt-button-color-accent:hover { background: color-mix(in srgb, var(--md-primary) 10%, transparent) !important; }
+        elm-review-queue-filters-sidebar .bolt-stackable-sidebar-header-actions button.bolt-button-color-accent-dark { background: var(--md-primary) !important; color: #fff !important; }
+        elm-review-queue-filters-sidebar .bolt-stackable-sidebar-header-actions button.bolt-button-color-accent-dark:hover { box-shadow: var(--md-elev-1) !important; }
+        elm-review-queue-filters-sidebar .bolt-stackable-sidebar-header-actions button.bolt-button-disabled { background: rgba(26, 28, 32, .12) !important; color: rgba(26, 28, 32, .38) !important; box-shadow: none !important; }
+        elm-review-queue-filters-sidebar .bolt-copilot-button { display: none !important; }
+        elm-review-queue-filters-sidebar bolt-stackable-sidebar-body { padding: 12px 16px 16px !important; }
+        elm-review-queue-filters-sidebar bolt-stackable-sidebar-section { display: block; margin: 0 0 8px !important; padding: 12px 16px 14px !important; border-radius: 16px; background: var(--md-surface-container); }
+        elm-review-queue-filters-sidebar bolt-stackable-sidebar-section .title { margin: 0 0 10px !important; padding: 0 !important; }
+        elm-review-queue-filters-sidebar bolt-stackable-sidebar-section .title-content h3 { margin: 0 !important; font-size: 14px !important; line-height: 20px !important; font-weight: 500 !important; letter-spacing: .1px; color: var(--md-on-surface) !important; }
+        elm-review-queue-filters-sidebar bolt-stackable-sidebar-section .description { margin: 2px 0 0 !important; font-size: 12px !important; line-height: 16px !important; letter-spacing: .4px; color: var(--md-on-surface-variant) !important; }
+        elm-review-queue-filters-sidebar bolt-stackable-sidebar-section .separator { display: none !important; }
+        elm-review-queue-filters-sidebar bolt-stackable-sidebar-section .content { padding: 0 !important; margin: 0 !important; }
+        elm-review-queue-filters-sidebar bolt-fields { display: flex !important; flex-direction: column !important; gap: 12px !important; }
+        elm-review-queue-filters-sidebar bolt-field { display: flex !important; flex-direction: column !important; align-items: stretch !important; gap: 6px !important; margin: 0 !important; padding: 0 !important; }
+        elm-review-queue-filters-sidebar bolt-field-label { width: auto !important; margin: 0 !important; padding: 0 !important; font-size: 12px !important; line-height: 16px !important; font-weight: 500 !important; letter-spacing: .4px; color: var(--md-on-surface-variant) !important; }
+        elm-review-queue-filters-sidebar .bolt-chip-list-wrapper { display: flex !important; flex-wrap: wrap !important; gap: 8px !important; }
+        elm-review-queue-filters-sidebar bolt-chip-check.bolt-chip { display: inline-flex !important; align-items: center !important; box-sizing: border-box !important; height: 32px !important; min-height: 0 !important; margin: 0 !important; padding: 0 12px !important; border-radius: 8px !important; border: 1px solid var(--md-outline) !important; background: transparent !important; color: var(--md-on-surface-variant) !important; box-shadow: none !important; font-size: 14px !important; line-height: 20px !important; font-weight: 500 !important; letter-spacing: .1px; cursor: pointer; transition: background-color .2s var(--md-ease); }
+        elm-review-queue-filters-sidebar bolt-chip-check.bolt-chip:hover { background: color-mix(in srgb, var(--md-on-surface) 8%, transparent) !important; }
+        elm-review-queue-filters-sidebar bolt-chip-check .bolt-chip-text { display: flex !important; align-items: center !important; gap: 6px !important; padding: 0 !important; color: inherit !important; }
+        elm-review-queue-filters-sidebar bolt-chip-check .mat-ripple { display: none !important; }
+        elm-review-queue-filters-sidebar bolt-chip-check bolt-icon { display: none !important; }
+        elm-review-queue-filters-sidebar bolt-chip-check.mat-mdc-chip-selected,
+        elm-review-queue-filters-sidebar bolt-chip-check.mdc-evolution-chip--selected,
+        elm-review-queue-filters-sidebar bolt-chip-check[aria-selected="true"] { border-color: transparent !important; background: var(--md-primary-container) !important; color: var(--md-on-primary-container) !important; }
+        elm-review-queue-filters-sidebar bolt-chip-check.mat-mdc-chip-selected bolt-icon,
+        elm-review-queue-filters-sidebar bolt-chip-check.mdc-evolution-chip--selected bolt-icon,
+        elm-review-queue-filters-sidebar bolt-chip-check[aria-selected="true"] bolt-icon { display: inline-flex !important; width: 16px !important; height: 16px !important; }
+        elm-review-queue-filters-sidebar .bolt-field-range-controls { display: grid !important; grid-template-columns: 1fr 1fr; gap: 8px !important; }
+        elm-review-queue-filters-sidebar .bolt-field-range-controls .bolt-form-field-label-wrapper { display: block; margin: 0 0 2px !important; }
+        elm-review-queue-filters-sidebar .bolt-field-range-controls bolt-label { font-size: 12px !important; line-height: 16px !important; letter-spacing: .4px; color: var(--md-on-surface-variant) !important; }
+        elm-review-queue-filters-sidebar input[boltinput][type="date"] { box-sizing: border-box; width: 100%; height: 40px; padding: 0 12px; border: 1px solid var(--md-outline); border-radius: 8px; background: transparent; color: var(--md-on-surface); font-family: inherit; font-size: 14px; line-height: 20px; }
+        elm-review-queue-filters-sidebar input[boltinput][type="date"]:hover { border-color: var(--md-on-surface); }
+        elm-review-queue-filters-sidebar input[boltinput][type="date"]:focus { outline: none; border: 2px solid var(--md-primary); padding: 0 11px; }
         #elm2-pick-compare-bar {
             display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
             padding: 12px 16px; margin: 0 0 12px;

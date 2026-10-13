@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.82
+// @version      2.83
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-82'; // keep in sync with @version (2.82)
+    const BUILD = 'v2-build-83'; // keep in sync with @version (2.83)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -201,6 +201,24 @@
         elm-review-queue-filters-sidebar input[boltinput][type="date"] { box-sizing: border-box; width: 100%; height: 40px; padding: 0 12px; border: 1px solid var(--md-outline); border-radius: 8px; background: transparent; color: var(--md-on-surface); font-family: inherit; font-size: 14px; line-height: 20px; }
         elm-review-queue-filters-sidebar input[boltinput][type="date"]:hover { border-color: var(--md-on-surface); }
         elm-review-queue-filters-sidebar input[boltinput][type="date"]:focus { outline: none; border: 2px solid var(--md-primary); padding: 0 11px; }
+        /* tighter vertical rhythm: one-line section headers, labels beside their controls */
+        elm-review-queue-filters-sidebar .bolt-stackable-sidebar-header-wrapper { padding: 8px 12px 8px 4px !important; }
+        elm-review-queue-filters-sidebar bolt-stackable-sidebar-body { padding: 8px 12px 12px !important; }
+        elm-review-queue-filters-sidebar bolt-stackable-sidebar-section { margin: 0 0 6px !important; padding: 8px 12px 10px !important; border-radius: 12px; }
+        elm-review-queue-filters-sidebar bolt-stackable-sidebar-section .title { margin: 0 0 6px !important; }
+        elm-review-queue-filters-sidebar bolt-stackable-sidebar-section .title-content { display: flex !important; align-items: baseline !important; gap: 8px !important; min-width: 0; }
+        elm-review-queue-filters-sidebar bolt-stackable-sidebar-section .title-content h3 { flex: 0 0 auto; }
+        elm-review-queue-filters-sidebar bolt-stackable-sidebar-section .description { margin: 0 !important; flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        elm-review-queue-filters-sidebar bolt-fields { gap: 6px !important; }
+        elm-review-queue-filters-sidebar bolt-field { display: grid !important; grid-template-columns: 132px minmax(0, 1fr); align-items: center !important; column-gap: 8px !important; row-gap: 0 !important; }
+        elm-review-queue-filters-sidebar .bolt-chip-list-wrapper { gap: 6px !important; }
+        elm-review-queue-filters-sidebar bolt-chip-check.bolt-chip { height: 28px !important; padding: 0 10px !important; font-size: 13px !important; }
+        elm-review-queue-filters-sidebar .bolt-field-range-controls { gap: 6px !important; }
+        elm-review-queue-filters-sidebar .bolt-field-range-controls .bolt-form-field-wrapper { display: flex !important; align-items: center !important; gap: 6px !important; }
+        elm-review-queue-filters-sidebar .bolt-field-range-controls .bolt-form-field-label-wrapper { margin: 0 !important; flex: 0 0 auto; }
+        elm-review-queue-filters-sidebar .bolt-field-range-controls .bolt-form-field-input-wrapper { flex: 1 1 auto; min-width: 0; }
+        elm-review-queue-filters-sidebar input[boltinput][type="date"] { height: 34px; padding: 0 8px; font-size: 13px; }
+        elm-review-queue-filters-sidebar input[boltinput][type="date"]:focus { padding: 0 7px; }
         #elm2-pick-compare-bar {
             display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
             padding: 12px 16px; margin: 0 0 12px;

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.83
+// @version      2.84
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-83'; // keep in sync with @version (2.83)
+    const BUILD = 'v2-build-84'; // keep in sync with @version (2.84)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -997,6 +997,22 @@
         const c = getComputedStyle(ref).borderTopColor;
         if (!c || c === 'rgba(0, 0, 0, 0)' || c === 'transparent') return;
         document.documentElement.style.setProperty('--elm2-bolt-blue', c);
+    }
+    // TEMPORARY DIAGNOSTIC (paginator): what the list page's paginator is made of and whether
+    // Angular's debug API is reachable from page scripts. Names only, no data.
+    let paginatorDiagLogged = false;
+    function logPaginatorDiagnostics() {
+        if (paginatorDiagLogged) return;
+        const pag = document.querySelector('.mat-mdc-paginator, mat-paginator, [class*="paginator"]');
+        if (!pag) return;
+        paginatorDiagLogged = true;
+        const desc = (el) => el.tagName.toLowerCase() + '.' + String(el.className).split(/\s+/).filter(Boolean).slice(0, 4).join('.');
+        const parts = Array.from(pag.querySelectorAll('*'))
+            .filter(e => e.children.length === 0 || /^(BUTTON|MAT-SELECT|INPUT)$/.test(e.tagName))
+            .slice(0, 30).map(e => desc(e) + (e.getAttribute('aria-label') ? '[' + e.getAttribute('aria-label') + ']' : ''));
+        console.log('[elm2] paginator:', desc(pag), '>', parts.join(' | '));
+        console.log('[elm2] angular debug api:', typeof window.ng, '| getAllAngularRootElements:', typeof window.getAllAngularRootElements,
+            '| __ngContext__ on paginator:', '__ngContext__' in pag);
     }
     // Element451's orange header colour, read from the header bar itself, for our own UI accents.
     function syncHeaderColor() {
@@ -2132,6 +2148,7 @@
         injectMergeCounter();
         colorScoreChips();
         syncHeaderColor(); // the header is on every page, not just the review page
+        logPaginatorDiagnostics();
         if (isDedupReviewPage()) {
             syncBoltBlue();
             annotateRowColors();

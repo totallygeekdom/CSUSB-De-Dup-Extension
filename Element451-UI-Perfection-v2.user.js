@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.103
+// @version      2.104
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-103'; // keep in sync with @version (2.103)
+    const BUILD = 'v2-build-104'; // keep in sync with @version (2.104)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -928,12 +928,12 @@
                     result.winner = 'right';
                     result.reason = `Same address, right more complete (${result.rightScore} vs ${result.leftScore})`;
                 } else {
-                    result.winner = 'left';
-                    result.reason = 'Same address, equal completeness - defaulting to left';
+                    result.winner = 'tie';
+                    result.reason = 'Same address, equal completeness - no pick';
                 }
             } else {
                 result.winner = 'tie';
-                result.reason = 'Different addresses - manual review or follow email';
+                result.reason = 'Different addresses - no pick';
             }
             return result;
         },
@@ -1801,8 +1801,17 @@
             const comparison = AddressComparer.compareAddresses(leftText, rightText);
             let winner = comparison.winner;
             if (winner === 'tie') {
-                const emailSide = getSelectedEmailSide();
-                if (emailSide) winner = emailSide;
+                // Ties are left to Bolt / the reviewer unless Auxiliary logic is on.
+                winner = null;
+                if (CFG.AUX_LOGIC) {
+                    if (comparison.areSame) {
+                        winner = getMostRecentProfileSide();
+                        if (winner) currentRule = 'same address -> more recent profile';
+                    } else {
+                        winner = getSelectedEmailSide();
+                        if (winner) currentRule = 'different address -> follows email pick';
+                    }
+                }
             }
             if (winner === 'left' || winner === 'right') applyScriptPick(row, winner);
         });

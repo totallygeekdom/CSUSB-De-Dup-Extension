@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.103`, shown in the settings pane and console as `v2-build-103` |
+| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.104`, shown in the settings pane and console as `v2-build-104` |
 | CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.22` |
 
 The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
@@ -262,7 +262,7 @@ Only rows where the two sides differ (conflicts) are considered. Rules run **in 
 
 **Dual personal-email tiebreak** (both emails personal): prefer the address containing a first name, then a last name (parts of 3+ letters of either contact's name), then the birth year (or its last 3/2 digits) from the DOB rows. If none separates them there is **no pick** (the row is left for you), exactly as in the classic script.
 
-**Addresses**: address rows compare with the built-in `AddressComparer` (the classic script's logic, unchanged); on a tie, the selected email side decides; with an applicant side the applicant rule wins.
+**Addresses**: with an applicant side the applicant rule wins. Otherwise address rows compare with the built-in `AddressComparer`: a duplicated-component address loses, and for the same address the more complete one wins. Ties are **not** picked (left to Bolt or you): the same address with equal completeness, different addresses, or both addresses having duplicated parts. With **Auxiliary logic** on, a same-address tie goes to the more recent profile (by Created date) and a different-address tie follows the selected email side.
 
 Not ported: the classic "email open count" tiebreaker (its "User Activity" section does not exist in the new layout).
 

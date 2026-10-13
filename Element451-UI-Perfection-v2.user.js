@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.111
+// @version      2.112
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-111'; // keep in sync with @version (2.111)
+    const BUILD = 'v2-build-112'; // keep in sync with @version (2.112)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -1300,13 +1300,34 @@
             return nameEl ? nameEl.textContent.trim() : '';
         });
     }
-    function getScoreChipLevel() {
-        const chip = document.querySelector('elm-deduplication-score-chip .bolt-chip');
-        if (!chip) return null;
+    // The score chip of the pair on screen. The review queue list (behind the sidebar) has a chip on
+    // every row, so a plain "first chip on the page" can belong to a different pair: look inside the
+    // sidebar that holds the diff form first, then ignore chips that sit in the list's table rows.
+    function getScoreChips() {
+        const all = Array.from(document.querySelectorAll('elm-deduplication-score-chip .bolt-chip, elm-deduplication-score-chip bolt-chip'));
+        const form = getDiffForm();
+        const scope = form && form.closest('elm-review-duplicates-sidebar, bolt-stackable-sidebar, bolt-stackable-sidebar-container');
+        if (scope) {
+            const inScope = all.filter(c => scope.contains(c));
+            if (inScope.length) return inScope;
+        }
+        const outsideList = all.filter(c => !c.closest('elm-review-queue-table, bolt-table, cdk-table, table, tr, [role="row"]'));
+        return outsideList.length ? outsideList : all;
+    }
+    function chipLevel(chip) {
+        const cls = chip.className && chip.className.toString ? chip.className.toString() : '';
+        if (/score-chip-low/.test(cls)) return 'low';
+        if (/score-chip-medium/.test(cls)) return 'medium';
+        if (/score-chip-high/.test(cls)) return 'high';
         const text = chip.textContent.trim().toLowerCase();
         if (text.includes('low')) return 'low';
         if (text.includes('medium')) return 'medium';
         if (text.includes('high')) return 'high';
+        return null;
+    }
+    function getScoreChipLevel() {
+        const chips = getScoreChips();
+        for (const chip of chips) { const lvl = chipLevel(chip); if (lvl) return lvl; }
         return null;
     }
     function getAnalysisSummaryText() {
@@ -2355,6 +2376,7 @@
             computeAutoApplyForPair();
             // Why a pick did / did not land: range inputs now, then each of our rows' state once the clicks have settled.
             console.log('[elm2] Range check — slider level', CFG.RANGE_LEVEL, '| score chip:', getScoreChipLevel() || '(not read)',
+                '| chips on page:', document.querySelectorAll('elm-deduplication-score-chip').length + ' (' + Array.from(document.querySelectorAll('elm-deduplication-score-chip .bolt-chip')).map(c => chipLevel(c) || '?').join(',') + ')',
                 '| in range:', pairInRange, '| use picks from:', CFG.USE_PICKS, '| applying:', autoApplyThisPair);
             setTimeout(() => {
                 if (getPairKey() !== phaseOnePairKey) return;

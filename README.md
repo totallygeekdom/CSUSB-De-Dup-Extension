@@ -26,12 +26,12 @@ relying on them for unattended automation:**
   scheme were not visible in the snapshot and are best-effort guesses.
 - The "email open count" tiebreaker (sourced from a "User Activity" section
   in the classic UI) was dropped — no equivalent section was found.
-- The classic script's list-page "jump to page N" and rows-per-page boxes are back as
-  "Rows" / "Page" / Go next to the paginator's range label. The new list keeps paging
-  state in Angular (not the URL), so the script drives the paginator component directly
-  (found through the element's `__ngContext__`); if that component can't be found it
-  walks to the page with the First / Next buttons instead. Rows per page needs the
-  direct route.
+- The classic script's "jump to page N" is back as a "Page" box with Go next to the
+  paginator's range label. The new list keeps paging state in Angular (not the URL), so
+  the script walks to the page with the First / Next buttons (or sets the paginator
+  component directly if it can be found). The classic rows-per-page box could not be
+  brought back: the page size isn't read from the URL and the paginator component isn't
+  reachable from a userscript.
 - The list-page department badge is now an appended pill rather than a
   restyled existing chip, since the real cell content was redacted in the
   reference snapshot.

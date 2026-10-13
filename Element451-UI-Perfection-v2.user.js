@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.94
+// @version      2.95
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-94'; // keep in sync with @version (2.94)
+    const BUILD = 'v2-build-95'; // keep in sync with @version (2.95)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -1032,13 +1032,13 @@
         document.documentElement.style.setProperty('--elm2-bolt-blue', c);
     }
     // =========================================================
-    // LIST PAGER: "Rows" and "Page" boxes + Go, next to the paginator's range label
+    // LIST PAGER: a "Page" box + Go, next to the paginator's range label
     // (the classic script had the same, driven by URL parameters; this UI keeps paging state in
     // Angular, so it drives the paginator itself).
     // Page jumps: (1) set the paginator component's pageIndex and emit its page event, found via the
     // element's __ngContext__ (Angular's debug API isn't exposed in production); if that component
     // can't be found, (2) click First page / Next page repeatedly, waiting for the range label.
-    // Rows per page can only be set through (1).
+    // (Rows per page can't be changed from outside: Element's paginator component isn't reachable.)
     // =========================================================
     const PAGER_RANGE = /(\d[\d,]*)\s*[\u2013\u2014-]\s*(\d[\d,]*)\s+of\s+(\d[\d,]*)/i;
     // The MatPaginator instance is not exposed by Angular in production builds. It is reachable
@@ -1071,18 +1071,6 @@
             }
         }
         return null;
-    }
-    // For the console when the component can't be found: what the context looks like (no data).
-    function describePaginatorContext(pag) {
-        const ctx = pag && pag.__ngContext__;
-        const out = { ctxType: typeof ctx, isArray: Array.isArray(ctx), length: Array.isArray(ctx) ? ctx.length : null };
-        if (Array.isArray(ctx)) {
-            const names = new Set();
-            ctx.forEach(o => { if (o && typeof o === 'object' && !(o instanceof Node) && !Array.isArray(o) && o.constructor && o.constructor.name) names.add(o.constructor.name); });
-            out.constructors = Array.from(names).slice(0, 40);
-            out.withPageIndex = ctx.filter(o => o && typeof o === 'object' && 'pageIndex' in o).length;
-        }
-        return out;
     }
     const rangeLabelText = (pag) => ((pag.querySelector('.mat-mdc-paginator-range-label') || {}).textContent || '').trim();
     function readPagerState(pag) {
@@ -1123,62 +1111,26 @@
         showMergeNotice('Going to page ' + (target + 1) + '…');
         while (cur < target) { const b = btn('Next page'); if (!b || !(await click(b))) break; cur++; }
     }
-    // Returns true if the page size change was handed to the paginator.
-    async function pagerSetRows(pag, rows) {
-        const inst = getPaginatorInstance(pag);
-        const before = rangeLabelText(pag);
-        const info = { foundComponent: !!inst, hasChangePageSize: !!(inst && typeof inst._changePageSize === 'function'),
-            sizeBefore: inst && inst.pageSize, options: inst && inst.pageSizeOptions, requested: rows };
-        if (!inst || !info.hasChangePageSize) {
-            console.log('[elm2] rows per page: not possible', JSON.stringify(Object.assign(info, { context: describePaginatorContext(pag) })));
-            showMergeNotice('Rows per page can’t be changed here.');
-            return false;
-        }
-        inst._changePageSize(Math.max(1, Math.min(500, rows)));
-        const changed = await waitForRangeChange(pag, before, 3500);
-        console.log('[elm2] rows per page:', JSON.stringify(Object.assign(info, { sizeAfter: inst.pageSize, labelChanged: changed, labelBefore: before, labelAfter: rangeLabelText(pag) })));
-        if (!changed) showMergeNotice('Rows per page didn’t change — the list ignored the new size.');
-        return true;
-    }
     function injectPagerInto(pag) {
         const label = pag.querySelector('.mat-mdc-paginator-range-label');
         if (!label) return;
         let box = pag.querySelector('.elm2-pager');
         if (!box) {
-            // Rows: our input replaces the "50" text (hidden, not removed, so Angular's bindings stay intact).
-            const valueEl = pag.querySelector('.mat-mdc-paginator-page-size-value');
-            const rowsEl = document.createElement('input');
-            rowsEl.type = 'number'; rowsEl.min = '1'; rowsEl.max = '500';
-            rowsEl.className = 'elm2-pager-input elm2-pager-rows';
-            rowsEl.setAttribute('aria-label', 'Rows per page');
-            if (valueEl) { valueEl.style.display = 'none'; valueEl.insertAdjacentElement('afterend', rowsEl); }
-            else { const sz = pag.querySelector('.mat-mdc-paginator-page-size'); if (sz) sz.appendChild(rowsEl); }
-            // Page: [n] of N + Go, just before the range label.
+            // Page: [n] of N + Go, just before the range label. (Rows per page can't be changed
+            // from outside the page, so Element's own "Rows per page: 50" text is left alone.)
             box = document.createElement('div');
             box.className = 'elm2-pager';
             box.innerHTML = '<label>Page <input type="number" min="1" class="elm2-pager-input elm2-pager-page" aria-label="Page"></label>' +
                 '<span class="elm2-pager-total"></span><button type="button" class="elm2-pager-go">Go</button>';
             label.parentElement.insertBefore(box, label);
             const pageEl = box.querySelector('.elm2-pager-page');
-            const go = async () => {
-                const st = readPagerState(pag) || {};
-                const rows = parseInt(rowsEl.value, 10);
-                const page = parseInt(pageEl.value, 10);
-                if (rows > 0 && rows !== st.size) {
-                    const ok = await pagerSetRows(pag, rows);
-                    if (!ok) return;
-                }
-                if (page > 0) pagerGoToPage(pag, page);
-            };
+            const go = () => { const page = parseInt(pageEl.value, 10); if (page > 0) pagerGoToPage(pag, page); };
             box.querySelector('.elm2-pager-go').addEventListener('click', go);
-            const onEnter = (e) => { if (e.key === 'Enter') { e.preventDefault(); go(); } };
-            box.addEventListener('keydown', onEnter);
-            rowsEl.addEventListener('keydown', onEnter);
+            box.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
         }
         const st = readPagerState(pag);
         if (!st) return;
-        const rowsEl = pag.querySelector('.elm2-pager-rows'), pageEl = box.querySelector('.elm2-pager-page');
-        if (rowsEl && document.activeElement !== rowsEl) rowsEl.value = String(st.size);
+        const pageEl = box.querySelector('.elm2-pager-page');
         if (document.activeElement !== pageEl) pageEl.value = String(st.index + 1);
         pageEl.max = String(st.pages);
         box.querySelector('.elm2-pager-total').textContent = 'of ' + st.pages;

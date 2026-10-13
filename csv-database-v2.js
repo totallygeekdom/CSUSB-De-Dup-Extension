@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.17
+// @version      2.18
 // @description  Tracks duplicate entries in a CSV database stored in browser localStorage — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -356,6 +356,12 @@
             apiPageCache.delete(oldestKey);
         }
         clearStaleAnnotations();
+        // The list URL no longer changes per page, so a page change can't be detected from it any
+        // more. Each capture of fresh list data is the signal instead: toast every time.
+        if (!isReviewDetailPage()) {
+            lastAnnotationSource = 'api';
+            showApiToast('API: data captured successfully', 'success');
+        }
         annotateQueueTable();
         setTimeout(annotateQueueTable, 100);
         setTimeout(annotateQueueTable, 500);
@@ -811,5 +817,5 @@
         updateDbSizeBadge();
     }, 1000);
 
-    console.log('%cCSV Database (new layout) v2.17 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
+    console.log('%cCSV Database (new layout) v2.18 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
 })();

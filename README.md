@@ -13,7 +13,7 @@ chip). Two v2 scripts target it:
 | Script | File | Current version |
 |---|---|---|
 | UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.103` (`v2-build-103`, shown in the settings pane) |
-| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.21` |
+| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.22` |
 
 **Full documentation: [`Full-Documentation-v2.md`](Full-Documentation-v2.md)** (architecture, every setting,
 the resolution rules, auto-merge, every website restyle, the database format, limitations).
@@ -45,7 +45,7 @@ the resolution rules, auto-merge, every website restyle, the database format, li
 - **CSV Database v2**: records blocked / skipped pairs keyed on the two contacts' **Spark IDs** (the review
   URL no longer changes per pair), stores names as 3-letter prefixes (`Jon...`), shows right-aligned department
   badges on the list page (matched through the list API's `identities[]`, falling back to names), exports and
-  imports CSV (columns `Firstname, Lastname, Firstname 2, Lastname 2, Dept., Row Contents, Spark ID 1, Spark ID 2`;
+  imports CSV (columns `Firstname, Lastname, Firstname 2, Lastname 2, Dept., Spark ID 1, Spark ID 2, Row Contents`;
   import reads columns by header name so older files still load), and has a **Show Database UI** toggle (under
   Display). Before every auto-skip the main script asks it to record the pair first.
 

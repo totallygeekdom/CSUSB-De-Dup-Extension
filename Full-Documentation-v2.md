@@ -6,7 +6,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 | Script | File | Current version |
 |---|---|---|
 | UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.103`, shown in the settings pane and console as `v2-build-103` |
-| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.21` |
+| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.22` |
 
 The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
 `Full-Documentation-v127.0.md`) are unchanged and target the old merge page.
@@ -365,7 +365,7 @@ A badge is placed in `.cdk-column-flagged` (falling back to signals, then the ro
 
 ### 11.6 Import / export
 
-- **Download**: `elm_csv_database_YYYY-MM-DD.csv`, columns `Firstname, Lastname, Firstname 2, Lastname 2, Dept., Row Contents, Spark ID 1, Spark ID 2`.
+- **Download**: `elm_csv_database_YYYY-MM-DD.csv`, columns `Firstname, Lastname, Firstname 2, Lastname 2, Dept., Spark ID 1, Spark ID 2, Row Contents`.
 - **Upload & Replace**: reads columns **by header name**, so files from earlier versions (a different column order, or the oldest 5-column `Unique ID` format, which gets no Spark IDs and matches by name only) still import. Names are shortened on import.
 - **Clear Database**: asks for confirmation.
 

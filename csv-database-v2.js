@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.21
+// @version      2.22
 // @description  Tracks duplicate entries in a CSV database stored in browser localStorage — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -651,8 +651,8 @@
     function toCSV() {
         const db = getDatabase();
         if (db.length === 0) return '';
-        const headers = ['Firstname', 'Lastname', 'Firstname 2', 'Lastname 2', 'Dept.', 'Row Contents', 'Spark ID 1', 'Spark ID 2'];
-        const rows = db.map(e => [e.firstName, e.lastName, e.firstName2, e.lastName2, e.dept, e.rowContents, e.sparkId1, e.sparkId2]
+        const headers = ['Firstname', 'Lastname', 'Firstname 2', 'Lastname 2', 'Dept.', 'Spark ID 1', 'Spark ID 2', 'Row Contents'];
+        const rows = db.map(e => [e.firstName, e.lastName, e.firstName2, e.lastName2, e.dept, e.sparkId1, e.sparkId2, e.rowContents]
             .map(v => `"${(v || '').replace(/"/g, '""')}"`).join(','));
         return [headers.join(','), ...rows].join('\n');
     }
@@ -820,5 +820,5 @@
         updateDbSizeBadge();
     }, 1000);
 
-    console.log('%cCSV Database (new layout) v2.21 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
+    console.log('%cCSV Database (new layout) v2.22 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
 })();

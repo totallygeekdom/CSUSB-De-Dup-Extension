@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.84
+// @version      2.85
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-84'; // keep in sync with @version (2.84)
+    const BUILD = 'v2-build-85'; // keep in sync with @version (2.85)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -219,6 +219,13 @@
         elm-review-queue-filters-sidebar .bolt-field-range-controls .bolt-form-field-input-wrapper { flex: 1 1 auto; min-width: 0; }
         elm-review-queue-filters-sidebar input[boltinput][type="date"] { height: 34px; padding: 0 8px; font-size: 13px; }
         elm-review-queue-filters-sidebar input[boltinput][type="date"]:focus { padding: 0 7px; }
+        #elm2-pager { display: inline-flex; align-items: center; gap: 8px; margin-right: 12px; font: 400 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; color: var(--md-on-surface-variant); }
+        #elm2-pager label { display: inline-flex; align-items: center; gap: 6px; }
+        #elm2-pager input { box-sizing: border-box; width: 64px; height: 32px; padding: 0 8px; border: 1px solid var(--md-outline); border-radius: 8px; background: transparent; color: var(--md-on-surface); font: inherit; text-align: center; }
+        #elm2-pager input:hover { border-color: var(--md-on-surface); }
+        #elm2-pager input:focus { outline: none; border: 2px solid var(--md-primary); padding: 0 7px; }
+        #elm2-pager #elm2-pager-go { height: 32px; padding: 0 16px; border: none; border-radius: 16px; background: var(--md-primary-container); color: var(--md-on-primary-container); font-family: inherit; font-weight: 500; font-size: 14px; line-height: 20px; cursor: pointer; transition: box-shadow .2s var(--md-ease); }
+        #elm2-pager #elm2-pager-go:hover { box-shadow: var(--md-elev-1); }
         #elm2-pick-compare-bar {
             display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
             padding: 12px 16px; margin: 0 0 12px;
@@ -998,21 +1005,107 @@
         if (!c || c === 'rgba(0, 0, 0, 0)' || c === 'transparent') return;
         document.documentElement.style.setProperty('--elm2-bolt-blue', c);
     }
-    // TEMPORARY DIAGNOSTIC (paginator): what the list page's paginator is made of and whether
-    // Angular's debug API is reachable from page scripts. Names only, no data.
-    let paginatorDiagLogged = false;
-    function logPaginatorDiagnostics() {
-        if (paginatorDiagLogged) return;
-        const pag = document.querySelector('.mat-mdc-paginator, mat-paginator, [class*="paginator"]');
-        if (!pag) return;
-        paginatorDiagLogged = true;
-        const desc = (el) => el.tagName.toLowerCase() + '.' + String(el.className).split(/\s+/).filter(Boolean).slice(0, 4).join('.');
-        const parts = Array.from(pag.querySelectorAll('*'))
-            .filter(e => e.children.length === 0 || /^(BUTTON|MAT-SELECT|INPUT)$/.test(e.tagName))
-            .slice(0, 30).map(e => desc(e) + (e.getAttribute('aria-label') ? '[' + e.getAttribute('aria-label') + ']' : ''));
-        console.log('[elm2] paginator:', desc(pag), '>', parts.join(' | '));
-        console.log('[elm2] angular debug api:', typeof window.ng, '| getAllAngularRootElements:', typeof window.getAllAngularRootElements,
-            '| __ngContext__ on paginator:', '__ngContext__' in pag);
+    // =========================================================
+    // LIST PAGER: "Rows" and "Page" boxes + Go, next to the paginator's range label
+    // (the classic script had the same, driven by URL parameters; this UI keeps paging state in
+    // Angular, so it drives the paginator itself).
+    // Page jumps: (1) set the paginator component's pageIndex and emit its page event, found via the
+    // element's __ngContext__ (Angular's debug API isn't exposed in production); if that component
+    // can't be found, (2) click First page / Next page repeatedly, waiting for the range label.
+    // Rows per page can only be set through (1).
+    // =========================================================
+    const PAGER_RANGE = /(\d[\d,]*)\s*[\u2013\u2014-]\s*(\d[\d,]*)\s+of\s+(\d[\d,]*)/i;
+    function getPaginatorEl() { return document.querySelector('mat-paginator'); }
+    function getPaginatorInstance(pag) {
+        let ctx = pag && pag.__ngContext__;
+        if (ctx && !Array.isArray(ctx) && Array.isArray(ctx.lView)) ctx = ctx.lView;
+        if (!Array.isArray(ctx)) return null;
+        for (const o of ctx) {
+            if (o && typeof o === 'object' && typeof o.nextPage === 'function' && typeof o._emitPageEvent === 'function' && 'pageIndex' in o) return o;
+        }
+        return null;
+    }
+    function readPagerState(pag) {
+        const label = pag.querySelector('.mat-mdc-paginator-range-label');
+        const m = label && label.textContent.replace(/\u00a0/g, ' ').match(PAGER_RANGE);
+        if (!m) return null;
+        const num = (t) => parseInt(t.replace(/,/g, ''), 10);
+        const start = num(m[1]), end = num(m[2]), total = num(m[3]);
+        const inst = getPaginatorInstance(pag);
+        const size = (inst && inst.pageSize) || Math.max(1, end - start + 1);
+        return { start, end, total, size, index: Math.floor((start - 1) / size), pages: Math.max(1, Math.ceil(total / size)) };
+    }
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    async function waitForRangeChange(pag, before, ms) {
+        const label = () => (pag.querySelector('.mat-mdc-paginator-range-label') || {}).textContent;
+        const t0 = Date.now();
+        while (Date.now() - t0 < ms) { if (label() !== before) return true; await sleep(100); }
+        return false;
+    }
+    async function pagerGoToPage(page) {
+        const pag = getPaginatorEl();
+        const st = pag && readPagerState(pag);
+        if (!st) return;
+        const target = Math.max(0, Math.min(st.pages - 1, page - 1));
+        if (target === st.index) return;
+        const inst = getPaginatorInstance(pag);
+        if (inst) {
+            const prev = inst.pageIndex;
+            inst.pageIndex = target;
+            inst._emitPageEvent(prev);
+            return;
+        }
+        // Fallback: walk with the real buttons.
+        const btn = (name) => pag.querySelector('button[aria-label="' + name + '"]:not([disabled])');
+        const label = () => (pag.querySelector('.mat-mdc-paginator-range-label') || {}).textContent;
+        let cur = st.index;
+        const click = async (b) => { const before = label(); b.click(); return waitForRangeChange(pag, before, 4000); };
+        if (target === 0) { const b = btn('First page'); if (b) await click(b); return; }
+        if (target < cur) { const b = btn('First page'); if (!b || !(await click(b))) return; cur = 0; }
+        showMergeNotice('Going to page ' + (target + 1) + '…');
+        while (cur < target) { const b = btn('Next page'); if (!b || !(await click(b))) break; cur++; }
+    }
+    function pagerSetRows(rows) {
+        const pag = getPaginatorEl();
+        const inst = pag && getPaginatorInstance(pag);
+        if (!inst || typeof inst._changePageSize !== 'function') { showMergeNotice('Rows per page can’t be changed from here on this page.'); return; }
+        inst._changePageSize(Math.max(1, Math.min(500, rows)));
+    }
+    function injectPager() {
+        const pag = getPaginatorEl();
+        if (!pag) { const old = document.getElementById('elm2-pager'); if (old) old.remove(); return; }
+        const label = pag.querySelector('.mat-mdc-paginator-range-label');
+        if (!label) return;
+        let box = document.getElementById('elm2-pager');
+        if (!box) {
+            box = document.createElement('div');
+            box.id = 'elm2-pager';
+            box.innerHTML = '<label>Rows <input id="elm2-pager-rows" type="number" min="1" max="500"></label>' +
+                '<label>Page <input id="elm2-pager-page" type="number" min="1"></label><span id="elm2-pager-total"></span>' +
+                '<button type="button" id="elm2-pager-go">Go</button>';
+            label.parentElement.insertBefore(box, label);
+            const go = async () => {
+                const st = readPagerState(pag) || {};
+                const rows = parseInt(document.getElementById('elm2-pager-rows').value, 10);
+                const page = parseInt(document.getElementById('elm2-pager-page').value, 10);
+                if (rows > 0 && rows !== st.size) {
+                    const before = (pag.querySelector('.mat-mdc-paginator-range-label') || {}).textContent;
+                    pagerSetRows(rows);
+                    // let the new page size load before jumping to the requested page
+                    if (page > 0) await waitForRangeChange(pag, before, 4000);
+                }
+                if (page > 0) pagerGoToPage(page);
+            };
+            document.getElementById('elm2-pager-go').addEventListener('click', go);
+            box.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
+        }
+        const st = readPagerState(pag);
+        if (!st) return;
+        const rowsEl = document.getElementById('elm2-pager-rows'), pageEl = document.getElementById('elm2-pager-page');
+        if (document.activeElement !== rowsEl) rowsEl.value = String(st.size);
+        if (document.activeElement !== pageEl) pageEl.value = String(st.index + 1);
+        pageEl.max = String(st.pages);
+        document.getElementById('elm2-pager-total').textContent = 'of ' + st.pages;
     }
     // Element451's orange header colour, read from the header bar itself, for our own UI accents.
     function syncHeaderColor() {
@@ -2148,7 +2241,7 @@
         injectMergeCounter();
         colorScoreChips();
         syncHeaderColor(); // the header is on every page, not just the review page
-        logPaginatorDiagnostics();
+        injectPager();
         if (isDedupReviewPage()) {
             syncBoltBlue();
             annotateRowColors();

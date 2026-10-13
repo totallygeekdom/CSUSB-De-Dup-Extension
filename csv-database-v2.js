@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.19
+// @version      2.20
 // @description  Tracks duplicate entries in a CSV database stored in browser localStorage — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -437,19 +437,6 @@
         return null;
     }
 
-    // TEMPORARY DIAGNOSTIC (paging): how the list request is parameterised. Logs the path and the
-    // query keys; values are shown only when numeric (offset / limit style), never text.
-    let listRequestLogs = 0;
-    function logListRequest(url) {
-        if (listRequestLogs >= 6) return;
-        try {
-            const u = new URL(url, window.location.href);
-            const q = Array.from(u.searchParams.entries()).map(([k, v]) => k + '=' + (/^-?\d+$/.test(v) ? v : '…')).join('&');
-            listRequestLogs++;
-            console.log('CSV Database: list request', u.pathname.replace(/[a-f0-9]{24}/gi, ':id'), '?' + q);
-        } catch (e) { /* ignore */ }
-    }
-
     (function interceptXHR() {
         const origOpen = XMLHttpRequest.prototype.open;
         XMLHttpRequest.prototype.open = function (method, url) {
@@ -464,7 +451,6 @@
                     if (!/duplicate|dedup/i.test(this._csvDbUrl)) return;
                     if (this._csvDbUrl.match(/\/duplicates?\/[a-f0-9]{24}/i)) return;
                     const data = JSON.parse(this.responseText);
-                    logListRequest(this._csvDbUrl);
                     const entries = data.data || data.items || data.results || (Array.isArray(data) ? data : null);
                     if (!entries || !Array.isArray(entries) || entries.length === 0) return;
                     const parsed = parseApiEntries(entries);
@@ -483,7 +469,6 @@
                     if (!url || !/duplicate|dedup/i.test(url)) return response;
                     if (url.match(/\/duplicates?\/[a-f0-9]{24}/i)) return response;
                     response.clone().json().then(data => {
-                        logListRequest(url);
                         const entries = data.data || data.items || data.results || (Array.isArray(data) ? data : null);
                         if (!entries || !Array.isArray(entries) || entries.length === 0) return;
                         const parsed = parseApiEntries(entries);
@@ -832,5 +817,5 @@
         updateDbSizeBadge();
     }, 1000);
 
-    console.log('%cCSV Database (new layout) v2.19 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
+    console.log('%cCSV Database (new layout) v2.20 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
 })();

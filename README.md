@@ -6,94 +6,59 @@ Two Tampermonkey userscripts that streamline the Element451 duplicate-contact me
 
 ## New "Deduplication" Layout (v2 scripts)
 
-Element451 replaced the classic merge page with a redesigned, AI-assisted
-**Deduplication** review-queue UI: a sortable queue table
-(`elm-review-queue-table`) plus a side panel (`elm-review-duplicates-sidebar`)
-containing a field-by-field diff form (`elm-duplicate-field-diff-form`)
-instead of the old full-page `elm-merge-row` list and floating merge button.
+Element451 replaced the classic merge page with a redesigned, AI-assisted **Deduplication** review
+queue (a queue table plus a side panel with a field-by-field diff form, Bolt AI picks and a score
+chip). Two v2 scripts target it:
 
-`Element451-UI-Perfection-v2.user.js` and `csv-database-v2.js` are ports of
-the two classic scripts targeting that new layout. They reuse the same
-`localStorage` settings keys and the same lockdown/resolution rules
-(department classification, forbidden names, address comparison, email
-preference, csusb.major/school, Encoura/College Board ID, etc.), adapted to
-the new DOM structure.
+| Script | File | Current version |
+|---|---|---|
+| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.100` (`v2-build-100`, shown in the settings pane) |
+| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.21` |
 
-**Known limitations — these were ported from a single static, PII-redacted
-HTML snapshot with no way to click through the live app, so verify before
-relying on them for unattended automation:**
-- The merge-success indicator, the "Ignored" chip, and the review page's URL
-  scheme were not visible in the snapshot and are best-effort guesses.
-- The "email open count" tiebreaker (sourced from a "User Activity" section
-  in the classic UI) was dropped — no equivalent section was found.
-- The classic script's "jump to page N" is back as a "Page" box with Go next to the
-  paginator's range label. The new list keeps paging state in Angular (not the URL), so
-  the script walks to the page with the First / Next buttons (or sets the paginator
-  component directly if it can be found). The classic rows-per-page box could not be
-  brought back: the page size isn't read from the URL and the paginator component isn't
-  reachable from a userscript.
-- The list-page department badge is now an appended pill rather than a
-  restyled existing chip, since the real cell content was redacted in the
-  reference snapshot.
+**Full documentation: [`Full-Documentation-v2.md`](Full-Documentation-v2.md)** (architecture, every setting,
+the resolution rules, auto-merge, every website restyle, the database format, limitations).
 
-**Corrected after live testing:**
-- Auto-skip never clicks "Dismiss" on a blocked entry. In this UI, Dismiss
-  opens a "Not a duplicate?" feedback dialog and, once confirmed, permanently
-  tells Bolt the pair is not a match — removing it from the queue and
-  training the matcher on that verdict. A department/forbidden/appeal/
-  ignored block says nothing about whether a pair is actually a duplicate,
-  so skipping only ever moves to the next entry, leaving the blocked pair
-  untouched for a human to review.
-- By default the script does not click "Merge Contacts" (see "When done" above for the opt-in): it's a deliberate,
-  permanent action with no undo, and this UI needs only one click to commit
-  it (unlike the classic merge page, where the FAB's auto-clicked first
-  press only *revealed* conflicts; the second, merge-committing click always
-  required a human, even with Auto-Click FAB on). "Auto-Resolve Fields"
-  only fills in the field-level selections; reviewing them and clicking
-  Merge is always manual. "Auto-Navigate After Merge" was removed for now —
-  it has nothing reliable to trigger off since there's no confirmed
-  merge-success signal yet (see above).
+### What they do
 
-- The review queue URL is always `.../v2/data/duplicates/bolt/review-queue`
-  and no longer changes per profile, so the v2 database is keyed on the
-  Spark IDs of the pair (read from the "Spark Id:" row), not the URL. CSV
-  columns: Firstname, Lastname, Firstname 2, Lastname 2 (the two contacts of
-  the pair), Dept., Row Contents, Spark ID 1, Spark ID 2. List rows don't
-  show Spark IDs, so list-page badges match on names: both contacts' 3-letter
-  prefixes must appear in the row (Spark IDs are only used if the list API
-  happens to include them). Import reads columns by header name, so
-  files from earlier versions (other column order, or the old 5-column
-  Unique ID format) still import and match by name only.
-- A "Show Database UI" toggle (settings pane, under Display) hides the header `DB:`
-  counter and the list-view department chips (Download / Upload / Clear stay
-  available; recording still happens either way).
-- Names are stored obfuscated: only the first 3 letters of the first and last
-  name are kept, followed by "..." when a name was cut (e.g. "Jon...") (existing entries are shortened automatically, and full names
-  are masked out of the Row Contents text too). Name matching on the list
-  page is therefore a weak fallback; Spark IDs are the real key.
+- **Automation per pair**, controlled by four settings in the gear pane:
+  - **Pairs in range** slider: None, Applicant, High, Medium, Low, All (each position adds to the one before).
+  - **Use picks from**: Bolt's or Ours (Ours includes the applicant rule).
+  - **When done**: Wait for me, or Merge after a cancel countdown (a centred dialog with a stepped ring,
+    a plain-language summary and a Cancel button; length set by **Merge countdown**, 2-15 s). This setting
+    resets every browser session. A final safety check runs before Merge Contacts is clicked.
+  - **Auto-Skip**: skips blocked, out-of-range and possible-twins pairs with no popup (Next duplicate
+    only, never Dismiss); off = stop on them and show the appeal / possible-twins popups.
+  - Slider **None** (or Allowed Department **None**) with Auto-Skip on is a **scan**: every pair is
+    recorded in the database and skipped.
+- **Blockers**: forbidden names, an `appeal` keyword, wrong department, student-ID mismatch, an Ignored chip.
+- **Field rules**: applicant side first, then milestone type, personal email (with a name / birth-year
+  tiebreak), csusb.major / csusb.school, Encoura / College Board ID, date-of-birth validity, first generation,
+  later intended term, name case, address comparison and the legacy default-to-left patterns.
+- **Review-page visuals**: Bolt-vs-ours pick colours (green agree, blue Bolt, orange ours), applicant band,
+  comparison bar with *Use Bolt AI picks* / *Use our picks* and a blue **hover preview** of what each would
+  select, High / Medium / Low score-chip colours, a pinned queue nav.
+- **Website restyles (Material 3, orange palette sampled from Element's header)**: gear icon and settings pane,
+  Review Queue / History tabs, a compact Advanced Filters panel, a Page box with Go on the list paginator,
+  and one shared toast stack (bottom-left) for both scripts.
+- **CSV Database v2**: records blocked / skipped pairs keyed on the two contacts' **Spark IDs** (the review
+  URL no longer changes per pair), stores names as 3-letter prefixes (`Jon...`), shows right-aligned department
+  badges on the list page (matched through the list API's `identities[]`, falling back to names), exports and
+  imports CSV (columns `Firstname, Lastname, Firstname 2, Lastname 2, Dept., Row Contents, Spark ID 1, Spark ID 2`;
+  import reads columns by header name so older files still load), and has a **Show Database UI** toggle (under
+  Display). Before every auto-skip the main script asks it to record the pair first.
 
-**Automation settings (v2):**
-- **Pairs in range** (slider: None / Applicant / High / Medium / Low / All): which pairs
-  automation covers, each position adding to the one before. None = no pair is in
-  range (nothing applied or merged; with Auto-Skip on every pair is skipped, which makes it a scan). Applicant = pairs with an
-  applicant side; High, Medium and Low add pairs by Bolt score; All = every pair, even
-  one with no score.
-- **Use picks from** (Bolt's / Ours): applies to every pair in range. Ours includes
-  the applicant rule; Bolt's keeps Element's pre-selected picks (ours only fills a
-  row Bolt left unselected).
-- **When done** (Wait for me / Merge): Merge shows a countdown dialog (4 seconds by default; "Merge countdown" sets 2-15) (a
-  draining ring around the seconds left, a plain-language summary and a Cancel
-  button; Esc also cancels), then re-checks that the pair
-  is unblocked, unchanged, every conflicting field has a pick and there is no
-  possible-twins warning before clicking Merge Contacts. This setting is kept per
-  browser session, so a new session always starts on Wait for me.
-- **Auto-Skip**: skips blocked, out-of-range and possible-twins pairs with no
-  popup (clicks "Next duplicate" only, never Dismiss). Off: the script stops on
-  them, showing the appeal / possible-twins popups, and never merges them.
-- The old "Bolt score is Low" popup is gone; the twins warning covers it.
+### Limitations (details in the full documentation)
 
-The classic scripts remain unchanged for as long as the old layout is still
-reachable anywhere.
+- Developed against saved HTML, mock pages and live feedback; the merge-success signal, the Ignored chip and
+  the score-chip text are inferred. The merge counter is hidden by default (`localStorage.elm_show_merge_counter = 'true'`).
+- **Rows per page** cannot be changed from the script. The **Page / Go** box works (it sets the paginator
+  directly if it can, otherwise it clicks First / Next).
+- When both emails are personal and nothing separates them, no pick is made (same as the classic script).
+- The classic scroll-to-bottom requirement, Auto-Click FAB and email-open-count tiebreaker were not ported.
+- Dismiss is never clicked by a script (it permanently tells Bolt a pair is not a duplicate); skipping only uses
+  Next duplicate.
+
+The classic scripts remain unchanged for as long as the old layout is reachable anywhere.
 
 ---
 
@@ -332,9 +297,12 @@ The CSV Database script depends on UI Perfection for DOM structure and signals. 
 
 ## Installation
 
-1. Install [Tampermonkey](https://www.tampermonkey.net/) browser extension.
-2. Create a new userscript and paste the contents of `Element451-UI-Perfection.user.js`.
-3. (Optional) Create a second userscript and paste the contents of `csv-database.js` for entry tracking and list page annotations.
+1. Install the [Tampermonkey](https://www.tampermonkey.net/) browser extension.
+2. **New Deduplication layout (v2):** create a userscript with the contents of
+   `Element451-UI-Perfection-v2.user.js` and, optionally, a second one with `csv-database-v2.js`. Install each once
+   and do not run them alongside the classic scripts. Check the gear pane's build line / Tampermonkey's version to
+   confirm what is running.
+3. **Classic merge page:** paste `Element451-UI-Perfection.user.js` and, optionally, `csv-database.js` instead.
 4. Navigate to your Element451 duplicates page. The scripts activate automatically on `*.element451.io`.
 
 ## localStorage Keys
@@ -350,3 +318,19 @@ The CSV Database script depends on UI Perfection for DOM structure and signals. 
 | `elm_high_contrast` | UI Perfection | High contrast toggle state |
 | `elm_merge_count` | UI Perfection | Merge counter value |
 | `elm_csv_database` | CSV Database | JSON array of recorded entries |
+
+### v2 scripts
+
+| Key | Used By | Purpose |
+|---|---|---|
+| `elm_range_level` | UI Perfection v2 | Pairs-in-range slider (0 None ... 5 All) |
+| `elm_use_picks` | UI Perfection v2 | Use picks from (`ours` / `bolt`) |
+| `elm_when_done` (sessionStorage) | UI Perfection v2 | When done (`wait` / `merge`), reset each browser session |
+| `elm_merge_countdown` | UI Perfection v2 | Cancel-countdown seconds (2-15) |
+| `elm_auto_skip_blocked` | UI Perfection v2 | Auto-Skip |
+| `elm_highlight_rows` | UI Perfection v2 | Highlight Rows |
+| `elm_allowed_department` | UI Perfection v2 | Allowed Department |
+| `elm_show_merge_counter` | UI Perfection v2 | Hidden: show the merge counter |
+| `elm_merge_count` | UI Perfection v2 | Merge counter value |
+| `elm_csv_database` | CSV Database v2 | Recorded pairs (JSON array, Spark-ID keyed) |
+| `elm_show_db_ui` | CSV Database v2 | Show Database UI |

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.100
+// @version      2.101
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-100'; // keep in sync with @version (2.100)
+    const BUILD = 'v2-build-101'; // keep in sync with @version (2.101)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -41,18 +41,22 @@
     // and auto-navigate can't be done safely until there's a real
     // merge-success signal to detect (see checkForMergeResult below) — both
     // need live investigation before they're worth exposing as settings.
-    // Slider position, 0..5: None, Applicant, High, Medium, Low, All (each adds to the one before).
-    // Stored under a new key; the old slider (0 none, 1 applicant, 2 low, 3 medium, 4 all) is mapped once.
+    // Slider position, 0..4: None, High, Medium, Low, All (each adds to the one before).
+    // Stored under 'elm_range_level2'. Earlier builds stored a six-position slider that also had an
+    // "Applicant" stop under 'elm_range_level' (0 none, 1 applicant, 2 high, 3 medium, 4 low, 5 all);
+    // that is mapped once (Applicant -> High). The oldest slider ('elm_auto_apply_level': 0 none,
+    // 1 applicant, 2 low, 3 medium, 4 all) is mapped the same way.
     function rangeLevel() {
-        const v = parseInt(localStorage.getItem('elm_range_level'), 10);
-        if (!isNaN(v)) return Math.max(0, Math.min(5, v));
+        const v2 = parseInt(localStorage.getItem('elm_range_level2'), 10);
+        if (!isNaN(v2)) return Math.max(0, Math.min(4, v2));
+        const v1 = parseInt(localStorage.getItem('elm_range_level'), 10);
+        if (!isNaN(v1)) return [0, 1, 1, 2, 3, 4][Math.max(0, Math.min(5, v1))];
         const old = parseInt(localStorage.getItem('elm_auto_apply_level'), 10);
-        if (!isNaN(old)) return [0, 1, 4, 3, 5][Math.max(0, Math.min(4, old))];
-        return getBoolSetting('elm_auto_click_fab', true) ? 5 : 0;
+        if (!isNaN(old)) return [0, 1, 3, 2, 4][Math.max(0, Math.min(4, old))];
+        return getBoolSetting('elm_auto_click_fab', true) ? 4 : 0;
     }
     const CFG = Object.defineProperties({}, {
-        // Slider = which pairs are in range (0 None = automation off, 1 Applicant, 2 + High score,
-        // 3 + Medium, 4 + Low, 5 All).
+        // Slider = which pairs are in range, by Bolt score (0 None, 1 High, 2 + Medium, 3 + Low, 4 All).
         RANGE_LEVEL:              { get() { return rangeLevel(); } },
         // Whose picks are used on pairs in range: 'ours' (our rules, incl. the applicant rule) or
         // 'bolt' (leave Bolt's picks; ours only fills rows Bolt left unselected).
@@ -539,7 +543,7 @@
         #elm-settings-pane .m3s-active, #elm-settings-pane .m3s-inactive { position: absolute; top: 14px; height: 16px; transition: width .2s var(--md-ease), left .2s var(--md-ease); }
         #elm-settings-pane .m3s-active { left: 0; width: max(0px, calc((100% - 4px) * var(--p) - var(--gap))); background: var(--md-primary); border-radius: 8px 2px 2px 8px; }
         #elm-settings-pane .m3s-inactive { right: 0; left: calc((100% - 4px) * var(--p) + 4px + var(--gap)); background: var(--md-primary-track); border-radius: 2px 8px 8px 2px; }
-        #elm-settings-pane .m3s-dots span { position: absolute; top: 20px; width: 4px; height: 4px; border-radius: 50%; left: calc(6px + (100% - 16px) * var(--i) / 5); }
+        #elm-settings-pane .m3s-dots span { position: absolute; top: 20px; width: 4px; height: 4px; border-radius: 50%; left: calc(6px + (100% - 16px) * var(--i) / 4); }
         #elm-settings-pane .m3s-dots span.on { background: #fff; }
         #elm-settings-pane .m3s-dots span.off { background: var(--md-primary); }
         #elm-settings-pane .m3s-dots span.here { display: none; }
@@ -549,7 +553,7 @@
         #elm-settings-pane .m3s input[type=range]:focus-visible ~ .m3s-handle .m3s-bubble,
         #elm-settings-pane .m3s input[type=range]:active ~ .m3s-handle .m3s-bubble { opacity: 1; }
         #elm-settings-pane .m3s-labels { position: relative; height: 16px; margin-top: 4px; font-size: 12px; line-height: 16px; letter-spacing: .4px; color: var(--md-on-surface-variant); }
-        #elm-settings-pane .m3s-labels span { position: absolute; top: 0; white-space: nowrap; left: calc((100% - 4px) * var(--i) / 5 + 2px); transform: translateX(-50%); transition: color .2s var(--md-ease); }
+        #elm-settings-pane .m3s-labels span { position: absolute; top: 0; white-space: nowrap; left: calc((100% - 4px) * var(--i) / 4 + 2px); transform: translateX(-50%); transition: color .2s var(--md-ease); }
         #elm-settings-pane .m3s-labels span:first-child { left: 0; transform: none; }
         #elm-settings-pane .m3s-labels span:last-child { left: 100%; transform: translateX(-100%); }
         #elm-settings-pane .m3s-labels span.sel { color: var(--md-primary-text); font-weight: 500; }
@@ -1177,19 +1181,19 @@
     // Every resolution rule below should call this instead of row.selectSide()
     // directly.
     let currentRule = '';
-    // pairInRange: whether the slider covers the pair on screen. Cumulative:
-    // 1 pairs with an applicant side, 2 + Bolt score High, 3 + Medium, 4 + Low, 5 every pair.
+    // pairInRange: whether the slider covers the pair on screen, by Bolt score. Cumulative:
+    // 1 High, 2 + Medium, 3 + Low, 4 every pair (even one with no score). An applicant side does
+    // not put a pair in range: applicants can have any score.
     // autoApplyThisPair: in range AND "Use picks from" is Ours (so our picks get applied).
     let pairInRange = false;
     let autoApplyThisPair = false;
     function computeAutoApplyForPair() {
         const level = CFG.RANGE_LEVEL;
         const score = getScoreChipLevel();
-        pairInRange = level >= 5
-            || (level >= 1 && !!findApplicantSide())
-            || (level >= 2 && score === 'high')
-            || (level >= 3 && score === 'medium')
-            || (level >= 4 && score === 'low');
+        pairInRange = level >= 4
+            || (level >= 1 && score === 'high')
+            || (level >= 2 && score === 'medium')
+            || (level >= 3 && score === 'low');
         autoApplyThisPair = pairInRange && CFG.USE_PICKS === 'ours';
         return autoApplyThisPair;
     }
@@ -2189,7 +2193,7 @@
         // At the Low / Medium Auto-Apply levels the decision depends on Bolt's score, which can
         // render a moment after the field rows: wait for it (up to 3s) before deciding.
         const lvl = CFG.RANGE_LEVEL;
-        if (lvl >= 2 && lvl < 5 && !getScoreChipLevel() && Date.now() - pairFirstSeenAt < 3000) return;
+        if (lvl >= 1 && lvl < 4 && !getScoreChipLevel() && Date.now() - pairFirstSeenAt < 3000) return;
         resolutionAttempted = true;
         // Two-phase, mirroring the classic script: resolve now, then re-verify
         // shortly after in case more Workflow/Source rows loaded in the meantime.
@@ -2373,13 +2377,13 @@
                 <div class="setting-row elm-slider-head"><label>Pairs in range</label><span id="elm-apply-level-label" class="elm-level-label"></span></div>
                 <div class="elm-slider">
                     <div class="m3s" id="elm-m3s">
-                        <input type="range" id="elm-apply-level" min="0" max="5" step="1" aria-label="Pairs in range">
+                        <input type="range" id="elm-apply-level" min="0" max="4" step="1" aria-label="Pairs in range">
                         <div class="m3s-active"></div>
                         <div class="m3s-inactive"></div>
-                        <div class="m3s-dots"><span style="--i:0"></span><span style="--i:1"></span><span style="--i:2"></span><span style="--i:3"></span><span style="--i:4"></span><span style="--i:5"></span></div>
+                        <div class="m3s-dots"><span style="--i:0"></span><span style="--i:1"></span><span style="--i:2"></span><span style="--i:3"></span><span style="--i:4"></span></div>
                         <div class="m3s-handle"><span class="m3s-bubble" id="elm-m3s-bubble"></span></div>
                     </div>
-                    <div class="m3s-labels"><span style="--i:0">None</span><span style="--i:1">Applicant</span><span style="--i:2">High</span><span style="--i:3">Medium</span><span style="--i:4">Low</span><span style="--i:5">All</span></div>
+                    <div class="m3s-labels"><span style="--i:0">None</span><span style="--i:1">High</span><span style="--i:2">Medium</span><span style="--i:3">Low</span><span style="--i:4">All</span></div>
                 </div>
                 <div id="elm-apply-level-desc" class="elm-level-desc"></div>
                 <div class="setting-row elm-seg-head"><label>Use picks from</label></div>
@@ -2425,19 +2429,18 @@
         }
         const levelSlider = document.getElementById('elm-apply-level');
         const levelLabel = document.getElementById('elm-apply-level-label');
-        const levelNames = ['None', 'Applicant', 'High', 'Medium', 'Low', 'All'];
+        const levelNames = ['None', 'High', 'Medium', 'Low', 'All'];
         const levelDescs = [
             'No pairs in range. Auto-Skip on skips every pair (a scan); off leaves them for you.',
-            'Only pairs that have an applicant side.',
-            'Applicant pairs, plus pairs with a High Bolt score.',
-            'Applicant pairs, plus High and Medium Bolt scores.',
-            'Applicant pairs, plus High, Medium and Low Bolt scores.',
+            'Pairs with a High Bolt score.',
+            'Pairs with a High or Medium Bolt score.',
+            'Pairs with a High, Medium or Low Bolt score.',
             'Every pair, even one with no Bolt score.'
         ];
         const syncLevel = () => {
             levelSlider.value = CFG.RANGE_LEVEL;
             const idx = parseInt(levelSlider.value, 10);
-            document.getElementById('elm-m3s').style.setProperty('--p', idx / 5);
+            document.getElementById('elm-m3s').style.setProperty('--p', idx / 4);
             document.querySelectorAll('#elm-m3s .m3s-dots span').forEach((d, i) => {
                 d.className = i < idx ? 'on' : i > idx ? 'off' : 'here';
             });
@@ -2455,7 +2458,7 @@
         };
         syncLevel();
         levelSlider.addEventListener('input', () => {
-            localStorage.setItem('elm_range_level', levelSlider.value);
+            localStorage.setItem('elm_range_level2', levelSlider.value);
             syncLevel();
             if (CFG.RANGE_LEVEL === 0) cancelAutoMerge('Auto-merge cancelled');
             reapplyForLevel();

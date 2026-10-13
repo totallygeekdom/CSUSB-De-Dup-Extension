@@ -12,7 +12,7 @@ chip). Two v2 scripts target it:
 
 | Script | File | Current version |
 |---|---|---|
-| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.100` (`v2-build-100`, shown in the settings pane) |
+| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.101` (`v2-build-101`, shown in the settings pane) |
 | CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.21` |
 
 **Full documentation: [`Full-Documentation-v2.md`](Full-Documentation-v2.md)** (architecture, every setting,
@@ -21,7 +21,7 @@ the resolution rules, auto-merge, every website restyle, the database format, li
 ### What they do
 
 - **Automation per pair**, controlled by four settings in the gear pane:
-  - **Pairs in range** slider: None, Applicant, High, Medium, Low, All (each position adds to the one before).
+  - **Pairs in range** slider, by Bolt score: None, High, Medium, Low, All (each position adds to the one before; an applicant side does not put a pair in range).
   - **Use picks from**: Bolt's or Ours (Ours includes the applicant rule).
   - **When done**: Wait for me, or Merge after a cancel countdown (a centred dialog with a stepped ring,
     a plain-language summary and a Cancel button; length set by **Merge countdown**, 2-15 s). This setting
@@ -323,7 +323,7 @@ The CSV Database script depends on UI Perfection for DOM structure and signals. 
 
 | Key | Used By | Purpose |
 |---|---|---|
-| `elm_range_level` | UI Perfection v2 | Pairs-in-range slider (0 None ... 5 All) |
+| `elm_range_level2` | UI Perfection v2 | Pairs-in-range slider (0 None ... 4 All) |
 | `elm_use_picks` | UI Perfection v2 | Use picks from (`ours` / `bolt`) |
 | `elm_when_done` (sessionStorage) | UI Perfection v2 | When done (`wait` / `merge`), reset each browser session |
 | `elm_merge_countdown` | UI Perfection v2 | Cancel-countdown seconds (2-15) |

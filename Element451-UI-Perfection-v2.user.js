@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.108
+// @version      2.109
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-108'; // keep in sync with @version (2.108)
+    const BUILD = 'v2-build-109'; // keep in sync with @version (2.109)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -73,6 +73,7 @@
         HIGHLIGHT_ROWS:           { get() { return getBoolSetting('elm_highlight_rows', true); } },
         SHOW_MERGE_COUNTER:       { get() { return getBoolSetting('elm_show_merge_counter', false); } },
         AUTO_SKIP_BLOCKED:        { get() { return getBoolSetting('elm_auto_skip_blocked', true); } },
+        NEXT_AFTER_MERGE:         { get() { return getBoolSetting('elm_next_after_merge', true); } },
         ALLOWED_DEPARTMENT:       { get() { return localStorage.getItem('elm_allowed_department') || 'UnderGrad'; } },
     });
     // =========================================================
@@ -2379,18 +2380,34 @@
             lastMergeContactNamesKey = getPairKey();
         });
     }
+    // After a merge Element451 replaces the form with a "Merge completed" card
+    // (bolt-card.merge-completion-state) holding "View merged contact" and "Next duplicate".
+    // That card is the real merge-success signal: count the merge, then press "Next duplicate"
+    // (not shown on the last pair, in which case nothing is clicked). Handled once per card.
+    function checkMergeCompletion() {
+        const card = document.querySelector('.merge-completion-state');
+        if (!card || card.dataset.elm2Handled) return;
+        card.dataset.elm2Handled = '1';
+        console.log('[elm2] Merge completed |', (card.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 90));
+        if (awaitingMergeResult) {
+            awaitingMergeResult = false;
+            if (CFG.SHOW_MERGE_COUNTER) incrementMergeCount();
+        }
+        if (!CFG.NEXT_AFTER_MERGE) return;
+        setTimeout(() => {
+            const btn = Array.from(card.querySelectorAll('.merge-completion-actions button'))
+                .find(b => /^next duplicate$/i.test(b.textContent.trim()));
+            if (!card.isConnected) return;
+            if (btn && !btn.disabled) { console.log('[elm2] Next duplicate after merge'); btn.click(); }
+            else console.log('[elm2] No "Next duplicate" button after merge (last pair?)');
+        }, 900);
+    }
     function checkForMergeResult() {
+        checkMergeCompletion();
         if (!awaitingMergeResult) return;
-        // BEST EFFORT: no merge-success element existed in the reference
-        // snapshot. Detect success as "the pair on screen changed" after
-        // Merge Contacts was clicked, which is the one thing guaranteed to
-        // happen whether the UI shows a toast or just advances the queue.
-        // NOTE: this only fires once the pair on screen has already
-        // changed, meaning the app already advanced the queue on its own —
-        // do NOT also call clickNextDuplicate() here, that would skip an
-        // extra pair. An "auto-navigate after merge" feature isn't safe to
-        // add back until there's a real merge-success indicator that can
-        // tell "merged" apart from "nothing happened yet" (see README).
+        // Fallback for a merge without the completion card: success is "the pair on screen changed"
+        // after Merge Contacts was clicked. It only fires once the app has already moved on, so it
+        // never presses Next duplicate itself.
         const pairKey = getPairKey();
         if (pairKey && pairKey !== lastMergeContactNamesKey) {
             awaitingMergeResult = false;
@@ -2534,6 +2551,8 @@
                 </div>
                 <div class="setting-row"><label>Auto-Skip</label>${toggleHtml('elm-auto-skip-blocked')}</div>
                 <div class="elm-level-desc elm-skip-desc">Skips blocked, out-of-range and possible-twins pairs with no popup. Off: stops on them instead.</div>
+                <div class="setting-row"><label>Next after merge</label>${toggleHtml('elm-next-after-merge')}</div>
+                <div class="elm-level-desc elm-next-desc">After a merge (yours or an auto-merge), presses "Next duplicate" on the "Merge completed" card.</div>
                 <div class="setting-row"><label>Auxiliary logic</label>${toggleHtml('elm-aux-logic')}</div>
                 <div class="elm-level-desc elm-aux-desc">Extra tie-breakers for milestone entries, csusb.major / csusb.school (both sides), Encoura / College Board IDs and system entries: picks the more recent profile (card "Created" date). Off: Bolt's pick stays.</div>
                 <div class="settings-section-title">Display</div>
@@ -2628,6 +2647,7 @@
         syncLevel();
         syncCountdown();
         setupToggle('elm-auto-skip-blocked', 'elm_auto_skip_blocked');
+        setupToggle('elm-next-after-merge', 'elm_next_after_merge');
         setupToggle('elm-highlight-rows', 'elm_highlight_rows');
         setupToggle('elm-aux-logic', 'elm_aux_logic', null, false);
         function setupToggle(elementId, storageKey, onChange, defaultValue = true) {

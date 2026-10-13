@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.97
+// @version      2.98
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-97'; // keep in sync with @version (2.97)
+    const BUILD = 'v2-build-98'; // keep in sync with @version (2.98)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -173,6 +173,12 @@
         .mat-mdc-tab-link-container:not(#elm2x) .mdc-tab.mat-mdc-tab-link .mdc-tab-indicator { left: 24px !important; right: 24px !important; width: auto !important; }
         .mat-mdc-tab-link-container:not(#elm2x) .mdc-tab.mat-mdc-tab-link .mdc-tab-indicator__content--underline { border-top-width: 3px !important; border-radius: 3px 3px 0 0 !important; border-color: var(--md-primary) !important; }
         /* --- Advanced Filters sidebar (list page): compact, Material 3 --- */
+        /* Panel width: Element sizes the overlay pane at 60% of the screen. The container inside it is
+           sized separately, so both are set to the same width (setting only the pane clipped the content). */
+        .cdk-overlay-pane:has(elm-review-queue-filters-sidebar),
+        bolt-stackable-sidebar-container:has(elm-review-queue-filters-sidebar),
+        elm-review-queue-filters-sidebar,
+        elm-review-queue-filters-sidebar bolt-stackable-sidebar { width: min(600px, 100vw) !important; max-width: 100vw !important; }
         elm-review-queue-filters-sidebar .bolt-stackable-sidebar-content { background: #ebe5de !important; color: var(--md-on-surface); font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; }
         elm-review-queue-filters-sidebar .bolt-stackable-sidebar-header-wrapper { display: flex !important; flex-wrap: nowrap !important; padding: 12px 16px 12px 8px !important; min-height: 0 !important; gap: 8px !important; align-items: center !important; border-bottom: 1px solid color-mix(in srgb, var(--md-outline) 25%, transparent) !important; background: transparent !important; }
         elm-review-queue-filters-sidebar .bolt-stackable-sidebar-header-wrapper bolt-stackable-sidebar-header { flex: 1 1 auto !important; min-width: 0 !important; }
@@ -186,7 +192,7 @@
         elm-review-queue-filters-sidebar .bolt-stackable-sidebar-header-actions button.bolt-button-color-accent-dark:hover { box-shadow: var(--md-elev-1) !important; }
         elm-review-queue-filters-sidebar .bolt-stackable-sidebar-header-actions button.bolt-button-disabled { background: rgba(26, 28, 32, .12) !important; color: rgba(26, 28, 32, .38) !important; box-shadow: none !important; }
         elm-review-queue-filters-sidebar .bolt-copilot-button { display: none !important; }
-        elm-review-queue-filters-sidebar bolt-stackable-sidebar-body { padding: 12px 16px 16px !important; }
+        elm-review-queue-filters-sidebar bolt-stackable-sidebar-body { display: block !important; padding: 12px 16px 16px !important; }
         elm-review-queue-filters-sidebar bolt-stackable-sidebar-section { display: block; margin: 0 0 8px !important; padding: 12px 16px 14px !important; border: 1px solid rgba(26, 28, 32, .08) !important; border-radius: 16px !important; box-shadow: 0 1px 2px rgba(0, 0, 0, .08) !important; background: #fffcfa !important; }
         elm-review-queue-filters-sidebar bolt-stackable-sidebar-section .title { margin: 0 0 10px !important; padding: 0 !important; }
         elm-review-queue-filters-sidebar bolt-stackable-sidebar-section .title-content h3 { margin: 0 !important; font-size: 14px !important; line-height: 20px !important; font-weight: 500 !important; letter-spacing: .1px; color: var(--md-on-surface) !important; }
@@ -222,7 +228,7 @@
         elm-review-queue-filters-sidebar input[boltinput][type="date"]:not(#elm2x):focus { outline: none; border: 2px solid var(--md-primary); padding: 0 11px; }
         /* tighter vertical rhythm: one-line section headers, labels beside their controls */
         elm-review-queue-filters-sidebar .bolt-stackable-sidebar-header-wrapper { padding: 12px 16px 12px 6px !important; background: #f7f3ef !important; }
-        elm-review-queue-filters-sidebar bolt-stackable-sidebar-body { padding: 12px 16px 16px !important; }
+        elm-review-queue-filters-sidebar bolt-stackable-sidebar-body { display: block !important; padding: 12px 16px 16px !important; }
         elm-review-queue-filters-sidebar bolt-stackable-sidebar-section { margin: 0 0 10px !important; padding: 14px 16px 16px !important; border-radius: 16px; }
         elm-review-queue-filters-sidebar bolt-stackable-sidebar-section .title { margin: 0 0 12px !important; }
         elm-review-queue-filters-sidebar bolt-stackable-sidebar-section .title-content { display: flex !important; align-items: baseline !important; gap: 8px !important; min-width: 0; }

@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.108`, shown in the settings pane and console as `v2-build-108` |
+| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.109`, shown in the settings pane and console as `v2-build-109` |
 | CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.22` |
 
 The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
@@ -291,6 +291,8 @@ Merging is permanent, so auto-merge is opt-in (**When done = Merge**, which rese
 4. When the countdown ends, a **final gate** re-checks: the pair is unchanged and unblocked, every conflicting field has a selected side, no twins flag, and the Merge Contacts button exists and is enabled. If it fails: Auto-Skip on → skip, off → a toast says why ("Auto-merge stopped: …").
 5. Only then is **Merge Contacts** clicked (once per pair), and the merge-tracking logic takes over.
 
+**After a merge** (yours or an auto-merge): Element451 shows a **Merge completed** card (`bolt-card.merge-completion-state`) with **View merged contact** and **Next duplicate**. The script detects that card, counts the merge, waits about 1 second and presses **Next duplicate** (the button is absent on the last pair, so nothing is pressed then). Turn this off with **Next after merge** in the settings pane. Storage: `elm_next_after_merge` (default on).
+
 The script never clicks **Dismiss** and never merges while the slider is on None or When done is on Wait for me.
 
 ---
@@ -397,6 +399,7 @@ Header `DB: N` pill, the Database section of the settings pane, the **Show Datab
 | `elm_when_done` (**sessionStorage**) | main | `wait` / `merge`, reset every browser session |
 | `elm_merge_countdown` | main | Cancel window seconds (2–15) |
 | `elm_auto_skip_blocked` | main | Auto-Skip |
+| `elm_next_after_merge` | main | Next after merge (default on) |
 | `elm_highlight_rows` | main | Highlight Rows |
 | `elm_allowed_department` | main | Allowed Department |
 | `elm_show_merge_counter` | main | Hidden: show the merge counter |

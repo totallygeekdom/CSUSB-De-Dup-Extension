@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.112`, shown in the settings pane and console as `v2-build-112` |
+| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.113`, shown in the settings pane and console as `v2-build-113` |
 | CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.22` |
 
 The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
@@ -286,7 +286,7 @@ The classic "Bolt score is Low" popup no longer exists; the twins check covers i
 Merging is permanent, so auto-merge is opt-in (**When done = Merge**, which resets every browser session) and gated:
 
 1. The pair must be in range, unblocked, and not flagged as possible twins.
-2. A **countdown dialog** opens (centred, over a 32% scrim; the scrim also blocks stray clicks). It shows a draining red ring that steps down once per second with the seconds left in the middle, the headline *Merging automatically*, a plain-language summary such as *"About to merge A and B. 12 fields conflict: 8 follow Bolt's pick and 4 follow ours (applicant side, email)."*, and a full-width **Cancel** pill. **Esc** also cancels. The countdown length is the **Merge countdown** setting (default 4 s, minimum 2 s).
+2. A **countdown dialog** opens (centred, over a 32% scrim; the scrim also blocks stray clicks). It shows a draining red ring that steps down once per second with the seconds left in the middle, the headline *Merging automatically*, a short brief (the two names; *Bolt score:* Low in red, Medium in orange or High in green; *Script agrees with 2/5*, the share of our picks that match Bolt's; and *Script chose 3 over Bolt: Email, Address, DOB*, or *Script found **applicant** and chose 3 over Bolt* when an applicant side decided), and a full-width **Cancel** pill. **Esc** also cancels. The countdown length is the **Merge countdown** setting (default 4 s, minimum 2 s).
 3. Cancelling, or the pair changing, aborts and shows a toast.
 4. When the countdown ends, a **final gate** re-checks: the pair is unchanged and unblocked, every conflicting field has a selected side, no twins flag, and the Merge Contacts button exists and is enabled. If it fails: Auto-Skip on → skip, off → a toast says why ("Auto-merge stopped: …").
 5. Only then is **Merge Contacts** clicked (once per pair), and the merge-tracking logic takes over.

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.113
+// @version      2.114
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-113'; // keep in sync with @version (2.113)
+    const BUILD = 'v2-build-114'; // keep in sync with @version (2.114)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -160,7 +160,6 @@
         #elm2-merge-overlay #elm2-merge-summary { margin: 0 12px 32px; font-size: 15px; line-height: 22px; letter-spacing: .15px; color: #434750; }
         #elm2-merge-overlay #elm2-merge-summary .brief-line { margin: 0 0 6px; }
         #elm2-merge-overlay #elm2-merge-summary .brief-names { font-size: 17px; line-height: 24px; font-weight: 600; color: #1a1c20; margin-bottom: 10px; }
-        #elm2-merge-overlay #elm2-merge-summary .brief-note { font-size: 13px; }
         #elm2-merge-overlay #elm2-merge-summary b { font-weight: 700; color: #1a1c20; }
         #elm2-merge-overlay #elm2-merge-summary .brief-score-high { color: #2e7d32; }
         #elm2-merge-overlay #elm2-merge-summary .brief-score-medium { color: #ef6c00; }
@@ -2253,20 +2252,19 @@
         if (over.length === 0) return;
         const l = line();
         const ours = CFG.USE_PICKS === 'ours';
-        if (findApplicantSide()) {
+        const applicant = !!findApplicantSide();
+        if (applicant) {
             text(l, 'Script found ');
             strong(l, 'applicant');
-            text(l, ours ? ' and chose ' : ' and differs on ');
-        } else {
-            text(l, ours ? 'Script chose ' : 'Script differs on ');
+            if (ours) { text(l, ' and chose '); strong(l, String(over.length)); text(l, ' over Bolt.'); }
+            else text(l, ' but Bolt chose instead.');
+            return;
         }
+        text(l, ours ? 'Script chose ' : 'Bolt chose ');
         strong(l, String(over.length));
-        if (ours) text(l, ' over Bolt');
-        if (!findApplicantSide()) {
-            const labels = Array.from(new Set(over.map(r => r.label).filter(Boolean)));
-            text(l, ': ' + labels.slice(0, 4).join(', ') + (labels.length > 4 ? ' +' + (labels.length - 4) + ' more' : ''));
-        } else text(l, '.');
-        if (!ours) { const n = line('brief-note'); text(n, "Bolt's picks are used."); }
+        text(l, ours ? ' over Bolt: ' : ' over script: ');
+        const labels = Array.from(new Set(over.map(r => r.label).filter(Boolean)));
+        text(l, labels.slice(0, 4).join(', ') + (labels.length > 4 ? ' +' + (labels.length - 4) + ' more' : ''));
     }
     // Final gate before the merge click. Returns { ok, reason }.
     function mergeReadiness(key) {

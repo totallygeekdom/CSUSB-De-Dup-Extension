@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.105
+// @version      2.106
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-105'; // keep in sync with @version (2.105)
+    const BUILD = 'v2-build-106'; // keep in sync with @version (2.106)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -993,10 +993,12 @@
                 values: [{ textContent: leftText }, { textContent: rightText }],
                 leftSelected: !!(leftBtn && leftBtn.classList.contains('diff-option-selected')),
                 rightSelected: !!(rightBtn && rightBtn.classList.contains('diff-option-selected')),
-                selectSide(side) {
+                selectSide(side, viaValue) {
                     const arrow = side === 'left' ? arrowA : arrowB;
                     const value = side === 'left' ? leftBtn : rightBtn;
                     if (isSel(arrow) || (!arrow && isSel(value))) return; // already selected
+                    // Retry path: the value button is the row's real radio control (role=radio).
+                    if (viaValue && value) { value.click(); return; }
                     // The arrows are the real control; fall back to the value button
                     // if clicking the arrow didn't register.
                     if (arrow) {
@@ -1230,7 +1232,22 @@
         rememberRow(row.key, { script: side, acted: true, rule: currentRule });
         // With Bolt's picks kept, ours only fills a row Bolt left unselected.
         const fillsGap = pairInRange && CFG.USE_PICKS === 'bolt' && !row.nativeSide;
-        if (autoApplyThisPair || fillsGap) row.selectSide(side);
+        if (autoApplyThisPair || fillsGap) {
+            row.selectSide(side);
+            confirmPick(row.key, side, 0);
+        }
+    }
+    // Angular can re-render a row (or Bolt can re-apply its default) right after our click, so the
+    // click is checked against the live DOM and redone through the radio button, up to twice.
+    function confirmPick(key, side, attempt) {
+        setTimeout(() => {
+            const fresh = getDiffRows().find(r => r.key === key);
+            if (!fresh || fresh.nativeSide === side) return;
+            if (attempt >= 2) { console.log('[elm2] pick did not stick after retries:', fresh.label, '->', side); return; }
+            console.log('[elm2] pick did not stick, retrying via radio button:', fresh.label, '->', side);
+            fresh.selectSide(side, true);
+            confirmPick(key, side, attempt + 1);
+        }, attempt === 0 ? 500 : 900);
     }
     function getContactCards() {
         const form = getDiffForm();

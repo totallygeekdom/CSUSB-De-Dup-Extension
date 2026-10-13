@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.90
+// @version      2.91
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-90'; // keep in sync with @version (2.90)
+    const BUILD = 'v2-build-91'; // keep in sync with @version (2.91)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -2001,7 +2001,7 @@
         const btn = e.target && e.target.closest ? e.target.closest('button') : null;
         if (!btn) return;
         const text = btn.textContent.trim().toLowerCase();
-        if (!btn.classList.contains('diff-value-button')) {
+        if (!btn.classList.contains('diff-value-button') && !/^(First|Next|Previous|Last) page$/.test(btn.getAttribute('aria-label') || '')) {
             console.log('[elm2] script click on button:', JSON.stringify(btn.textContent.trim() || btn.getAttribute('aria-label') || ''));
         }
         const inNotDupDialog = !!btn.closest('bolt-dialog') && /not a duplicate/i.test(btn.closest('bolt-dialog').textContent);

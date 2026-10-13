@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.107
+// @version      2.108
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-107'; // keep in sync with @version (2.107)
+    const BUILD = 'v2-build-108'; // keep in sync with @version (2.108)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -1199,8 +1199,42 @@
         getDiffRows().forEach(row => {
             const d = row.element.dataset;
             if (d.elm2AiSide || d.elm2AiSeen) return; // already captured, or we've already acted on this row
-            if (row.nativeSide) { d.elm2AiSide = row.nativeSide; rememberRow(row.key, { ai: row.nativeSide }); }
+            const ai = captureBoltPick(row);
+            if (ai) { d.elm2AiSide = ai; rememberRow(row.key, { ai }); }
         });
+    }
+    // Bolt's original pick for a row, kept across visits. Element451 saves the selection on a pair, so
+    // when you come back to it the screen shows whatever was selected last time (ours, or yours), not
+    // Bolt's pick. The first time a row is seen its pick is stored (hashed, no names or emails kept);
+    // later visits read it back instead of treating the saved selection as Bolt's.
+    const BOLT_STORE_KEY = 'elm2_bolt_picks';
+    function hashStr(str) {
+        let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+        for (let i = 0; i < str.length; i++) {
+            const ch = str.charCodeAt(i);
+            h1 = Math.imul(h1 ^ ch, 2654435761);
+            h2 = Math.imul(h2 ^ ch, 1597334677);
+        }
+        h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+        h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+        return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+    }
+    function boltStoreId(row) { return hashStr(getContactNames().join('|') + '||' + row.key); }
+    function boltStoreRead() {
+        try { return JSON.parse(localStorage.getItem(BOLT_STORE_KEY) || '{}') || {}; } catch (e) { return {}; }
+    }
+    function captureBoltPick(row) {
+        if (!row.isConflict) return row.nativeSide;
+        const id = boltStoreId(row);
+        const store = boltStoreRead();
+        const saved = store[id];
+        if (saved && (saved.s === 'l' || saved.s === 'r')) return saved.s === 'l' ? 'left' : 'right';
+        if (!row.nativeSide) return null;
+        store[id] = { s: row.nativeSide === 'left' ? 'l' : 'r', t: Date.now() };
+        const ids = Object.keys(store);
+        if (ids.length > 3000) ids.sort((x, y) => store[x].t - store[y].t).slice(0, ids.length - 2500).forEach(k => delete store[k]);
+        try { localStorage.setItem(BOLT_STORE_KEY, JSON.stringify(store)); } catch (e) { /* storage unavailable */ }
+        return row.nativeSide;
     }
     // Selects a side AND records it as our script's pick, so the AI-vs-script
     // comparison bar can show both and let a human bulk-switch between them.
@@ -1226,7 +1260,10 @@
     function applyScriptPick(row, side) {
         const d = row.element.dataset;
         d.elm2Rule = currentRule;
-        if (!d.elm2AiSide && !d.elm2AiSeen && row.nativeSide) { d.elm2AiSide = row.nativeSide; rememberRow(row.key, { ai: row.nativeSide }); }
+        if (!d.elm2AiSide && !d.elm2AiSeen) {
+            const ai = captureBoltPick(row);
+            if (ai) { d.elm2AiSide = ai; rememberRow(row.key, { ai }); }
+        }
         d.elm2AiSeen = '1'; // from here on, a selection on this row may be ours, not Bolt's
         d.elm2ScriptSide = side;
         rememberRow(row.key, { script: side, acted: true, rule: currentRule });

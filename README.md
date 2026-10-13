@@ -12,7 +12,7 @@ chip). Two v2 scripts target it:
 
 | Script | File | Current version |
 |---|---|---|
-| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.108` (`v2-build-108`, shown in the settings pane) |
+| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.109` (`v2-build-109`, shown in the settings pane) |
 | CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.22` |
 
 **Full documentation: [`Full-Documentation-v2.md`](Full-Documentation-v2.md)** (architecture, every setting,
@@ -28,6 +28,7 @@ the resolution rules, auto-merge, every website restyle, the database format, li
     resets every browser session. A final safety check runs before Merge Contacts is clicked.
   - **Auto-Skip**: skips blocked, out-of-range and possible-twins pairs with no popup (Next duplicate
     only, never Dismiss); off = stop on them and show the appeal / possible-twins popups.
+  - **Next after merge**: after a merge, presses "Next duplicate" on the "Merge completed" card (default on).
   - Slider **None** (or Allowed Department **None**) with Auto-Skip on is a **scan**: every pair is
     recorded in the database and skipped.
 - **Blockers**: forbidden names, an `appeal` keyword, wrong department, student-ID mismatch, an Ignored chip.
@@ -337,4 +338,5 @@ The CSV Database script depends on UI Perfection for DOM structure and signals. 
 | `elm_csv_database` | CSV Database v2 | Recorded pairs (JSON array, Spark-ID keyed) |
 | `elm_show_db_ui` | CSV Database v2 | Show Database UI |
 | `elm_aux_logic` | UI Perfection v2 | Auxiliary logic (default off) |
+| `elm_next_after_merge` | UI Perfection v2 | Next after merge (default on) |
 | `elm2_bolt_picks` | UI Perfection v2 | Bolt's original pick per conflicting row, hashed (no names or emails), so a revisited pair still shows what Bolt picked |

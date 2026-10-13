@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.98
+// @version      2.99
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-98'; // keep in sync with @version (2.98)
+    const BUILD = 'v2-build-99'; // keep in sync with @version (2.99)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -178,7 +178,7 @@
         .cdk-overlay-pane:has(elm-review-queue-filters-sidebar),
         bolt-stackable-sidebar-container:has(elm-review-queue-filters-sidebar),
         elm-review-queue-filters-sidebar,
-        elm-review-queue-filters-sidebar bolt-stackable-sidebar { width: min(600px, 100vw) !important; max-width: 100vw !important; }
+        elm-review-queue-filters-sidebar bolt-stackable-sidebar { width: min(640px, 100vw) !important; max-width: 100vw !important; }
         elm-review-queue-filters-sidebar .bolt-stackable-sidebar-content { background: #ebe5de !important; color: var(--md-on-surface); font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; }
         elm-review-queue-filters-sidebar .bolt-stackable-sidebar-header-wrapper { display: flex !important; flex-wrap: nowrap !important; padding: 12px 16px 12px 8px !important; min-height: 0 !important; gap: 8px !important; align-items: center !important; border-bottom: 1px solid color-mix(in srgb, var(--md-outline) 25%, transparent) !important; background: transparent !important; }
         elm-review-queue-filters-sidebar .bolt-stackable-sidebar-header-wrapper bolt-stackable-sidebar-header { flex: 1 1 auto !important; min-width: 0 !important; }
@@ -223,9 +223,9 @@
         elm-review-queue-filters-sidebar .bolt-field-range-controls { display: grid !important; grid-template-columns: 1fr 1fr; gap: 8px !important; }
         elm-review-queue-filters-sidebar .bolt-field-range-controls .bolt-form-field-label-wrapper { display: block; margin: 0 0 2px !important; }
         elm-review-queue-filters-sidebar .bolt-field-range-controls bolt-label { font-size: 12px !important; line-height: 16px !important; letter-spacing: .4px; color: var(--md-on-surface-variant) !important; }
-        elm-review-queue-filters-sidebar input[boltinput][type="date"]:not(#elm2x) { box-sizing: border-box; width: 140px; max-width: 100%; height: 40px; padding: 0 12px; border: 1px solid var(--md-outline); border-radius: 8px; background: transparent; color: var(--md-on-surface); font-family: inherit; font-size: 14px; line-height: 20px; }
+        elm-review-queue-filters-sidebar input[boltinput][type="date"]:not(#elm2x) { box-sizing: border-box; width: 168px; max-width: 100%; height: 40px; padding: 0 10px; border: 1px solid var(--md-outline); border-radius: 8px; background: transparent; color: var(--md-on-surface); font-family: inherit; font-size: 14px; line-height: 20px; }
         elm-review-queue-filters-sidebar input[boltinput][type="date"]:not(#elm2x):hover { border-color: var(--md-on-surface); }
-        elm-review-queue-filters-sidebar input[boltinput][type="date"]:not(#elm2x):focus { outline: none; border: 2px solid var(--md-primary); padding: 0 11px; }
+        elm-review-queue-filters-sidebar input[boltinput][type="date"]:not(#elm2x):focus { outline: none; border: 2px solid var(--md-primary); padding: 0 9px; }
         /* tighter vertical rhythm: one-line section headers, labels beside their controls */
         elm-review-queue-filters-sidebar .bolt-stackable-sidebar-header-wrapper { padding: 12px 16px 12px 6px !important; background: #f7f3ef !important; }
         elm-review-queue-filters-sidebar bolt-stackable-sidebar-body { display: block !important; padding: 12px 16px 16px !important; }
@@ -236,7 +236,7 @@
         elm-review-queue-filters-sidebar bolt-stackable-sidebar-section .description { margin: 0 !important; flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         elm-review-queue-filters-sidebar bolt-fields { gap: 14px !important; }
         elm-review-queue-filters-sidebar bolt-fields, elm-review-queue-filters-sidebar bolt-field, elm-review-queue-filters-sidebar bolt-stackable-sidebar-section-content { border: none !important; box-shadow: none !important; background: transparent !important; }
-        elm-review-queue-filters-sidebar bolt-field { display: grid !important; grid-template-columns: 132px minmax(0, 1fr); align-items: center !important; column-gap: 8px !important; row-gap: 0 !important; }
+        elm-review-queue-filters-sidebar bolt-field { display: grid !important; grid-template-columns: 128px minmax(0, 1fr); align-items: center !important; column-gap: 8px !important; row-gap: 0 !important; }
         elm-review-queue-filters-sidebar .bolt-chip-list-wrapper { gap: 8px !important; }
         elm-review-queue-filters-sidebar bolt-chip-check.bolt-chip { height: 32px !important; padding: 0 12px !important; font-size: 14px !important; }
         elm-review-queue-filters-sidebar .bolt-field-range-controls { display: flex !important; flex-wrap: nowrap !important; justify-content: flex-start !important; gap: 8px 16px !important; }
@@ -252,7 +252,7 @@
         elm-review-queue-filters-sidebar .bolt-field-range-controls .bolt-form-field-label-wrapper { margin: 0 !important; flex: 0 0 auto; }
         elm-review-queue-filters-sidebar .bolt-field-range-controls .bolt-form-field-input-wrapper { flex: 0 0 auto; min-width: 0; }
         elm-review-queue-filters-sidebar input[boltinput][type="date"]:not(#elm2x) { height: 40px; padding: 0 12px; font-size: 14px; }
-        elm-review-queue-filters-sidebar input[boltinput][type="date"]:not(#elm2x):focus { padding: 0 11px; }
+        elm-review-queue-filters-sidebar input[boltinput][type="date"]:not(#elm2x):focus { padding: 0 9px; }
         .elm2-pager { display: inline-flex; align-items: center; gap: 8px; margin-right: 12px; font: 400 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; color: var(--md-on-surface-variant); }
         .elm2-pager label { display: inline-flex; align-items: center; gap: 6px; }
         .elm2-pager-input { box-sizing: border-box; width: 64px; height: 32px; padding: 0 8px; border: 1px solid var(--md-outline); border-radius: 8px; background: transparent; color: var(--md-on-surface); font: inherit; text-align: center; }
@@ -498,7 +498,7 @@
         /* outlined select */
         #elm-settings-pane select, #elm-settings-pane input[type=number] { height: 40px; padding: 0 12px; box-sizing: border-box; background: transparent; color: var(--md-on-surface); border: 1px solid var(--md-outline); border-radius: 8px; font: 400 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; }
         #elm-settings-pane select:hover { border-color: var(--md-on-surface); }
-        #elm-settings-pane select:focus { outline: none; border: 2px solid var(--md-primary); padding: 0 11px; }
+        #elm-settings-pane select:focus { outline: none; border: 2px solid var(--md-primary); padding: 0 9px; }
         /* Material 3 style switches for the settings pane (same look as the restyled
                "Hide matching items" toggle): 40x24 pill, small thumb off, filled track
                with a white check thumb on. */

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.114
+// @version      2.115
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-114'; // keep in sync with @version (2.114)
+    const BUILD = 'v2-build-115'; // keep in sync with @version (2.115)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -136,7 +136,7 @@
         #elm2-toast-stack { position: fixed; left: 16px; bottom: 16px; z-index: 10000; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
         .elm2-toast { display: flex; align-items: center; gap: 12px; box-sizing: border-box; min-height: 48px; max-width: 340px; padding: 8px 16px 8px 12px; border-radius: 4px; background: #2f3236; color: #f1f3f7; font: 400 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .25px; box-shadow: var(--md-elev-3); opacity: 0; transform: translateY(8px); transition: opacity .25s var(--md-ease), transform .25s var(--md-ease); }
         .elm2-toast.visible { opacity: 1; transform: none; }
-        .elm2-toast.elm2-notice { padding-left: 16px; }
+        .elm2-toast.elm2-notice, .elm2-toast.elm2-result { padding-left: 16px; }
         /* Material 3 dialog: 32% scrim, tonal container, hero indicator, headline + supporting text,
            filled error button. Container radius = button radius (24) + gap (16) so the corners nest. */
         #elm2-merge-overlay {
@@ -2182,15 +2182,17 @@
     function hideMergeBar() {
         document.querySelectorAll('#elm2-toast-stack .elm2-notice').forEach(t => t.remove());
     }
-    function showMergeNotice(text) {
+    // keep = true: an outcome toast ("Merged", "Not merged, skipped") that must survive the pair change,
+    // whereas ordinary notices are cleared by hideMergeBar() when the pair changes.
+    function showMergeNotice(text, keep) {
         const st = toastStack();
         const el = document.createElement('div');
-        el.className = 'elm2-toast elm2-notice';
+        el.className = 'elm2-toast' + (keep ? ' elm2-result' : ' elm2-notice');
         el.setAttribute('role', 'status');
         el.textContent = text;
         st.appendChild(el);
         requestAnimationFrame(() => el.classList.add('visible'));
-        setTimeout(() => { el.classList.remove('visible'); setTimeout(() => el.remove(), 250); }, 6000);
+        setTimeout(() => { el.classList.remove('visible'); setTimeout(() => el.remove(), 250); }, keep ? 9000 : 6000);
         while (st.children.length > 4) st.firstChild.remove();
     }
     // The countdown itself: a centred dialog over a dimmed page, with a draining ring around the
@@ -2314,13 +2316,21 @@
             if (!ready.ok) {
                 console.log('[elm2] Auto-merge not done:', ready.reason);
                 if (ready.reason === 'the pair changed') return;
-                if (CFG.AUTO_SKIP_BLOCKED) { skipToNext('auto-merge not ready: ' + ready.reason); }
+                if (CFG.AUTO_SKIP_BLOCKED) { showMergeNotice('Not merged, skipped: ' + ready.reason + '.', true); skipToNext('auto-merge not ready: ' + ready.reason); }
                 else showMergeNotice('Auto-merge stopped: ' + ready.reason + '.');
                 return;
             }
             mergedPairKey = key;
             console.log('[elm2] Auto-merging pair');
             ready.btn.click();
+            // Watchdog: a merge shows a "Merge completed" card. If it never comes (for example a
+            // confirmation dialog is waiting), say so instead of leaving it looking like a skip.
+            setTimeout(() => {
+                if (getPairKey() !== key || Array.from(document.querySelectorAll('.merge-completion-state')).some(c => c.getClientRects().length)) return;
+                const dlg = document.querySelector('bolt-dialog');
+                console.log('[elm2] Merge Contacts clicked but no "Merge completed" card;', dlg ? 'dialog open: ' + dlg.textContent.replace(/\s+/g, ' ').trim().slice(0, 160) : 'no dialog open');
+                showMergeNotice('Clicked Merge Contacts but nothing happened yet. Is a dialog waiting?', true);
+            }, 6000);
         }, 1000);
     }
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && mergeTimer) cancelAutoMerge('Auto-merge cancelled'); });
@@ -2421,6 +2431,7 @@
                 if (shouldWarn) {
                     conflictWarningShown = true;
                     if (CFG.AUTO_SKIP_BLOCKED) {
+                        if (pairInRange && CFG.WHEN_DONE === 'merge') showMergeNotice('Not merged, skipped: possible twins (' + conflicts.join(', ') + ').', true);
                         skipToNext('possible twins: ' + conflicts.join(', '));
                     } else {
                         alert(`⚠️ Warning: ${conflictCount} conflicting signal${conflictCount === 1 ? '' : 's'} detected!\n\nConflicts found in: ${conflicts.join(', ')}\n\nThese entries might be twins or two different people. Please review carefully before merging.`);
@@ -2451,9 +2462,11 @@
     // (not shown on the last pair, in which case nothing is clicked). Handled once per card.
     function checkMergeCompletion() {
         const card = document.querySelector('.merge-completion-state');
-        if (!card || card.dataset.elm2Handled) return;
+        if (!card || card.dataset.elm2Handled || !card.getClientRects().length) return; // absent, handled, or hidden
         card.dataset.elm2Handled = '1';
+        const sentence = card.querySelector('.bolt-body-large');
         console.log('[elm2] Merge completed |', (card.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 90));
+        showMergeNotice('Merged. ' + (sentence ? sentence.textContent.trim() : ''), true);
         if (awaitingMergeResult) {
             awaitingMergeResult = false;
             if (CFG.SHOW_MERGE_COUNTER) incrementMergeCount();

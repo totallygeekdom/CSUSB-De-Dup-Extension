@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.114`, shown in the settings pane and console as `v2-build-114` |
+| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.115`, shown in the settings pane and console as `v2-build-115` |
 | CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.22` |
 
 The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
@@ -291,7 +291,7 @@ Merging is permanent, so auto-merge is opt-in (**When done = Merge**, which rese
 4. When the countdown ends, a **final gate** re-checks: the pair is unchanged and unblocked, every conflicting field has a selected side, no twins flag, and the Merge Contacts button exists and is enabled. If it fails: Auto-Skip on → skip, off → a toast says why ("Auto-merge stopped: …").
 5. Only then is **Merge Contacts** clicked (once per pair), and the merge-tracking logic takes over.
 
-**After a merge** (yours or an auto-merge): Element451 shows a **Merge completed** card (`bolt-card.merge-completion-state`) with **View merged contact** and **Next duplicate**. The script detects that card, counts the merge, waits about 1 second and presses **Next duplicate** (the button is absent on the last pair, so nothing is pressed then). Turn this off with **Next after merge** in the settings pane. Storage: `elm_next_after_merge` (default on).
+**After a merge** (yours or an auto-merge): Element451 shows a **Merge completed** card (`bolt-card.merge-completion-state`) with **View merged contact** and **Next duplicate**. The script detects that card, counts the merge, waits about 1 second and presses **Next duplicate** (the button is absent on the last pair, so nothing is pressed then). A toast confirms each merge (*Merged. X is now the only record for this student.*), and an auto-merge that is skipped says why (*Not merged, skipped: 1 field(s) have no pick.* / *possible twins*). If Merge Contacts was clicked but no Merge completed card appears within 6 s, a toast says so and the console logs any open dialog. Turn the Next duplicate click off with **Next after merge** in the settings pane. Storage: `elm_next_after_merge` (default on).
 
 The script never clicks **Dismiss** and never merges while the slider is on None or When done is on Wait for me.
 

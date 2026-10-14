@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.115
+// @version      2.116
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-115'; // keep in sync with @version (2.115)
+    const BUILD = 'v2-build-116'; // keep in sync with @version (2.116)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -1393,7 +1393,10 @@
             const detail = {};
             document.dispatchEvent(new CustomEvent('elm2-record-pair', { detail }));
             if (detail.handled && !detail.recorded && Date.now() - startedAt < 3000) { setTimeout(attempt, 250); return; }
-            console.log('[elm2] Skipping to next pair:', reason);
+            const qp = getQueuePosition();
+            console.log('[elm2] Skipping to next pair:', reason, qp ? '(was ' + qp.current + '/' + qp.total + ')' : '');
+            // In auto-merge mode every skip says why, so a pair that is passed over is never a mystery.
+            if (CFG.WHEN_DONE === 'merge') showMergeNotice('Skipped' + (qp ? ' ' + qp.current + '/' + qp.total : '') + ': ' + reason + '.', true);
             clickLoop();
         };
         attempt();
@@ -2316,7 +2319,7 @@
             if (!ready.ok) {
                 console.log('[elm2] Auto-merge not done:', ready.reason);
                 if (ready.reason === 'the pair changed') return;
-                if (CFG.AUTO_SKIP_BLOCKED) { showMergeNotice('Not merged, skipped: ' + ready.reason + '.', true); skipToNext('auto-merge not ready: ' + ready.reason); }
+                if (CFG.AUTO_SKIP_BLOCKED) { skipToNext('not merged, ' + ready.reason); }
                 else showMergeNotice('Auto-merge stopped: ' + ready.reason + '.');
                 return;
             }
@@ -2431,7 +2434,6 @@
                 if (shouldWarn) {
                     conflictWarningShown = true;
                     if (CFG.AUTO_SKIP_BLOCKED) {
-                        if (pairInRange && CFG.WHEN_DONE === 'merge') showMergeNotice('Not merged, skipped: possible twins (' + conflicts.join(', ') + ').', true);
                         skipToNext('possible twins: ' + conflicts.join(', '));
                     } else {
                         alert(`⚠️ Warning: ${conflictCount} conflicting signal${conflictCount === 1 ? '' : 's'} detected!\n\nConflicts found in: ${conflicts.join(', ')}\n\nThese entries might be twins or two different people. Please review carefully before merging.`);
@@ -2466,7 +2468,8 @@
         card.dataset.elm2Handled = '1';
         const sentence = card.querySelector('.bolt-body-large');
         console.log('[elm2] Merge completed |', (card.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 90));
-        showMergeNotice('Merged. ' + (sentence ? sentence.textContent.trim() : ''), true);
+        const qpm = getQueuePosition();
+        showMergeNotice('Merged' + (qpm ? ' ' + qpm.current + '/' + qpm.total : '') + '. ' + (sentence ? sentence.textContent.trim() : ''), true);
         if (awaitingMergeResult) {
             awaitingMergeResult = false;
             if (CFG.SHOW_MERGE_COUNTER) incrementMergeCount();

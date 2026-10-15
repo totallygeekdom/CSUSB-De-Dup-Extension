@@ -12,7 +12,7 @@ chip). Two v2 scripts target it:
 
 | Script | File | Current version |
 |---|---|---|
-| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.118` (`v2-build-118`, shown in the settings pane) |
+| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.119` (`v2-build-119`, shown in the settings pane) |
 | CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.22` |
 
 **Full documentation: [`Full-Documentation-v2.md`](Full-Documentation-v2.md)** (architecture, every setting,
@@ -34,9 +34,10 @@ the resolution rules, auto-merge, every website restyle, the database format, li
 - **Blockers**: forbidden names, an `appeal` keyword, wrong department, student-ID mismatch, an Ignored chip.
 - **Field rules**: applicant side first, then personal email (with a name / birth-year tiebreak), csusb.major /
   csusb.school (one side), date-of-birth validity, first generation, later intended term, name case and address
-  comparison. An **Auxiliary logic** switch (off by default) adds the milestone, csusb.major / csusb.school (both sides),
-  Encoura / College Board ID and system-entry rules, which pick the more recent profile (later "Created" date on the
-  contact card); with it off those rows keep Bolt's pick.
+  comparison. Rows Bolt leaves unselected and no rule covers (Milestones, Sources, ...) are filled: side with data,
+  then the more recent profile (Created date), then the selected email's side, then an arbitrary stable side. A rule that
+  applies but cannot decide (dual personal email, address tie, csusb.major / school on both sides) with no Bolt pick
+  means the pair needs manual review and is never auto-merged.
 - **Review-page visuals**: Bolt-vs-ours pick colours (green agree, blue Bolt, orange ours), applicant band,
   comparison bar with *Use Bolt AI picks* / *Use our picks* and a blue **hover preview** of what each would
   select, High / Medium / Low score-chip colours, a pinned queue nav.
@@ -337,6 +338,5 @@ The CSV Database script depends on UI Perfection for DOM structure and signals. 
 | `elm_merge_count` | UI Perfection v2 | Merge counter value |
 | `elm_csv_database` | CSV Database v2 | Recorded pairs (JSON array, Spark-ID keyed) |
 | `elm_show_db_ui` | CSV Database v2 | Show Database UI |
-| `elm_aux_logic` | UI Perfection v2 | Auxiliary logic (default off) |
 | `elm_next_after_merge` | UI Perfection v2 | Next after merge (default on) |
 | `elm2_bolt_picks` | UI Perfection v2 | Bolt's original pick per conflicting row, hashed (no names or emails), so a revisited pair still shows what Bolt picked |

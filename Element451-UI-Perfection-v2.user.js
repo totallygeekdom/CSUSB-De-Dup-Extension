@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.118
+// @version      2.119
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-118'; // keep in sync with @version (2.118)
+    const BUILD = 'v2-build-119'; // keep in sync with @version (2.119)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -66,10 +66,6 @@
         // Seconds of the auto-merge cancel window (never below 2: the window is required).
         MERGE_COUNTDOWN:          { get() { const v = parseInt(localStorage.getItem('elm_merge_countdown'), 10); return isNaN(v) ? 4 : Math.max(2, Math.min(15, v)); } },
         WHEN_DONE:                { get() { try { return sessionStorage.getItem('elm_when_done') === 'merge' ? 'merge' : 'wait'; } catch (e) { return 'wait'; } } },
-        // Auxiliary logic: extra tie-breaking rules (milestone entries, csusb.major / csusb.school when both
-        // sides have it, Encoura / College Board IDs, legacy system entries) that pick the more recent
-        // profile. Off (default): those rows get no suggestion and Bolt's pick stays.
-        AUX_LOGIC:                { get() { return getBoolSetting('elm_aux_logic', false); } },
         HIGHLIGHT_ROWS:           { get() { return getBoolSetting('elm_highlight_rows', true); } },
         SHOW_MERGE_COUNTER:       { get() { return getBoolSetting('elm_show_merge_counter', false); } },
         AUTO_SKIP_BLOCKED:        { get() { return getBoolSetting('elm_auto_skip_blocked', true); } },
@@ -1029,7 +1025,7 @@
     // pair, which would leave our per-row state (Bolt's pick, our pick, resolved
     // flags, colors) attached to a row that now shows different data. Tag each
     // row with the pair it was computed for and wipe anything stale.
-    const ROW_STATE_KEYS = ['elm2AiSide', 'elm2AiSeen', 'elm2ScriptSide', 'elm2AutoResolved', 'elm2DualPersonal', 'elm2DualResolved', 'elm2AddressResolved'];
+    const ROW_STATE_KEYS = ['elm2AiSide', 'elm2AiSeen', 'elm2ScriptSide', 'elm2AutoResolved', 'elm2DualPersonal', 'elm2DualResolved', 'elm2AddressResolved', 'elm2NeedsReview'];
     // Bolt's original picks and our own picks, remembered in the script (not just
     // on the DOM nodes) for the current pair, so they survive Element451
     // re-rendering a row after the user or our script has changed the selection.
@@ -1719,19 +1715,6 @@
                 row.element.dataset.elm2AutoResolved = 'true';
                 return;
             }
-            // Milestone type matching (no applicant context)
-            // (Auxiliary logic: picks the more recent profile; with it off the row gets no suggestion.)
-            currentRule = 'milestone type match -> more recent profile';
-            if (text.match(/type:\s*\w+,\s*\w{3}\s+\d{1,2},\s*\d{4}/i)) {
-                const typePattern = /type:\s*(\w+),/i;
-                const leftTypeMatch = leftText.match(typePattern), rightTypeMatch = rightText.match(typePattern);
-                if (leftTypeMatch && rightTypeMatch && leftTypeMatch[1].toLowerCase() === rightTypeMatch[1].toLowerCase()) {
-                    row.element.dataset.elm2AutoResolved = 'true';
-                    const recent = CFG.AUX_LOGIC ? getMostRecentProfileSide() : null;
-                    if (recent) applyScriptPick(row, recent);
-                    return;
-                }
-            }
             // Email preference
             currentRule = 'personal email preferred';
             if (row.label.toLowerCase().includes('email')) {
@@ -1749,21 +1732,11 @@
                 if (leftHas && !rightHas) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'left'); return; }
                 if (rightHas && !leftHas) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'right'); return; }
                 if (leftHas && rightHas) {
-                    // both have it: auxiliary logic -> more recent profile; off -> Bolt's pick stays
+                    // both have it: the rule cannot decide, so without a Bolt pick the pair needs a human
                     row.element.dataset.elm2AutoResolved = 'true';
-                    const recent = CFG.AUX_LOGIC ? getMostRecentProfileSide() : null;
-                    if (recent) { currentRule = 'csusb.major (both) -> more recent profile'; applyScriptPick(row, recent); }
+                    row.element.dataset.elm2NeedsReview = '1';
                     return;
                 }
-            }
-            // Encoura / College Board ID — default left when both sides have it
-            // (Auxiliary logic: more recent profile; off -> no suggestion.)
-            currentRule = 'Encoura/College Board ID -> more recent profile';
-            if ((/Encoura Id:/i.test(leftText) && /Encoura Id:/i.test(rightText)) || (/College Board Id:/i.test(leftText) && /College Board Id:/i.test(rightText))) {
-                row.element.dataset.elm2AutoResolved = 'true';
-                const recent = CFG.AUX_LOGIC ? getMostRecentProfileSide() : null;
-                if (recent) applyScriptPick(row, recent);
-                return;
             }
             // csusb.school preference (Student Type rows)
             currentRule = 'csusb.school';
@@ -1774,10 +1747,8 @@
                 if (rightHas && !leftHas) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'right'); return; }
                 if (!leftHas && !rightHas) return;
                 if (leftHas && rightHas) {
-                    // both have it: auxiliary logic -> more recent profile; off -> Bolt's pick stays
                     row.element.dataset.elm2AutoResolved = 'true';
-                    const recent = CFG.AUX_LOGIC ? getMostRecentProfileSide() : null;
-                    if (recent) { currentRule = 'csusb.school (both) -> more recent profile'; applyScriptPick(row, recent); }
+                    row.element.dataset.elm2NeedsReview = '1';
                     return;
                 }
             }
@@ -1820,25 +1791,6 @@
                     if (isTitleCase(leftText) && !isTitleCase(rightText)) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'left'); return; }
                 }
             }
-            // System-generated entries (only reached with no applicant context)
-            const legacyPatterns = [
-                /Spark Id:/i,
-                /type:\s*Created,\s*name:\s*Record Created/i,
-                /type:\s*Custom/i,
-                /type:.*name:/i,
-                /type:\s*Web/i,
-                /\[ACUx\]/i,
-                /Outreach_UGRD_/i
-            ];
-            // Matches on the whole row, as in the classic script. A blank left side
-            // never reaches here: the blank-side rule above picks the filled side first.
-            // (Auxiliary logic: more recent profile; off -> no suggestion.)
-            currentRule = 'system entry -> more recent profile';
-            if (legacyPatterns.some(p => p.test(text))) {
-                row.element.dataset.elm2AutoResolved = 'true';
-                const recent = CFG.AUX_LOGIC ? getMostRecentProfileSide() : null;
-                if (recent) applyScriptPick(row, recent);
-            }
         });
     }
     // Dual-personal-email tiebreak (name/DOB-in-email). Email-open-count tier
@@ -1879,7 +1831,7 @@
             const rightYear = (leftYearValid && checkYearInEmail(rightLower, birthYearLeft)) || (rightYearValid && checkYearInEmail(rightLower, birthYearRight));
             if (leftYear && !rightYear) { row.element.dataset.elm2DualResolved = 'true'; applyScriptPick(row, 'left'); return; }
             if (rightYear && !leftYear) { row.element.dataset.elm2DualResolved = 'true'; applyScriptPick(row, 'right'); return; }
-            row.element.dataset.elm2DualResolved = 'true'; // no tiebreaker — leave for manual review
+            row.element.dataset.elm2DualResolved = 'true'; row.element.dataset.elm2NeedsReview = '1'; // no tiebreaker: a human decides
         });
     }
     function autoResolveAddresses() {
@@ -1904,21 +1856,29 @@
             }
             currentRule = 'address comparison';
             const comparison = AddressComparer.compareAddresses(leftText, rightText);
-            let winner = comparison.winner;
-            if (winner === 'tie') {
-                // Ties are left to Bolt / the reviewer unless Auxiliary logic is on.
-                winner = null;
-                if (CFG.AUX_LOGIC) {
-                    if (comparison.areSame) {
-                        winner = getMostRecentProfileSide();
-                        if (winner) currentRule = 'same address -> more recent profile';
-                    } else {
-                        winner = getSelectedEmailSide();
-                        if (winner) currentRule = 'different address -> follows email pick';
-                    }
-                }
-            }
+            const winner = comparison.winner;
+            // A tie (same address, equal completeness; different addresses) or two broken addresses:
+            // the rule cannot decide, so without a Bolt pick the pair needs a human.
+            if (winner !== 'left' && winner !== 'right') row.element.dataset.elm2NeedsReview = '1';
             if (winner === 'left' || winner === 'right') applyScriptPick(row, winner);
+        });
+    }
+    // Rows Bolt left unselected and no rule covers (Milestones, Sources and other list-type rows, most
+    // often) still need a side. Order: the side with data when one side is blank, then the more recent
+    // profile (Created date), then the side of the selected email, then an arbitrary but stable side
+    // (a hash of the pair, so a revisited pair gets the same answer). Rows where a rule applied but
+    // could not decide (elm2NeedsReview) are left alone: those pairs go to manual review.
+    function autoFillUnselected() {
+        getDiffRows().filter(r => r.isConflict).forEach(row => {
+            const d = row.element.dataset;
+            if (d.elm2AiSide || d.elm2ScriptSide || d.elm2NeedsReview) return;
+            const l = row.values[0].textContent, r = row.values[1].textContent;
+            let side = null;
+            if (isBlankValue(l) !== isBlankValue(r)) { side = isBlankValue(l) ? 'right' : 'left'; currentRule = 'fallback: one side blank -> side with data'; }
+            if (!side) { side = getMostRecentProfileSide(); if (side) currentRule = 'fallback: more recent profile'; }
+            if (!side) { side = getSelectedEmailSide(); if (side) currentRule = 'fallback: follows the selected email'; }
+            if (!side) { side = parseInt(hashStr(getContactNames().join('|') + '||' + row.key).slice(-2), 36) % 2 ? 'left' : 'right'; currentRule = 'fallback: arbitrary (stable)'; }
+            applyScriptPick(row, side);
         });
     }
     function runAutoResolution() {
@@ -1926,6 +1886,7 @@
         autoResolveRows();
         autoDualPersonalEmails();
         autoResolveAddresses();
+        autoFillUnselected();
     }
 
     // =========================================================
@@ -2055,10 +2016,7 @@
             const ai = row.element.dataset.elm2AiSide;
             const script = row.element.dataset.elm2ScriptSide;
             const both = !!ai && !!script;
-            // A "more recent profile" suggestion (Auxiliary logic) is a tie-breaker, not a rule match, so
-            // it never earns the green agree colour; it only shows when it differs from Bolt's pick.
-            const recencyOnly = /more recent profile/.test(row.element.dataset.elm2Rule || '');
-            const agree = both && ai === script && !recencyOnly;
+            const agree = both && ai === script;
             const conflict = both && ai !== script;
             // Conflict rows: color the two value buttons by who picked them.
             const btns = row.element.querySelectorAll(':scope > .diff-value-button');
@@ -2244,44 +2202,53 @@
             text(l, 'Bolt score: ');
             strong(l, score.charAt(0).toUpperCase() + score.slice(1), 'brief-score brief-score-' + score);
         }
-        const picks = getDiffRows().filter(r => r.isConflict && r.element.dataset.elm2ScriptSide && r.element.dataset.elm2AiSide);
+        const rows = getDiffRows().filter(r => r.isConflict);
+        const picks = rows.filter(r => r.element.dataset.elm2ScriptSide && r.element.dataset.elm2AiSide);
         const over = picks.filter(r => r.element.dataset.elm2ScriptSide !== r.element.dataset.elm2AiSide);
-        if (picks.length === 0) { text(line(), "No script picks; Bolt's picks stand."); return; }
-        const agree = line();
-        text(agree, 'Script agrees with ');
-        strong(agree, (picks.length - over.length) + '/' + picks.length);
-        if (over.length === 0) return;
-        const l = line();
-        const ours = CFG.USE_PICKS === 'ours';
-        const applicant = !!findApplicantSide();
-        if (applicant) {
-            text(l, 'Script found ');
-            strong(l, 'applicant');
-            if (ours) { text(l, ' and chose '); strong(l, String(over.length)); text(l, ' over Bolt.'); }
-            else text(l, ' but Bolt chose instead.');
-            return;
+        const filled = rows.filter(r => r.element.dataset.elm2ScriptSide && !r.element.dataset.elm2AiSide);
+        const labelList = (list) => {
+            const labels = Array.from(new Set(list.map(r => r.label).filter(Boolean)));
+            return labels.slice(0, 4).join(', ') + (labels.length > 4 ? ' +' + (labels.length - 4) + ' more' : '');
+        };
+        if (picks.length === 0 && filled.length === 0) { text(line(), "No script picks; Bolt's picks stand."); return; }
+        if (picks.length > 0) {
+            const agree = line();
+            text(agree, 'Script agrees with ');
+            strong(agree, (picks.length - over.length) + '/' + picks.length);
         }
-        text(l, ours ? 'Script chose ' : 'Bolt chose ');
-        strong(l, String(over.length));
-        text(l, ours ? ' over Bolt: ' : ' over script: ');
-        const labels = Array.from(new Set(over.map(r => r.label).filter(Boolean)));
-        text(l, labels.slice(0, 4).join(', ') + (labels.length > 4 ? ' +' + (labels.length - 4) + ' more' : ''));
+        if (over.length > 0) {
+            const l = line();
+            const ours = CFG.USE_PICKS === 'ours';
+            const applicant = !!findApplicantSide();
+            if (applicant) {
+                text(l, 'Script found ');
+                strong(l, 'applicant');
+                if (ours) { text(l, ' and chose '); strong(l, String(over.length)); text(l, ' over Bolt.'); }
+                else text(l, ' but Bolt chose instead.');
+            } else {
+                text(l, ours ? 'Script chose ' : 'Bolt chose ');
+                strong(l, String(over.length));
+                text(l, (ours ? ' over Bolt: ' : ' over script: ') + labelList(over));
+            }
+        }
+        if (filled.length > 0) {
+            const l = line();
+            text(l, 'Bolt left ');
+            strong(l, String(filled.length));
+            text(l, ' blank, script filled: ' + labelList(filled));
+        }
     }
     // Final gate before the merge click. Returns { ok, reason }.
     function mergeReadiness(key) {
         if (getPairKey() !== key) return { ok: false, reason: 'the pair changed' };
         if (getAllBlockers().length > 0) return { ok: false, reason: 'the pair is blocked' };
-        // Bolt leaves list-type rows (Milestones, Sources and other "type: …" entries) unselected, and
-        // with Auxiliary logic off our rules do not pick them either. Those do not block a merge; a
-        // scalar field (email, name, phone …) with no selected side still does.
+        // A conflicting row with no selected side (Bolt left it blank and a rule applied but could not
+        // decide) means a human has to look: the pair is not merged.
         const unresolved = getDiffRows().filter(r => r.isConflict && !r.nativeSide);
-        const listLike = (r) => /type:\s*\w+/i.test(r.values[0].textContent + ' ' + r.values[1].textContent);
-        const blocking = unresolved.filter(r => !listLike(r));
-        if (blocking.length > 0) {
-            blocking.forEach(r => console.log('[elm2] No pick on:', r.label, '| A:', r.values[0].textContent, '| B:', r.values[1].textContent));
-            return { ok: false, reason: blocking.length + ' field(s) have no pick (' + blocking.map(r => r.label || '(unnamed)').join(', ') + ')' };
+        if (unresolved.length > 0) {
+            unresolved.forEach(r => console.log('[elm2] Needs review:', r.label || '(unnamed)', '| A:', r.values[0].textContent, '| B:', r.values[1].textContent));
+            return { ok: false, reason: unresolved.length + ' field(s) need review (' + unresolved.map(r => r.label || '(unnamed)').join(', ') + ')' };
         }
-        if (unresolved.length > 0) console.log('[elm2] Merging with', unresolved.length, 'list-type row(s) left unselected:', unresolved.map(r => r.label || '(unnamed)').join(', '));
         if (CONFLICT_ROW_THRESHOLD > 0 && checkForConflictingRecords().shouldWarn) return { ok: false, reason: 'possible twins' };
         const btn = getSidebarActionButton('Merge Contacts');
         if (!btn || btn.disabled || btn.getAttribute('aria-disabled') === 'true') return { ok: false, reason: 'the Merge Contacts button is unavailable' };
@@ -2647,8 +2614,6 @@
                 <div class="elm-level-desc elm-skip-desc">Skips blocked, out-of-range and possible-twins pairs with no popup. Off: stops on them instead.</div>
                 <div class="setting-row"><label>Next after merge</label>${toggleHtml('elm-next-after-merge')}</div>
                 <div class="elm-level-desc elm-next-desc">After a merge (yours or an auto-merge), presses "Next duplicate" on the "Merge completed" card.</div>
-                <div class="setting-row"><label>Auxiliary logic</label>${toggleHtml('elm-aux-logic')}</div>
-                <div class="elm-level-desc elm-aux-desc">Extra tie-breakers for milestone entries, csusb.major / csusb.school (both sides), Encoura / College Board IDs and system entries: picks the more recent profile (card "Created" date). Off: Bolt's pick stays.</div>
                 <div class="settings-section-title">Display</div>
                 <div class="setting-row"><label>Highlight Rows</label>${toggleHtml('elm-highlight-rows')}</div>
                 <div class="settings-section-title">Department</div>
@@ -2743,7 +2708,6 @@
         setupToggle('elm-auto-skip-blocked', 'elm_auto_skip_blocked');
         setupToggle('elm-next-after-merge', 'elm_next_after_merge');
         setupToggle('elm-highlight-rows', 'elm_highlight_rows');
-        setupToggle('elm-aux-logic', 'elm_aux_logic', null, false);
         function setupToggle(elementId, storageKey, onChange, defaultValue = true) {
             const el = document.getElementById(elementId);
             if (!el) return;

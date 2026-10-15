@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.122
+// @version      2.123
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-122'; // keep in sync with @version (2.122)
+    const BUILD = 'v2-build-123'; // keep in sync with @version (2.123)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -148,7 +148,7 @@
         }
         #elm2-merge-overlay.visible .elm2-merge-card { transform: scale(1); opacity: 1; }
         #elm2-merge-overlay .elm2-ring { position: relative; width: 160px; height: 160px; margin: 0 auto 24px; }
-        #elm2-merge-overlay .elm2-ring svg { width: 100%; height: 100%; transform: rotate(90deg); }
+        #elm2-merge-overlay .elm2-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
         #elm2-merge-overlay .elm2-ring-track { fill: none; stroke: #f9dedc; stroke-width: 8; }
         #elm2-merge-overlay .elm2-ring-arc { fill: none; stroke: #b3261e; stroke-width: 8; stroke-linecap: round; stroke-dasharray: 276.46 276.46; stroke-dashoffset: 0; transition: stroke-dasharray .8s cubic-bezier(.2, 0, 0, 1), stroke-dashoffset .8s cubic-bezier(.2, 0, 0, 1), stroke .3s linear; }
         #elm2-merge-overlay #elm2-merge-count { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 57px; line-height: 64px; font-weight: 400; color: #b3261e; }
@@ -2271,13 +2271,17 @@
         card.classList.remove('done');
         document.getElementById('elm2-merge-title').textContent = 'Merging automatically';
         renderMergeBrief(document.getElementById('elm2-merge-summary'));
-        // The ring drains one step per second, in time with the number. It drains from both ends
-        // toward the top, so the part still showing is always centred; at 0 it goes full and green.
+        // The ring drains one step per second, in time with the number: the arc starts at 12 o'clock
+        // and its far end walks back counter-clockwise. A round line cap pokes half a stroke past
+        // the end of its dash, which made the end bit sit visibly left of its mark (6 o'clock at half
+        // time), so the dash is pulled in by one cap radius at each end and the rounded tips land
+        // exactly on the marks. At 0 it fills completely (and turns green).
         const CIRC = 276.46;
+        const CAP = 4; // stroke-width 8 -> cap radius 4, in viewBox units
         const setArc = (frac) => {
-            const len = CIRC * frac;
-            arc.style.strokeDasharray = len + ' ' + CIRC;
-            arc.style.strokeDashoffset = String(-(CIRC / 2 - len / 2));
+            if (frac >= 1) { arc.style.strokeDasharray = CIRC + ' ' + CIRC; arc.style.strokeDashoffset = '0'; return; }
+            arc.style.strokeDasharray = Math.max(0.01, CIRC * frac - 2 * CAP) + ' ' + CIRC;
+            arc.style.strokeDashoffset = String(-CAP);
         };
         const render = () => {
             const count = document.getElementById('elm2-merge-count');

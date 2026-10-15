@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.131
+// @version      2.132
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-131'; // keep in sync with @version (2.131)
+    const BUILD = 'v2-build-132'; // keep in sync with @version (2.132)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -2289,10 +2289,10 @@
         // The setting is the whole wait: the numbers step once a second and the merge is clicked the instant
         // they reach 0; the green state shows at that moment and the dialog lingers a little (LINGER) after
         // the click purely so it can be seen. The race lights are the exception: their green "GO" holds for
-        // RACE_GO before the click, so that style takes 4.3 s.
+        // RACE_GO before the click, and its lamp steps are shortened to match (the whole style still takes
+        // exactly the setting, 4 s).
         const LINGER = 450;
         const RACE_GO = 300;
-        const TICK = 1000;
         const card = ov.querySelector('.elm2-merge-card');
         const arc = ov.querySelector('.elm2-ring-arc');
         const fill = ov.querySelector('.elm2-ring-fill');
@@ -2300,6 +2300,7 @@
         arc.style.transition = 'none';
         card.classList.remove('done', 'fired');
         const race = CFG.COUNTDOWN_STYLE === 'race';
+        const TICK = race ? (total * 1000 - RACE_GO) / total : 1000; // race: 4 steps of 925 ms + 300 ms GO = 4 s
         card.classList.toggle('race', race);
         const lamps = Array.from(ov.querySelectorAll('.elm2-lamps i'));
         const setLamps = () => lamps.forEach((l, i) => {

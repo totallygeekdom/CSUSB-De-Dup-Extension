@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.128
+// @version      2.129
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-128'; // keep in sync with @version (2.128)
+    const BUILD = 'v2-build-129'; // keep in sync with @version (2.129)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -2285,10 +2285,10 @@
         hideMergeBar();
         const total = CFG.MERGE_COUNTDOWN;
         let left = total;
-        // The setting is the time from the dialog opening to the merge click: the numbers run to 0 a
-        // short beat early (HOLD) so the green "GO" state fits inside the setting instead of adding to it.
-        const HOLD = 500;
-        const TICK = (total * 1000 - HOLD) / total;
+        // The numbers (or lamps) take exactly the setting to reach 0, one step per second. The green "GO"
+        // state is a short beat after that (HOLD) before the merge click; it is not part of the countdown.
+        const HOLD = 300;
+        const TICK = 1000;
         const card = ov.querySelector('.elm2-merge-card');
         const arc = ov.querySelector('.elm2-ring-arc');
         const fill = ov.querySelector('.elm2-ring-fill');

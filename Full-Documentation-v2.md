@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.120`, shown in the settings pane and console as `v2-build-120` |
+| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.121`, shown in the settings pane and console as `v2-build-121` |
 | CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.22` |
 
 The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
@@ -256,7 +256,7 @@ Only rows where the two sides differ (conflicts) are considered. Rules run **in 
 **Fallback and manual review.** After the rules, every conflicting row ends in one of three states:
 
 1. **Decided**: a rule picked a side, or Bolt had already selected one (Bolt's pick stands when no rule has an opinion).
-2. **Filled**: Bolt left the row unselected (typically Milestones, Sources and other `type: …` list rows) and no rule applies. The script picks, in order: the side with data when one side is blank; the **more recent profile** (the contact card's *Created* date); the side of the **selected email**; and finally an **arbitrary but stable** side (a hash of the pair, so a revisited pair gets the same answer). These rows have no Bolt pick to agree with, so they are never green, and the merge brief lists them (*Bolt left 2 blank, script filled: Milestones, Sources*).
+2. **Filled**: Bolt left the row unselected (typically Milestones, Sources and other `type: …` list rows) and no rule applies. The script picks, in order: the side with data when one side is blank; the **more recent profile** (the contact card's *Created* date); the side of the **selected email**; and finally an **arbitrary but stable** side (a hash of the pair, so a revisited pair gets the same answer). These rows have no Bolt pick to agree with, so they are never green,.
 3. **Needs review**: a rule applied but could not decide (dual personal email with no tiebreak, an address tie or two broken addresses, `csusb.major` or `csusb.school` on both sides) **and** Bolt left the row unselected. The pair is never auto-merged: with Auto-Skip on it is skipped, with it off it stays on screen. The console names the rows (`[elm2] Needs review: …`).
 
 **Dual personal-email tiebreak** (both emails personal): prefer the address containing a first name, then a last name (parts of 3+ letters of either contact's name), then the birth year (or its last 3/2 digits) from the DOB rows. If none separates them there is **no pick**; with no Bolt pick either the row *needs review*.

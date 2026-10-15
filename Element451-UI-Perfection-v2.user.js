@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.120
+// @version      2.121
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-120'; // keep in sync with @version (2.120)
+    const BUILD = 'v2-build-121'; // keep in sync with @version (2.121)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -2208,41 +2208,28 @@
             text(l, 'Bolt score: ');
             strong(l, score.charAt(0).toUpperCase() + score.slice(1), 'brief-score brief-score-' + score);
         }
-        const rows = getDiffRows().filter(r => r.isConflict);
-        const picks = rows.filter(r => r.element.dataset.elm2ScriptSide && r.element.dataset.elm2AiSide);
+        const picks = getDiffRows().filter(r => r.isConflict && r.element.dataset.elm2ScriptSide && r.element.dataset.elm2AiSide);
         const over = picks.filter(r => r.element.dataset.elm2ScriptSide !== r.element.dataset.elm2AiSide);
-        const filled = rows.filter(r => r.element.dataset.elm2ScriptSide && !r.element.dataset.elm2AiSide);
-        const labelList = (list) => {
-            const labels = Array.from(new Set(list.map(r => r.label).filter(Boolean)));
-            return labels.slice(0, 4).join(', ') + (labels.length > 4 ? ' +' + (labels.length - 4) + ' more' : '');
-        };
-        if (picks.length === 0 && filled.length === 0) { text(line(), "No script picks; Bolt's picks stand."); return; }
-        if (picks.length > 0) {
-            const agree = line();
-            text(agree, 'Script agrees with ');
-            strong(agree, (picks.length - over.length) + '/' + picks.length);
+        if (picks.length === 0) { text(line(), "No script picks; Bolt's picks stand."); return; }
+        const agree = line();
+        text(agree, 'Script agrees with ');
+        strong(agree, (picks.length - over.length) + '/' + picks.length);
+        if (over.length === 0) return;
+        const l = line();
+        const ours = CFG.USE_PICKS === 'ours';
+        const applicant = !!findApplicantSide();
+        if (applicant) {
+            text(l, 'Script found ');
+            strong(l, 'applicant');
+            if (ours) { text(l, ' and chose '); strong(l, String(over.length)); text(l, ' over Bolt.'); }
+            else text(l, ' but Bolt chose instead.');
+            return;
         }
-        if (over.length > 0) {
-            const l = line();
-            const ours = CFG.USE_PICKS === 'ours';
-            const applicant = !!findApplicantSide();
-            if (applicant) {
-                text(l, 'Script found ');
-                strong(l, 'applicant');
-                if (ours) { text(l, ' and chose '); strong(l, String(over.length)); text(l, ' over Bolt.'); }
-                else text(l, ' but Bolt chose instead.');
-            } else {
-                text(l, ours ? 'Script chose ' : 'Bolt chose ');
-                strong(l, String(over.length));
-                text(l, (ours ? ' over Bolt: ' : ' over script: ') + labelList(over));
-            }
-        }
-        if (filled.length > 0) {
-            const l = line();
-            text(l, 'Bolt left ');
-            strong(l, String(filled.length));
-            text(l, ' blank, script filled: ' + labelList(filled));
-        }
+        text(l, ours ? 'Script chose ' : 'Bolt chose ');
+        strong(l, String(over.length));
+        text(l, ours ? ' over Bolt: ' : ' over script: ');
+        const labels = Array.from(new Set(over.map(r => r.label).filter(Boolean)));
+        text(l, labels.slice(0, 4).join(', ') + (labels.length > 4 ? ' +' + (labels.length - 4) + ' more' : ''));
     }
     // Final gate before the merge click. Returns { ok, reason }.
     function mergeReadiness(key) {

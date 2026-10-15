@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.127
+// @version      2.128
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-127'; // keep in sync with @version (2.127)
+    const BUILD = 'v2-build-128'; // keep in sync with @version (2.128)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -152,7 +152,7 @@
         #elm2-merge-overlay .elm2-ring { position: relative; width: 160px; height: 160px; margin: 0 auto 24px; }
         #elm2-merge-overlay .elm2-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
         #elm2-merge-overlay .elm2-ring-track { fill: none; stroke: #f9dedc; stroke-width: 8; }
-        #elm2-merge-overlay .elm2-ring-arc { fill: none; stroke: #b3261e; stroke-width: 8; stroke-linecap: round; stroke-dasharray: 276.46 276.46; stroke-dashoffset: 0; transition: stroke-dasharray .8s cubic-bezier(.2, 0, 0, 1), stroke-dashoffset .8s cubic-bezier(.2, 0, 0, 1), stroke .3s linear; }
+        #elm2-merge-overlay .elm2-ring-arc { fill: none; stroke: #b3261e; stroke-width: 8; stroke-linecap: round; stroke-dasharray: 276.46 276.46; stroke-dashoffset: 0; transition: stroke-dasharray .6s cubic-bezier(.2, 0, 0, 1), stroke-dashoffset .6s cubic-bezier(.2, 0, 0, 1), stroke .3s linear; }
         #elm2-merge-overlay #elm2-merge-count { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 57px; line-height: 64px; font-weight: 400; color: #b3261e; }
         #elm2-merge-overlay #elm2-merge-title { margin: 0 8px 8px; font-size: 24px; line-height: 32px; font-weight: 400; color: #1a1c20; }
         #elm2-merge-overlay #elm2-merge-summary { margin: 0 12px 32px; font-size: 15px; line-height: 22px; letter-spacing: .15px; color: #434750; }
@@ -2285,6 +2285,10 @@
         hideMergeBar();
         const total = CFG.MERGE_COUNTDOWN;
         let left = total;
+        // The setting is the time from the dialog opening to the merge click: the numbers run to 0 a
+        // short beat early (HOLD) so the green "GO" state fits inside the setting instead of adding to it.
+        const HOLD = 500;
+        const TICK = (total * 1000 - HOLD) / total;
         const card = ov.querySelector('.elm2-merge-card');
         const arc = ov.querySelector('.elm2-ring-arc');
         const fill = ov.querySelector('.elm2-ring-fill');
@@ -2363,8 +2367,8 @@
                     const dlg = document.querySelector('bolt-dialog');
                     console.log('[elm2] Merge Contacts clicked but no "Merge completed" card;', dlg ? 'dialog open: ' + dlg.textContent.replace(/\s+/g, ' ').trim().slice(0, 160) : 'no dialog open');
                 }, 6000);
-            }, 800);
-        }, 1000);
+            }, HOLD);
+        }, TICK);
     }
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && mergeTimer) cancelAutoMerge('Auto-merge cancelled'); });
 

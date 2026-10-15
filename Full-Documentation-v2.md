@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.122`, shown in the settings pane and console as `v2-build-122` |
+| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.123`, shown in the settings pane and console as `v2-build-123` |
 | CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.22` |
 
 The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
@@ -285,7 +285,7 @@ The classic "Bolt score is Low" popup no longer exists; the twins check covers i
 Merging is permanent, so auto-merge is opt-in (**When done = Merge**, which resets every browser session) and gated:
 
 1. The pair must be in range, unblocked, and not flagged as possible twins.
-2. A **countdown dialog** opens (centred, over a 32% scrim; the scrim also blocks stray clicks). It shows a red ring that steps down once per second (it drains from both ends toward the top, so what is left is always centred) with the seconds left in the middle; at **0** the ring fills, turns green and the headline reads *Merging…* for under a second, then the merge is clicked (Cancel and Esc still work until then), the headline *Merging automatically*, a short brief (the two names; *Bolt score:* Low in red, Medium in orange or High in green; *Script agrees with 2/5*, the share of our picks that match Bolt's; and *Script chose 3 over Bolt: Email, Address, DOB*, or *Script found **applicant** and chose 3 over Bolt* when an applicant side decided; with **Use picks from = Bolt's** it reads *Bolt chose 3 over script: Email, Address, DOB*, or *Script found **applicant** but Bolt chose instead*), and a full-width **Cancel** pill. **Esc** also cancels. The countdown length is the **Merge countdown** setting (default 4 s, minimum 2 s).
+2. A **countdown dialog** opens (centred, over a 32% scrim; the scrim also blocks stray clicks). It shows a red ring that steps down once per second (it starts at 12 o'clock and its end walks back; the rounded tip lands exactly on the mark, e.g. 6 o'clock at half time) with the seconds left in the middle; at **0** the ring fills, turns green and the headline reads *Merging…* for under a second, then the merge is clicked (Cancel and Esc still work until then), the headline *Merging automatically*, a short brief (the two names; *Bolt score:* Low in red, Medium in orange or High in green; *Script agrees with 2/5*, the share of our picks that match Bolt's; and *Script chose 3 over Bolt: Email, Address, DOB*, or *Script found **applicant** and chose 3 over Bolt* when an applicant side decided; with **Use picks from = Bolt's** it reads *Bolt chose 3 over script: Email, Address, DOB*, or *Script found **applicant** but Bolt chose instead*), and a full-width **Cancel** pill. **Esc** also cancels. The countdown length is the **Merge countdown** setting (default 4 s, minimum 2 s).
 3. Cancelling, or the pair changing, aborts and shows a toast.
 4. When the countdown ends, a **final gate** re-checks: the pair is unchanged and unblocked, every conflicting field has a selected side (rows that *need review* stop the merge), no twins flag, and the Merge Contacts button exists and is enabled. If it fails: Auto-Skip on → skip, off → a toast says why ("Auto-merge stopped: …").
 5. Only then is **Merge Contacts** clicked (once per pair), and the merge-tracking logic takes over.

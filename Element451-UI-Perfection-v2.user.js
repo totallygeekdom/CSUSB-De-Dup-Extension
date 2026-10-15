@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.117
+// @version      2.118
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-117'; // keep in sync with @version (2.117)
+    const BUILD = 'v2-build-118'; // keep in sync with @version (2.118)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -2271,11 +2271,17 @@
     function mergeReadiness(key) {
         if (getPairKey() !== key) return { ok: false, reason: 'the pair changed' };
         if (getAllBlockers().length > 0) return { ok: false, reason: 'the pair is blocked' };
+        // Bolt leaves list-type rows (Milestones, Sources and other "type: …" entries) unselected, and
+        // with Auxiliary logic off our rules do not pick them either. Those do not block a merge; a
+        // scalar field (email, name, phone …) with no selected side still does.
         const unresolved = getDiffRows().filter(r => r.isConflict && !r.nativeSide);
-        if (unresolved.length > 0) {
-            unresolved.forEach(r => console.log('[elm2] No pick on:', r.label, '| A:', r.values[0].textContent, '| B:', r.values[1].textContent));
-            return { ok: false, reason: unresolved.length + ' field(s) have no pick (' + unresolved.map(r => r.label).join(', ') + ')' };
+        const listLike = (r) => /type:\s*\w+/i.test(r.values[0].textContent + ' ' + r.values[1].textContent);
+        const blocking = unresolved.filter(r => !listLike(r));
+        if (blocking.length > 0) {
+            blocking.forEach(r => console.log('[elm2] No pick on:', r.label, '| A:', r.values[0].textContent, '| B:', r.values[1].textContent));
+            return { ok: false, reason: blocking.length + ' field(s) have no pick (' + blocking.map(r => r.label || '(unnamed)').join(', ') + ')' };
         }
+        if (unresolved.length > 0) console.log('[elm2] Merging with', unresolved.length, 'list-type row(s) left unselected:', unresolved.map(r => r.label || '(unnamed)').join(', '));
         if (CONFLICT_ROW_THRESHOLD > 0 && checkForConflictingRecords().shouldWarn) return { ok: false, reason: 'possible twins' };
         const btn = getSidebarActionButton('Merge Contacts');
         if (!btn || btn.disabled || btn.getAttribute('aria-disabled') === 'true') return { ok: false, reason: 'the Merge Contacts button is unavailable' };

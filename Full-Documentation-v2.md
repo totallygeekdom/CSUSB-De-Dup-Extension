@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.118`, shown in the settings pane and console as `v2-build-118` |
+| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.119`, shown in the settings pane and console as `v2-build-119` |
 | CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.22` |
 
 The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
@@ -170,10 +170,6 @@ Skips pairs the script will not handle, with **no popup**, by clicking **Next du
 
 Off: the script stops on those pairs and leaves them on screen, showing the popups that apply ([section 8](#8-warnings-and-popups)). A twins pair is never auto-merged either way. Before every skip the CSV script is asked to record the pair first ([11.3](#113-recording)). Storage: `elm_auto_skip_blocked` (default on).
 
-### 4.5b Auxiliary logic
-
-A switch (default **off**) for the extra tie-breakers that mattered more in the classic layout and matter less now that Bolt AI makes the default picks: milestone entries, `csusb.major` / `csusb.school` when **both** sides have it, Encoura / College Board IDs, and system-generated entries. With it **on**, those rows pick the **more recent profile**, meaning the contact whose card shows the later **Created** date (`Created 9/4/2026` on the contact card). With it **off**, those rows get no suggestion and Bolt's pick stays. If the card dates are missing or equal, there is no suggestion either way. A `csusb.major` / `csusb.school` value on only one side is still decided by the core rule. Storage: `elm_aux_logic`.
-
 ### 4.6 Display
 
 - **Highlight Rows** (`elm_highlight_rows`, default on): the pick colours on rows and the applicant band.
@@ -248,21 +244,24 @@ Only rows where the two sides differ (conflicts) are considered. Rules run **in 
 |---|---|---|
 | 0 | Blank side | If either value is empty, the row is skipped (no opinion) |
 | 1 | **Applicant side** (outranks everything) | If an applicant side exists, every conflict row follows it, **except** a row where the applicant side is blank ("-") and the other side has data: that row picks the side with data. Detection: a *Cal State Apply Application* entry on only one side wins; if on both, the later application date wins (left on a tie/no date); otherwise an `Application Start/Submit/Complete` or `Admit` type entry on one side; if both, the side with more such entries, then the later date. Only used for UnderGrad pairs |
-| 2 | Blank-vs-data | One side blank ("-") and the other has data (no applicant side): no opinion, Bolt's pick stays |
-| 3 | Milestone type match *(auxiliary logic)* | Rows like `type: X, Mon dd, yyyy` where both sides have the same type: the **more recent profile** (auxiliary logic on); no suggestion when it is off |
+| 2 | Blank-vs-data | One side blank ("-") and the other has data (no applicant side): no rule pick; Bolt's pick stays, or the fallback below takes the side with data |
 | 4 | **Personal email preferred** | Email rows: the side with a personal-domain address (gmail, yahoo, icloud, hotmail, aol, me.com, outlook, live, msn, protonmail, proton.me) wins when only one side is personal. Both personal: flagged for the tiebreak below |
-| 5 | **csusb.major** | The side with `csusb.major.` wins; if both have it: the **more recent profile** (auxiliary logic on), otherwise no suggestion |
-| 6 | Encoura / College Board ID *(auxiliary logic)* | Both sides present: the **more recent profile** (auxiliary logic on); no suggestion when it is off |
-| 7 | **csusb.school** | Student Type rows: the side with `csusb.school.<n>` wins; if both have it: the **more recent profile** (auxiliary logic on), otherwise no suggestion |
+| 5 | **csusb.major** | The side with `csusb.major.` wins; if both have it the rule cannot decide (see *Needs review* below) |
+| 7 | **csusb.school** | Student Type rows: the side with `csusb.school.<n>` wins; if both have it the rule cannot decide (see *Needs review* below) |
 | 8 | Date of birth validity | Reject a year that starts with 0 or is below 1900 |
 | 9 | First generation | Prefer `Yes` over `No` |
 | 10 | Intended term | Prefer the later term code in parentheses, e.g. `(2274)` |
 | 11 | Name case | If the values differ only by case, prefer Title Case over ALL CAPS or all lower-case |
-| 12 | System entries *(auxiliary logic)* | Any row whose text matches `Spark Id:`, `type: Created, name: Record Created`, `type: Custom`, `type: … name:`, `type: Web`, `[ACUx]` or `Outreach_UGRD_`: the **more recent profile** (auxiliary logic on); no suggestion when it is off |
 
-**Dual personal-email tiebreak** (both emails personal): prefer the address containing a first name, then a last name (parts of 3+ letters of either contact's name), then the birth year (or its last 3/2 digits) from the DOB rows. If none separates them there is **no pick** (the row is left for you), exactly as in the classic script.
+**Fallback and manual review.** After the rules, every conflicting row ends in one of three states:
 
-**Addresses**: with an applicant side the applicant rule wins (unless the applicant's address is blank and the other has one). Otherwise address rows compare with the built-in `AddressComparer`: a duplicated-component address loses, and for the same address the more complete one wins. Ties are **not** picked (left to Bolt or you): the same address with equal completeness, different addresses, or both addresses having duplicated parts. With **Auxiliary logic** on, a same-address tie goes to the more recent profile (by Created date) and a different-address tie follows the selected email side.
+1. **Decided**: a rule picked a side, or Bolt had already selected one (Bolt's pick stands when no rule has an opinion).
+2. **Filled**: Bolt left the row unselected (typically Milestones, Sources and other `type: …` list rows) and no rule applies. The script picks, in order: the side with data when one side is blank; the **more recent profile** (the contact card's *Created* date); the side of the **selected email**; and finally an **arbitrary but stable** side (a hash of the pair, so a revisited pair gets the same answer). These rows have no Bolt pick to agree with, so they are never green, and the merge brief lists them (*Bolt left 2 blank, script filled: Milestones, Sources*).
+3. **Needs review**: a rule applied but could not decide (dual personal email with no tiebreak, an address tie or two broken addresses, `csusb.major` or `csusb.school` on both sides) **and** Bolt left the row unselected. The pair is never auto-merged: with Auto-Skip on it is skipped, with it off it stays on screen. The console names the rows (`[elm2] Needs review: …`).
+
+**Dual personal-email tiebreak** (both emails personal): prefer the address containing a first name, then a last name (parts of 3+ letters of either contact's name), then the birth year (or its last 3/2 digits) from the DOB rows. If none separates them there is **no pick**; with no Bolt pick either the row *needs review*.
+
+**Addresses**: with an applicant side the applicant rule wins (unless the applicant's address is blank and the other has one). Otherwise address rows compare with the built-in `AddressComparer`: a duplicated-component address loses, and for the same address the more complete one wins. Ties are **not** picked (Bolt's pick stands; with none, the row needs review): the same address with equal completeness, different addresses, or both addresses having duplicated parts.
 
 Not ported: the classic "email open count" tiebreaker (its "User Activity" section does not exist in the new layout).
 
@@ -288,7 +287,7 @@ Merging is permanent, so auto-merge is opt-in (**When done = Merge**, which rese
 1. The pair must be in range, unblocked, and not flagged as possible twins.
 2. A **countdown dialog** opens (centred, over a 32% scrim; the scrim also blocks stray clicks). It shows a draining red ring that steps down once per second with the seconds left in the middle, the headline *Merging automatically*, a short brief (the two names; *Bolt score:* Low in red, Medium in orange or High in green; *Script agrees with 2/5*, the share of our picks that match Bolt's; and *Script chose 3 over Bolt: Email, Address, DOB*, or *Script found **applicant** and chose 3 over Bolt* when an applicant side decided; with **Use picks from = Bolt's** it reads *Bolt chose 3 over script: Email, Address, DOB*, or *Script found **applicant** but Bolt chose instead*), and a full-width **Cancel** pill. **Esc** also cancels. The countdown length is the **Merge countdown** setting (default 4 s, minimum 2 s).
 3. Cancelling, or the pair changing, aborts and shows a toast.
-4. When the countdown ends, a **final gate** re-checks: the pair is unchanged and unblocked, every conflicting field has a selected side (list-type rows such as Milestones and Sources, which Bolt leaves unselected, are exempt and logged), no twins flag, and the Merge Contacts button exists and is enabled. If it fails: Auto-Skip on → skip, off → a toast says why ("Auto-merge stopped: …").
+4. When the countdown ends, a **final gate** re-checks: the pair is unchanged and unblocked, every conflicting field has a selected side (rows that *need review* stop the merge), no twins flag, and the Merge Contacts button exists and is enabled. If it fails: Auto-Skip on → skip, off → a toast says why ("Auto-merge stopped: …").
 5. Only then is **Merge Contacts** clicked (once per pair), and the merge-tracking logic takes over.
 
 **After a merge** (yours or an auto-merge): Element451 shows a **Merge completed** card (`bolt-card.merge-completion-state`) with **View merged contact** and **Next duplicate**. The script detects that card, counts the merge, waits about 1 second and presses **Next duplicate** (the button is absent on the last pair, so nothing is pressed then). The console logs each merge (`[elm2] Merged 7/40 | …`) and each skip with its queue position and reason (`[elm2] Skipping to next pair: … (was 8/40)`). The final-check conditions are tested **before** the countdown starts, so a pair that could not merge (for example a field with no pick, which is named with its two values in the console as `[elm2] No pick on: …`) is skipped without showing the dialog. If Merge Contacts was clicked but no Merge completed card appears within 6 s, the console says so and logs any open dialog. Turn the Next duplicate click off with **Next after merge** in the settings pane. Storage: `elm_next_after_merge` (default on).
@@ -303,7 +302,7 @@ All of these are CSS/DOM additions made by the main script. Colours use a Materi
 
 ### 10.1 Review pair
 
-- **Pick colours** (Highlight Rows): on a row where Bolt and we agree, the chosen value is **green**; on a row where we differ, Bolt's pick is **blue** and ours is **orange**; rows where our rules have no opinion keep Element's default styling. A suggestion that only comes from the **Auxiliary logic** "more recent profile" tie-breaker is never green when it agrees with Bolt (it is a tie-breaker, not a rule match); it shows blue/orange only when it differs. There are no legends or text badges, and arrows are never restyled.
+- **Pick colours** (Highlight Rows): on a row where Bolt and we agree, the chosen value is **green**; on a row where we differ, Bolt's pick is **blue** and ours is **orange**; rows where our rules have no opinion keep Element's default styling. There are no legends or text badges, and arrows are never restyled.
 - **Applicant band**: with an applicant side, that contact's card is outlined and a yellow band marks that side's column of values (disabled on blocked pairs).
 - **Comparison bar** under the contact header: a one-line status ("Our N suggestion(s) match Bolt's picks (x conflicting of y fields)" / "⚠ n of N suggestions differ from Bolt's picks" / "automation is off", etc.) plus two buttons: **Use Bolt AI picks** and **Use our picks**.
 - **Hover preview**: hovering (or focusing) either button highlights in blue exactly what it would select on the rows it would change, with the other values neutral; the green/blue/orange pick colours are hidden meanwhile. Disabled on blocked pairs.
@@ -407,7 +406,6 @@ Header `DB: N` pill, the Database section of the settings pane, the **Show Datab
 | `elm_range_level`, `elm_auto_apply_level`, `elm_auto_click_fab` | main | Legacy slider values, read once to initialise `elm_range_level2` |
 | `elm_csv_database` | CSV | Recorded pairs (JSON array) |
 | `elm_show_db_ui` | CSV | Show Database UI |
-| `elm_aux_logic` | main | Auxiliary logic (default off) |
 | `elm2_bolt_picks` | main | Bolt's original pick per conflicting row (hashed ids, `l`/`r` + timestamp, capped at 2,500 entries). Element451 saves the selection on a pair, so on a second visit the screen shows the last selection rather than Bolt's pick; this keeps Bolt's real pick for the colours and *Use Bolt AI picks* |
 
 ### 12.3 Console output (page console, F12 → filter `elm2` or `CSV Database`)

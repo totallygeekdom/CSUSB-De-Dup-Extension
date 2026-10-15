@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.121
+// @version      2.122
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-121'; // keep in sync with @version (2.121)
+    const BUILD = 'v2-build-122'; // keep in sync with @version (2.122)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -148,9 +148,9 @@
         }
         #elm2-merge-overlay.visible .elm2-merge-card { transform: scale(1); opacity: 1; }
         #elm2-merge-overlay .elm2-ring { position: relative; width: 160px; height: 160px; margin: 0 auto 24px; }
-        #elm2-merge-overlay .elm2-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+        #elm2-merge-overlay .elm2-ring svg { width: 100%; height: 100%; transform: rotate(90deg); }
         #elm2-merge-overlay .elm2-ring-track { fill: none; stroke: #f9dedc; stroke-width: 8; }
-        #elm2-merge-overlay .elm2-ring-arc { fill: none; stroke: #b3261e; stroke-width: 8; stroke-linecap: round; stroke-dasharray: 276.46; stroke-dashoffset: 0; transition: stroke-dashoffset .8s cubic-bezier(.2, 0, 0, 1); }
+        #elm2-merge-overlay .elm2-ring-arc { fill: none; stroke: #b3261e; stroke-width: 8; stroke-linecap: round; stroke-dasharray: 276.46 276.46; stroke-dashoffset: 0; transition: stroke-dasharray .8s cubic-bezier(.2, 0, 0, 1), stroke-dashoffset .8s cubic-bezier(.2, 0, 0, 1), stroke .3s linear; }
         #elm2-merge-overlay #elm2-merge-count { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 57px; line-height: 64px; font-weight: 400; color: #b3261e; }
         #elm2-merge-overlay #elm2-merge-title { margin: 0 8px 8px; font-size: 24px; line-height: 32px; font-weight: 400; color: #1a1c20; }
         #elm2-merge-overlay #elm2-merge-summary { margin: 0 12px 32px; font-size: 15px; line-height: 22px; letter-spacing: .15px; color: #434750; }
@@ -165,6 +165,9 @@
         #elm2-merge-overlay #elm2-merge-cancel:hover { box-shadow: var(--md-elev-1); }
         #elm2-merge-overlay #elm2-merge-cancel:hover::after { opacity: .08; }
         #elm2-merge-overlay #elm2-merge-cancel:active::after { opacity: .12; }
+        #elm2-merge-overlay .elm2-merge-card.done .elm2-ring-track { stroke: #cfe8d0; }
+        #elm2-merge-overlay .elm2-merge-card.done .elm2-ring-arc { stroke: #2e7d32; }
+        #elm2-merge-overlay .elm2-merge-card.done #elm2-merge-count { color: #2e7d32; }
         @keyframes elm2-count-in { from { opacity: 0; transform: scale(.7); } to { opacity: 1; transform: scale(1); } }
         #elm2-merge-overlay #elm2-merge-cancel:focus-visible { outline: 3px solid rgba(179, 38, 30, .4); outline-offset: 2px; }
         /* --- Review Queue / History tabs: Material 3 primary tabs ---
@@ -2187,7 +2190,7 @@
     }
     function cancelAutoMerge(message) {
         const wasRunning = !!mergeTimer;
-        clearInterval(mergeTimer);
+        clearInterval(mergeTimer); clearTimeout(mergeTimer);
         mergeTimer = null;
         hideMergeModal();
         hideMergeBar();
@@ -2263,10 +2266,19 @@
         hideMergeBar();
         const total = CFG.MERGE_COUNTDOWN;
         let left = total;
+        const card = ov.querySelector('.elm2-merge-card');
         const arc = ov.querySelector('.elm2-ring-arc');
+        card.classList.remove('done');
+        document.getElementById('elm2-merge-title').textContent = 'Merging automatically';
         renderMergeBrief(document.getElementById('elm2-merge-summary'));
-        // The ring drains one step per second, in time with the number.
+        // The ring drains one step per second, in time with the number. It drains from both ends
+        // toward the top, so the part still showing is always centred; at 0 it goes full and green.
         const CIRC = 276.46;
+        const setArc = (frac) => {
+            const len = CIRC * frac;
+            arc.style.strokeDasharray = len + ' ' + CIRC;
+            arc.style.strokeDashoffset = String(-(CIRC / 2 - len / 2));
+        };
         const render = () => {
             const count = document.getElementById('elm2-merge-count');
             count.textContent = String(left);
@@ -2274,39 +2286,52 @@
             count.style.animation = 'none';
             void count.getBoundingClientRect();
             count.style.animation = 'elm2-count-in .5s cubic-bezier(.05, .7, .1, 1)';
-            arc.style.strokeDashoffset = String(CIRC * (1 - left / total));
+            if (left > 0) setArc(left / total);
         };
         arc.style.transition = 'none';
-        arc.style.strokeDashoffset = '0';
+        setArc(1);
         void arc.getBoundingClientRect();
         arc.style.transition = '';
         render();
         ov.classList.add('visible');
+        // Final gate, then the merge click itself. Returns false when the pair is not mergeable.
+        const stop = (ready) => {
+            hideMergeModal();
+            console.log('[elm2] Auto-merge not done:', ready.reason);
+            if (ready.reason === 'the pair changed') return;
+            if (CFG.AUTO_SKIP_BLOCKED) { skipToNext('not merged, ' + ready.reason); }
+            else showMergeNotice('Auto-merge stopped: ' + ready.reason + '.');
+        };
         mergeTimer = setInterval(() => {
             if (getPairKey() !== key) { cancelAutoMerge(); return; }
             left--;
             if (left > 0) { render(); return; }
             clearInterval(mergeTimer);
             mergeTimer = null;
-            hideMergeModal();
             const ready = mergeReadiness(key);
-            if (!ready.ok) {
-                console.log('[elm2] Auto-merge not done:', ready.reason);
-                if (ready.reason === 'the pair changed') return;
-                if (CFG.AUTO_SKIP_BLOCKED) { skipToNext('not merged, ' + ready.reason); }
-                else showMergeNotice('Auto-merge stopped: ' + ready.reason + '.');
-                return;
-            }
-            mergedPairKey = key;
-            console.log('[elm2] Auto-merging pair');
-            ready.btn.click();
-            // Watchdog: a merge shows a "Merge completed" card. If it never comes (for example a
-            // confirmation dialog is waiting), the console says so.
-            setTimeout(() => {
-                if (getPairKey() !== key || Array.from(document.querySelectorAll('.merge-completion-state')).some(c => c.getClientRects().length)) return;
-                const dlg = document.querySelector('bolt-dialog');
-                console.log('[elm2] Merge Contacts clicked but no "Merge completed" card;', dlg ? 'dialog open: ' + dlg.textContent.replace(/\s+/g, ' ').trim().slice(0, 160) : 'no dialog open');
-            }, 6000);
+            if (!ready.ok) { stop(ready); return; }
+            // 0: the ring fills and turns green for a beat (Cancel still works), then the merge is clicked.
+            card.classList.add('done');
+            document.getElementById('elm2-merge-title').textContent = 'Merging…';
+            arc.style.strokeDasharray = CIRC + ' ' + CIRC;
+            arc.style.strokeDashoffset = '0';
+            render();
+            mergeTimer = setTimeout(() => {
+                mergeTimer = null;
+                hideMergeModal();
+                const again = mergeReadiness(key);
+                if (!again.ok) { stop(again); return; }
+                mergedPairKey = key;
+                console.log('[elm2] Auto-merging pair');
+                again.btn.click();
+                // Watchdog: a merge shows a "Merge completed" card. If it never comes (for example a
+                // confirmation dialog is waiting), the console says so.
+                setTimeout(() => {
+                    if (getPairKey() !== key || Array.from(document.querySelectorAll('.merge-completion-state')).some(c => c.getClientRects().length)) return;
+                    const dlg = document.querySelector('bolt-dialog');
+                    console.log('[elm2] Merge Contacts clicked but no "Merge completed" card;', dlg ? 'dialog open: ' + dlg.textContent.replace(/\s+/g, ' ').trim().slice(0, 160) : 'no dialog open');
+                }, 6000);
+            }, 800);
         }, 1000);
     }
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && mergeTimer) cancelAutoMerge('Auto-merge cancelled'); });

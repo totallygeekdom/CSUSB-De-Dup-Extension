@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.123
+// @version      2.124
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-123'; // keep in sync with @version (2.123)
+    const BUILD = 'v2-build-124'; // keep in sync with @version (2.124)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -165,6 +165,10 @@
         #elm2-merge-overlay #elm2-merge-cancel:hover { box-shadow: var(--md-elev-1); }
         #elm2-merge-overlay #elm2-merge-cancel:hover::after { opacity: .08; }
         #elm2-merge-overlay #elm2-merge-cancel:active::after { opacity: .12; }
+        /* Element451's own "Skip merge completion screen" / "Skip this screen next time" switches would remove the
+           card Next after merge reads, so they are hidden while that setting is on (and only while they are off). */
+        body.elm2-next-after-merge bolt-slide-toggle.skip-merge-completion-toggle:has(button[aria-checked="false"]),
+        body.elm2-next-after-merge bolt-slide-toggle.merge-completion-skip-toggle:has(button[aria-checked="false"]) { display: none !important; }
         #elm2-merge-overlay .elm2-merge-card.done .elm2-ring-track { stroke: #cfe8d0; }
         #elm2-merge-overlay .elm2-merge-card.done .elm2-ring-arc { stroke: #2e7d32; }
         #elm2-merge-overlay .elm2-merge-card.done #elm2-merge-count { color: #2e7d32; }
@@ -2464,6 +2468,16 @@
     // (bolt-card.merge-completion-state) holding "View merged contact" and "Next duplicate".
     // That card is the real merge-success signal: count the merge, then press "Next duplicate"
     // (not shown on the last pair, in which case nothing is clicked). Handled once per card.
+    let skipToggleWarned = false;
+    function syncSkipToggles() {
+        document.body.classList.toggle('elm2-next-after-merge', CFG.NEXT_AFTER_MERGE);
+        if (!CFG.NEXT_AFTER_MERGE || skipToggleWarned) return;
+        const on = document.querySelector('bolt-slide-toggle.skip-merge-completion-toggle button[aria-checked="true"], bolt-slide-toggle.merge-completion-skip-toggle button[aria-checked="true"]');
+        if (on) {
+            skipToggleWarned = true;
+            console.warn('[elm2] Element\'s "Skip merge completion screen" is ON: the Merge completed card never shows, so Next after merge cannot work. Turn that switch off (it stays visible while it is on).');
+        }
+    }
     function checkMergeCompletion() {
         const card = document.querySelector('.merge-completion-state');
         if (!card || card.dataset.elm2Handled || !card.getClientRects().length) return; // absent, handled, or hidden
@@ -2507,6 +2521,7 @@
         syncHeaderColor(); // the header is on every page, not just the review page
         injectPager();
         stripFilterTooltips();
+        syncSkipToggles();
         if (isDedupReviewPage()) {
             syncBoltBlue();
             annotateRowColors();
@@ -2635,7 +2650,7 @@
                 <div class="setting-row"><label>Auto-Skip</label>${toggleHtml('elm-auto-skip-blocked')}</div>
                 <div class="elm-level-desc elm-skip-desc">Skips blocked, out-of-range and possible-twins pairs with no popup. Off: stops on them instead.</div>
                 <div class="setting-row"><label>Next after merge</label>${toggleHtml('elm-next-after-merge')}</div>
-                <div class="elm-level-desc elm-next-desc">After a merge (yours or an auto-merge), presses "Next duplicate" on the "Merge completed" card.</div>
+                <div class="elm-level-desc elm-next-desc">After a merge (yours or an auto-merge), presses "Next duplicate" on the "Merge completed" card, and hides Element\'s own "Skip merge completion screen" switches (which would remove that card).</div>
                 <div class="settings-section-title">Display</div>
                 <div class="setting-row"><label>Highlight Rows</label>${toggleHtml('elm-highlight-rows')}</div>
                 <div class="settings-section-title">Department</div>

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.130
+// @version      2.131
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-130'; // keep in sync with @version (2.130)
+    const BUILD = 'v2-build-131'; // keep in sync with @version (2.131)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -185,7 +185,7 @@
         #elm2-merge-overlay .elm2-lamps i.red { background: #ff3b30; box-shadow: 0 0 14px 3px rgba(255, 59, 48, .65), inset 0 -3px 6px rgba(0,0,0,.25); }
         #elm2-merge-overlay .elm2-lamps i.green { background: #34d058; box-shadow: 0 0 14px 3px rgba(52, 208, 88, .7), inset 0 -3px 6px rgba(0,0,0,.2); }
         #elm2-merge-overlay .elm2-merge-card.done .elm2-ring-track { stroke: #cfe8d0; }
-        #elm2-merge-overlay .elm2-merge-card.done #elm2-merge-cancel { opacity: .38; pointer-events: none; }
+        #elm2-merge-overlay .elm2-merge-card.fired #elm2-merge-cancel { opacity: .38; pointer-events: none; }
         #elm2-merge-overlay .elm2-merge-card.done #elm2-merge-count { color: #2e7d32; }
         @keyframes elm2-count-in { from { opacity: 0; transform: scale(.7); } to { opacity: 1; transform: scale(1); } }
         #elm2-merge-overlay #elm2-merge-cancel:focus-visible { outline: 3px solid rgba(179, 38, 30, .4); outline-offset: 2px; }
@@ -2286,17 +2286,19 @@
         hideMergeBar();
         const total = CFG.MERGE_COUNTDOWN;
         let left = total;
-        // The setting is the whole wait: the numbers (or lamps) step once a second and the merge is clicked
-        // the instant they reach 0. The green "GO" state is shown at that moment and the dialog lingers
-        // a little (LINGER) after the click purely so it can be seen; it never delays the merge.
+        // The setting is the whole wait: the numbers step once a second and the merge is clicked the instant
+        // they reach 0; the green state shows at that moment and the dialog lingers a little (LINGER) after
+        // the click purely so it can be seen. The race lights are the exception: their green "GO" holds for
+        // RACE_GO before the click, so that style takes 4.3 s.
         const LINGER = 450;
+        const RACE_GO = 300;
         const TICK = 1000;
         const card = ov.querySelector('.elm2-merge-card');
         const arc = ov.querySelector('.elm2-ring-arc');
         const fill = ov.querySelector('.elm2-ring-fill');
         fill.style.transition = 'none';
         arc.style.transition = 'none';
-        card.classList.remove('done');
+        card.classList.remove('done', 'fired');
         const race = CFG.COUNTDOWN_STYLE === 'race';
         card.classList.toggle('race', race);
         const lamps = Array.from(ov.querySelectorAll('.elm2-lamps i'));
@@ -2350,21 +2352,31 @@
             mergeTimer = null;
             const ready = mergeReadiness(key);
             if (!ready.ok) { stop(ready); return; }
-            // 0: the ring (or lamps) goes green and the merge is clicked right away.
+            // 0: the ring (or lamps) goes green; the merge is clicked right away (race lights: after RACE_GO).
             card.classList.add('done');
             document.getElementById('elm2-merge-title').textContent = race ? 'GO!' : 'Merging…';
             render();
-            mergedPairKey = key;
-            console.log('[elm2] Auto-merging pair');
-            ready.btn.click();
-            setTimeout(hideMergeModal, LINGER);
-            // Watchdog: a merge shows a "Merge completed" card. If it never comes (for example a
-            // confirmation dialog is waiting), the console says so.
-            setTimeout(() => {
-                if (getPairKey() !== key || Array.from(document.querySelectorAll('.merge-completion-state')).some(c => c.getClientRects().length)) return;
-                const dlg = document.querySelector('bolt-dialog');
-                console.log('[elm2] Merge Contacts clicked but no "Merge completed" card;', dlg ? 'dialog open: ' + dlg.textContent.replace(/\s+/g, ' ').trim().slice(0, 160) : 'no dialog open');
-            }, 6000);
+            const fire = (btn) => {
+                card.classList.add('fired');
+                mergedPairKey = key;
+                console.log('[elm2] Auto-merging pair');
+                btn.click();
+                setTimeout(hideMergeModal, LINGER);
+                // Watchdog: a merge shows a "Merge completed" card. If it never comes (for example a
+                // confirmation dialog is waiting), the console says so.
+                setTimeout(() => {
+                    if (getPairKey() !== key || Array.from(document.querySelectorAll('.merge-completion-state')).some(c => c.getClientRects().length)) return;
+                    const dlg = document.querySelector('bolt-dialog');
+                    console.log('[elm2] Merge Contacts clicked but no "Merge completed" card;', dlg ? 'dialog open: ' + dlg.textContent.replace(/\s+/g, ' ').trim().slice(0, 160) : 'no dialog open');
+                }, 6000);
+            };
+            if (!race) { fire(ready.btn); return; }
+            mergeTimer = setTimeout(() => {
+                mergeTimer = null;
+                const again = mergeReadiness(key);
+                if (!again.ok) { stop(again); return; }
+                fire(again.btn);
+            }, RACE_GO);
         }, TICK);
     }
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && mergeTimer) cancelAutoMerge('Auto-merge cancelled'); });

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.125
+// @version      2.126
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-125'; // keep in sync with @version (2.125)
+    const BUILD = 'v2-build-126'; // keep in sync with @version (2.126)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -169,8 +169,12 @@
            card Next after merge reads, so they are hidden while that setting is on (and only while they are off). */
         body.elm2-next-after-merge bolt-slide-toggle.skip-merge-completion-toggle:has(button[aria-checked="false"]),
         body.elm2-next-after-merge bolt-slide-toggle.merge-completion-skip-toggle:has(button[aria-checked="false"]) { display: none !important; }
+        /* At 0 a green ring is drawn from 12 o'clock counter-clockwise (the circle is mirrored, so its
+           path runs the other way) while the red arc fades out. */
+        #elm2-merge-overlay .elm2-ring-fill { fill: none; stroke: #2e7d32; stroke-width: 8; stroke-linecap: round; stroke-dasharray: 0.01 276.46; opacity: 0; transition: stroke-dasharray .7s cubic-bezier(.2, 0, 0, 1), opacity .15s linear; }
+        #elm2-merge-overlay .elm2-merge-card.done .elm2-ring-fill { opacity: 1; stroke-dasharray: 276.46 276.46; }
+        #elm2-merge-overlay .elm2-merge-card.done .elm2-ring-arc { opacity: 0; transition: opacity .3s linear; }
         #elm2-merge-overlay .elm2-merge-card.done .elm2-ring-track { stroke: #cfe8d0; }
-        #elm2-merge-overlay .elm2-merge-card.done .elm2-ring-arc { stroke: #2e7d32; }
         #elm2-merge-overlay .elm2-merge-card.done #elm2-merge-count { color: #2e7d32; }
         @keyframes elm2-count-in { from { opacity: 0; transform: scale(.7); } to { opacity: 1; transform: scale(1); } }
         #elm2-merge-overlay #elm2-merge-cancel:focus-visible { outline: 3px solid rgba(179, 38, 30, .4); outline-offset: 2px; }
@@ -2176,7 +2180,7 @@
             ov.innerHTML = `
                 <div class="elm2-merge-card" role="alertdialog" aria-live="polite" aria-labelledby="elm2-merge-title" aria-describedby="elm2-merge-summary">
                     <div class="elm2-ring">
-                        <svg viewBox="0 0 100 100" aria-hidden="true"><circle class="elm2-ring-track" cx="50" cy="50" r="44"></circle><circle class="elm2-ring-arc" cx="50" cy="50" r="44"></circle></svg>
+                        <svg viewBox="0 0 100 100" aria-hidden="true"><circle class="elm2-ring-track" cx="50" cy="50" r="44"></circle><circle class="elm2-ring-arc" cx="50" cy="50" r="44"></circle><circle class="elm2-ring-fill" cx="50" cy="50" r="44" transform="translate(0,100) scale(1,-1)"></circle></svg>
                         <span id="elm2-merge-count"></span>
                     </div>
                     <h2 id="elm2-merge-title">Merging automatically</h2>
@@ -2272,6 +2276,9 @@
         let left = total;
         const card = ov.querySelector('.elm2-merge-card');
         const arc = ov.querySelector('.elm2-ring-arc');
+        const fill = ov.querySelector('.elm2-ring-fill');
+        fill.style.transition = 'none';
+        arc.style.transition = 'none';
         card.classList.remove('done');
         document.getElementById('elm2-merge-title').textContent = 'Merging automatically';
         renderMergeBrief(document.getElementById('elm2-merge-summary'));
@@ -2296,10 +2303,10 @@
             count.style.animation = 'elm2-count-in .5s cubic-bezier(.05, .7, .1, 1)';
             if (left > 0) setArc(left / total);
         };
-        arc.style.transition = 'none';
         setArc(1);
         void arc.getBoundingClientRect();
         arc.style.transition = '';
+        fill.style.transition = '';
         render();
         ov.classList.add('visible');
         // Final gate, then the merge click itself. Returns false when the pair is not mergeable.
@@ -2321,8 +2328,6 @@
             // 0: the ring fills and turns green for a beat (Cancel still works), then the merge is clicked.
             card.classList.add('done');
             document.getElementById('elm2-merge-title').textContent = 'Merging…';
-            arc.style.strokeDasharray = CIRC + ' ' + CIRC;
-            arc.style.strokeDashoffset = '0';
             render();
             mergeTimer = setTimeout(() => {
                 mergeTimer = null;

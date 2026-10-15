@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.126
+// @version      2.127
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-126'; // keep in sync with @version (2.126)
+    const BUILD = 'v2-build-127'; // keep in sync with @version (2.127)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -64,7 +64,9 @@
         // What happens once a pair in range is decided: 'wait' for you, or 'merge'. Kept per browser
         // session only, so a new session always starts on 'wait'.
         // Seconds of the auto-merge cancel window (never below 2: the window is required).
-        MERGE_COUNTDOWN:          { get() { const v = parseInt(localStorage.getItem('elm_merge_countdown'), 10); return isNaN(v) ? 4 : Math.max(2, Math.min(15, v)); } },
+        // The countdown drop-down also offers "race lights": a 4 second countdown drawn as a start signal.
+        COUNTDOWN_STYLE:          { get() { return localStorage.getItem('elm_merge_countdown') === 'race' ? 'race' : 'ring'; } },
+        MERGE_COUNTDOWN:          { get() { const raw = localStorage.getItem('elm_merge_countdown'); if (raw === 'race') return 4; const v = parseInt(raw, 10); return isNaN(v) ? 4 : Math.max(2, Math.min(15, v)); } },
         WHEN_DONE:                { get() { try { return sessionStorage.getItem('elm_when_done') === 'merge' ? 'merge' : 'wait'; } catch (e) { return 'wait'; } } },
         HIGHLIGHT_ROWS:           { get() { return getBoolSetting('elm_highlight_rows', true); } },
         SHOW_MERGE_COUNTER:       { get() { return getBoolSetting('elm_show_merge_counter', false); } },
@@ -174,6 +176,14 @@
         #elm2-merge-overlay .elm2-ring-fill { fill: none; stroke: #2e7d32; stroke-width: 8; stroke-linecap: round; stroke-dasharray: 0.01 276.46; opacity: 0; transition: stroke-dasharray .7s cubic-bezier(.2, 0, 0, 1), opacity .15s linear; }
         #elm2-merge-overlay .elm2-merge-card.done .elm2-ring-fill { opacity: 1; stroke-dasharray: 276.46 276.46; }
         #elm2-merge-overlay .elm2-merge-card.done .elm2-ring-arc { opacity: 0; transition: opacity .3s linear; }
+        /* "Race lights" countdown style: three lamps instead of the ring. Red lamps light one per second (3, 2, 1),
+           then all three go green with "GO!". */
+        #elm2-merge-overlay .elm2-lamps { display: none; }
+        #elm2-merge-overlay .elm2-merge-card.race .elm2-ring svg, #elm2-merge-overlay .elm2-merge-card.race #elm2-merge-count { display: none; }
+        #elm2-merge-overlay .elm2-merge-card.race .elm2-lamps { position: absolute; left: 0; right: 0; top: 50%; height: 68px; margin-top: -34px; box-sizing: border-box; padding: 0 12px; border-radius: 34px; background: #1f2124; box-shadow: inset 0 2px 6px rgba(0,0,0,.5); display: flex; align-items: center; justify-content: space-between; }
+        #elm2-merge-overlay .elm2-lamps i { width: 40px; height: 40px; border-radius: 50%; background: #3a3d42; box-shadow: inset 0 2px 4px rgba(0,0,0,.6); transition: background-color .08s linear, box-shadow .08s linear; }
+        #elm2-merge-overlay .elm2-lamps i.red { background: #ff3b30; box-shadow: 0 0 14px 3px rgba(255, 59, 48, .65), inset 0 -3px 6px rgba(0,0,0,.25); }
+        #elm2-merge-overlay .elm2-lamps i.green { background: #34d058; box-shadow: 0 0 14px 3px rgba(52, 208, 88, .7), inset 0 -3px 6px rgba(0,0,0,.2); }
         #elm2-merge-overlay .elm2-merge-card.done .elm2-ring-track { stroke: #cfe8d0; }
         #elm2-merge-overlay .elm2-merge-card.done #elm2-merge-count { color: #2e7d32; }
         @keyframes elm2-count-in { from { opacity: 0; transform: scale(.7); } to { opacity: 1; transform: scale(1); } }
@@ -2182,6 +2192,7 @@
                     <div class="elm2-ring">
                         <svg viewBox="0 0 100 100" aria-hidden="true"><circle class="elm2-ring-track" cx="50" cy="50" r="44"></circle><circle class="elm2-ring-arc" cx="50" cy="50" r="44"></circle><circle class="elm2-ring-fill" cx="50" cy="50" r="44" transform="translate(0,100) scale(1,-1)"></circle></svg>
                         <span id="elm2-merge-count"></span>
+                        <div class="elm2-lamps" aria-hidden="true"><i></i><i></i><i></i></div>
                     </div>
                     <h2 id="elm2-merge-title">Merging automatically</h2>
                     <div id="elm2-merge-summary"></div>
@@ -2280,7 +2291,14 @@
         fill.style.transition = 'none';
         arc.style.transition = 'none';
         card.classList.remove('done');
-        document.getElementById('elm2-merge-title').textContent = 'Merging automatically';
+        const race = CFG.COUNTDOWN_STYLE === 'race';
+        card.classList.toggle('race', race);
+        const lamps = Array.from(ov.querySelectorAll('.elm2-lamps i'));
+        const setLamps = () => lamps.forEach((l, i) => {
+            // red lamps at 3, 2, 1 seconds left; all green at 0
+            l.className = left <= 0 ? 'green' : (i < Math.max(0, 4 - left) ? 'red' : '');
+        });
+        document.getElementById('elm2-merge-title').textContent = race ? 'Get ready…' : 'Merging automatically';
         renderMergeBrief(document.getElementById('elm2-merge-summary'));
         // The ring drains one step per second, in time with the number: the arc starts at 12 o'clock
         // and its far end walks back counter-clockwise. A round line cap pokes half a stroke past
@@ -2302,6 +2320,7 @@
             void count.getBoundingClientRect();
             count.style.animation = 'elm2-count-in .5s cubic-bezier(.05, .7, .1, 1)';
             if (left > 0) setArc(left / total);
+            if (race) setLamps();
         };
         setArc(1);
         void arc.getBoundingClientRect();
@@ -2327,7 +2346,7 @@
             if (!ready.ok) { stop(ready); return; }
             // 0: the ring fills and turns green for a beat (Cancel still works), then the merge is clicked.
             card.classList.add('done');
-            document.getElementById('elm2-merge-title').textContent = 'Merging…';
+            document.getElementById('elm2-merge-title').textContent = race ? 'GO!' : 'Merging…';
             render();
             mergeTimer = setTimeout(() => {
                 mergeTimer = null;
@@ -2647,7 +2666,7 @@
                 <div class="setting-row" id="elm-countdown-row">
                     <label for="elm-merge-countdown">Merge countdown</label>
                     <select id="elm-merge-countdown">
-                        <option value="2">2 seconds</option><option value="3">3 seconds</option><option value="4">4 seconds</option>
+                        <option value="2">2 seconds</option><option value="3">3 seconds</option><option value="4">4 seconds</option><option value="race">4 seconds, race lights</option>
                         <option value="5">5 seconds</option><option value="6">6 seconds</option><option value="8">8 seconds</option>
                         <option value="10">10 seconds</option><option value="15">15 seconds</option>
                     </select>
@@ -2741,7 +2760,7 @@
             countdownSelect.disabled = !active;
             countdownRow.style.opacity = active ? '' : '.38';
         };
-        countdownSelect.value = String(CFG.MERGE_COUNTDOWN);
+        countdownSelect.value = CFG.COUNTDOWN_STYLE === 'race' ? 'race' : String(CFG.MERGE_COUNTDOWN);
         countdownSelect.addEventListener('change', () => localStorage.setItem('elm_merge_countdown', countdownSelect.value));
         document.getElementById('elm-when-done').addEventListener('click', syncCountdown);
         levelSlider.addEventListener('input', syncCountdown);

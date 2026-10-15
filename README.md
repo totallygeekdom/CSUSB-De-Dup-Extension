@@ -12,7 +12,7 @@ chip). Two v2 scripts target it:
 
 | Script | File | Current version |
 |---|---|---|
-| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.126` (`v2-build-126`, shown in the settings pane) |
+| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.127` (`v2-build-127`, shown in the settings pane) |
 | CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.22` |
 
 **Full documentation: [`Full-Documentation-v2.md`](Full-Documentation-v2.md)** (architecture, every setting,
@@ -24,7 +24,7 @@ the resolution rules, auto-merge, every website restyle, the database format, li
   - **Pairs in range** slider, by Bolt score: None, High, Medium, Low, All (each position adds to the one before; an applicant side does not put a pair in range).
   - **Use picks from**: Bolt's or Ours (Ours includes the applicant rule).
   - **When done**: Wait for me, or Merge after a cancel countdown (a centred dialog with a stepped ring,
-    a short brief (names, Bolt score, how often the script agrees with Bolt, what it chose over Bolt) and a Cancel button; length set by **Merge countdown**, 2-15 s). This setting
+    a short brief (names, Bolt score, how often the script agrees with Bolt, what it chose over Bolt) and a Cancel button; length set by **Merge countdown**, 2-15 s, or a 4 s "race lights" start signal). This setting
     resets every browser session. A final safety check runs before Merge Contacts is clicked.
   - **Auto-Skip**: skips blocked, out-of-range and possible-twins pairs with no popup (Next duplicate
     only, never Dismiss); off = stop on them and show the appeal / possible-twins popups.

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.119
+// @version      2.120
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-119'; // keep in sync with @version (2.119)
+    const BUILD = 'v2-build-120'; // keep in sync with @version (2.120)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -981,6 +981,10 @@
             const nativeSide = (isSel(arrowA) && !isSel(arrowB)) ? 'left'
                 : (isSel(arrowB) && !isSel(arrowA)) ? 'right'
                 : isSel(leftBtn) ? 'left' : isSel(rightBtn) ? 'right' : null;
+            // Any other selected radio in the row (the middle button between the arrows, e.g. a
+            // "keep both" / swap option) is a Bolt choice too: not left, not right, but not blank.
+            const otherSelected = Array.from(row.querySelectorAll(':scope > .diff-actions > button')).some(b =>
+                b !== arrowA && b !== arrowB && (b.getAttribute('aria-checked') === 'true' || (b.classList.contains('diff-option-selected') && !b.classList.contains('bolt-button-disabled'))));
             // Stable identity for this row within the current pair (survives
             // Element451 re-rendering the DOM node): field label + nth occurrence + both values.
             const occ = labelCounts[label] = (labelCounts[label] || 0) + 1;
@@ -989,6 +993,7 @@
                 key: `${label}#${occ}|${norm(leftText)}|${norm(rightText)}`,
                 label,
                 nativeSide,
+                otherSelected: !nativeSide && otherSelected,
                 // Element451 doesn't flag conflicting rows (it just hides matching
                 // ones), so we detect them ourselves: the two sides differ.
                 // Case counts: "jesse" vs "Jesse" is a real conflict (the name-case rule needs it), so the
@@ -1871,13 +1876,14 @@
     function autoFillUnselected() {
         getDiffRows().filter(r => r.isConflict).forEach(row => {
             const d = row.element.dataset;
-            if (d.elm2AiSide || d.elm2ScriptSide || d.elm2NeedsReview) return;
+            if (d.elm2AiSide || d.elm2ScriptSide || d.elm2NeedsReview || row.otherSelected) return;
             const l = row.values[0].textContent, r = row.values[1].textContent;
             let side = null;
             if (isBlankValue(l) !== isBlankValue(r)) { side = isBlankValue(l) ? 'right' : 'left'; currentRule = 'fallback: one side blank -> side with data'; }
             if (!side) { side = getMostRecentProfileSide(); if (side) currentRule = 'fallback: more recent profile'; }
             if (!side) { side = getSelectedEmailSide(); if (side) currentRule = 'fallback: follows the selected email'; }
             if (!side) { side = parseInt(hashStr(getContactNames().join('|') + '||' + row.key).slice(-2), 36) % 2 ? 'left' : 'right'; currentRule = 'fallback: arbitrary (stable)'; }
+            console.log('[elm2] Filled', row.label || '(unnamed)', '->', side, '|', currentRule);
             applyScriptPick(row, side);
         });
     }
@@ -2244,7 +2250,7 @@
         if (getAllBlockers().length > 0) return { ok: false, reason: 'the pair is blocked' };
         // A conflicting row with no selected side (Bolt left it blank and a rule applied but could not
         // decide) means a human has to look: the pair is not merged.
-        const unresolved = getDiffRows().filter(r => r.isConflict && !r.nativeSide);
+        const unresolved = getDiffRows().filter(r => r.isConflict && !r.nativeSide && !r.otherSelected);
         if (unresolved.length > 0) {
             unresolved.forEach(r => console.log('[elm2] Needs review:', r.label || '(unnamed)', '| A:', r.values[0].textContent, '| B:', r.values[1].textContent));
             return { ok: false, reason: unresolved.length + ' field(s) need review (' + unresolved.map(r => r.label || '(unnamed)').join(', ') + ')' };

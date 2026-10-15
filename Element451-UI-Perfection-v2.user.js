@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.124
+// @version      2.125
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-124'; // keep in sync with @version (2.124)
+    const BUILD = 'v2-build-125'; // keep in sync with @version (2.125)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -408,13 +408,13 @@
             pointer-events: none;
             z-index: 2;
         }
-        /* --- Material 3 style "Hide matching items" switch.
+        /* --- Material 3 style "Hide matching items" switch (also used for Element451's two "skip merge completion screen" switches).
                40x24 pill track; off = outlined track with a small 12px thumb,
                on = filled track with an 18px white thumb and a check mark.
                Element451's own MDC track/thumb internals are hidden and the visuals are
                drawn with the button's pseudo-elements; the button itself (click, keyboard,
                aria) is untouched. --- */
-        bolt-slide-toggle.hide-matching-items-toggle button.mdc-switch {
+        bolt-slide-toggle:is(.hide-matching-items-toggle, .skip-merge-completion-toggle, .merge-completion-skip-toggle) button.mdc-switch {
             position: relative !important;
             width: 40px !important;
             min-width: 40px !important;
@@ -426,15 +426,15 @@
             background: #e6e1db !important;
             transition: background-color 0.2s, border-color 0.2s;
         }
-        bolt-slide-toggle.hide-matching-items-toggle button.mdc-switch.mdc-switch--selected {
+        bolt-slide-toggle:is(.hide-matching-items-toggle, .skip-merge-completion-toggle, .merge-completion-skip-toggle) button.mdc-switch.mdc-switch--selected {
             background: var(--md-primary) !important;
             border-color: var(--md-primary) !important;
         }
-        bolt-slide-toggle.hide-matching-items-toggle button.mdc-switch .mdc-switch__track,
-        bolt-slide-toggle.hide-matching-items-toggle button.mdc-switch .mdc-switch__handle-track {
+        bolt-slide-toggle:is(.hide-matching-items-toggle, .skip-merge-completion-toggle, .merge-completion-skip-toggle) button.mdc-switch .mdc-switch__track,
+        bolt-slide-toggle:is(.hide-matching-items-toggle, .skip-merge-completion-toggle, .merge-completion-skip-toggle) button.mdc-switch .mdc-switch__handle-track {
             display: none !important;
         }
-        bolt-slide-toggle.hide-matching-items-toggle button.mdc-switch::before {
+        bolt-slide-toggle:is(.hide-matching-items-toggle, .skip-merge-completion-toggle, .merge-completion-skip-toggle) button.mdc-switch::before {
             content: "";
             position: absolute;
             top: 50%;
@@ -446,14 +446,14 @@
             background: #73777f;
             transition: left 0.2s, width 0.2s, height 0.2s, margin-top 0.2s, background-color 0.2s;
         }
-        bolt-slide-toggle.hide-matching-items-toggle button.mdc-switch.mdc-switch--selected::before {
+        bolt-slide-toggle:is(.hide-matching-items-toggle, .skip-merge-completion-toggle, .merge-completion-skip-toggle) button.mdc-switch.mdc-switch--selected::before {
             left: 17px;
             width: 18px;
             height: 18px;
             margin-top: -9px;
             background: #fff;
         }
-        bolt-slide-toggle.hide-matching-items-toggle button.mdc-switch.mdc-switch--selected::after {
+        bolt-slide-toggle:is(.hide-matching-items-toggle, .skip-merge-completion-toggle, .merge-completion-skip-toggle) button.mdc-switch.mdc-switch--selected::after {
             content: "";
             position: absolute;
             left: 24px;
@@ -483,7 +483,7 @@
         html body elm-deduplication-score-chip bolt-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip-low .bolt-chip-text {
             color: #fff !important;
         }
-        bolt-slide-toggle.hide-matching-items-toggle label.mdc-label {
+        bolt-slide-toggle:is(.hide-matching-items-toggle, .skip-merge-completion-toggle, .merge-completion-skip-toggle) label.mdc-label {
             margin-left: 12px !important;
             padding-left: 0 !important;
         }

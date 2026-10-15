@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.129
+// @version      2.130
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-129'; // keep in sync with @version (2.129)
+    const BUILD = 'v2-build-130'; // keep in sync with @version (2.130)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -185,6 +185,7 @@
         #elm2-merge-overlay .elm2-lamps i.red { background: #ff3b30; box-shadow: 0 0 14px 3px rgba(255, 59, 48, .65), inset 0 -3px 6px rgba(0,0,0,.25); }
         #elm2-merge-overlay .elm2-lamps i.green { background: #34d058; box-shadow: 0 0 14px 3px rgba(52, 208, 88, .7), inset 0 -3px 6px rgba(0,0,0,.2); }
         #elm2-merge-overlay .elm2-merge-card.done .elm2-ring-track { stroke: #cfe8d0; }
+        #elm2-merge-overlay .elm2-merge-card.done #elm2-merge-cancel { opacity: .38; pointer-events: none; }
         #elm2-merge-overlay .elm2-merge-card.done #elm2-merge-count { color: #2e7d32; }
         @keyframes elm2-count-in { from { opacity: 0; transform: scale(.7); } to { opacity: 1; transform: scale(1); } }
         #elm2-merge-overlay #elm2-merge-cancel:focus-visible { outline: 3px solid rgba(179, 38, 30, .4); outline-offset: 2px; }
@@ -2285,9 +2286,10 @@
         hideMergeBar();
         const total = CFG.MERGE_COUNTDOWN;
         let left = total;
-        // The numbers (or lamps) take exactly the setting to reach 0, one step per second. The green "GO"
-        // state is a short beat after that (HOLD) before the merge click; it is not part of the countdown.
-        const HOLD = 300;
+        // The setting is the whole wait: the numbers (or lamps) step once a second and the merge is clicked
+        // the instant they reach 0. The green "GO" state is shown at that moment and the dialog lingers
+        // a little (LINGER) after the click purely so it can be seen; it never delays the merge.
+        const LINGER = 450;
         const TICK = 1000;
         const card = ov.querySelector('.elm2-merge-card');
         const arc = ov.querySelector('.elm2-ring-arc');
@@ -2348,26 +2350,21 @@
             mergeTimer = null;
             const ready = mergeReadiness(key);
             if (!ready.ok) { stop(ready); return; }
-            // 0: the ring fills and turns green for a beat (Cancel still works), then the merge is clicked.
+            // 0: the ring (or lamps) goes green and the merge is clicked right away.
             card.classList.add('done');
             document.getElementById('elm2-merge-title').textContent = race ? 'GO!' : 'Merging…';
             render();
-            mergeTimer = setTimeout(() => {
-                mergeTimer = null;
-                hideMergeModal();
-                const again = mergeReadiness(key);
-                if (!again.ok) { stop(again); return; }
-                mergedPairKey = key;
-                console.log('[elm2] Auto-merging pair');
-                again.btn.click();
-                // Watchdog: a merge shows a "Merge completed" card. If it never comes (for example a
-                // confirmation dialog is waiting), the console says so.
-                setTimeout(() => {
-                    if (getPairKey() !== key || Array.from(document.querySelectorAll('.merge-completion-state')).some(c => c.getClientRects().length)) return;
-                    const dlg = document.querySelector('bolt-dialog');
-                    console.log('[elm2] Merge Contacts clicked but no "Merge completed" card;', dlg ? 'dialog open: ' + dlg.textContent.replace(/\s+/g, ' ').trim().slice(0, 160) : 'no dialog open');
-                }, 6000);
-            }, HOLD);
+            mergedPairKey = key;
+            console.log('[elm2] Auto-merging pair');
+            ready.btn.click();
+            setTimeout(hideMergeModal, LINGER);
+            // Watchdog: a merge shows a "Merge completed" card. If it never comes (for example a
+            // confirmation dialog is waiting), the console says so.
+            setTimeout(() => {
+                if (getPairKey() !== key || Array.from(document.querySelectorAll('.merge-completion-state')).some(c => c.getClientRects().length)) return;
+                const dlg = document.querySelector('bolt-dialog');
+                console.log('[elm2] Merge Contacts clicked but no "Merge completed" card;', dlg ? 'dialog open: ' + dlg.textContent.replace(/\s+/g, ' ').trim().slice(0, 160) : 'no dialog open');
+            }, 6000);
         }, TICK);
     }
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && mergeTimer) cancelAutoMerge('Auto-merge cancelled'); });

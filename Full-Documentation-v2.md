@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.137`, shown in the settings pane and console as `v2-build-137` |
+| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.138`, shown in the settings pane and console as `v2-build-138` |
 | CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.22` |
 
 The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
@@ -220,7 +220,7 @@ with **Auto-Skip on**. Every pair is recorded in the database and skipped with n
 
 ## 6. Blockers (lockdowns)
 
-A pair is blocked when any of these is true. Blocked pairs get red styling (the Merge Contacts button turns red; the triggering row and, for forbidden/ignored, the contact card are outlined) and are never auto-applied or auto-merged.
+A pair is blocked when any of these is true. Blocked pairs get red styling (the Merge Contacts button turns red; the triggering row and, for forbidden, the contact card are outlined) and are never auto-applied or auto-merged.
 
 | Blocker | Detection |
 |---|---|
@@ -228,11 +228,10 @@ A pair is blocked when any of these is true. Blocked pairs get red styling (the 
 | **Appeal** | Any row value, on either side, contains the word `appeal` (the side is reported) |
 | **Wrong department** | The detected department differs from **Allowed Department** (see below) |
 | **Student ID mismatch** | A row containing `School Id:` shows two different numeric IDs |
-| **Ignored** | A chip (`.bolt-chip` / `elm-chip`) whose text is `Ignored` is on the page |
 
 **Department detection.** A row counts as Grad/IA when it is a Workflows / Application / Program / `type:` / `status:` row whose text contains `GRAD_` or "grad student" or an `IA_` / `_IA_` / `_IA ` marker **and** `status: Finished`. Otherwise the pair is **UnderGrad**. For a blocked UnderGrad pair the *first diff row* is highlighted red, as the classic script highlighted its first row; it is only a marker, because UnderGrad is "no Grad/IA row found".
 
-The detected department is also published for the CSV script (`Forbidden` > `Appeal` > `Ignored` > `Grad/IA` / `UnderGrad`).
+The detected department is also published for the CSV script (`Forbidden` > `Appeal` > `Grad/IA` / `UnderGrad`).
 
 ---
 
@@ -257,7 +256,7 @@ Only rows where the two sides differ (conflicts) are considered. Rules run **in 
 
 1. **Decided**: a rule picked a side, or Bolt had already selected one (Bolt's pick stands when no rule has an opinion).
 2. **Filled**: Bolt left the row unselected (typically Milestones, Sources and other `type: …` list rows) and no rule applies. The script picks, in order: the side with data when one side is blank; the **more recent profile** (the contact card's *Created* date); the side of the **selected email**; and finally an **arbitrary but stable** side (a hash of the pair, so a revisited pair gets the same answer). These rows have no Bolt pick to agree with, so they are never green,.
-3. **Needs review**: a rule applied but could not decide (dual personal email with no tiebreak, an address tie or two broken addresses, `csusb.major` or `csusb.school` on both sides) **and** Bolt left the row unselected. The pair is never auto-merged and is **never skipped**: it stays on screen for you (with a `Review: <fields>` toast during auto-merge) whatever Auto-Skip says. Once you have merged it by hand and moved on, auto-merge resumes on the next pair. The console names the rows (`[elm2] Needs review: …`).
+3. **Needs review**: a rule applied but could not decide (dual personal email with no tiebreak, an address tie or two broken addresses, `csusb.major` or `csusb.school` on both sides) **and** Bolt left the row unselected. The pair is never auto-merged and is **never skipped**: it stays on screen for you (no toast; the console names the fields) whatever Auto-Skip says. Once you have merged it by hand and moved on, auto-merge resumes on the next pair. The console names the rows (`[elm2] Needs review: …`).
 
 **Dual personal-email tiebreak** (both emails personal): prefer the address containing a first name, then a last name (parts of 3+ letters of either contact's name), then the birth year (or its last 3/2 digits) from the DOB rows. If none separates them there is **no pick**; with no Bolt pick either the row *needs review*.
 
@@ -287,10 +286,10 @@ Merging is permanent, so auto-merge is opt-in (**When done = Merge**, which rese
 1. The pair must be in range, unblocked, and not flagged as possible twins.
 2. A **countdown dialog** opens centred **in the merge panel** (the review sidebar), with the 32% scrim covering only that panel rather than the whole site; the scrim also blocks stray clicks on the panel. It shows a red ring that steps down once per second (it starts at 12 o'clock and its end walks back; the rounded tip lands exactly on the mark, e.g. 6 o'clock at half time) with the seconds left in the middle; at **0** a green ring draws itself counter-clockwise from 12 o'clock while the red arc fades, the headline reads *Merging…* and the merge is clicked at that moment (Cancel and Esc work until the countdown reaches 0), the headline *Merging automatically*, a short brief (the two names; *Bolt score:* Low in red, Medium in orange or High in green; *Script agrees with 2/5*, the share of our picks that match Bolt's; and *Script chose 3 over Bolt: Email, Address, DOB*, or *Script found **applicant** and chose 3 over Bolt* when an applicant side decided; with **Use picks from = Bolt's** it reads *Bolt chose 3 over script: Email, Address, DOB*, or *Script found **applicant** but Bolt chose instead*), and a full-width **Cancel** pill. **Esc** also cancels. The countdown length is the **Merge countdown** setting (default 4 s, minimum 2 s): that is the whole wait: the numbers (or lamps) step once a second and Merge Contacts is clicked the instant they reach 0. The green *GO* state shows at that moment and the dialog lingers for a fraction of a second after the click so it can be seen; Cancel is greyed out once the merge has fired. The exception is **race lights**, which hold the green *GO!* for 0.3 s before the click; their four lamp steps are shortened to 0.925 s each so the whole style still takes exactly **4 s**. Its drop-down also has **4 seconds, race lights**: a 4 s countdown drawn as a start signal instead of the ring. Three dark lamps (*Get ready…*), then red lamps light at 3, 2 and 1 seconds left, and at 0 all three go green with *GO!* before the merge click. Stored as `elm_merge_countdown = race`.
 3. Cancelling, or the pair changing, aborts and shows a toast.
-4. When the countdown ends, a **final gate** re-checks: the pair is unchanged and unblocked, every conflicting field has a selected side (rows that *need review* stop the merge), no twins flag, and the Merge Contacts button exists and is enabled. If it fails because a field needs review, the pair stays on screen (`Review: <fields>`). Any other failure: Auto-Skip on → skip, off → a toast says why ("Auto-merge stopped: …").
+4. When the countdown ends, a **final gate** re-checks: the pair is unchanged and unblocked, every conflicting field has a selected side (rows that *need review* stop the merge), no twins flag, and the Merge Contacts button exists and is enabled. If it fails because a field needs review, the pair stays on screen. Any other failure: Auto-Skip on → skip, off → a toast says why ("Auto-merge stopped: …").
 5. Only then is **Merge Contacts** clicked (once per pair), and the merge-tracking logic takes over.
 
-**After a merge** (yours or an auto-merge): Element451 shows a **Merge completed** card (`bolt-card.merge-completion-state`) with **View merged contact** and **Next duplicate**. The script detects that card, counts the merge, waits about 1 second and presses **Next duplicate** (the button is absent on the last pair, so nothing is pressed then). **Toasts (auto-merge only).** While auto-merge is running (*When done = Merge*, slider not on None) short toasts name each outcome: `Skip: Appeal`, `Skip: Graduate/IA`, `Skip: Student ID`, `Skip: Forbidden`, `Skip: Ignored`, `Skip: Range`, `Skip: Twins`; a pair that needs review is not skipped and shows `Review: Email` (the fields) instead and, at the merge click, `Merge: 2/3` (the *Script agrees with 2/3* figure from the dialog), `Merge: Applicant` when an applicant side decided, or `Merge: Bolt` when the script made no picks of its own. Manual sessions and plain scans show none. The console logs each merge (`[elm2] Merged 7/40 | …`) and each skip with its queue position and reason (`[elm2] Skipping to next pair: … (was 8/40)`). The final-check conditions are tested **before** the countdown starts, so a pair that could not merge (for example a field with no pick, which is named with its two values in the console as `[elm2] No pick on: …`) is skipped without showing the dialog. If Merge Contacts was clicked but no Merge completed card appears within 6 s, the console says so and logs any open dialog. While **Next after merge** is on, Element451's own *Skip merge completion screen* and *Skip this screen next time* switches are hidden, because turning either on would remove the card the script reads. A switch that is already on is left visible (so it can be turned off) and the console warns about it. Turn the Next duplicate click off with **Next after merge** in the settings pane. Storage: `elm_next_after_merge` (default on).
+**After a merge** (yours or an auto-merge): Element451 shows a **Merge completed** card (`bolt-card.merge-completion-state`) with **View merged contact** and **Next duplicate**. The script detects that card, counts the merge, waits about 1 second and presses **Next duplicate** (the button is absent on the last pair, so nothing is pressed then). **Toasts (auto-merge only).** While auto-merge is running (*When done = Merge*, slider not on None) short toasts name each outcome: `Skip: Appeal`, `Skip: Graduate/IA`, `Skip: Student ID`, `Skip: Forbidden`, `Skip: Range`, `Skip: Twins`; a pair that needs review is not skipped and has no toast (the console names the fields) and, at the merge click, `Merge: 2/3` (the *Script agrees with 2/3* figure from the dialog), `Merge: Applicant` when an applicant side decided, or `Merge: Bolt` when the script made no picks of its own. Manual sessions and plain scans show none. The console logs each merge (`[elm2] Merged 7/40 | …`) and each skip with its queue position and reason (`[elm2] Skipping to next pair: … (was 8/40)`). The final-check conditions are tested **before** the countdown starts, so a pair that could not merge (for example a field with no pick, which is named with its two values in the console as `[elm2] No pick on: …`) is skipped without showing the dialog. If Merge Contacts was clicked but no Merge completed card appears within 6 s, the console says so and logs any open dialog. While **Next after merge** is on, Element451's own *Skip merge completion screen* and *Skip this screen next time* switches are hidden, because turning either on would remove the card the script reads. A switch that is already on is left visible (so it can be turned off) and the console warns about it. Turn the Next duplicate click off with **Next after merge** in the settings pane. Storage: `elm_next_after_merge` (default on).
 
 The script never clicks **Dismiss** and never merges while the slider is on None or When done is on Wait for me.
 
@@ -350,7 +349,7 @@ Stored in `localStorage.elm_csv_database` as a JSON array. Each entry:
 
 - **Key**: the pair of **Spark IDs** (read from the `Spark Id:` diff row; Spark ID 1 = contact A, 2 = contact B), compared as an unordered set.
 - **Privacy**: only the first 3 letters of each first/last name are stored, followed by `...` when a name was cut (`Jon...`); names of 3 letters or fewer are kept. Full names are also masked out of `rowContents`. Older entries with full names are shortened automatically when the database is read.
-- **dept** values: `Grad/IA`, `UnderGrad`, `Forbidden`, `Appeal`, `Ignored`.
+- **dept** values: `Grad/IA`, `UnderGrad`, `Forbidden`, `Appeal`.
 
 ### 11.3 Recording
 
@@ -421,7 +420,6 @@ Header `DB: N` pill, the Database section of the settings pane, the **Show Datab
 ## 13. Known limitations and unverified guesses
 
 - **Merge-success detection** is inferred: a merge is counted when the pair on screen changes after Merge Contacts was clicked. There is no confirmed success indicator, so there is no auto-navigate-after-merge feature.
-- The **Ignored chip** selector is a best-effort guess (the list API also carries an `ignored` field that is not used yet).
 - **Score chip reading** assumes the chip text contains `high` / `medium` / `low`.
 - **Applicant detection** depends on the Workflows/Application rows being loaded; it re-checks about 0.6 s later, but a very slow load could mislabel a pair.
 - **Rows per page** cannot be changed from the script, and the original classic page-size box was dropped. The main script now runs with `@grant none` (build 100) so Angular's paginator component may become reachable; the page-jump console line shows which route is used.

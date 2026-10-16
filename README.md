@@ -12,7 +12,7 @@ chip). Two v2 scripts target it:
 
 | Script | File | Current version |
 |---|---|---|
-| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.137` (`v2-build-137`, shown in the settings pane) |
+| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.138` (`v2-build-138`, shown in the settings pane) |
 | CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.22` |
 
 **Full documentation: [`Full-Documentation-v2.md`](Full-Documentation-v2.md)** (architecture, every setting,
@@ -31,7 +31,7 @@ the resolution rules, auto-merge, every website restyle, the database format, li
   - **Next after merge**: after a merge, presses "Next duplicate" on the "Merge completed" card (default on).
   - Slider **None** (or Allowed Department **None**) with Auto-Skip on is a **scan**: every pair is
     recorded in the database and skipped.
-- **Blockers**: forbidden names, an `appeal` keyword, wrong department, student-ID mismatch, an Ignored chip.
+- **Blockers**: forbidden names, an `appeal` keyword, wrong department, student-ID mismatch (ignored pairs are already filtered out of the v2 queue).
 - **Field rules**: applicant side first, then personal email (with a name / birth-year tiebreak), csusb.major /
   csusb.school (one side), date-of-birth validity, first generation, later intended term, name case and address
   comparison. Rows Bolt leaves unselected and no rule covers (Milestones, Sources, ...) are filled: side with data,

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.137
+// @version      2.138
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -20,12 +20,12 @@
 // This file was ported from ONE static, PII-redacted HTML snapshot of that new
 // UI — there was no way to click through it, so anything involving a state not
 // visible in that snapshot (error/unresolved styling, the actual merge-success
-// toast, the "Ignored" chip, list-page cell contents) is a best-effort guess
+// toast, list-page cell contents) is a best-effort guess
 // and is called out inline. Test against the real site and adjust selectors
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-137'; // keep in sync with @version (2.137)
+    const BUILD = 'v2-build-138'; // keep in sync with @version (2.138)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -121,7 +121,7 @@
         .diff-row.elm2-blocked-row .diff-value-button {
             color: #b71c1c !important;
         }
-        /* --- Contact card highlight for forbidden-name / ignored detection --- */
+        /* --- Contact card highlight for forbidden-name detection --- */
         .contact-card.elm2-blocked-card {
             outline: 3px solid #b71c1c;
             outline-offset: -3px;
@@ -1397,7 +1397,7 @@
     // "Not a duplicate?" feedback dialog and, once confirmed, permanently
     // tells Bolt these two contacts are different people — removing the
     // pair from the queue and training the matcher on that verdict. A
-    // department/forbidden/appeal/ignored block says nothing about whether
+    // department/forbidden/appeal block says nothing about whether
     // the pair is actually a duplicate, so automation must never click this.
     // Skipping a blocked entry must only ever move to the next pair via
     // clickNextDuplicate() below, leaving the pair untouched in the queue.
@@ -1509,12 +1509,6 @@
         }
         return { appeal: false };
     }
-    function isStudentIgnored() {
-        // BEST EFFORT: no "Ignored" chip was present in the reference snapshot
-        // to confirm markup against. Verify this selector live.
-        return Array.from(document.querySelectorAll('.bolt-chip, elm-chip'))
-            .some(el => el.textContent.trim().toLowerCase() === 'ignored');
-    }
     function detectActualDepartment() {
         const rows = getDiffRows();
         const isGradText = (t) => t.includes('GRAD_') || /grad student/i.test(t);
@@ -1562,7 +1556,6 @@
         if (wrongDept.wrongDept) blockers.push({ type: 'department', ...wrongDept });
         const idMismatch = isStudentIdMismatch();
         if (idMismatch.mismatch) blockers.push({ type: 'student-id-mismatch', ...idMismatch });
-        if (isStudentIgnored()) blockers.push({ type: 'ignored' });
         return blockers;
     }
     function blockerLabel(blockers) {
@@ -1573,7 +1566,6 @@
             else if (b.type === 'department') n = b.reason === 'Grad/IA' ? 'Graduate/IA' : (b.reason || 'Department');
             else if (b.type === 'student-id-mismatch') n = 'Student ID';
             else if (b.type === 'forbidden') n = 'Forbidden';
-            else if (b.type === 'ignored') n = 'Ignored';
             else n = b.type;
             if (n && !names.includes(n)) names.push(n);
         });
@@ -1586,7 +1578,7 @@
         if (blockers.length === 0) return;
         document.body.classList.add('elm2-blocked');
         blockers.forEach(b => { if (b.row && b.row.element) b.row.element.classList.add('elm2-blocked-row'); });
-        if (blockers.some(b => b.type === 'forbidden' || b.type === 'ignored')) {
+        if (blockers.some(b => b.type === 'forbidden')) {
             getContactCards().forEach(c => c.classList.add('elm2-blocked-card'));
         }
     }
@@ -1596,10 +1588,8 @@
         const sparks = getSparkIds();
         const forbidden = blockers.some(b => b.type === 'forbidden' || b.type === 'student-id-mismatch');
         const appeal = blockers.find(b => b.type === 'appeal');
-        const ignored = blockers.some(b => b.type === 'ignored');
         if (forbidden) document.body.dataset.csvDept = 'Forbidden';
         else if (appeal) document.body.dataset.csvDept = 'Appeal';
-        else if (ignored) document.body.dataset.csvDept = 'Ignored';
         else document.body.dataset.csvDept = detectActualDepartment().dept;
         if (sparks.a || sparks.b) { document.body.dataset.csvSpark1 = sparks.a; document.body.dataset.csvSpark2 = sparks.b; }
         else { delete document.body.dataset.csvSpark1; delete document.body.dataset.csvSpark2; }
@@ -2335,7 +2325,7 @@
             console.log('[elm2] Auto-merge not started:', pre.reason);
             if (pre.reason === 'the pair changed') return;
             // A pair that needs a human is never skipped: it stays on screen (whatever Auto-Skip says).
-            if (pre.review) { showMergeNotice('Review: ' + pre.review, true); return; }
+            if (pre.review) return; // needs a human: stays on screen, no toast (the console names the fields)
             if (CFG.AUTO_SKIP_BLOCKED) skipToNext('not merged, ' + pre.reason);
             else showMergeNotice('Auto-merge stopped: ' + pre.reason + '.');
             return;
@@ -2401,7 +2391,7 @@
             hideMergeModal();
             console.log('[elm2] Auto-merge not done:', ready.reason);
             if (ready.reason === 'the pair changed') return;
-            if (ready.review) { showMergeNotice('Review: ' + ready.review, true); return; }
+            if (ready.review) return; // needs a human: stays on screen, no toast
             if (CFG.AUTO_SKIP_BLOCKED) { skipToNext('not merged, ' + ready.reason); }
             else showMergeNotice('Auto-merge stopped: ' + ready.reason + '.');
         };

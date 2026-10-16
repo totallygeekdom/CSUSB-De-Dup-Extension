@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.140
+// @version      2.141
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-140'; // keep in sync with @version (2.140)
+    const BUILD = 'v2-build-141'; // keep in sync with @version (2.141)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -611,6 +611,7 @@
         #elm-settings-pane #elm-when-done-desc { min-height: 54px; }
         #elm-settings-pane .elm-level-desc { min-height: 36px; /* two lines reserved so the controls below do not jump */ font-size: 13px; line-height: 18px; letter-spacing: .25px; color: var(--md-on-surface-variant); margin: 0 0 8px; }
         .elm-toggle-switch input:focus-visible + .elm-toggle-slider { outline: 2px solid var(--md-primary); outline-offset: 2px; }
+        .elm-toggle-switch input:disabled { cursor: default; }
     `;
     if (typeof GM_addStyle === 'function') GM_addStyle(css);
     else { const styleEl = document.createElement('style'); styleEl.textContent = css; document.head.appendChild(styleEl); }
@@ -1405,10 +1406,9 @@
     // Skips to the next pair, but first has the CSV database script (if installed) record this
     // one, retrying for up to 3s until it confirms, so a fast skip never loses an entry.
     let skipInFlightKey = '';
-    // Only while auto-merge is actually running (When done = Merge, slider not on None) is every skip
-    // announced with a short label ("Skip: Appeal"); plain scans and manual sessions stay quiet.
+    // Every skip is announced with a short label ("Skip: Appeal") when outcome toasts are on.
     function skipToNext(reason, label) {
-        if (label && CFG.WHEN_DONE === 'merge' && CFG.RANGE_LEVEL > 0) showMergeNotice('Skip: ' + label, true);
+        if (label && toastsEnabled()) showMergeNotice('Skip: ' + label, true);
         const key = getPairKey();
         if (skipInFlightKey === key) return; // already skipping this pair
         skipInFlightKey = key;
@@ -2183,6 +2183,11 @@
     // The "Merge: 2/3" toast is worked out at the merge click (the rows are gone afterwards) but only shown
     // once Element's "Merge completed" card is seen, so it never announces a merge that did not happen.
     let pendingMergeToast = null;
+    // Outcome toasts ("Merge: 2/3", "Skip: Appeal") follow the Outcome toasts switch, except that they are
+    // always on while Auto-Skip or auto-merge (When done = Merge, slider not on None) is on.
+    const autoMergeOn = () => CFG.WHEN_DONE === 'merge' && CFG.RANGE_LEVEL > 0;
+    const toastsForced = () => CFG.AUTO_SKIP_BLOCKED || autoMergeOn();
+    const toastsEnabled = () => toastsForced() || getBoolSetting('elm_outcome_toasts', true);
     // Notices ("Auto-merge cancelled", "Rows per page ...") use the shared toast stack that
     // csv-database-v2.js also uses for its API toast: bottom-left, newest at the bottom.
     function toastStack() {
@@ -2412,8 +2417,6 @@
             document.getElementById('elm2-merge-title').textContent = race ? 'GO!' : 'Merging…';
             render();
             const fire = (btn) => {
-                const st = mergeStats();
-                pendingMergeToast = { text: 'Merge: ' + (st.applicant ? 'Applicant' : st.total > 0 ? st.agree + '/' + st.total : 'Bolt'), at: Date.now() };
                 card.classList.add('fired');
                 mergedPairKey = key;
                 console.log('[elm2] Auto-merging pair');
@@ -2567,6 +2570,9 @@
         btn.addEventListener('click', () => {
             awaitingMergeResult = true;
             lastMergeContactNamesKey = getPairKey();
+            // Worked out now (the rows are gone after the merge), shown when the Merge completed card appears.
+            const st = mergeStats();
+            pendingMergeToast = { text: 'Merge: ' + (st.applicant ? 'Applicant' : st.total > 0 ? st.agree + '/' + st.total : 'Bolt'), at: Date.now() };
         });
     }
     // After a merge Element451 replaces the form with a "Merge completed" card
@@ -2589,7 +2595,7 @@
         if (!card || card.dataset.elm2Handled || !card.getClientRects().length) return; // absent, handled, or hidden
         card.dataset.elm2Handled = '1';
         formWasAbsent = true; // the next pair is a new one, whatever its key says
-        if (pendingMergeToast && Date.now() - pendingMergeToast.at < 20000) showMergeNotice(pendingMergeToast.text, true);
+        if (pendingMergeToast && Date.now() - pendingMergeToast.at < 20000 && toastsEnabled()) showMergeNotice(pendingMergeToast.text, true);
         pendingMergeToast = null;
         const sentence = card.querySelector('.bolt-body-large');
         const qpm = getQueuePosition();
@@ -2758,6 +2764,8 @@
                 </div>
                 <div class="setting-row"><label>Auto-Skip</label>${toggleHtml('elm-auto-skip-blocked')}</div>
                 <div class="elm-level-desc elm-skip-desc">Skips blocked, out-of-range and possible-twins pairs with no popup. Off: stops on them instead.</div>
+                <div class="setting-row"><label>Outcome toasts</label>${toggleHtml('elm-outcome-toasts')}</div>
+                <div class="elm-level-desc elm-toast-desc">Short toasts after each outcome: "Merge: 2/3" once a merge completes, "Skip: Appeal" when a pair is skipped. Always on while Auto-Skip or auto-merge is on.</div>
                 <div class="setting-row"><label>Next after merge</label>${toggleHtml('elm-next-after-merge')}</div>
                 <div class="elm-level-desc elm-next-desc">After a merge (yours or an auto-merge), presses "Next duplicate" on the "Merge completed" card, and hides Element\'s own "Skip merge completion screen" switches (which would remove that card).</div>
                 <div class="settings-section-title">Display</div>
@@ -2851,7 +2859,19 @@
         levelSlider.addEventListener('input', syncCountdown);
         syncLevel();
         syncCountdown();
-        setupToggle('elm-auto-skip-blocked', 'elm_auto_skip_blocked');
+        // Outcome toasts: the switch is forced on and greyed out while Auto-Skip or auto-merge is on.
+        const toastsEl = document.getElementById('elm-outcome-toasts');
+        const syncToasts = () => {
+            const forced = toastsForced();
+            toastsEl.checked = forced || getBoolSetting('elm_outcome_toasts', true);
+            toastsEl.disabled = forced;
+            toastsEl.closest('.setting-row').style.opacity = forced ? '.38' : '';
+        };
+        toastsEl.addEventListener('change', () => localStorage.setItem('elm_outcome_toasts', String(toastsEl.checked)));
+        document.getElementById('elm-when-done').addEventListener('click', syncToasts);
+        levelSlider.addEventListener('input', syncToasts);
+        setupToggle('elm-auto-skip-blocked', 'elm_auto_skip_blocked', syncToasts);
+        syncToasts();
         setupToggle('elm-next-after-merge', 'elm_next_after_merge');
         setupToggle('elm-highlight-rows', 'elm_highlight_rows');
         function setupToggle(elementId, storageKey, onChange, defaultValue = true) {

@@ -1,11 +1,11 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      1
+// @version      2.142
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
-// @grant        GM_addStyle
+// @grant        none
 // @updateURL    https://raw.githubusercontent.com/totallygeekdom/csusb-de-dup-extension/main/Element451-UI-Perfection-v2.user.js
 // @downloadURL  https://raw.githubusercontent.com/totallygeekdom/csusb-de-dup-extension/main/Element451-UI-Perfection-v2.user.js
 // ==/UserScript==
@@ -20,12 +20,12 @@
 // This file was ported from ONE static, PII-redacted HTML snapshot of that new
 // UI — there was no way to click through it, so anything involving a state not
 // visible in that snapshot (error/unresolved styling, the actual merge-success
-// toast, the "Ignored" chip, list-page cell contents) is a best-effort guess
+// toast, list-page cell contents) is a best-effort guess
 // and is called out inline. Test against the real site and adjust selectors
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-7';
+    const BUILD = 'v2-build-142'; // keep in sync with @version (2.142)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -41,16 +41,62 @@
     // and auto-navigate can't be done safely until there's a real
     // merge-success signal to detect (see checkForMergeResult below) — both
     // need live investigation before they're worth exposing as settings.
+    // Slider position, 0..4: None, High, Medium, Low, All (each adds to the one before).
+    // Stored under 'elm_range_level2'. Earlier builds stored a six-position slider that also had an
+    // "Applicant" stop under 'elm_range_level' (0 none, 1 applicant, 2 high, 3 medium, 4 low, 5 all);
+    // that is mapped once (Applicant -> High). The oldest slider ('elm_auto_apply_level': 0 none,
+    // 1 applicant, 2 low, 3 medium, 4 all) is mapped the same way.
+    function rangeLevel() {
+        const v2 = parseInt(localStorage.getItem('elm_range_level2'), 10);
+        if (!isNaN(v2)) return Math.max(0, Math.min(4, v2));
+        const v1 = parseInt(localStorage.getItem('elm_range_level'), 10);
+        if (!isNaN(v1)) return [0, 1, 1, 2, 3, 4][Math.max(0, Math.min(5, v1))];
+        const old = parseInt(localStorage.getItem('elm_auto_apply_level'), 10);
+        if (!isNaN(old)) return [0, 1, 3, 2, 4][Math.max(0, Math.min(4, old))];
+        return getBoolSetting('elm_auto_click_fab', true) ? 4 : 0;
+    }
     const CFG = Object.defineProperties({}, {
-        AUTO_RESOLVE_FIELDS:      { get() { return getBoolSetting('elm_auto_click_fab', true); } },
-        SHOW_MERGE_COUNTER:       { get() { return getBoolSetting('elm_show_merge_counter', true); } },
+        // Slider = which pairs are in range, by Bolt score (0 None, 1 High, 2 + Medium, 3 + Low, 4 All).
+        RANGE_LEVEL:              { get() { return rangeLevel(); } },
+        // Whose picks are used on pairs in range: 'ours' (our rules, incl. the applicant rule) or
+        // 'bolt' (leave Bolt's picks; ours only fills rows Bolt left unselected).
+        USE_PICKS:                { get() { return localStorage.getItem('elm_use_picks') === 'bolt' ? 'bolt' : 'ours'; } },
+        // What happens once a pair in range is decided: 'wait' for you, or 'merge'. Kept per browser
+        // session only, so a new session always starts on 'wait'.
+        // Seconds of the auto-merge cancel window (never below 2: the window is required).
+        // The countdown drop-down also offers "race lights": a 4 second countdown drawn as a start signal.
+        COUNTDOWN_STYLE:          { get() { return localStorage.getItem('elm_merge_countdown') === 'race' ? 'race' : 'ring'; } },
+        MERGE_COUNTDOWN:          { get() { const raw = localStorage.getItem('elm_merge_countdown'); if (raw === 'race') return 4; const v = parseInt(raw, 10); return isNaN(v) ? 4 : Math.max(2, Math.min(15, v)); } },
+        WHEN_DONE:                { get() { try { return sessionStorage.getItem('elm_when_done') === 'merge' ? 'merge' : 'wait'; } catch (e) { return 'wait'; } } },
+        HIGHLIGHT_ROWS:           { get() { return getBoolSetting('elm_highlight_rows', true); } },
+        SHOW_MERGE_COUNTER:       { get() { return getBoolSetting('elm_show_merge_counter', false); } },
         AUTO_SKIP_BLOCKED:        { get() { return getBoolSetting('elm_auto_skip_blocked', true); } },
+        NEXT_AFTER_MERGE:         { get() { return getBoolSetting('elm_next_after_merge', true); } },
         ALLOWED_DEPARTMENT:       { get() { return localStorage.getItem('elm_allowed_department') || 'UnderGrad'; } },
     });
     // =========================================================
     // CSS
     // =========================================================
     const css = `
+        /* --- Material 3 design tokens for OUR UI (gear, counter, settings pane, comparison
+               bar). Primary is Element451's orange header colour (sampled; #ef6c00 until found). --- */
+        :root {
+            --md-primary: var(--elm2-header-color, #ef6c00);
+            --md-primary-text: color-mix(in srgb, var(--md-primary) 76%, #000);
+            --md-primary-container: color-mix(in srgb, var(--md-primary) 18%, #fff);
+            --md-on-primary-container: color-mix(in srgb, var(--md-primary) 30%, #000);
+            --md-primary-track: color-mix(in srgb, var(--md-primary) 26%, #fff);
+            --md-on-surface: #1a1c20;
+            --md-on-surface-variant: #434750;
+            --md-outline: #73777f;
+            --md-surface-container-low: #f7f4f1;
+            --md-surface-container: #f1ede8;
+            --md-surface-container-highest: #e6e1db;
+            --md-error: #b3261e;
+            --md-elev-1: 0 1px 2px rgba(0,0,0,.3), 0 1px 3px 1px rgba(0,0,0,.15);
+            --md-elev-3: 0 1px 3px rgba(0,0,0,.3), 0 4px 8px 3px rgba(0,0,0,.15);
+            --md-ease: cubic-bezier(.2, 0, 0, 1);
+        }
         /* --- LOCKDOWN: red "Merge Contacts" button + null symbol --- */
         body.elm2-blocked .review-queue-nav-visible ~ * .bolt-stackable-sidebar-header-actions button:last-of-type,
         body.elm2-blocked bolt-stackable-sidebar-header-actions button:last-of-type {
@@ -75,7 +121,7 @@
         .diff-row.elm2-blocked-row .diff-value-button {
             color: #b71c1c !important;
         }
-        /* --- Contact card highlight for forbidden-name / ignored detection --- */
+        /* --- Contact card highlight for forbidden-name detection --- */
         .contact-card.elm2-blocked-card {
             outline: 3px solid #b71c1c;
             outline-offset: -3px;
@@ -83,76 +129,489 @@
         /* --- Applicant-side driven resolution: light yellow tint (replaces the old
                pixel-overlay approach — much simpler now that each side is its own
                button element instead of a shared row) --- */
-        .diff-value-button.elm2-applicant-side {
-            background-color: #fff9c4 !important;
-            border-color: #f9a825 !important;
-        }
         /* --- AI-vs-script pick comparison bar + per-row disagreement badges --- */
+        /* Shared toast stack (also used by csv-database-v2.js): bottom-left, stacks upward. */
+        #elm2-toast-stack { position: fixed; left: 16px; bottom: 16px; z-index: 10000; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+        .elm2-toast { display: flex; align-items: center; gap: 12px; box-sizing: border-box; min-height: 48px; max-width: 340px; padding: 8px 16px 8px 12px; border-radius: 4px; background: #2f3236; color: #f1f3f7; font: 400 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .25px; box-shadow: var(--md-elev-3); opacity: 0; transform: translateY(8px); transition: opacity .25s var(--md-ease), transform .25s var(--md-ease); }
+        .elm2-toast.visible { opacity: 1; transform: none; }
+        .elm2-toast.elm2-notice, .elm2-toast.elm2-result { padding-left: 16px; }
+        /* Material 3 dialog: 32% scrim, tonal container, hero indicator, headline + supporting text,
+           filled error button. Container radius = button radius (24) + gap (16) so the corners nest. */
+        #elm2-merge-overlay {
+            position: fixed; inset: 0; z-index: 10001; display: flex; align-items: center; justify-content: center;
+            background: rgba(0, 0, 0, .32); opacity: 0; pointer-events: none; transition: opacity .2s var(--md-ease);
+        }
+        #elm2-merge-overlay.visible { opacity: 1; pointer-events: auto; }
+        /* the overlay is sized to the merge panel by placeMergeOverlay(); without a panel it covers the page */
+        #elm2-merge-overlay .elm2-merge-card {
+            box-sizing: border-box; width: 360px; max-width: calc(100% - 32px); padding: 40px 16px 16px; border-radius: 40px;
+            background: #efebe6; color: #1a1c20; box-shadow: var(--md-elev-3); text-align: center;
+            font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            transform: scale(.85); opacity: 0; transition: transform .25s cubic-bezier(.05, .7, .1, 1), opacity .15s linear;
+        }
+        #elm2-merge-overlay.visible .elm2-merge-card { transform: scale(1); opacity: 1; }
+        #elm2-merge-overlay .elm2-ring { position: relative; width: 160px; height: 160px; margin: 0 auto 24px; }
+        #elm2-merge-overlay .elm2-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+        #elm2-merge-overlay .elm2-ring-track { fill: none; stroke: #f9dedc; stroke-width: 8; }
+        #elm2-merge-overlay .elm2-ring-arc { fill: none; stroke: #b3261e; stroke-width: 8; stroke-linecap: round; stroke-dasharray: 276.46 276.46; stroke-dashoffset: 0; transition: stroke-dasharray .6s cubic-bezier(.2, 0, 0, 1), stroke-dashoffset .6s cubic-bezier(.2, 0, 0, 1), stroke .3s linear; }
+        #elm2-merge-overlay #elm2-merge-count { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 57px; line-height: 64px; font-weight: 400; color: #b3261e; }
+        #elm2-merge-overlay #elm2-merge-title { margin: 0 8px 8px; font-size: 24px; line-height: 32px; font-weight: 400; color: #1a1c20; }
+        #elm2-merge-overlay #elm2-merge-summary { margin: 0 12px 32px; font-size: 15px; line-height: 22px; letter-spacing: .15px; color: #434750; }
+        #elm2-merge-overlay #elm2-merge-summary .brief-line { margin: 0 0 6px; }
+        #elm2-merge-overlay #elm2-merge-summary .brief-names { font-size: 17px; line-height: 24px; font-weight: 600; color: #1a1c20; margin-bottom: 10px; }
+        #elm2-merge-overlay #elm2-merge-summary b { font-weight: 700; color: #1a1c20; }
+        #elm2-merge-overlay #elm2-merge-summary .brief-score-high { color: #2e7d32; }
+        #elm2-merge-overlay #elm2-merge-summary .brief-score-medium { color: #ef6c00; }
+        #elm2-merge-overlay #elm2-merge-summary .brief-score-low { color: #d32f2f; }
+        #elm2-merge-overlay #elm2-merge-cancel { position: relative; width: 100%; height: 48px; border: none; border-radius: 24px; background: #b3261e; color: #fff; font-family: inherit; font-weight: 500; font-size: 14px; line-height: 20px; letter-spacing: .1px; cursor: pointer; overflow: hidden; transition: box-shadow .2s var(--md-ease); }
+        #elm2-merge-overlay #elm2-merge-cancel::after { content: ''; position: absolute; inset: 0; background: #fff; opacity: 0; transition: opacity .2s var(--md-ease); }
+        #elm2-merge-overlay #elm2-merge-cancel:hover { box-shadow: var(--md-elev-1); }
+        #elm2-merge-overlay #elm2-merge-cancel:hover::after { opacity: .08; }
+        #elm2-merge-overlay #elm2-merge-cancel:active::after { opacity: .12; }
+        /* Element451's own "Skip merge completion screen" / "Skip this screen next time" switches would remove the
+           card Next after merge reads, so they are hidden while that setting is on (and only while they are off). */
+        body.elm2-next-after-merge bolt-slide-toggle.skip-merge-completion-toggle:has(button[aria-checked="false"]),
+        body.elm2-next-after-merge bolt-slide-toggle.merge-completion-skip-toggle:has(button[aria-checked="false"]) { display: none !important; }
+        /* At 0 a green ring is drawn from 12 o'clock counter-clockwise (the circle is mirrored, so its
+           path runs the other way) while the red arc fades out. */
+        #elm2-merge-overlay .elm2-ring-fill { fill: none; stroke: #2e7d32; stroke-width: 8; stroke-linecap: round; stroke-dasharray: 0.01 276.46; opacity: 0; transition: stroke-dasharray .7s cubic-bezier(.2, 0, 0, 1), opacity .15s linear; }
+        #elm2-merge-overlay .elm2-merge-card.done .elm2-ring-fill { opacity: 1; stroke-dasharray: 276.46 276.46; }
+        #elm2-merge-overlay .elm2-merge-card.done .elm2-ring-arc { opacity: 0; transition: opacity .3s linear; }
+        /* "Race lights" countdown style: three lamps instead of the ring. Red lamps light one per second (3, 2, 1),
+           then all three go green with "GO!". */
+        #elm2-merge-overlay .elm2-lamps { display: none; }
+        #elm2-merge-overlay .elm2-merge-card.race .elm2-ring svg, #elm2-merge-overlay .elm2-merge-card.race #elm2-merge-count { display: none; }
+        #elm2-merge-overlay .elm2-merge-card.race .elm2-lamps { position: absolute; left: 0; right: 0; top: 50%; height: 68px; margin-top: -34px; box-sizing: border-box; padding: 0 12px; border-radius: 34px; background: #1f2124; box-shadow: inset 0 2px 6px rgba(0,0,0,.5); display: flex; align-items: center; justify-content: space-between; }
+        #elm2-merge-overlay .elm2-lamps i { width: 40px; height: 40px; border-radius: 50%; background: #3a3d42; box-shadow: inset 0 2px 4px rgba(0,0,0,.6); transition: background-color .08s linear, box-shadow .08s linear; }
+        #elm2-merge-overlay .elm2-lamps i.red { background: #ff3b30; box-shadow: 0 0 14px 3px rgba(255, 59, 48, .65), inset 0 -3px 6px rgba(0,0,0,.25); }
+        #elm2-merge-overlay .elm2-lamps i.green { background: #34d058; box-shadow: 0 0 14px 3px rgba(52, 208, 88, .7), inset 0 -3px 6px rgba(0,0,0,.2); }
+        #elm2-merge-overlay .elm2-merge-card.done .elm2-ring-track { stroke: #cfe8d0; }
+        #elm2-merge-overlay .elm2-merge-card.fired #elm2-merge-cancel { opacity: .38; pointer-events: none; }
+        #elm2-merge-overlay .elm2-merge-card.done #elm2-merge-count { color: #2e7d32; }
+        @keyframes elm2-count-in { from { opacity: 0; transform: scale(.7); } to { opacity: 1; transform: scale(1); } }
+        #elm2-merge-overlay #elm2-merge-cancel:focus-visible { outline: 3px solid rgba(179, 38, 30, .4); outline-offset: 2px; }
+        /* --- Review Queue / History tabs: Material 3 primary tabs ---
+           48px, label-medium text, indicator = 3px rounded-top bar as wide as the label,
+           1px divider under the whole bar, hover/press state layers. --- */
+        .mat-mdc-tab-link-container:not(#elm2x) { background: transparent !important; border-bottom: 1px solid color-mix(in srgb, var(--md-outline) 35%, transparent) !important; }
+        .mat-mdc-tab-link-container:not(#elm2x) .mat-mdc-tab-links { border: none !important; justify-content: flex-start !important; }
+        .mat-mdc-tab-link-container:not(#elm2x) .mdc-tab.mat-mdc-tab-link { flex: 0 0 auto !important; height: 48px !important; min-width: 90px !important; padding: 0 24px !important; opacity: 1 !important; background: transparent !important; transition: background-color .2s var(--md-ease); }
+        .mat-mdc-tab-link-container:not(#elm2x) .mdc-tab.mat-mdc-tab-link .mdc-tab__text-label { color: var(--md-on-surface-variant) !important; font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif !important; font-size: 14px !important; line-height: 20px !important; font-weight: 500 !important; letter-spacing: .1px !important; text-transform: none !important; }
+        .mat-mdc-tab-link-container:not(#elm2x) .mdc-tab.mat-mdc-tab-link:hover { background: color-mix(in srgb, var(--md-on-surface) 8%, transparent) !important; }
+        .mat-mdc-tab-link-container:not(#elm2x) .mdc-tab.mat-mdc-tab-link:active { background: color-mix(in srgb, var(--md-on-surface) 12%, transparent) !important; }
+        .mat-mdc-tab-link-container:not(#elm2x) .mdc-tab.mat-mdc-tab-link:focus-visible { outline: 2px solid var(--md-primary) !important; outline-offset: -2px; }
+        .mat-mdc-tab-link-container:not(#elm2x) .mdc-tab--active.mat-mdc-tab-link .mdc-tab__text-label { color: var(--md-primary-text) !important; }
+        .mat-mdc-tab-link-container:not(#elm2x) .mdc-tab--active.mat-mdc-tab-link:hover { background: color-mix(in srgb, var(--md-primary) 8%, transparent) !important; }
+        .mat-mdc-tab-link-container:not(#elm2x) .mdc-tab.mat-mdc-tab-link .mdc-tab__ripple,
+        .mat-mdc-tab-link-container:not(#elm2x) .mdc-tab.mat-mdc-tab-link .mat-mdc-tab-ripple { display: none !important; }
+        .mat-mdc-tab-link-container:not(#elm2x) .mdc-tab.mat-mdc-tab-link .mdc-tab-indicator { left: 24px !important; right: 24px !important; width: auto !important; }
+        .mat-mdc-tab-link-container:not(#elm2x) .mdc-tab.mat-mdc-tab-link .mdc-tab-indicator__content--underline { border-top-width: 3px !important; border-radius: 3px 3px 0 0 !important; border-color: var(--md-primary) !important; }
+        /* --- Advanced Filters sidebar (list page): compact, Material 3 --- */
+        /* Panel width: Element sizes the overlay pane at 60% of the screen. The container inside it is
+           sized separately, so both are set to the same width (setting only the pane clipped the content). */
+        .cdk-overlay-pane:has(elm-review-queue-filters-sidebar),
+        bolt-stackable-sidebar-container:has(elm-review-queue-filters-sidebar),
+        elm-review-queue-filters-sidebar,
+        elm-review-queue-filters-sidebar bolt-stackable-sidebar { width: min(640px, 100vw) !important; max-width: 100vw !important; }
+        elm-review-queue-filters-sidebar .bolt-stackable-sidebar-content { background: #ebe5de !important; color: var(--md-on-surface); font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+        elm-review-queue-filters-sidebar .bolt-stackable-sidebar-header-wrapper { display: flex !important; flex-wrap: nowrap !important; padding: 12px 16px 12px 8px !important; min-height: 0 !important; gap: 8px !important; align-items: center !important; border-bottom: 1px solid color-mix(in srgb, var(--md-outline) 25%, transparent) !important; background: transparent !important; }
+        elm-review-queue-filters-sidebar .bolt-stackable-sidebar-header-wrapper bolt-stackable-sidebar-header { flex: 1 1 auto !important; min-width: 0 !important; }
+        elm-review-queue-filters-sidebar .bolt-stackable-sidebar-close-button { width: 40px !important; height: 40px !important; padding: 0 !important; border: none !important; border-radius: 50% !important; flex: 0 0 auto !important; color: var(--md-on-surface-variant) !important; background: transparent !important; }
+        elm-review-queue-filters-sidebar .bolt-stackable-sidebar-header-title { margin: 0 !important; font-size: 22px !important; line-height: 28px !important; font-weight: 400 !important; color: var(--md-on-surface) !important; }
+        elm-review-queue-filters-sidebar .bolt-stackable-sidebar-header-actions { display: flex !important; gap: 8px !important; }
+        elm-review-queue-filters-sidebar .bolt-stackable-sidebar-header-actions button { height: 40px !important; min-width: 0 !important; padding: 0 20px !important; border: none !important; border-radius: 20px !important; box-shadow: none !important; font-size: 14px !important; line-height: 20px !important; font-weight: 500 !important; letter-spacing: .1px !important; text-transform: none !important; }
+        elm-review-queue-filters-sidebar .bolt-stackable-sidebar-header-actions button.bolt-button-color-accent { background: transparent !important; color: var(--md-primary-text) !important; }
+        elm-review-queue-filters-sidebar .bolt-stackable-sidebar-header-actions button.bolt-button-color-accent:hover { background: color-mix(in srgb, var(--md-primary) 10%, transparent) !important; }
+        elm-review-queue-filters-sidebar .bolt-stackable-sidebar-header-actions button.bolt-button-color-accent-dark { background: var(--md-primary) !important; color: #fff !important; }
+        elm-review-queue-filters-sidebar .bolt-stackable-sidebar-header-actions button.bolt-button-color-accent-dark:hover { box-shadow: var(--md-elev-1) !important; }
+        elm-review-queue-filters-sidebar .bolt-stackable-sidebar-header-actions button.bolt-button-disabled { background: rgba(26, 28, 32, .12) !important; color: rgba(26, 28, 32, .38) !important; box-shadow: none !important; }
+        elm-review-queue-filters-sidebar .bolt-copilot-button { display: none !important; }
+        elm-review-queue-filters-sidebar bolt-stackable-sidebar-body { display: block !important; padding: 12px 16px 16px !important; }
+        elm-review-queue-filters-sidebar bolt-stackable-sidebar-section { display: block; margin: 0 0 8px !important; padding: 12px 16px 14px !important; border: 1px solid rgba(26, 28, 32, .08) !important; border-radius: 16px !important; box-shadow: 0 1px 2px rgba(0, 0, 0, .08) !important; background: #fffcfa !important; }
+        elm-review-queue-filters-sidebar bolt-stackable-sidebar-section .title { margin: 0 0 10px !important; padding: 0 !important; }
+        elm-review-queue-filters-sidebar bolt-stackable-sidebar-section .title-content h3 { margin: 0 !important; font-size: 14px !important; line-height: 20px !important; font-weight: 500 !important; letter-spacing: .1px; color: var(--md-on-surface) !important; }
+        elm-review-queue-filters-sidebar bolt-stackable-sidebar-section .description { margin: 2px 0 0 !important; font-size: 12px !important; line-height: 16px !important; letter-spacing: .4px; color: var(--md-on-surface-variant) !important; }
+        elm-review-queue-filters-sidebar bolt-stackable-sidebar-section .separator { display: none !important; }
+        elm-review-queue-filters-sidebar bolt-stackable-sidebar-section .content { padding: 0 !important; margin: 0 !important; }
+        elm-review-queue-filters-sidebar bolt-fields { display: flex !important; flex-direction: column !important; gap: 12px !important; }
+        elm-review-queue-filters-sidebar bolt-field { display: flex !important; flex-direction: column !important; align-items: stretch !important; gap: 6px !important; margin: 0 !important; padding: 0 !important; }
+        elm-review-queue-filters-sidebar bolt-field-label { width: auto !important; margin: 0 !important; padding: 0 !important; font-size: 12px !important; line-height: 16px !important; font-weight: 500 !important; letter-spacing: .4px; color: var(--md-on-surface-variant) !important; }
+        elm-review-queue-filters-sidebar .bolt-chip-list-wrapper { display: flex !important; flex-wrap: wrap !important; gap: 8px !important; }
+        elm-review-queue-filters-sidebar bolt-chip-check.bolt-chip:not(#elm2x) { display: inline-flex !important; align-items: center !important; box-sizing: border-box !important; height: 32px !important; min-height: 0 !important; margin: 0 !important; padding: 0 12px !important; border-radius: 8px !important; border: 1px solid var(--md-outline) !important; background: transparent !important; color: var(--md-on-surface-variant) !important; box-shadow: none !important; font-size: 14px !important; line-height: 20px !important; font-weight: 500 !important; letter-spacing: .1px; cursor: pointer; transition: background-color .2s var(--md-ease); }
+        elm-review-queue-filters-sidebar bolt-chip-check.bolt-chip:not(#elm2x):hover { background: color-mix(in srgb, var(--md-on-surface) 8%, transparent) !important; }
+        elm-review-queue-filters-sidebar bolt-chip-check:not(#elm2x) .bolt-chip-text { display: flex !important; align-items: center !important; gap: 6px !important; padding: 0 !important; color: inherit !important; }
+        elm-review-queue-filters-sidebar bolt-chip-check .mat-ripple { display: none !important; }
+        elm-review-queue-filters-sidebar bolt-chip-check:not(#elm2x) bolt-icon { display: none !important; }
+        elm-review-queue-filters-sidebar bolt-chip-check.mat-mdc-chip-selected:not(#elm2x),
+        elm-review-queue-filters-sidebar bolt-chip-check.mdc-evolution-chip--selected:not(#elm2x),
+        elm-review-queue-filters-sidebar bolt-chip-check[aria-selected="true"]:not(#elm2x),
+        elm-review-queue-filters-sidebar bolt-chip-check[aria-checked="true"]:not(#elm2x) { border-color: transparent !important; background: var(--md-primary-container) !important; color: var(--md-on-primary-container) !important; }
+        elm-review-queue-filters-sidebar bolt-chip-check.mat-mdc-chip-selected:not(#elm2x) .bolt-chip-text,
+        elm-review-queue-filters-sidebar bolt-chip-check.mdc-evolution-chip--selected:not(#elm2x) .bolt-chip-text,
+        elm-review-queue-filters-sidebar bolt-chip-check[aria-selected="true"]:not(#elm2x) .bolt-chip-text,
+        elm-review-queue-filters-sidebar bolt-chip-check[aria-checked="true"]:not(#elm2x) .bolt-chip-text { color: var(--md-on-primary-container) !important; }
+        elm-review-queue-filters-sidebar bolt-chip-check.mat-mdc-chip-selected:not(#elm2x) bolt-icon,
+        elm-review-queue-filters-sidebar bolt-chip-check.mdc-evolution-chip--selected:not(#elm2x) bolt-icon,
+        elm-review-queue-filters-sidebar bolt-chip-check[aria-selected="true"]:not(#elm2x) bolt-icon,
+        elm-review-queue-filters-sidebar bolt-chip-check[aria-checked="true"]:not(#elm2x) bolt-icon { display: inline-flex !important; width: 16px !important; height: 16px !important; color: var(--md-on-primary-container) !important; }
+        elm-review-queue-filters-sidebar .bolt-field-range-controls { display: grid !important; grid-template-columns: 1fr 1fr; gap: 8px !important; }
+        elm-review-queue-filters-sidebar .bolt-field-range-controls .bolt-form-field-label-wrapper { display: block; margin: 0 0 2px !important; }
+        elm-review-queue-filters-sidebar .bolt-field-range-controls bolt-label { font-size: 12px !important; line-height: 16px !important; letter-spacing: .4px; color: var(--md-on-surface-variant) !important; }
+        elm-review-queue-filters-sidebar input[boltinput][type="date"]:not(#elm2x) { box-sizing: border-box; width: 168px; max-width: 100%; height: 40px; padding: 0 10px; border: 1px solid var(--md-outline); border-radius: 8px; background: transparent; color: var(--md-on-surface); font-family: inherit; font-size: 14px; line-height: 20px; }
+        elm-review-queue-filters-sidebar input[boltinput][type="date"]:not(#elm2x):hover { border-color: var(--md-on-surface); }
+        elm-review-queue-filters-sidebar input[boltinput][type="date"]:not(#elm2x):focus { outline: none; border: 2px solid var(--md-primary); padding: 0 9px; }
+        /* tighter vertical rhythm: one-line section headers, labels beside their controls */
+        elm-review-queue-filters-sidebar .bolt-stackable-sidebar-header-wrapper { padding: 12px 16px 12px 6px !important; background: #f7f3ef !important; }
+        elm-review-queue-filters-sidebar bolt-stackable-sidebar-body { display: block !important; padding: 12px 16px 16px !important; }
+        elm-review-queue-filters-sidebar bolt-stackable-sidebar-section { margin: 0 0 10px !important; padding: 14px 16px 16px !important; border-radius: 16px; }
+        elm-review-queue-filters-sidebar bolt-stackable-sidebar-section .title { margin: 0 0 12px !important; }
+        elm-review-queue-filters-sidebar bolt-stackable-sidebar-section .title-content { display: flex !important; align-items: baseline !important; gap: 8px !important; min-width: 0; }
+        elm-review-queue-filters-sidebar bolt-stackable-sidebar-section .title-content h3 { flex: 0 0 auto; }
+        elm-review-queue-filters-sidebar bolt-stackable-sidebar-section .description { margin: 0 !important; flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        elm-review-queue-filters-sidebar bolt-fields { gap: 14px !important; }
+        elm-review-queue-filters-sidebar bolt-fields, elm-review-queue-filters-sidebar bolt-field, elm-review-queue-filters-sidebar bolt-stackable-sidebar-section-content { border: none !important; box-shadow: none !important; background: transparent !important; }
+        elm-review-queue-filters-sidebar bolt-field { display: grid !important; grid-template-columns: 128px minmax(0, 1fr); align-items: center !important; column-gap: 8px !important; row-gap: 0 !important; }
+        elm-review-queue-filters-sidebar .bolt-chip-list-wrapper { gap: 8px !important; }
+        elm-review-queue-filters-sidebar bolt-chip-check.bolt-chip { height: 32px !important; padding: 0 12px !important; font-size: 14px !important; }
+        /* the chip list / form field wrappers must never draw their own hover or focus background (only the chips do) */
+        elm-review-queue-filters-sidebar bolt-chip-list:not(#elm2x),
+        elm-review-queue-filters-sidebar bolt-chip-list:not(#elm2x):hover,
+        elm-review-queue-filters-sidebar bolt-chip-list:not(#elm2x):focus,
+        elm-review-queue-filters-sidebar bolt-chip-list:not(#elm2x):focus-within,
+        elm-review-queue-filters-sidebar bolt-form-field:not(#elm2x),
+        elm-review-queue-filters-sidebar bolt-form-field:not(#elm2x):hover,
+        elm-review-queue-filters-sidebar bolt-form-field:not(#elm2x):focus-within,
+        elm-review-queue-filters-sidebar .bolt-form-field-wrapper:not(#elm2x),
+        elm-review-queue-filters-sidebar .bolt-form-field-input-wrapper:not(#elm2x),
+        elm-review-queue-filters-sidebar .bolt-form-field-infix:not(#elm2x),
+        elm-review-queue-filters-sidebar .bolt-chip-list-wrapper:not(#elm2x),
+        elm-review-queue-filters-sidebar .bolt-chip-list-wrapper:not(#elm2x):hover { background: transparent !important; box-shadow: none !important; outline: none !important; }
+        elm-review-queue-filters-sidebar .bolt-field-range-controls { display: flex !important; flex-wrap: nowrap !important; justify-content: flex-start !important; gap: 8px 16px !important; }
+        elm-review-queue-filters-sidebar bolt-field .bolt-field-input { display: block !important; }
+        elm-review-queue-filters-sidebar .bolt-field-range-controls bolt-form-field { flex: 0 0 auto !important; }
+        elm-review-queue-filters-sidebar .bolt-field-range-controls bolt-form-field,
+        elm-review-queue-filters-sidebar .bolt-field-range-controls .bolt-form-field-wrapper,
+        elm-review-queue-filters-sidebar .bolt-field-range-controls .bolt-form-field-input-wrapper,
+        elm-review-queue-filters-sidebar .bolt-field-range-controls .bolt-form-field-infix { min-width: 0 !important; width: auto !important; max-width: 100% !important; }
+        elm-review-queue-filters-sidebar bolt-field .bolt-field-input { min-width: 0 !important; }
+        elm-review-queue-filters-sidebar .bolt-field-range-controls bolt-label { text-transform: none !important; }
+        elm-review-queue-filters-sidebar .bolt-field-range-controls .bolt-form-field-wrapper { display: flex !important; align-items: center !important; gap: 6px !important; }
+        elm-review-queue-filters-sidebar .bolt-field-range-controls .bolt-form-field-label-wrapper { margin: 0 !important; flex: 0 0 auto; }
+        elm-review-queue-filters-sidebar .bolt-field-range-controls .bolt-form-field-input-wrapper { flex: 0 0 auto; min-width: 0; }
+        elm-review-queue-filters-sidebar input[boltinput][type="date"]:not(#elm2x) { height: 40px; padding: 0 12px; font-size: 14px; }
+        elm-review-queue-filters-sidebar input[boltinput][type="date"]:not(#elm2x):focus { padding: 0 9px; }
+        .elm2-pager { display: inline-flex; align-items: center; gap: 8px; margin-right: 12px; font: 400 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; color: var(--md-on-surface-variant); }
+        .elm2-pager label { display: inline-flex; align-items: center; gap: 6px; }
+        .elm2-pager-input { box-sizing: border-box; width: 64px; height: 32px; padding: 0 8px; border: 1px solid var(--md-outline); border-radius: 8px; background: transparent; color: var(--md-on-surface); font: inherit; text-align: center; }
+        .elm2-pager-input:hover { border-color: var(--md-on-surface); }
+        .elm2-pager-input:focus { outline: none; border: 2px solid var(--md-primary); padding: 0 7px; }
+        .elm2-pager .elm2-pager-go { height: 32px; padding: 0 16px; border: none; border-radius: 16px; background: var(--md-primary-container); color: var(--md-on-primary-container); font-family: inherit; font-weight: 500; font-size: 14px; line-height: 20px; cursor: pointer; transition: box-shadow .2s var(--md-ease); }
+        .elm2-pager .elm2-pager-go:hover { box-shadow: var(--md-elev-1); }
         #elm2-pick-compare-bar {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            flex-wrap: wrap;
-            padding: 10px 12px;
-            margin: 0 0 8px;
-            background: #f5f5f5;
-            border: 1px solid #ddd;
-            border-radius: 8px;
+            display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+            padding: 12px 16px; margin: 0 0 12px;
+            background: var(--md-surface-container); border: none; border-radius: 12px;
             font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif;
         }
-        #elm2-pick-compare-count { font-size: 13px; color: #555; flex: 1 1 auto; min-width: 160px; }
+        #elm2-pick-compare-count { font-size: 14px; line-height: 20px; letter-spacing: .25px; color: var(--md-on-surface-variant); flex: 1 1 auto; min-width: 160px; }
         #elm2-pick-compare-bar button {
-            border: 1px solid #ccc;
-            background: #fff;
-            border-radius: 6px;
-            padding: 6px 12px;
-            font-size: 13px;
-            cursor: pointer;
+            height: 40px; padding: 0 24px; border-radius: 20px; box-sizing: border-box;
+            background: transparent; border: 1px solid var(--md-outline); color: var(--md-primary);
+            font: 500 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .1px;
+            cursor: pointer; transition: background-color .2s var(--md-ease);
         }
-        #elm2-use-ai-btn:hover, #elm2-use-script-btn:hover { background: #eee; }
-        #elm2-pick-compare-bar button:disabled { opacity: 0.45; cursor: default; }
-        .diff-row.elm2-agree-row { background-color: #e8f5e9; box-shadow: inset 4px 0 0 #43a047; }
-        .diff-row.elm2-disagree-row { background-color: #ffebee; box-shadow: inset 4px 0 0 #d32f2f; }
-        .diff-value-button.elm2-suggested { outline: 2px dashed #f9a825; outline-offset: -2px; }
-        .elm2-pick-badge:not(.elm2-pick-differs) { background: #e8f5e9; color: #2e7d32; }
-        .elm2-pick-badge {
-            display: inline-block;
-            margin-left: 8px;
-            padding: 1px 7px;
-            border-radius: 8px;
-            font-size: 11px;
-            font-weight: 600;
-            background: #fff3e0;
-            color: #e65100;
-            white-space: nowrap;
-            vertical-align: middle;
+        #elm2-pick-compare-bar #elm2-use-ai-btn { border-color: var(--elm2-bolt-blue, #1976d2); color: var(--elm2-bolt-blue, #1976d2); }
+        #elm2-pick-compare-bar #elm2-use-ai-btn:hover { background: rgba(25, 118, 210, 0.08); background: color-mix(in srgb, var(--elm2-bolt-blue, #1976d2) 8%, transparent); }
+        #elm2-pick-compare-bar #elm2-use-script-btn { border-color: #ef6c00; color: #ef6c00; }
+        #elm2-pick-compare-bar #elm2-use-script-btn:hover { background: rgba(239, 108, 0, 0.08); }
+        #elm2-pick-compare-bar button:active { background-color: rgba(0, 0, 0, 0.1); }
+        #elm2-pick-compare-bar button:focus-visible { outline: 2px solid var(--md-primary); outline-offset: 2px; }
+        #elm2-pick-compare-bar button:disabled { opacity: .38; cursor: default; background: transparent; }
+        /* --- Pick comparison colors (light semi-transparent fill + saturated border,
+               replacing Element451's own blue; its overlay pseudo-elements are hidden).
+               Agreement row: the value both agreed on stays green (even if you then select the other one,
+               which just gets Element451's normal blue).
+               Conflict row (our pick differs from Bolt's): the two values are colored by
+               who picked them — Element451's blue = Bolt's pick, orange = ours.
+               Rows where our rules have no opinion keep Element451's default styling. --- */
+        body .diff-row button.diff-value-button.elm2-agree-pick {
+            background: rgba(67, 160, 71, 0.22) !important;
+            border: 2px solid #2e7d32 !important;
+            box-shadow: none !important;
+            outline: none !important;
+            color: #212121 !important;
+        }
+        body .diff-row button.diff-value-button.elm2-agree-pick * {
+            background: transparent !important;
+            color: #212121 !important;
+        }
+        body .diff-row button.diff-value-button.elm2-agree-pick::before,
+        body .diff-row button.diff-value-button.elm2-agree-pick::after {
+            background: transparent !important;
+            border-color: #2e7d32 !important;
+            box-shadow: none !important;
+            opacity: 0 !important;
+        }
+        body .diff-row button.diff-value-button.elm2-pick-bolt {
+            background: rgba(25, 118, 210, 0.22) !important;
+            background: color-mix(in srgb, var(--elm2-bolt-blue, #1976d2) 22%, transparent) !important;
+            border: 2px solid var(--elm2-bolt-blue, #1976d2) !important;
+            box-shadow: none !important;
+            outline: none !important;
+            color: #212121 !important;
+        }
+        body .diff-row button.diff-value-button.elm2-pick-bolt * {
+            background: transparent !important;
+            color: #212121 !important;
+        }
+        body .diff-row button.diff-value-button.elm2-pick-bolt::before,
+        body .diff-row button.diff-value-button.elm2-pick-bolt::after {
+            background: transparent !important;
+            border-color: var(--elm2-bolt-blue, #1976d2) !important;
+            box-shadow: none !important;
+            opacity: 0 !important;
+        }
+        body .diff-row button.diff-value-button.elm2-pick-ours {
+            background: rgba(239, 108, 0, 0.22) !important;
+            border: 2px solid #ef6c00 !important;
+            box-shadow: none !important;
+            outline: none !important;
+            color: #212121 !important;
+        }
+        body .diff-row button.diff-value-button.elm2-pick-ours * {
+            background: transparent !important;
+            color: #212121 !important;
+        }
+        body .diff-row button.diff-value-button.elm2-pick-ours::before,
+        body .diff-row button.diff-value-button.elm2-pick-ours::after {
+            background: transparent !important;
+            border-color: #ef6c00 !important;
+            box-shadow: none !important;
+            opacity: 0 !important;
+        }
+        /* Hover preview of "Use Bolt AI picks" / "Use our picks": on the rows that button would
+               change, every value is neutral and the value it would select gets the blue
+               highlight (the green / blue / orange pick colours are hidden meanwhile). */
+        body.elm2-previewing .diff-row.elm2-preview-row button.diff-value-button {
+            background: transparent !important;
+            border: 2px solid rgba(0, 0, 0, 0.12) !important;
+            box-shadow: none !important;
+            outline: none !important;
+            color: #212121 !important;
+        }
+        body.elm2-previewing .diff-row.elm2-preview-row button.diff-value-button * { background: transparent !important; color: #212121 !important; }
+        body.elm2-previewing .diff-row.elm2-preview-row button.diff-value-button::before,
+        body.elm2-previewing .diff-row.elm2-preview-row button.diff-value-button::after {
+            background: transparent !important; box-shadow: none !important; opacity: 0 !important;
+        }
+        body.elm2-previewing .diff-row.elm2-preview-row button.diff-value-button.elm2-preview-pick {
+            background: rgba(25, 118, 210, 0.22) !important;
+            background: color-mix(in srgb, var(--elm2-bolt-blue, #1976d2) 22%, transparent) !important;
+            border: 2px solid var(--elm2-bolt-blue, #1976d2) !important;
+        }
+        /* Applicant side (Application / Cal State Apply entries): when found, the
+               "follow the applicant" rule drives the picks, so mark that contact's card. */
+        .contact-card.elm2-applicant-card {
+            background-color: #fff9c4 !important;
+            outline: 3px solid #f9a825;
+            outline-offset: -3px;
+        }
+        #elm2-applicant-outline {
+            position: absolute;
+            box-sizing: border-box;
+            border: 2px solid #f9a825;
+            border-radius: 4px;
+            pointer-events: none;
+            z-index: 2;
+        }
+        /* --- Material 3 style "Hide matching items" switch (also used for Element451's two "skip merge completion screen" switches).
+               40x24 pill track; off = outlined track with a small 12px thumb,
+               on = filled track with an 18px white thumb and a check mark.
+               Element451's own MDC track/thumb internals are hidden and the visuals are
+               drawn with the button's pseudo-elements; the button itself (click, keyboard,
+               aria) is untouched. --- */
+        bolt-slide-toggle:is(.hide-matching-items-toggle, .skip-merge-completion-toggle, .merge-completion-skip-toggle) button.mdc-switch {
+            position: relative !important;
+            width: 40px !important;
+            min-width: 40px !important;
+            height: 24px !important;
+            padding: 0 !important;
+            box-sizing: border-box !important;
+            border-radius: 12px !important;
+            border: 2px solid #73777f !important;
+            background: #e6e1db !important;
+            transition: background-color 0.2s, border-color 0.2s;
+        }
+        bolt-slide-toggle:is(.hide-matching-items-toggle, .skip-merge-completion-toggle, .merge-completion-skip-toggle) button.mdc-switch.mdc-switch--selected {
+            background: var(--md-primary) !important;
+            border-color: var(--md-primary) !important;
+        }
+        bolt-slide-toggle:is(.hide-matching-items-toggle, .skip-merge-completion-toggle, .merge-completion-skip-toggle) button.mdc-switch .mdc-switch__track,
+        bolt-slide-toggle:is(.hide-matching-items-toggle, .skip-merge-completion-toggle, .merge-completion-skip-toggle) button.mdc-switch .mdc-switch__handle-track {
+            display: none !important;
+        }
+        bolt-slide-toggle:is(.hide-matching-items-toggle, .skip-merge-completion-toggle, .merge-completion-skip-toggle) button.mdc-switch::before {
+            content: "";
+            position: absolute;
+            top: 50%;
+            left: 4px;
+            width: 12px;
+            height: 12px;
+            margin-top: -6px;
+            border-radius: 50%;
+            background: #73777f;
+            transition: left 0.2s, width 0.2s, height 0.2s, margin-top 0.2s, background-color 0.2s;
+        }
+        bolt-slide-toggle:is(.hide-matching-items-toggle, .skip-merge-completion-toggle, .merge-completion-skip-toggle) button.mdc-switch.mdc-switch--selected::before {
+            left: 17px;
+            width: 18px;
+            height: 18px;
+            margin-top: -9px;
+            background: #fff;
+        }
+        bolt-slide-toggle:is(.hide-matching-items-toggle, .skip-merge-completion-toggle, .merge-completion-skip-toggle) button.mdc-switch.mdc-switch--selected::after {
+            content: "";
+            position: absolute;
+            left: 24px;
+            top: 4px;
+            width: 4px;
+            height: 8px;
+            border: solid var(--md-primary);
+            border-width: 0 2px 2px 0;
+            transform: rotate(45deg);
+        }
+        /* Score chips: Medium and Low get the same solid look as High (which is left
+               exactly as Element451 draws it), in orange and red. Element451 sets each
+               level's fill with its own !important rule, so these selectors are
+               deliberately far more specific than that (the repeated
+               class only raises specificity). */
+        html body elm-deduplication-score-chip bolt-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip-medium {
+            background-color: #ef6c00 !important;
+            border-color: #ef6c00 !important;
+            color: #fff !important;
+        }
+        html body elm-deduplication-score-chip bolt-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip-low {
+            background-color: #d32f2f !important;
+            border-color: #d32f2f !important;
+            color: #fff !important;
+        }
+        html body elm-deduplication-score-chip bolt-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip-medium .bolt-chip-text,
+        html body elm-deduplication-score-chip bolt-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip.score-chip-low .bolt-chip-text {
+            color: #fff !important;
+        }
+        bolt-slide-toggle:is(.hide-matching-items-toggle, .skip-merge-completion-toggle, .merge-completion-skip-toggle) label.mdc-label {
+            margin-left: 12px !important;
+            padding-left: 0 !important;
+        }
+        /* Pin the Previous / position / Next bar to the top of the review panel while the
+               field list scrolls. --elm2-nav-top leaves room for Element451's own title bar
+               when that is sticky too. */
+        .review-queue-nav {
+            position: sticky !important;
+            top: var(--elm2-nav-top, 0px);
+            z-index: 20;
+            background: #fff;
+            box-shadow: 0 1px 0 rgba(0, 0, 0, 0.08);
         }
         /* --- Merge counter / settings pane (unchanged from classic script; the
                top navbar — .bolt-navigation-right / elm-universal-search — was not
                redesigned) --- */
         #elm-controls-wrapper { display: flex; align-items: center; gap: 12px; margin-right: 16px; position: relative; }
-        #elm-counter-wrapper { display: flex; align-items: center; background: #f5f5f5; border-radius: 20px; border: 1px solid #ddd; padding: 2px; transition: all 0.2s ease-out; }
-        #elm-reset-btn { background: transparent; border: none; color: #999; cursor: pointer; font-size: 14px; padding: 4px 8px; border-radius: 50%; transition: all 0.2s; line-height: 1; }
-        #elm-reset-btn:hover { color: #d32f2f; background-color: rgba(211, 47, 47, 0.1); }
-        #elm-merge-counter { font-weight: 600; font-size: 14px; color: #555; padding: 4px 12px 4px 4px; white-space: nowrap; }
-        #elm-settings-btn { background: transparent; border: 1px solid rgba(255,255,255,0.3); color: white; cursor: pointer; font-size: 18px; padding: 4px 8px; border-radius: 8px; transition: all 0.2s; line-height: 1; display: flex; align-items: center; justify-content: center; }
-        #elm-settings-btn:hover { background-color: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.5); }
-        #elm-settings-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.35); z-index: 9998; }
+        /* tonal assist-chip style pill (merge counter; the DB badge in csv-database-v2 matches) */
+        #elm-counter-wrapper { display: flex; align-items: center; gap: 4px; height: 32px; box-sizing: border-box; padding: 0 4px 0 12px; background: var(--md-surface-container-highest); border: none; border-radius: 8px; }
+        #elm-merge-counter { font: 500 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .1px; color: var(--md-on-surface); padding: 0; white-space: nowrap; }
+        #elm-reset-btn { width: 24px; height: 24px; padding: 0; display: flex; align-items: center; justify-content: center; background: transparent; border: none; border-radius: 50%; color: var(--md-on-surface-variant); cursor: pointer; font-size: 16px; line-height: 1; transition: background-color .2s var(--md-ease), color .2s var(--md-ease); }
+        #elm-reset-btn:hover { color: var(--md-error); background-color: rgba(179, 38, 30, .08); }
+        /* standard icon button (40px, state layer) */
+        #elm-settings-btn { width: 40px; height: 40px; padding: 0; display: flex; align-items: center; justify-content: center; background: transparent; border: none; border-radius: 50%; color: #fff; cursor: pointer; font-size: 22px; line-height: 1; transition: background-color .2s var(--md-ease); }
+        #elm-settings-btn:hover { background-color: rgba(255, 255, 255, .12); }
+        #elm-settings-btn:active { background-color: rgba(255, 255, 255, .18); }
+        #elm-settings-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+        /* modal side sheet */
+        #elm-settings-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, .32); z-index: 9998; }
         #elm-settings-overlay.open { display: block; }
-        #elm-settings-pane { position: fixed; top: 0; right: -360px; width: 340px; height: 100%; background: #fff; box-shadow: -4px 0 24px rgba(0,0,0,0.25); z-index: 9999; transition: right 0.25s ease-out; overflow-y: auto; font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+        #elm-settings-pane { position: fixed; top: 0; right: -400px; width: 360px; max-width: 100vw; height: 100%; box-sizing: border-box; background: var(--md-surface-container-low); color: var(--md-on-surface); border-radius: 28px 0 0 28px; box-shadow: var(--md-elev-3); z-index: 9999; transition: right .3s var(--md-ease); overflow-y: auto; font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; }
         #elm-settings-pane.open { right: 0; }
-        #elm-settings-pane .settings-header { padding: 20px; font-size: 18px; font-weight: 600; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
-        #elm-settings-pane .settings-body { padding: 16px 20px; }
-        #elm-settings-pane .settings-section-title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: #888; margin: 20px 0 8px; }
-        #elm-settings-pane .setting-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #f2f2f2; gap: 12px; }
-        #elm-settings-pane .setting-row label { font-size: 14px; color: #333; }
-        #elm-settings-pane select, #elm-settings-pane input[type=number] { padding: 4px 8px; border-radius: 6px; border: 1px solid #ccc; font-size: 13px; }
-        .elm-toggle-switch { position: relative; width: 40px; height: 22px; flex-shrink: 0; }
-        .elm-toggle-switch input { opacity: 0; width: 0; height: 0; }
-        .elm-toggle-slider { position: absolute; cursor: pointer; inset: 0; background-color: #ccc; transition: 0.2s; border-radius: 22px; }
-        .elm-toggle-slider::before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: white; transition: 0.2s; border-radius: 50%; }
-        .elm-toggle-switch input:checked + .elm-toggle-slider { background-color: #43a047; }
-        .elm-toggle-switch input:checked + .elm-toggle-slider::before { transform: translateX(18px); }
+        #elm-settings-pane .settings-header { padding: 24px 16px 16px 24px; display: flex; justify-content: space-between; align-items: flex-start; }
+        #elm-settings-pane .settings-title { font-size: 22px; line-height: 28px; font-weight: 400; }
+        #elm-settings-pane .settings-build { font-size: 12px; line-height: 16px; letter-spacing: .5px; color: var(--md-on-surface-variant); }
+        #elm-settings-close { width: 40px; height: 40px; padding: 0; display: flex; align-items: center; justify-content: center; background: transparent; border: none; border-radius: 50%; color: var(--md-on-surface-variant); font-size: 24px; line-height: 1; cursor: pointer; transition: background-color .2s var(--md-ease); }
+        #elm-settings-close:hover { background-color: rgba(29, 27, 32, .08); }
+        #elm-settings-close:focus-visible { outline: 2px solid var(--md-primary); }
+        #elm-settings-pane .settings-body { padding: 0 24px 24px; }
+        #elm-settings-pane .settings-section-title { font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: var(--md-primary-text); text-transform: none; margin: 24px 0 4px; }
+        #elm-settings-pane .setting-row { display: flex; justify-content: space-between; align-items: center; min-height: 56px; padding: 8px 0; border: none; gap: 16px; }
+        #elm-settings-pane .setting-row label { font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--md-on-surface); }
+        /* outlined select */
+        #elm-settings-pane select, #elm-settings-pane input[type=number] { height: 40px; padding: 0 12px; box-sizing: border-box; background: transparent; color: var(--md-on-surface); border: 1px solid var(--md-outline); border-radius: 8px; font: 400 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+        #elm-settings-pane select:hover { border-color: var(--md-on-surface); }
+        #elm-settings-pane select:focus { outline: none; border: 2px solid var(--md-primary); padding: 0 9px; }
+        /* Material 3 style switches for the settings pane (same look as the restyled
+               "Hide matching items" toggle): 40x24 pill, small thumb off, filled track
+               with a white check thumb on. */
+        .elm-toggle-switch { position: relative; width: 40px; height: 24px; flex-shrink: 0; }
+        .elm-toggle-switch input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; z-index: 1; }
+        .elm-toggle-slider {
+            position: absolute; inset: 0; box-sizing: border-box;
+            border: 2px solid #73777f; border-radius: 12px; background: #e6e1db;
+            transition: background-color 0.2s, border-color 0.2s;
+        }
+        .elm-toggle-slider::before {
+            content: ""; position: absolute; top: 50%; left: 4px;
+            width: 12px; height: 12px; margin-top: -6px; border-radius: 50%; background: #73777f;
+            transition: left 0.2s, width 0.2s, height 0.2s, margin-top 0.2s, background-color 0.2s;
+        }
+        .elm-toggle-switch input:checked + .elm-toggle-slider {
+            background: var(--md-primary); border-color: var(--md-primary);
+        }
+        .elm-toggle-switch input:checked + .elm-toggle-slider::before {
+            left: 17px; width: 18px; height: 18px; margin-top: -9px; background: #fff;
+        }
+        .elm-toggle-switch input:checked + .elm-toggle-slider::after {
+            content: ""; position: absolute; left: 24px; top: 4px; width: 4px; height: 8px;
+            border: solid var(--md-primary); border-width: 0 2px 2px 0; transform: rotate(45deg);
+        }
+        /* M3 discrete slider (Auto-Apply level): 16px rounded track split by a 4px pill handle
+               with a 6px gap either side, stop dots on the track, a value bubble while
+               focused/pressed. The real <input type=range> sits on top, invisible, so
+               dragging, clicking and keyboard use are native. */
+        #elm-settings-pane .elm-slider-head { min-height: 40px; }
+        #elm-settings-pane .setting-row.elm-seg-head { min-height: 32px; padding-bottom: 0; }
+        #elm-settings-pane .elm-level-label { font-size: 14px; font-weight: 500; letter-spacing: .1px; color: var(--md-primary-text); }
+        #elm-settings-pane .elm-slider { padding: 22px 2px 12px; }
+        #elm-settings-pane .m3s { position: relative; height: 44px; --p: 0; --gap: 6px; }
+        #elm-settings-pane .m3s input[type=range] { -webkit-appearance: none; appearance: none; position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; z-index: 3; }
+        #elm-settings-pane .m3s input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 4px; height: 44px; }
+        #elm-settings-pane .m3s input[type=range]::-moz-range-thumb { width: 4px; height: 44px; border: none; }
+        #elm-settings-pane .m3s-active, #elm-settings-pane .m3s-inactive { position: absolute; top: 14px; height: 16px; transition: width .2s var(--md-ease), left .2s var(--md-ease); }
+        #elm-settings-pane .m3s-active { left: 0; width: max(0px, calc((100% - 4px) * var(--p) - var(--gap))); background: var(--md-primary); border-radius: 8px 2px 2px 8px; }
+        #elm-settings-pane .m3s-inactive { right: 0; left: calc((100% - 4px) * var(--p) + 4px + var(--gap)); background: var(--md-primary-track); border-radius: 2px 8px 8px 2px; }
+        #elm-settings-pane .m3s-dots span { position: absolute; top: 20px; width: 4px; height: 4px; border-radius: 50%; left: calc(6px + (100% - 16px) * var(--i) / 4); }
+        #elm-settings-pane .m3s-dots span.on { background: #fff; }
+        #elm-settings-pane .m3s-dots span.off { background: var(--md-primary); }
+        #elm-settings-pane .m3s-dots span.here { display: none; }
+        #elm-settings-pane .m3s-handle { position: absolute; top: 0; width: 4px; height: 44px; border-radius: 2px; background: var(--md-primary); left: calc((100% - 4px) * var(--p)); pointer-events: none; z-index: 2; transition: left .2s var(--md-ease), width .15s var(--md-ease); }
+        #elm-settings-pane .m3s input[type=range]:active ~ .m3s-handle { width: 2px; margin-left: 1px; }
+        #elm-settings-pane .m3s-bubble { position: absolute; bottom: calc(100% + 4px); left: 50%; transform: translateX(-50%); background: #2f3236; color: #f1f3f7; font-size: 12px; line-height: 16px; letter-spacing: .4px; padding: 6px 12px; border-radius: 16px; white-space: nowrap; opacity: 0; transition: opacity .15s var(--md-ease); }
+        #elm-settings-pane .m3s input[type=range]:focus-visible ~ .m3s-handle .m3s-bubble,
+        #elm-settings-pane .m3s input[type=range]:active ~ .m3s-handle .m3s-bubble { opacity: 1; }
+        #elm-settings-pane .m3s-labels { position: relative; height: 16px; margin-top: 4px; font-size: 12px; line-height: 16px; letter-spacing: .4px; color: var(--md-on-surface-variant); }
+        #elm-settings-pane .m3s-labels span { position: absolute; top: 0; white-space: nowrap; left: calc((100% - 4px) * var(--i) / 4 + 2px); transform: translateX(-50%); transition: color .2s var(--md-ease); }
+        #elm-settings-pane .m3s-labels span:first-child { left: 0; transform: none; }
+        #elm-settings-pane .m3s-labels span:last-child { left: 100%; transform: translateX(-100%); }
+        #elm-settings-pane .m3s-labels span.sel { color: var(--md-primary-text); font-weight: 500; }
+        #elm-settings-pane .elm-seg { display: flex; height: 40px; margin: 4px 0 8px; border: 1px solid var(--md-outline); border-radius: 20px; overflow: hidden; }
+        #elm-settings-pane .elm-seg button { flex: 1; display: flex; align-items: center; justify-content: center; border: none; border-left: 1px solid var(--md-outline); background: transparent; color: var(--md-on-surface); font-family: inherit; font-weight: 500; font-size: 14px; line-height: 20px; letter-spacing: .1px; cursor: pointer; transition: background-color .2s var(--md-ease); }
+        #elm-settings-pane .elm-seg.elm-seg-disabled { opacity: .38; }
+        #elm-settings-pane .elm-seg button:disabled { cursor: default; }
+        #elm-settings-pane .elm-seg button:first-child { border-left: none; }
+        #elm-settings-pane .elm-seg button:hover { background: rgba(0, 0, 0, .06); }
+        #elm-settings-pane .elm-seg button[aria-checked="true"] { background: var(--md-primary-container); color: var(--md-on-primary-container); }
+        #elm-settings-pane .elm-seg button[aria-checked="true"]::before { content: ''; width: 10px; height: 5px; margin: -3px 8px 0 0; border-left: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(-45deg); }
+        #elm-settings-pane #elm-when-done-desc { min-height: 54px; }
+        #elm-settings-pane .elm-level-desc { min-height: 36px; /* two lines reserved so the controls below do not jump */ font-size: 13px; line-height: 18px; letter-spacing: .25px; color: var(--md-on-surface-variant); margin: 0 0 8px; }
+        .elm-toggle-switch input:focus-visible + .elm-toggle-slider { outline: 2px solid var(--md-primary); outline-offset: 2px; }
+        .elm-toggle-switch input:disabled { cursor: default; }
     `;
     if (typeof GM_addStyle === 'function') GM_addStyle(css);
     else { const styleEl = document.createElement('style'); styleEl.textContent = css; document.head.appendChild(styleEl); }
@@ -341,6 +800,19 @@
             let parsed = {};
             const parts = cleaned.split(',').map(p => p.trim()).filter(p => p);
             const parseStreetPart = (streetPart) => {
+                // A street chunk with no comma after it can still carry "<state> <zip>" and a bare unit
+                // ("3600 Mountain Avenue 13E Ca 92404"): peel those off so the street parses cleanly.
+                const szTail = streetPart.match(/\s+([A-Za-z]{2})\s+(\d{5}(?:-\d{4})?)\s*$/);
+                if (szTail) {
+                    if (!parsed.state) parsed.state = szTail[1];
+                    if (!parsed.zip) parsed.zip = szTail[2];
+                    streetPart = streetPart.substring(0, szTail.index).trim();
+                }
+                const bareUnit = streetPart.match(/^(\d+[A-Za-z]?\s+(?:\S+\s+)+?(?:st|street|ave|avenue|blvd|boulevard|dr|drive|rd|road|ln|lane|ct|court|cir|circle|trl|trail|way|pl|place|pkwy|parkway|hwy|highway|ter|terrace)\.?)\s+((?=[a-z0-9-]*\d)[a-z0-9-]{1,5})$/i);
+                if (bareUnit) {
+                    parsed.sec_unit_num = bareUnit[2].toLowerCase();
+                    streetPart = bareUnit[1];
+                }
                 const unitPatterns = [
                     /\s+(?:apt|apartment|unit|ste|suite|spc|space)\.?\s*#?\s*[a-z0-9-]+$/i,
                     /\s+#\s*[a-z0-9-]+$/i
@@ -496,12 +968,12 @@
                     result.winner = 'right';
                     result.reason = `Same address, right more complete (${result.rightScore} vs ${result.leftScore})`;
                 } else {
-                    result.winner = 'left';
-                    result.reason = 'Same address, equal completeness - defaulting to left';
+                    result.winner = 'tie';
+                    result.reason = 'Same address, equal completeness - no pick';
                 }
             } else {
                 result.winner = 'tie';
-                result.reason = 'Different addresses - manual review or follow email';
+                result.reason = 'Different addresses - no pick';
             }
             return result;
         },
@@ -526,6 +998,7 @@
     function getDiffRows() {
         const form = getDiffForm();
         if (!form) return [];
+        const labelCounts = {};
         return Array.from(form.querySelectorAll('.diff-row')).map(row => {
             const buttons = row.querySelectorAll(':scope > .diff-value-button');
             const titleEl = row.querySelector(':scope > .diff-title');
@@ -535,19 +1008,52 @@
             const leftText = leftBtn ? leftBtn.textContent.trim() : '';
             const rightText = rightBtn ? rightBtn.textContent.trim() : '';
             const norm = (t) => t.toLowerCase().replace(/\s+/g, ' ').trim();
+            // Which side Element451 itself has selected. Bolt AI marks its default
+            // pick on the "Keep Contact A/B" arrow buttons (and a user overrides it by
+            // clicking an arrow), so the arrows are the primary signal; the value
+            // buttons' aria-checked/diff-option-selected are only a fallback.
+            const isSel = (b) => !!b && (b.getAttribute('aria-checked') === 'true' || b.classList.contains('diff-option-selected'));
+            const arrowA = row.querySelector(':scope > .diff-actions > .diff-action-button[title="Keep Contact A"]');
+            const arrowB = row.querySelector(':scope > .diff-actions > .diff-action-button[title="Keep Contact B"]');
+            const nativeSide = (isSel(arrowA) && !isSel(arrowB)) ? 'left'
+                : (isSel(arrowB) && !isSel(arrowA)) ? 'right'
+                : isSel(leftBtn) ? 'left' : isSel(rightBtn) ? 'right' : null;
+            // Any other selected radio in the row (the middle button between the arrows, e.g. a
+            // "keep both" / swap option) is a Bolt choice too: not left, not right, but not blank.
+            const otherSelected = Array.from(row.querySelectorAll(':scope > .diff-actions > button')).some(b =>
+                b !== arrowA && b !== arrowB && (b.getAttribute('aria-checked') === 'true' || (b.classList.contains('diff-option-selected') && !b.classList.contains('bolt-button-disabled'))));
+            // Stable identity for this row within the current pair (survives
+            // Element451 re-rendering the DOM node): field label + nth occurrence + both values.
+            const occ = labelCounts[label] = (labelCounts[label] || 0) + 1;
             return {
                 element: row,
+                key: `${label}#${occ}|${norm(leftText)}|${norm(rightText)}`,
                 label,
+                nativeSide,
+                otherSelected: !nativeSide && otherSelected,
                 // Element451 doesn't flag conflicting rows (it just hides matching
                 // ones), so we detect them ourselves: the two sides differ.
-                isConflict: norm(leftText) !== norm(rightText),
+                // Case counts: "jesse" vs "Jesse" is a real conflict (the name-case rule needs it), so the
+                // comparison collapses whitespace only; norm() above also lowercases, for the row key.
+                isConflict: leftText.replace(/\s+/g, ' ') !== rightText.replace(/\s+/g, ' '),
                 textContent: `${label} ${leftText} ${rightText}`,
                 values: [{ textContent: leftText }, { textContent: rightText }],
                 leftSelected: !!(leftBtn && leftBtn.classList.contains('diff-option-selected')),
                 rightSelected: !!(rightBtn && rightBtn.classList.contains('diff-option-selected')),
-                selectSide(side) {
-                    const btn = side === 'left' ? leftBtn : rightBtn;
-                    if (btn && !btn.classList.contains('diff-option-selected')) btn.click();
+                selectSide(side, viaValue) {
+                    const arrow = side === 'left' ? arrowA : arrowB;
+                    const value = side === 'left' ? leftBtn : rightBtn;
+                    if (isSel(arrow) || (!arrow && isSel(value))) return; // already selected
+                    // Retry path: the value button is the row's real radio control (role=radio).
+                    if (viaValue && value) { value.click(); return; }
+                    // The arrows are the real control; fall back to the value button
+                    // if clicking the arrow didn't register.
+                    if (arrow) {
+                        arrow.click();
+                        if (value) setTimeout(() => { if (!isSel(value) && !isSel(arrow)) value.click(); }, 80);
+                    } else if (value) {
+                        value.click();
+                    }
                 }
             };
         });
@@ -557,24 +1063,275 @@
         const needle = labelSubstr.toLowerCase();
         return getDiffRows().filter(r => r.label.toLowerCase().includes(needle));
     }
+    // Element451 may reuse the same .diff-row elements when moving to the next
+    // pair, which would leave our per-row state (Bolt's pick, our pick, resolved
+    // flags, colors) attached to a row that now shows different data. Tag each
+    // row with the pair it was computed for and wipe anything stale.
+    const ROW_STATE_KEYS = ['elm2AiSide', 'elm2AiSeen', 'elm2ScriptSide', 'elm2AutoResolved', 'elm2DualPersonal', 'elm2DualResolved', 'elm2AddressResolved', 'elm2NeedsReview'];
+    // Bolt's original picks and our own picks, remembered in the script (not just
+    // on the DOM nodes) for the current pair, so they survive Element451
+    // re-rendering a row after the user or our script has changed the selection.
+    // Entry: { ai: 'left'|'right', script: 'left'|'right', acted: bool }.
+    const rowMemory = new Map();
+    let memoryPairKey = '';
+    function rememberRow(key, patch) {
+        rowMemory.set(key, Object.assign(rowMemory.get(key) || {}, patch));
+    }
+    function resetStaleRows() {
+        const pairKey = getPairKey();
+        if (!pairKey) return;
+        if (memoryPairKey !== pairKey) { rowMemory.clear(); memoryPairKey = pairKey; }
+        getDiffRows().forEach(row => {
+            const el = row.element;
+            if (el.dataset.elm2Pair !== pairKey) {
+                ROW_STATE_KEYS.forEach(k => delete el.dataset[k]);
+                el.classList.remove('elm2-blocked-row');
+                el.removeAttribute('title');
+                el.querySelectorAll(':scope > .diff-value-button').forEach(b => b.classList.remove('elm2-agree-pick', 'elm2-pick-bolt', 'elm2-pick-ours'));
+                el.dataset.elm2Pair = pairKey;
+            }
+            const m = rowMemory.get(row.key);
+            if (m) {
+                if (m.ai) el.dataset.elm2AiSide = m.ai;
+                if (m.script) el.dataset.elm2ScriptSide = m.script;
+                if (m.rule) el.dataset.elm2Rule = m.rule;
+                if (m.acted) el.dataset.elm2AiSeen = '1';
+            }
+        });
+    }
+    // Element451's default blue outline color, read from one of its own
+    // outlined accent buttons (e.g. "Save for later") so our Bolt-side styling
+    // matches it exactly instead of relying on a guessed hex value.
+    function syncBoltBlue() {
+        const ref = document.querySelector('bolt-stackable-sidebar-header-actions button.bolt-button-outlined.bolt-button-color-accent');
+        if (!ref) return;
+        const c = getComputedStyle(ref).borderTopColor;
+        if (!c || c === 'rgba(0, 0, 0, 0)' || c === 'transparent') return;
+        document.documentElement.style.setProperty('--elm2-bolt-blue', c);
+    }
+    // =========================================================
+    // LIST PAGER: a "Page" box + Go, next to the paginator's range label
+    // (the classic script had the same, driven by URL parameters; this UI keeps paging state in
+    // Angular, so it drives the paginator itself).
+    // Page jumps: (1) set the paginator component's pageIndex and emit its page event, found via the
+    // element's __ngContext__ (Angular's debug API isn't exposed in production); if that component
+    // can't be found, (2) click First page / Next page repeatedly, waiting for the range label.
+    // (Rows per page can't be changed from outside: Element's paginator component isn't reachable.)
+    // =========================================================
+    const PAGER_RANGE = /(\d[\d,]*)\s*[\u2013\u2014-]\s*(\d[\d,]*)\s+of\s+(\d[\d,]*)/i;
+    // The MatPaginator instance is not exposed by Angular in production builds. It is reachable
+    // through the DOM's __ngContext__ (an Angular "LView" array that holds the directive
+    // instances of the view the element was created in): search this element's context and its
+    // ancestors', also one level into any component instance found there (e.g. a parent component
+    // holding the paginator as a ViewChild).
+    const isPaginatorLike = (o) => !!o && typeof o === 'object' && !(o instanceof Node) &&
+        typeof o.nextPage === 'function' && typeof o._emitPageEvent === 'function' && 'pageIndex' in o;
+    function getPaginatorInstance(pag) {
+        if (!pag) return null;
+        if (pag.__elm2Paginator && isPaginatorLike(pag.__elm2Paginator)) return pag.__elm2Paginator;
+        let el = pag;
+        for (let depth = 0; el && depth < 10; depth++, el = el.parentElement) {
+            let ctx = el.__ngContext__;
+            if (ctx && !Array.isArray(ctx) && Array.isArray(ctx.lView)) ctx = ctx.lView;
+            if (!Array.isArray(ctx)) continue;
+            const items = ctx.length > 3000 ? ctx.slice(0, 3000) : ctx;
+            for (const o of items) {
+                if (isPaginatorLike(o)) { pag.__elm2Paginator = o; return o; }
+            }
+            for (const o of items) {
+                if (!o || typeof o !== 'object' || o instanceof Node || Array.isArray(o)) continue;
+                let keys;
+                try { keys = Object.keys(o); } catch (e) { continue; }
+                for (const k of keys.slice(0, 80)) {
+                    let v; try { v = o[k]; } catch (e) { continue; }
+                    if (isPaginatorLike(v)) { pag.__elm2Paginator = v; return v; }
+                }
+            }
+        }
+        return null;
+    }
+    const rangeLabelText = (pag) => ((pag.querySelector('.mat-mdc-paginator-range-label') || {}).textContent || '').trim();
+    function readPagerState(pag) {
+        const m = rangeLabelText(pag).replace(/\u00a0/g, ' ').match(PAGER_RANGE);
+        if (!m) return null;
+        const num = (t) => parseInt(t.replace(/,/g, ''), 10);
+        const start = num(m[1]), end = num(m[2]), total = num(m[3]);
+        const inst = getPaginatorInstance(pag);
+        const size = (inst && inst.pageSize) || Math.max(1, end - start + 1);
+        return { start, end, total, size, index: Math.floor((start - 1) / size), pages: Math.max(1, Math.ceil(total / size)) };
+    }
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    async function waitForRangeChange(pag, before, ms) {
+        const t0 = Date.now();
+        while (Date.now() - t0 < ms) { if (rangeLabelText(pag) !== before) return true; await sleep(100); }
+        return false;
+    }
+    async function pagerGoToPage(pag, page) {
+        const st = readPagerState(pag);
+        if (!st) return;
+        const target = Math.max(0, Math.min(st.pages - 1, page - 1));
+        if (target === st.index) return;
+        const inst = getPaginatorInstance(pag);
+        if (inst) {
+            console.log('[elm2] page jump: direct (paginator component found)');
+            const prev = inst.pageIndex;
+            inst.pageIndex = target;
+            inst._emitPageEvent(prev);
+            return;
+        }
+        console.log('[elm2] page jump: clicking First / Next (paginator component not found)');
+        // Fallback: walk with the real buttons.
+        const btn = (name) => pag.querySelector('button[aria-label="' + name + '"]:not([disabled]):not([aria-disabled="true"])');
+        let cur = st.index;
+        const click = async (b) => { const before = rangeLabelText(pag); b.click(); return waitForRangeChange(pag, before, 4000); };
+        if (target === 0) { const b = btn('First page'); if (b) await click(b); return; }
+        if (target < cur) { const b = btn('First page'); if (!b || !(await click(b))) return; cur = 0; }
+        showMergeNotice('Going to page ' + (target + 1) + '…');
+        while (cur < target) { const b = btn('Next page'); if (!b || !(await click(b))) break; cur++; }
+    }
+    function injectPagerInto(pag) {
+        const label = pag.querySelector('.mat-mdc-paginator-range-label');
+        if (!label) return;
+        let box = pag.querySelector('.elm2-pager');
+        if (!box) {
+            // Page: [n] of N + Go, just before the range label. (Rows per page can't be changed
+            // from outside the page, so Element's own "Rows per page: 50" text is left alone.)
+            box = document.createElement('div');
+            box.className = 'elm2-pager';
+            box.innerHTML = '<label>Page <input type="number" min="1" class="elm2-pager-input elm2-pager-page" aria-label="Page"></label>' +
+                '<span class="elm2-pager-total"></span><button type="button" class="elm2-pager-go">Go</button>';
+            label.parentElement.insertBefore(box, label);
+            const pageEl = box.querySelector('.elm2-pager-page');
+            const go = () => { const page = parseInt(pageEl.value, 10); if (page > 0) pagerGoToPage(pag, page); };
+            box.querySelector('.elm2-pager-go').addEventListener('click', go);
+            box.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
+        }
+        const st = readPagerState(pag);
+        if (!st) return;
+        const pageEl = box.querySelector('.elm2-pager-page');
+        if (document.activeElement !== pageEl) pageEl.value = String(st.index + 1);
+        pageEl.max = String(st.pages);
+        box.querySelector('.elm2-pager-total').textContent = 'of ' + st.pages;
+    }
+    function injectPager() { document.querySelectorAll('mat-paginator').forEach(injectPagerInto); }
+    // Each filter section carries a title="..." attribute that pops a native tooltip on hover
+    // anywhere inside it; the section already shows its title, so the attribute is removed.
+    function stripFilterTooltips() {
+        document.querySelectorAll('elm-review-queue-filters-sidebar [title]').forEach(el => {
+            if (el.tagName === 'BOLT-STACKABLE-SIDEBAR-SECTION' || el.closest('bolt-stackable-sidebar-section')) el.removeAttribute('title');
+        });
+    }
+    // Element451's orange header colour, read from the header bar itself, for our own UI accents.
+    function syncHeaderColor() {
+        let el = document.querySelector('.bolt-navigation-right');
+        while (el && el !== document.documentElement) {
+            const c = getComputedStyle(el).backgroundColor;
+            const m = c.match(/rgba?\(([^)]+)\)/);
+            if (m) {
+                const [r, g, b, a = 1] = m[1].split(',').map(parseFloat);
+                // opaque and not white/near-white/grey: that is the header colour
+                if (a > 0.9 && Math.max(r, g, b) - Math.min(r, g, b) > 40) {
+                    document.documentElement.style.setProperty('--elm2-header-color', c);
+                    return;
+                }
+            }
+            el = el.parentElement;
+        }
+    }
     // Records the side Bolt had pre-selected before our script touched the
     // row, the first time each row is seen (idempotent — a no-op on rows
     // already stamped). Must run before runAutoResolution() so it captures
     // Bolt's actual default rather than our own prior click.
     function snapshotNativeSelections() {
         getDiffRows().forEach(row => {
-            if (row.element.dataset.elm2AiSide) return; // already captured
-            if (row.leftSelected) row.element.dataset.elm2AiSide = 'left';
-            else if (row.rightSelected) row.element.dataset.elm2AiSide = 'right';
+            const d = row.element.dataset;
+            if (d.elm2AiSide || d.elm2AiSeen) return; // already captured, or we've already acted on this row
+            const ai = captureBoltPick(row);
+            if (ai) { d.elm2AiSide = ai; rememberRow(row.key, { ai }); }
         });
+    }
+    // Bolt's original pick for a row, kept across visits. Element451 saves the selection on a pair, so
+    // when you come back to it the screen shows whatever was selected last time (ours, or yours), not
+    // Bolt's pick. The first time a row is seen its pick is stored (hashed, no names or emails kept);
+    // later visits read it back instead of treating the saved selection as Bolt's.
+    const BOLT_STORE_KEY = 'elm2_bolt_picks';
+    function hashStr(str) {
+        let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+        for (let i = 0; i < str.length; i++) {
+            const ch = str.charCodeAt(i);
+            h1 = Math.imul(h1 ^ ch, 2654435761);
+            h2 = Math.imul(h2 ^ ch, 1597334677);
+        }
+        h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+        h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+        return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+    }
+    function boltStoreId(row) { return hashStr(getContactNames().join('|') + '||' + row.key); }
+    function boltStoreRead() {
+        try { return JSON.parse(localStorage.getItem(BOLT_STORE_KEY) || '{}') || {}; } catch (e) { return {}; }
+    }
+    function captureBoltPick(row) {
+        if (!row.isConflict) return row.nativeSide;
+        const id = boltStoreId(row);
+        const store = boltStoreRead();
+        const saved = store[id];
+        if (saved && (saved.s === 'l' || saved.s === 'r')) return saved.s === 'l' ? 'left' : 'right';
+        if (!row.nativeSide) return null;
+        store[id] = { s: row.nativeSide === 'left' ? 'l' : 'r', t: Date.now() };
+        const ids = Object.keys(store);
+        if (ids.length > 3000) ids.sort((x, y) => store[x].t - store[y].t).slice(0, ids.length - 2500).forEach(k => delete store[k]);
+        try { localStorage.setItem(BOLT_STORE_KEY, JSON.stringify(store)); } catch (e) { /* storage unavailable */ }
+        return row.nativeSide;
     }
     // Selects a side AND records it as our script's pick, so the AI-vs-script
     // comparison bar can show both and let a human bulk-switch between them.
     // Every resolution rule below should call this instead of row.selectSide()
     // directly.
+    let currentRule = '';
+    // pairInRange: whether the slider covers the pair on screen, by Bolt score. Cumulative:
+    // 1 High, 2 + Medium, 3 + Low, 4 every pair (even one with no score). An applicant side does
+    // not put a pair in range: applicants can have any score.
+    // autoApplyThisPair: in range AND "Use picks from" is Ours (so our picks get applied).
+    let pairInRange = false;
+    let autoApplyThisPair = false;
+    function computeAutoApplyForPair() {
+        const level = CFG.RANGE_LEVEL;
+        const score = getScoreChipLevel();
+        pairInRange = level >= 4
+            || (level >= 1 && score === 'high')
+            || (level >= 2 && score === 'medium')
+            || (level >= 3 && score === 'low');
+        autoApplyThisPair = pairInRange && CFG.USE_PICKS === 'ours';
+        return autoApplyThisPair;
+    }
     function applyScriptPick(row, side) {
-        row.element.dataset.elm2ScriptSide = side;
-        row.selectSide(side);
+        const d = row.element.dataset;
+        d.elm2Rule = currentRule;
+        if (!d.elm2AiSide && !d.elm2AiSeen) {
+            const ai = captureBoltPick(row);
+            if (ai) { d.elm2AiSide = ai; rememberRow(row.key, { ai }); }
+        }
+        d.elm2AiSeen = '1'; // from here on, a selection on this row may be ours, not Bolt's
+        d.elm2ScriptSide = side;
+        rememberRow(row.key, { script: side, acted: true, rule: currentRule });
+        // With Bolt's picks kept, ours only fills a row Bolt left unselected.
+        const fillsGap = pairInRange && CFG.USE_PICKS === 'bolt' && !row.nativeSide;
+        if (autoApplyThisPair || fillsGap) {
+            row.selectSide(side);
+            confirmPick(row.key, side, 0);
+        }
+    }
+    // Angular can re-render a row (or Bolt can re-apply its default) right after our click, so the
+    // click is checked against the live DOM and redone through the radio button, up to twice.
+    function confirmPick(key, side, attempt) {
+        setTimeout(() => {
+            const fresh = getDiffRows().find(r => r.key === key);
+            if (!fresh || fresh.nativeSide === side) return;
+            if (attempt >= 2) { console.log('[elm2] pick did not stick after retries:', fresh.label, '->', side); return; }
+            console.log('[elm2] pick did not stick, retrying via radio button:', fresh.label, '->', side);
+            fresh.selectSide(side, true);
+            confirmPick(key, side, attempt + 1);
+        }, attempt === 0 ? 500 : 900);
     }
     function getContactCards() {
         const form = getDiffForm();
@@ -587,13 +1344,34 @@
             return nameEl ? nameEl.textContent.trim() : '';
         });
     }
-    function getScoreChipLevel() {
-        const chip = document.querySelector('elm-deduplication-score-chip .bolt-chip');
-        if (!chip) return null;
+    // The score chip of the pair on screen. The review queue list (behind the sidebar) has a chip on
+    // every row, so a plain "first chip on the page" can belong to a different pair: look inside the
+    // sidebar that holds the diff form first, then ignore chips that sit in the list's table rows.
+    function getScoreChips() {
+        const all = Array.from(document.querySelectorAll('elm-deduplication-score-chip .bolt-chip, elm-deduplication-score-chip bolt-chip'));
+        const form = getDiffForm();
+        const scope = form && form.closest('elm-review-duplicates-sidebar, bolt-stackable-sidebar, bolt-stackable-sidebar-container');
+        if (scope) {
+            const inScope = all.filter(c => scope.contains(c));
+            if (inScope.length) return inScope;
+        }
+        const outsideList = all.filter(c => !c.closest('elm-review-queue-table, bolt-table, cdk-table, table, tr, [role="row"]'));
+        return outsideList.length ? outsideList : all;
+    }
+    function chipLevel(chip) {
+        const cls = chip.className && chip.className.toString ? chip.className.toString() : '';
+        if (/score-chip-low/.test(cls)) return 'low';
+        if (/score-chip-medium/.test(cls)) return 'medium';
+        if (/score-chip-high/.test(cls)) return 'high';
         const text = chip.textContent.trim().toLowerCase();
         if (text.includes('low')) return 'low';
         if (text.includes('medium')) return 'medium';
         if (text.includes('high')) return 'high';
+        return null;
+    }
+    function getScoreChipLevel() {
+        const chips = getScoreChips();
+        for (const chip of chips) { const lvl = chipLevel(chip); if (lvl) return lvl; }
         return null;
     }
     function getAnalysisSummaryText() {
@@ -614,18 +1392,53 @@
             b => b.textContent.trim().toLowerCase() === text.toLowerCase()
         ) || null;
     }
-    // No clickMergeContacts() helper — merging is never automated (see the
-    // MAIN AUTOMATION LOOP notes below).
+    // Merging is only ever clicked by startAutoMerge() ("When done" = Merge), after a countdown.
     // IMPORTANT: "Dismiss" is NOT the equivalent of the classic script's
     // auto-skip (which just moved to the next entry). In this UI it opens a
     // "Not a duplicate?" feedback dialog and, once confirmed, permanently
     // tells Bolt these two contacts are different people — removing the
     // pair from the queue and training the matcher on that verdict. A
-    // department/forbidden/appeal/ignored block says nothing about whether
+    // department/forbidden/appeal block says nothing about whether
     // the pair is actually a duplicate, so automation must never click this.
     // Skipping a blocked entry must only ever move to the next pair via
     // clickNextDuplicate() below, leaving the pair untouched in the queue.
     function clickSaveForLater() { const b = getSidebarActionButton('Save for later'); if (b) b.click(); return !!b; }
+    // Skips to the next pair, but first has the CSV database script (if installed) record this
+    // one, retrying for up to 3s until it confirms, so a fast skip never loses an entry.
+    let skipInFlightKey = '';
+    // Every skip is announced with a short label ("Skip: Appeal") when outcome toasts are on.
+    function skipToNext(reason, label) {
+        if (label && toastsEnabled()) showMergeNotice('Skip: ' + label, true);
+        const key = getPairKey();
+        if (skipInFlightKey === key) return; // already skipping this pair
+        skipInFlightKey = key;
+        const startedAt = Date.now();
+        let clicks = 0;
+        // Next duplicate can be disabled for a moment while Element loads the following pair, so a
+        // failed click is retried; a click that worked but hasn't moved on after 3s is retried too.
+        const clickLoop = () => {
+            if (getPairKey() !== key) { skipInFlightKey = ''; return; } // moved on
+            if (clicks >= 10) {
+                skipInFlightKey = '';
+                console.warn('[elm2] Could not move to the next pair after', clicks, 'tries');
+                showMergeNotice('Auto-skip stopped: there is no next pair to move to.');
+                return;
+            }
+            const ok = clickNextDuplicate();
+            clicks++;
+            setTimeout(clickLoop, ok ? 3000 : 500);
+        };
+        const attempt = () => {
+            if (getPairKey() !== key) { skipInFlightKey = ''; return; } // already moved on
+            const detail = {};
+            document.dispatchEvent(new CustomEvent('elm2-record-pair', { detail }));
+            if (detail.handled && !detail.recorded && Date.now() - startedAt < 3000) { setTimeout(attempt, 250); return; }
+            const qp = getQueuePosition();
+            console.log('[elm2] Skipping to next pair:', reason, qp ? '(was ' + qp.current + '/' + qp.total + ')' : '');
+            clickLoop();
+        };
+        attempt();
+    }
     function clickNextDuplicate() {
         const b = document.querySelector('.review-queue-nav [aria-label="Next duplicate"]:not([disabled])');
         if (b) { b.click(); return true; }
@@ -636,27 +1449,24 @@
         if (b) { b.click(); return true; }
         return false;
     }
-    // BEST EFFORT: the reference snapshot is a saved file with no address bar,
-    // so the new review page's URL scheme is unconfirmed. Tries the classic
-    // "/duplicates/<24-hex-id>" pattern plus a couple of plausible
-    // "deduplication" variants — verify against the live site and adjust.
-    function extractDuplicateId(url) {
-        const patterns = [
-            /\/duplicates?\/([a-f0-9]{24})/i,
-            /\/deduplication[a-z-]*\/([a-f0-9]{24})/i,
-            /[?&](?:id|contactId|duplicateId)=([a-f0-9]{24})/i
-        ];
-        for (const p of patterns) {
-            const m = url.match(p);
-            if (m) return m[1].toLowerCase();
+    // The review queue is a single URL (.../bolt/review-queue) that never changes per
+    // profile, so a pair is identified by the Spark ID of each contact, read from
+    // the "Spark Id: ..." row of the diff form. Returns { a, b } (either may be '').
+    function getSparkIds() {
+        const re = /Spark Id:\s*([^\s,|]+)/i;
+        for (const row of getDiffRows()) {
+            const l = row.values[0].textContent.match(re);
+            const r = row.values[1].textContent.match(re);
+            if (l || r) return { a: l ? l[1] : '', b: r ? r[1] : '' };
         }
-        return null;
+        return { a: '', b: '' };
     }
 
     // =========================================================
     // STATE
     // =========================================================
     let currentQueuePositionKey = '';   // "current/total" — used to detect navigation to a new pair
+    let pairFirstSeenAt = 0;            // when the current pair was first seen
     let resolutionAttempted = false;    // resolution ran for the current pair
     let mergeClickPending = false;      // waiting on the two-phase verification delay
     let conflictWarningShown = false;
@@ -667,9 +1477,11 @@
     function getPairKey() {
         // Prefer contact names (stable identity for the pair on screen); fall back
         // to the queue position counter if names aren't available yet.
+        // The queue position is part of the key: consecutive pairs can have identical names, and
+        // with names alone the script would think it was still on the same pair and stall.
         const names = getContactNames();
-        if (names.length === 2 && names[0] && names[1]) return names.join('|');
         const pos = getQueuePosition();
+        if (names.length === 2 && names[0] && names[1]) return names.join('|') + (pos ? '#' + pos.current : '');
         return pos ? `${pos.current}/${pos.total}` : '';
     }
 
@@ -697,12 +1509,6 @@
         }
         return { appeal: false };
     }
-    function isStudentIgnored() {
-        // BEST EFFORT: no "Ignored" chip was present in the reference snapshot
-        // to confirm markup against. Verify this selector live.
-        return Array.from(document.querySelectorAll('.bolt-chip, elm-chip'))
-            .some(el => el.textContent.trim().toLowerCase() === 'ignored');
-    }
     function detectActualDepartment() {
         const rows = getDiffRows();
         const isGradText = (t) => t.includes('GRAD_') || /grad student/i.test(t);
@@ -716,6 +1522,8 @@
                 return { dept: 'Grad/IA', row };
             }
         }
+        // Like the classic script: with no Grad/IA row, the first row is highlighted red
+        // as the marker for a blocked UnderGrad entry.
         return { dept: 'UnderGrad', row: rows[0] || null };
     }
     function isWrongDepartment() {
@@ -748,8 +1556,20 @@
         if (wrongDept.wrongDept) blockers.push({ type: 'department', ...wrongDept });
         const idMismatch = isStudentIdMismatch();
         if (idMismatch.mismatch) blockers.push({ type: 'student-id-mismatch', ...idMismatch });
-        if (isStudentIgnored()) blockers.push({ type: 'ignored' });
         return blockers;
+    }
+    // One reason per skipped pair, by priority: Range > Forbidden > Student ID > Grad/IA (wrong department)
+    // > Appeal. (Twins is only reached by pairs that passed all of these.)
+    function blockerLabel(blockers) {
+        computeAutoApplyForPair();
+        if (!pairInRange) return 'Range';
+        const has = (t) => blockers.find(b => b.type === t);
+        if (has('forbidden')) return 'Forbidden';
+        if (has('student-id-mismatch')) return 'Student ID';
+        const dept = has('department');
+        if (dept) return dept.reason === 'Grad/IA' ? 'Graduate/IA' : (dept.reason || 'Department');
+        if (has('appeal')) return 'Appeal';
+        return blockers.length ? blockers[0].type : '';
     }
     function applyBlockStyling(blockers) {
         document.body.classList.remove('elm2-blocked');
@@ -758,23 +1578,23 @@
         if (blockers.length === 0) return;
         document.body.classList.add('elm2-blocked');
         blockers.forEach(b => { if (b.row && b.row.element) b.row.element.classList.add('elm2-blocked-row'); });
-        if (blockers.some(b => b.type === 'forbidden' || b.type === 'ignored')) {
+        if (blockers.some(b => b.type === 'forbidden')) {
             getContactCards().forEach(c => c.classList.add('elm2-blocked-card'));
         }
     }
     // Signals the current entry's department/block status to csv-database-v2.js
     // via document.body.dataset, same contract as the classic script.
     function updateCsvSignal(blockers) {
-        const uid = extractDuplicateId(window.location.href);
+        const sparks = getSparkIds();
         const forbidden = blockers.some(b => b.type === 'forbidden' || b.type === 'student-id-mismatch');
         const appeal = blockers.find(b => b.type === 'appeal');
-        const ignored = blockers.some(b => b.type === 'ignored');
         if (forbidden) document.body.dataset.csvDept = 'Forbidden';
         else if (appeal) document.body.dataset.csvDept = 'Appeal';
-        else if (ignored) document.body.dataset.csvDept = 'Ignored';
         else document.body.dataset.csvDept = detectActualDepartment().dept;
-        if (uid) document.body.dataset.csvUid = uid;
-        if (appeal && !appealWarningShown) {
+        if (sparks.a || sparks.b) { document.body.dataset.csvSpark1 = sparks.a; document.body.dataset.csvSpark2 = sparks.b; }
+        else { delete document.body.dataset.csvSpark1; delete document.body.dataset.csvSpark2; }
+        // A skipped pair (Auto-Skip on) gets no popup; one left for you does.
+        if (appeal && !appealWarningShown && !CFG.AUTO_SKIP_BLOCKED) {
             appealWarningShown = true;
             const sideLabel = appeal.side === 'left' ? 'left side' : 'right side';
             alert('⚠️ Appeal keyword detected!\n\nReason: The word "appeal" was found on the ' + sideLabel + ' of this entry.\n\nThis merge is blocked and cannot be processed.');
@@ -792,6 +1612,7 @@
         if (CONFLICT_ROW_THRESHOLD === 0) return { conflictCount: 0, shouldWarn: false, conflicts: [] };
         const conflicts = [];
         let conflictCount = 0;
+        let boltFlagged = false;
         const names = getContactNames();
         if (names.length === 2 && names[0] && names[1]) {
             const norm = (n) => n.toLowerCase().replace(/[\s-]/g, '');
@@ -824,10 +1645,11 @@
         // these are different people. Treat that as a strong extra conflict.
         const summary = getAnalysisSummaryText().toLowerCase();
         if (summary && /different (people|person|individuals?)/i.test(summary)) {
-            conflictCount += CONFLICT_ROW_THRESHOLD; // force a warning regardless of threshold
+            boltFlagged = true; // forces a warning regardless of the threshold, without inflating the count
+            conflictCount++;
             conflicts.push('Bolt Analysis (flagged as different people)');
         }
-        const shouldWarn = conflictCount >= CONFLICT_ROW_THRESHOLD;
+        const shouldWarn = boltFlagged || conflictCount >= CONFLICT_ROW_THRESHOLD;
         return { conflictCount, shouldWarn, conflicts };
     }
 
@@ -854,6 +1676,7 @@
     }
     function getSelectedEmailSide() {
         for (const row of getDiffRowsByLabel('email')) {
+            if (row.element.dataset.elm2ScriptSide) return row.element.dataset.elm2ScriptSide;
             if (row.leftSelected) return 'left';
             if (row.rightSelected) return 'right';
         }
@@ -894,6 +1717,22 @@
         }
         return null;
     }
+    // The profile that was created later, from the "Created <date>" line on each contact card (A = left,
+    // B = right). Returns 'left' / 'right', or null if either date is missing or they are equal.
+    function getMostRecentProfileSide() {
+        const created = getContactCards().map(card => {
+            const item = Array.from(card.querySelectorAll('.contact-card-meta-item')).find(it => {
+                const l = it.querySelector('.contact-card-meta-label');
+                return l && /created/i.test(l.textContent);
+            });
+            const v = item && item.querySelector('.contact-card-meta-value');
+            const m = v && v.textContent.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+            return m ? new Date(parseInt(m[3], 10), parseInt(m[1], 10) - 1, parseInt(m[2], 10)).getTime() : null;
+        });
+        if (created.length < 2 || created[0] === null || created[1] === null || created[0] === created[1]) return null;
+        return created[0] > created[1] ? 'left' : 'right';
+    }
+    const isBlankValue = (t) => !t || /^[-\u2013\u2014\s]+$/.test(t);
     function autoResolveRows() {
         const applicantSide = findApplicantSide();
         const rows = getDiffRows().filter(r => r.isConflict && !r.element.dataset.elm2AutoResolved);
@@ -903,22 +1742,29 @@
             if (!leftText || !rightText) return;
             if (applicantSide) {
                 row.element.dataset.elm2AutoResolved = 'true';
-                applyScriptPick(row, applicantSide);
-                const btn = row.element.querySelectorAll(':scope > .diff-value-button')[applicantSide === 'left' ? 0 : 1];
-                if (btn) btn.classList.add('elm2-applicant-side');
-                return;
-            }
-            // Milestone type matching (no applicant context)
-            if (text.match(/type:\s*\w+,\s*\w{3}\s+\d{1,2},\s*\d{4}/i)) {
-                const typePattern = /type:\s*(\w+),/i;
-                const leftTypeMatch = leftText.match(typePattern), rightTypeMatch = rightText.match(typePattern);
-                if (leftTypeMatch && rightTypeMatch && leftTypeMatch[1].toLowerCase() === rightTypeMatch[1].toLowerCase()) {
-                    row.element.dataset.elm2AutoResolved = 'true';
-                    applyScriptPick(row, 'left');
+                // The applicant side wins, except where it has nothing ("-") and the other side does.
+                const otherSide = applicantSide === 'left' ? 'right' : 'left';
+                const appText = applicantSide === 'left' ? leftText : rightText;
+                const otherText = applicantSide === 'left' ? rightText : leftText;
+                if (isBlankValue(appText) && !isBlankValue(otherText)) {
+                    currentRule = 'applicant side is blank -> side with data';
+                    applyScriptPick(row, otherSide);
                     return;
                 }
+                currentRule = 'follows applicant side (Application/Cal State Apply)';
+                applyScriptPick(row, applicantSide);
+                return;
+            }
+            // One side blank ("-"), the other has data: nothing to decide, so we have no
+            // opinion and leave Bolt's pick alone. Runs AFTER the applicant-side rule
+            // (which outranks everything) but before the pattern rules below, so the
+            // legacy default-to-left can never pick an empty side.
+            if (isBlankValue(leftText) !== isBlankValue(rightText)) {
+                row.element.dataset.elm2AutoResolved = 'true';
+                return;
             }
             // Email preference
+            currentRule = 'personal email preferred';
             if (row.label.toLowerCase().includes('email')) {
                 const personalDomains = ['gmail.com', 'yahoo.com', 'icloud.com', 'hotmail.com', 'aol.com', 'me.com', 'outlook.com', 'live.com', 'msn.com', 'protonmail.com', 'proton.me'];
                 const leftIsPersonal = personalDomains.some(d => leftText.toLowerCase().includes('@' + d));
@@ -928,24 +1774,20 @@
                 if (leftIsPersonal && rightIsPersonal) { row.element.dataset.elm2AutoResolved = 'true'; row.element.dataset.elm2DualPersonal = 'true'; return; }
             }
             // csusb.major preference
+            currentRule = 'csusb.major';
             if (/csusb\.major\./i.test(text)) {
                 const leftHas = /csusb\.major\./i.test(leftText), rightHas = /csusb\.major\./i.test(rightText);
                 if (leftHas && !rightHas) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'left'); return; }
                 if (rightHas && !leftHas) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'right'); return; }
                 if (leftHas && rightHas) {
-                    const emailSide = getSelectedEmailSide();
-                    if (emailSide) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, emailSide); }
+                    // both have it: the rule cannot decide, so without a Bolt pick the pair needs a human
+                    row.element.dataset.elm2AutoResolved = 'true';
+                    row.element.dataset.elm2NeedsReview = '1';
                     return;
                 }
             }
-            // Encoura / College Board ID — default left when both sides have it
-            if (/Encoura Id:/i.test(leftText) && /Encoura Id:/i.test(rightText)) {
-                row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'left'); return;
-            }
-            if (/College Board Id:/i.test(leftText) && /College Board Id:/i.test(rightText)) {
-                row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'left'); return;
-            }
             // csusb.school preference (Student Type rows)
+            currentRule = 'csusb.school';
             if (text.includes('Student Type') && /csusb\.school\.\d+/i.test(text)) {
                 const schoolPattern = /csusb\.school\.\d+/i;
                 const leftHas = schoolPattern.test(leftText), rightHas = schoolPattern.test(rightText);
@@ -953,12 +1795,13 @@
                 if (rightHas && !leftHas) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'right'); return; }
                 if (!leftHas && !rightHas) return;
                 if (leftHas && rightHas) {
-                    const emailSide = getSelectedEmailSide();
-                    if (emailSide) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, emailSide); }
+                    row.element.dataset.elm2AutoResolved = 'true';
+                    row.element.dataset.elm2NeedsReview = '1';
                     return;
                 }
             }
             // Date of Birth — reject invalid years
+            currentRule = 'date of birth validity';
             if (row.label.toLowerCase().includes('birth')) {
                 const leftYear = leftText.match(/\b(\d{4})\b/), rightYear = rightText.match(/\b(\d{4})\b/);
                 const leftInvalid = leftYear && (leftYear[1].startsWith('0') || parseInt(leftYear[1]) < 1900);
@@ -967,6 +1810,7 @@
                 if (rightInvalid && !leftInvalid) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'left'); return; }
             }
             // First Generation Student — prefer Yes over No
+            currentRule = 'first generation = yes';
             if (row.label.toLowerCase().includes('first generation')) {
                 const leftYes = /\byes\b/i.test(leftText), rightYes = /\byes\b/i.test(rightText);
                 const leftNo = /\bno\b/i.test(leftText), rightNo = /\bno\b/i.test(rightText);
@@ -974,6 +1818,7 @@
                 if (rightYes && leftNo) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'right'); return; }
             }
             // Intended Term — prefer later term code
+            currentRule = 'later intended term';
             if (row.label.toLowerCase().includes('intended term')) {
                 const termCodePattern = /\((\d{4})\)/;
                 const leftCodeMatch = leftText.match(termCodePattern), rightCodeMatch = rightText.match(termCodePattern);
@@ -984,6 +1829,7 @@
                 }
             }
             // Name case preference — Title Case over ALL CAPS / all lowercase
+            currentRule = 'name case';
             if (row.label.toLowerCase().includes('name') && !row.label.toLowerCase().includes('email')) {
                 if (leftText.toLowerCase() === rightText.toLowerCase() && leftText !== rightText) {
                     const isAllUpper = (s) => s === s.toUpperCase() && s !== s.toLowerCase();
@@ -993,25 +1839,12 @@
                     if (isTitleCase(leftText) && !isTitleCase(rightText)) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'left'); return; }
                 }
             }
-            // Legacy default-to-left patterns (only reached with no applicant context)
-            const legacyPatterns = [
-                /Spark Id:/i,
-                /type:\s*Created,\s*name:\s*Record Created/i,
-                /type:\s*Custom/i,
-                /type:.*name:/i,
-                /type:\s*Web/i,
-                /\[ACUx\]/i,
-                /Outreach_UGRD_/i
-            ];
-            if (legacyPatterns.some(p => p.test(text))) {
-                row.element.dataset.elm2AutoResolved = 'true';
-                applyScriptPick(row, 'left');
-            }
         });
     }
     // Dual-personal-email tiebreak (name/DOB-in-email). Email-open-count tier
     // dropped — no "User Activity" section found in the new layout.
     function autoDualPersonalEmails() {
+        currentRule = 'dual personal email tiebreak';
         const rows = getDiffRows().filter(r => r.isConflict && r.element.dataset.elm2DualPersonal && !r.element.dataset.elm2DualResolved);
         const names = getContactNames();
         const [firstA = '', ...restA] = (names[0] || '').toLowerCase().split(/\s+/);
@@ -1046,30 +1879,63 @@
             const rightYear = (leftYearValid && checkYearInEmail(rightLower, birthYearLeft)) || (rightYearValid && checkYearInEmail(rightLower, birthYearRight));
             if (leftYear && !rightYear) { row.element.dataset.elm2DualResolved = 'true'; applyScriptPick(row, 'left'); return; }
             if (rightYear && !leftYear) { row.element.dataset.elm2DualResolved = 'true'; applyScriptPick(row, 'right'); return; }
-            row.element.dataset.elm2DualResolved = 'true'; // no tiebreaker — leave for manual review
+            row.element.dataset.elm2DualResolved = 'true'; row.element.dataset.elm2NeedsReview = '1'; // no tiebreaker: a human decides
         });
     }
     function autoResolveAddresses() {
+        currentRule = 'address comparison';
         const applicantSide = findApplicantSide();
         const rows = getDiffRowsByLabel('address').filter(r => r.isConflict && !r.element.dataset.elm2AddressResolved);
         rows.forEach(row => {
             const leftText = row.values[0].textContent, rightText = row.values[1].textContent;
             if (!leftText || !rightText) return;
             row.element.dataset.elm2AddressResolved = 'true';
-            if (applicantSide) { applyScriptPick(row, applicantSide); return; }
-            const comparison = AddressComparer.compareAddresses(leftText, rightText);
-            let winner = comparison.winner;
-            if (winner === 'tie') {
-                const emailSide = getSelectedEmailSide();
-                if (emailSide) winner = emailSide;
+            if (applicantSide) {
+                const appText = applicantSide === 'left' ? leftText : rightText;
+                const otherText = applicantSide === 'left' ? rightText : leftText;
+                if (isBlankValue(appText) && !isBlankValue(otherText)) {
+                    currentRule = 'applicant side is blank -> side with data';
+                    applyScriptPick(row, applicantSide === 'left' ? 'right' : 'left');
+                    return;
+                }
+                currentRule = 'follows applicant side (Application/Cal State Apply)';
+                applyScriptPick(row, applicantSide);
+                return;
             }
+            currentRule = 'address comparison';
+            const comparison = AddressComparer.compareAddresses(leftText, rightText);
+            const winner = comparison.winner;
+            // A tie (same address, equal completeness; different addresses) or two broken addresses:
+            // the rule cannot decide, so without a Bolt pick the pair needs a human.
+            if (winner !== 'left' && winner !== 'right') row.element.dataset.elm2NeedsReview = '1';
             if (winner === 'left' || winner === 'right') applyScriptPick(row, winner);
         });
     }
+    // Rows Bolt left unselected and no rule covers (Milestones, Sources and other list-type rows, most
+    // often) still need a side. Order: the side with data when one side is blank, then the more recent
+    // profile (Created date), then the side of the selected email, then an arbitrary but stable side
+    // (a hash of the pair, so a revisited pair gets the same answer). Rows where a rule applied but
+    // could not decide (elm2NeedsReview) are left alone: those pairs go to manual review.
+    function autoFillUnselected() {
+        getDiffRows().filter(r => r.isConflict).forEach(row => {
+            const d = row.element.dataset;
+            if (d.elm2AiSide || d.elm2ScriptSide || d.elm2NeedsReview || row.otherSelected) return;
+            const l = row.values[0].textContent, r = row.values[1].textContent;
+            let side = null;
+            if (isBlankValue(l) !== isBlankValue(r)) { side = isBlankValue(l) ? 'right' : 'left'; currentRule = 'fallback: one side blank -> side with data'; }
+            if (!side) { side = getMostRecentProfileSide(); if (side) currentRule = 'fallback: more recent profile'; }
+            if (!side) { side = getSelectedEmailSide(); if (side) currentRule = 'fallback: follows the selected email'; }
+            if (!side) { side = parseInt(hashStr(getContactNames().join('|') + '||' + row.key).slice(-2), 36) % 2 ? 'left' : 'right'; currentRule = 'fallback: arbitrary (stable)'; }
+            console.log('[elm2] Filled', row.label || '(unnamed)', '->', side, '|', currentRule);
+            applyScriptPick(row, side);
+        });
+    }
     function runAutoResolution() {
+        computeAutoApplyForPair();
         autoResolveRows();
         autoDualPersonalEmails();
         autoResolveAddresses();
+        autoFillUnselected();
     }
 
     // =========================================================
@@ -1084,49 +1950,166 @@
     function getPickComparisonRows() {
         return getDiffRows().filter(r => r.element.dataset.elm2AiSide && r.element.dataset.elm2ScriptSide);
     }
-    function annotateRowPickBadges() {
+    function clearPickClasses(root) {
+        root.querySelectorAll('.elm2-agree-pick, .elm2-pick-bolt, .elm2-pick-ours').forEach(el => el.classList.remove('elm2-agree-pick', 'elm2-pick-bolt', 'elm2-pick-ours'));
+    }
+    // Yellow background behind the applicant side across the whole field list, as in
+    // the classic layout: from the field label through that side's value and arrows,
+    // including the header row. It's painted as each row's own background, so the
+    // entries on top keep their green/blue/orange colors. Plus a yellow contact card.
+    function clearApplicantBand() {
+        document.querySelectorAll('[data-elm2-band]').forEach(el => {
+            el.style.backgroundImage = '';
+            el.removeAttribute('data-elm2-band');
+        });
+        const o = document.getElementById('elm2-applicant-outline');
+        if (o) o.remove();
+    }
+    // Medium and Low score chips get a solid orange / red fill with white text, like High.
+    // Applied as inline !important on the chip because Element451's own per-level fill
+    // rules beat any stylesheet rule we can write (e.g. an !important rule inside a
+    // cascade layer outranks an unlayered one regardless of specificity); inline
+    // !important outranks all of them.
+    function colorScoreChips() {
+        const colors = { medium: '#ef6c00', low: '#d32f2f' };
+        document.querySelectorAll('elm-deduplication-score-chip bolt-chip').forEach(chip => {
+            const level = chip.classList.contains('score-chip-medium') ? 'medium'
+                : chip.classList.contains('score-chip-low') ? 'low' : '';
+            if (!level) return;
+            const c = colors[level];
+            chip.style.setProperty('background-color', c, 'important');
+            chip.style.setProperty('border-color', c, 'important');
+            chip.style.setProperty('color', '#fff', 'important');
+            const label = chip.querySelector('.bolt-chip-text');
+            if (label) label.style.setProperty('color', '#fff', 'important');
+        });
+    }
+    // Keeps the pinned queue nav below Element451's own header if that is sticky/fixed.
+    function pinReviewQueueNav() {
+        if (!document.querySelector('.review-queue-nav')) return;
+        const hdr = document.querySelector('.bolt-stackable-sidebar-header-wrapper');
+        let top = 0;
+        if (hdr) {
+            const pos = getComputedStyle(hdr).position;
+            if (pos === 'sticky' || pos === 'fixed' || pos === 'absolute') top = Math.round(hdr.getBoundingClientRect().height);
+        }
+        document.documentElement.style.setProperty('--elm2-nav-top', top + 'px');
+    }
+    // When the Auto-Apply slider is changed mid-review, apply our suggestions if the new
+    // level now covers this pair (lowering it never undoes anything already applied).
+    function reapplyForLevel() {
+        if (!computeAutoApplyForPair()) return;
+        getDiffRows().forEach(row => {
+            const side = row.element.dataset.elm2ScriptSide;
+            if (side) row.selectSide(side);
+        });
+    }
+    function annotateApplicantSide() {
+        document.querySelectorAll('.elm2-applicant-card').forEach(el => el.classList.remove('elm2-applicant-card'));
+        if (!CFG.HIGHLIGHT_ROWS || document.body.classList.contains('elm2-blocked')) { clearApplicantBand(); return; }
+        const side = findApplicantSide();
+        const form = getDiffForm();
+        const formEl = form ? form.querySelector('form.diff-form') : null;
+        if (!side || !formEl) { clearApplicantBand(); return; }
+        const card = getContactCards()[side === 'left' ? 0 : 1];
+        if (card) card.classList.add('elm2-applicant-card');
+
+        // The band ends at the applicant contact's OWN arrow button (not the whole
+        // arrow group, which also contains the other contact's arrow).
+        const arrowSel = side === 'left' ? '[title="Keep Contact A"]' : '[title="Keep Contact B"]';
+        const ref = Array.from(formEl.querySelectorAll('.diff-row')).find(r => r.querySelector(':scope > .diff-actions > .diff-action-button' + arrowSel));
+        if (!ref) { clearApplicantBand(); return; }
+        const arrow = ref.querySelector(':scope > .diff-actions > .diff-action-button' + arrowSel).getBoundingClientRect();
+        const pad = 10;
+        const boundary = side === 'left' ? arrow.right + pad : arrow.left - pad;
+        const yellow = '#fff9c4';
+        const targets = Array.from(formEl.querySelectorAll('.diff-header, .diff-row')).filter(el => el.getBoundingClientRect().width);
+        if (targets.length === 0) { clearApplicantBand(); return; }
+        targets.forEach(el => {
+            const r = el.getBoundingClientRect();
+            const n = Math.round(boundary - r.left);
+            const img = side === 'left'
+                ? `linear-gradient(to right, ${yellow} 0, ${yellow} ${n}px, transparent ${n}px)`
+                : `linear-gradient(to right, transparent ${n}px, ${yellow} ${n}px)`;
+            if (el.dataset.elm2Band === side && el.style.backgroundImage === img) return;
+            el.style.backgroundImage = img;
+            el.dataset.elm2Band = side;
+        });
+
+        // Amber outline around the whole applicant side, from the header row to the last
+        // row. Transparent inside, so it never tints the entries.
+        if (getComputedStyle(formEl).position === 'static') formEl.style.position = 'relative';
+        let outline = document.getElementById('elm2-applicant-outline');
+        if (!outline) { outline = document.createElement('div'); outline.id = 'elm2-applicant-outline'; }
+        if (outline.parentElement !== formEl) formEl.appendChild(outline);
+        const formRect = formEl.getBoundingClientRect();
+        const rects = targets.map(el => el.getBoundingClientRect());
+        const top = Math.min(...rects.map(r => r.top));
+        const bottom = Math.max(...rects.map(r => r.bottom));
+        const left = side === 'left' ? Math.min(...rects.map(r => r.left)) : boundary;
+        const right = side === 'left' ? boundary : Math.max(...rects.map(r => r.right));
+        outline.style.left = (left - formRect.left + formEl.scrollLeft) + 'px';
+        outline.style.top = (top - formRect.top + formEl.scrollTop) + 'px';
+        outline.style.width = (right - left) + 'px';
+        outline.style.height = (bottom - top) + 'px';
+    }
+    function annotateRowColors() {
+        resetStaleRows();
+        if (!CFG.HIGHLIGHT_ROWS) {
+            clearPickClasses(document);
+            document.querySelectorAll('.diff-row[title]').forEach(el => el.removeAttribute('title'));
+            return;
+        }
         const label = (side) => (side === 'left' ? 'A' : 'B');
         getDiffRows().forEach(row => {
             const ai = row.element.dataset.elm2AiSide;
             const script = row.element.dataset.elm2ScriptSide;
-            // Green = Bolt's original pick matches ours, red = it doesn't.
-            // Rows where our rules have no opinion (or Bolt had no default) stay plain.
-            row.element.classList.toggle('elm2-agree-row', !!ai && !!script && ai === script);
-            row.element.classList.toggle('elm2-disagree-row', !!ai && !!script && ai !== script);
-            let badge = row.element.querySelector(':scope > .elm2-pick-badge');
+            const both = !!ai && !!script;
+            const agree = both && ai === script;
+            const conflict = both && ai !== script;
+            // Conflict rows: color the two value buttons by who picked them.
             const btns = row.element.querySelectorAll(':scope > .diff-value-button');
-            btns.forEach(b => b.classList.remove('elm2-suggested'));
-            if (!script) { if (badge) badge.remove(); return; }
-            const suggestedBtn = btns[script === 'left' ? 0 : 1];
-            if (suggestedBtn) suggestedBtn.classList.add('elm2-suggested');
-            if (!badge) {
-                badge = document.createElement('span');
-                badge.className = 'elm2-pick-badge';
-                const titleEl = row.element.querySelector(':scope > .diff-title');
-                if (titleEl) titleEl.insertAdjacentElement('afterend', badge);
-                else row.element.appendChild(badge);
+            ['left', 'right'].forEach((side, idx) => {
+                const btn = btns[idx];
+                if (!btn) return;
+                btn.classList.toggle('elm2-agree-pick', agree && ai === side);
+                btn.classList.toggle('elm2-pick-bolt', conflict && ai === side);
+                btn.classList.toggle('elm2-pick-ours', conflict && script === side);
+            });
+            if (both) {
+                row.element.title = 'Our rules suggest Contact ' + label(script) + (row.element.dataset.elm2Rule ? ' (' + row.element.dataset.elm2Rule + ')' : '') + '; Bolt picked Contact ' + label(ai);
+            } else {
+                row.element.removeAttribute('title');
             }
-            const differs = !!ai && ai !== script;
-            badge.classList.toggle('elm2-pick-differs', differs);
-            badge.textContent = differs
-                ? `⚠ Bolt: ${label(ai)} · Ours: ${label(script)}`
-                : `⚙ Ours: ${label(script)}${ai ? ' ✓ matches Bolt' : ''}`;
-            badge.title = 'Our rules suggest Contact ' + label(script) + (ai ? '; Bolt picked Contact ' + label(ai) : '');
         });
+    }
+    // Hover preview: highlights, in blue, what "Use Bolt AI picks" (elm2AiSide) or "Use our
+    // picks" (elm2ScriptSide) would select. previewPicks(null) clears it.
+    function previewPicks(attr) {
+        if (document.body.classList.contains('elm2-blocked')) attr = null; // no preview on blocked entries
+        getDiffRows().forEach(row => {
+            const el = row.element;
+            const side = attr ? el.dataset[attr] : null;
+            el.classList.toggle('elm2-preview-row', !!side);
+            el.querySelectorAll(':scope > .diff-value-button').forEach((b, i) => {
+                b.classList.toggle('elm2-preview-pick', !!side && (side === 'left' ? 0 : 1) === i);
+            });
+        });
+        document.body.classList.toggle('elm2-previewing', !!attr);
     }
     function applyAllPicks(sourceAttr) {
         getDiffRows().forEach(row => {
             const side = row.element.dataset[sourceAttr];
             if (side) row.selectSide(side);
         });
-        annotateRowPickBadges();
+        annotateRowColors();
         injectPickComparisonBar();
     }
     function injectPickComparisonBar() {
         const form = getDiffForm();
         const formEl = form ? form.querySelector('form.diff-form') : null;
         let bar = document.getElementById('elm2-pick-compare-bar');
-        if (!formEl) { if (bar) bar.remove(); return; }
+        if (!formEl) { if (bar) bar.remove(); previewPicks(null); return; }
         if (!bar) {
             bar = document.createElement('div');
             bar.id = 'elm2-pick-compare-bar';
@@ -1138,8 +2121,14 @@
             const header = formEl.querySelector(':scope > .diff-contacts-header');
             if (header) header.insertAdjacentElement('afterend', bar);
             else formEl.insertBefore(bar, formEl.firstChild);
-            document.getElementById('elm2-use-ai-btn').addEventListener('click', () => applyAllPicks('elm2AiSide'));
-            document.getElementById('elm2-use-script-btn').addEventListener('click', () => applyAllPicks('elm2ScriptSide'));
+            [['elm2-use-ai-btn', 'elm2AiSide'], ['elm2-use-script-btn', 'elm2ScriptSide']].forEach(([id, attr]) => {
+                const btn = document.getElementById(id);
+                btn.addEventListener('click', () => applyAllPicks(attr));
+                btn.addEventListener('mouseenter', () => previewPicks(attr));
+                btn.addEventListener('focus', () => previewPicks(attr));
+                btn.addEventListener('mouseleave', () => previewPicks(null));
+                btn.addEventListener('blur', () => previewPicks(null));
+            });
         }
         const all = getDiffRows();
         const conflicts = all.filter(r => r.isConflict).length;
@@ -1149,10 +2138,12 @@
         const blocked = document.body.classList.contains('elm2-blocked');
         let msg;
         if (blocked) msg = `Blocked entry — no suggestions made (${conflicts} conflicting of ${all.length} fields)`;
-        else if (!CFG.AUTO_RESOLVE_FIELDS) msg = `Auto-Resolve Fields is OFF — no suggestions (${conflicts} conflicting of ${all.length} fields)`;
         else if (ours.length === 0) msg = `${conflicts} conflicting field(s); our rules had no opinion on any of them`;
         else if (differing > 0) msg = `⚠ ${differing} of ${ours.length} suggestions differ from Bolt's picks (${conflicts} conflicting of ${all.length} fields)`;
         else msg = `Our ${ours.length} suggestion(s) match Bolt's picks (${conflicts} conflicting of ${all.length} fields)`;
+        if (!blocked && ours.length > 0 && !autoApplyThisPair) {
+            msg += CFG.RANGE_LEVEL === 0 ? ' — no pairs are in range (slider on None)' : CFG.USE_PICKS === 'bolt' ? " — using Bolt's picks" : ' — not auto-applied for this pair (outside the slider range)';
+        }
         document.getElementById('elm2-pick-compare-count').textContent = msg;
         document.getElementById('elm2-use-ai-btn').disabled = both.length === 0;
         document.getElementById('elm2-use-script-btn').disabled = ours.length === 0;
@@ -1168,7 +2159,7 @@
         const btn = e.target && e.target.closest ? e.target.closest('button') : null;
         if (!btn) return;
         const text = btn.textContent.trim().toLowerCase();
-        if (!btn.classList.contains('diff-value-button')) {
+        if (!btn.classList.contains('diff-value-button') && !/^(First|Next|Previous|Last) page$/.test(btn.getAttribute('aria-label') || '')) {
             console.log('[elm2] script click on button:', JSON.stringify(btn.textContent.trim() || btn.getAttribute('aria-label') || ''));
         }
         const inNotDupDialog = !!btn.closest('bolt-dialog') && /not a duplicate/i.test(btn.closest('bolt-dialog').textContent);
@@ -1180,27 +2171,311 @@
     }, true);
 
     // =========================================================
+    // AUTO-MERGE ("When done" = Merge)
+    // Merging is permanent, so it only happens after a visible countdown with a Cancel
+    // button and a short written overview, and only after a final re-check that the pair
+    // is still unblocked, still the same pair, and every conflicting field has a pick.
+    // Dismiss is never clicked (see the click guard above).
+    // =========================================================
+    let mergeTimer = null;
+    let mergeBarTimer = null;
+    let mergedPairKey = '';
+    // The "Merge: 2/3" toast is worked out at the merge click (the rows are gone afterwards) but only shown
+    // once Element's "Merge completed" card is seen, so it never announces a merge that did not happen.
+    let pendingMergeToast = null;
+    // Toasts ("Merge: 2/3", "Skip: Appeal") follow the Toasts switch, except that they are forced off while the
+    // slider is on None (a scan) and forced on while Auto-Skip or auto-merge (When done = Merge) is on.
+    const autoMergeOn = () => CFG.WHEN_DONE === 'merge' && CFG.RANGE_LEVEL > 0;
+    const toastsForcedOff = () => CFG.RANGE_LEVEL === 0;
+    const toastsForcedOn = () => !toastsForcedOff() && (CFG.AUTO_SKIP_BLOCKED || autoMergeOn());
+    const toastsEnabled = () => !toastsForcedOff() && (toastsForcedOn() || getBoolSetting('elm_outcome_toasts', true));
+    // Notices ("Auto-merge cancelled", "Rows per page ...") use the shared toast stack that
+    // csv-database-v2.js also uses for its API toast: bottom-left, newest at the bottom.
+    function toastStack() {
+        let st = document.getElementById('elm2-toast-stack');
+        if (!st) { st = document.createElement('div'); st.id = 'elm2-toast-stack'; document.body.appendChild(st); }
+        return st;
+    }
+    function hideMergeBar() {
+        document.querySelectorAll('#elm2-toast-stack .elm2-notice').forEach(t => t.remove());
+    }
+    // keep = true: a short outcome toast ("Skip: Twins", "Merge: 2/3") that must survive the pair change,
+    // whereas ordinary notices are cleared by hideMergeBar() when the pair changes.
+    function showMergeNotice(text, keep) {
+        const st = toastStack();
+        const el = document.createElement('div');
+        el.className = 'elm2-toast' + (keep ? ' elm2-result' : ' elm2-notice');
+        el.setAttribute('role', 'status');
+        el.textContent = text;
+        st.appendChild(el);
+        requestAnimationFrame(() => el.classList.add('visible'));
+        setTimeout(() => { el.classList.remove('visible'); setTimeout(() => el.remove(), 250); }, keep ? 4500 : 6000);
+        while (st.children.length > 4) st.firstChild.remove();
+    }
+    // The countdown itself: a centred dialog over a dimmed page, with a draining ring around the
+    // seconds left, a plain-language summary and a Cancel button. The overlay also stops stray
+    // clicks while the countdown runs.
+    function mergeModal() {
+        let ov = document.getElementById('elm2-merge-overlay');
+        if (!ov) {
+            ov = document.createElement('div');
+            ov.id = 'elm2-merge-overlay';
+            ov.innerHTML = `
+                <div class="elm2-merge-card" role="alertdialog" aria-live="polite" aria-labelledby="elm2-merge-title" aria-describedby="elm2-merge-summary">
+                    <div class="elm2-ring">
+                        <svg viewBox="0 0 100 100" aria-hidden="true"><circle class="elm2-ring-track" cx="50" cy="50" r="44"></circle><circle class="elm2-ring-arc" cx="50" cy="50" r="44"></circle><circle class="elm2-ring-fill" cx="50" cy="50" r="44" transform="translate(0,100) scale(1,-1)"></circle></svg>
+                        <span id="elm2-merge-count"></span>
+                        <div class="elm2-lamps" aria-hidden="true"><i></i><i></i><i></i></div>
+                    </div>
+                    <h2 id="elm2-merge-title">Merging automatically</h2>
+                    <div id="elm2-merge-summary"></div>
+                    <button type="button" id="elm2-merge-cancel">Cancel</button>
+                </div>`;
+            document.body.appendChild(ov);
+            document.getElementById('elm2-merge-cancel').addEventListener('click', () => cancelAutoMerge('Auto-merge cancelled'));
+        }
+        return ov;
+    }
+    // The scrim and the dialog belong to the merge panel (the review sidebar), not the whole page:
+    // size the overlay to the visible part of that panel, which also centres the card in it.
+    function placeMergeOverlay(ov) {
+        const form = getDiffForm();
+        let panel = form && (form.closest('elm-review-duplicates-sidebar') || form.closest('bolt-stackable-sidebar') || form.querySelector('form.diff-form') || form);
+        let r = panel ? panel.getBoundingClientRect() : null;
+        const vw = window.innerWidth, vh = window.innerHeight;
+        // an ancestor that is basically the whole page is not "the panel": use the form itself
+        if (r && r.width >= vw * 0.95 && r.height >= vh * 0.95 && form) r = form.getBoundingClientRect();
+        if (!r || r.width < 200 || r.height < 200) { ov.style.inset = '0'; ov.style.left = ov.style.top = ov.style.width = ov.style.height = ''; return; }
+        const left = Math.max(r.left, 0), top = Math.max(r.top, 0);
+        const right = Math.min(r.right, vw), bottom = Math.min(r.bottom, vh);
+        ov.style.inset = 'auto';
+        ov.style.left = left + 'px'; ov.style.top = top + 'px';
+        ov.style.width = Math.max(0, right - left) + 'px'; ov.style.height = Math.max(0, bottom - top) + 'px';
+    }
+    function hideMergeModal() {
+        const ov = document.getElementById('elm2-merge-overlay');
+        if (ov) ov.classList.remove('visible');
+    }
+    function cancelAutoMerge(message) {
+        const wasRunning = !!mergeTimer;
+        clearInterval(mergeTimer); clearTimeout(mergeTimer);
+        mergeTimer = null;
+        hideMergeModal();
+        hideMergeBar();
+        if (wasRunning && message) showMergeNotice(message);
+    }
+    // The auto-merge brief: who, Bolt's score, how often the script agrees with Bolt, and what it
+    // chose over Bolt. Built from DOM nodes (no HTML strings, so contact names are never parsed as markup).
+    // How the script's picks compare with Bolt's on the pair on screen (also the source of the "Merge: 2/3" toast).
+    function mergeStats() {
+        const rows = getDiffRows().filter(r => r.isConflict);
+        const picks = rows.filter(r => r.element.dataset.elm2ScriptSide && r.element.dataset.elm2AiSide);
+        const over = picks.filter(r => r.element.dataset.elm2ScriptSide !== r.element.dataset.elm2AiSide);
+        return { picks, over, total: picks.length, agree: picks.length - over.length, applicant: !!findApplicantSide() };
+    }
+    function renderMergeBrief(box) {
+        const line = (cls) => { const d = document.createElement('div'); d.className = 'brief-line ' + (cls || ''); box.appendChild(d); return d; };
+        const text = (parent, t) => parent.appendChild(document.createTextNode(t));
+        const strong = (parent, t, cls) => { const b = document.createElement('b'); if (cls) b.className = cls; b.textContent = t; parent.appendChild(b); };
+        box.textContent = '';
+        const names = getContactNames().filter(Boolean);
+        text(line('brief-names'), names.length === 2 ? names.join(' | ') : 'These two contacts');
+        const score = getScoreChipLevel();
+        if (score) {
+            const l = line();
+            text(l, 'Bolt score: ');
+            strong(l, score.charAt(0).toUpperCase() + score.slice(1), 'brief-score brief-score-' + score);
+        }
+        const { picks, over } = mergeStats();
+        if (picks.length === 0) { text(line(), "No script picks; Bolt's picks stand."); return; }
+        const agree = line();
+        text(agree, 'Script agrees with ');
+        strong(agree, (picks.length - over.length) + '/' + picks.length);
+        if (over.length === 0) return;
+        const l = line();
+        const ours = CFG.USE_PICKS === 'ours';
+        const applicant = !!findApplicantSide();
+        if (applicant) {
+            text(l, 'Script found ');
+            strong(l, 'applicant');
+            if (ours) { text(l, ' and chose '); strong(l, String(over.length)); text(l, ' over Bolt.'); }
+            else text(l, ' but Bolt chose instead.');
+            return;
+        }
+        text(l, ours ? 'Script chose ' : 'Bolt chose ');
+        strong(l, String(over.length));
+        text(l, ours ? ' over Bolt: ' : ' over script: ');
+        const labels = Array.from(new Set(over.map(r => r.label).filter(Boolean)));
+        text(l, labels.slice(0, 4).join(', ') + (labels.length > 4 ? ' +' + (labels.length - 4) + ' more' : ''));
+    }
+    // Final gate before the merge click. Returns { ok, reason }.
+    function mergeReadiness(key) {
+        if (getPairKey() !== key) return { ok: false, reason: 'the pair changed' };
+        if (getAllBlockers().length > 0) return { ok: false, reason: 'the pair is blocked' };
+        // A conflicting row with no selected side (Bolt left it blank and a rule applied but could not
+        // decide) means a human has to look: the pair is not merged.
+        const unresolved = getDiffRows().filter(r => r.isConflict && !r.nativeSide && !r.otherSelected);
+        if (unresolved.length > 0) {
+            unresolved.forEach(r => console.log('[elm2] Needs review:', r.label || '(unnamed)', '| A:', r.values[0].textContent, '| B:', r.values[1].textContent));
+            const fields = Array.from(new Set(unresolved.map(r => r.label || '(unnamed)')));
+            return { ok: false, reason: unresolved.length + ' field(s) need review (' + fields.join(', ') + ')', review: fields.slice(0, 3).join(', ') + (fields.length > 3 ? ' +' + (fields.length - 3) : '') };
+        }
+        if (CONFLICT_ROW_THRESHOLD > 0 && checkForConflictingRecords().shouldWarn) return { ok: false, reason: 'possible twins' };
+        const btn = getSidebarActionButton('Merge Contacts');
+        if (!btn || btn.disabled || btn.getAttribute('aria-disabled') === 'true') return { ok: false, reason: 'the Merge Contacts button is unavailable' };
+        return { ok: true, btn };
+    }
+    function startAutoMerge(key) {
+        if (mergedPairKey === key || getPairKey() !== key) return;
+        cancelAutoMerge();
+        // Do not count down to a merge that the final check would refuse anyway.
+        const pre = mergeReadiness(key);
+        if (!pre.ok) {
+            console.log('[elm2] Auto-merge not started:', pre.reason);
+            if (pre.reason === 'the pair changed') return;
+            // A pair that needs a human is never skipped: it stays on screen (whatever Auto-Skip says).
+            if (pre.review) return; // needs a human: stays on screen, no toast (the console names the fields)
+            if (CFG.AUTO_SKIP_BLOCKED) skipToNext('not merged, ' + pre.reason);
+            else showMergeNotice('Auto-merge stopped: ' + pre.reason + '.');
+            return;
+        }
+        const ov = mergeModal();
+        hideMergeBar();
+        const total = CFG.MERGE_COUNTDOWN;
+        let left = total;
+        // The setting is the whole wait: the numbers step once a second and the merge is clicked the instant
+        // they reach 0; the green state shows at that moment and the dialog lingers a little (LINGER) after
+        // the click purely so it can be seen. The race lights are the exception: their green "GO" holds for
+        // RACE_GO before the click, and its lamp steps are shortened to match (the whole style still takes
+        // exactly the setting, 4 s).
+        const LINGER = 450;
+        const RACE_GO = 300;
+        const card = ov.querySelector('.elm2-merge-card');
+        const arc = ov.querySelector('.elm2-ring-arc');
+        const fill = ov.querySelector('.elm2-ring-fill');
+        fill.style.transition = 'none';
+        arc.style.transition = 'none';
+        card.classList.remove('done', 'fired');
+        const race = CFG.COUNTDOWN_STYLE === 'race';
+        const TICK = race ? (total * 1000 - RACE_GO) / total : 1000; // race: 4 steps of 925 ms + 300 ms GO = 4 s
+        card.classList.toggle('race', race);
+        const lamps = Array.from(ov.querySelectorAll('.elm2-lamps i'));
+        const setLamps = () => lamps.forEach((l, i) => {
+            // red lamps at 3, 2, 1 seconds left; all green at 0
+            l.className = left <= 0 ? 'green' : (i < Math.max(0, 4 - left) ? 'red' : '');
+        });
+        document.getElementById('elm2-merge-title').textContent = race ? 'Get ready…' : 'Merging automatically';
+        renderMergeBrief(document.getElementById('elm2-merge-summary'));
+        // The ring drains one step per second, in time with the number: the arc starts at 12 o'clock
+        // and its far end walks back counter-clockwise. A round line cap pokes half a stroke past
+        // the end of its dash, which made the end bit sit visibly left of its mark (6 o'clock at half
+        // time), so the dash is pulled in by one cap radius at each end and the rounded tips land
+        // exactly on the marks. At 0 it fills completely (and turns green).
+        const CIRC = 276.46;
+        const CAP = 4; // stroke-width 8 -> cap radius 4, in viewBox units
+        const setArc = (frac) => {
+            if (frac >= 1) { arc.style.strokeDasharray = CIRC + ' ' + CIRC; arc.style.strokeDashoffset = '0'; return; }
+            arc.style.strokeDasharray = Math.max(0.01, CIRC * frac - 2 * CAP) + ' ' + CIRC;
+            arc.style.strokeDashoffset = String(-CAP);
+        };
+        const render = () => {
+            const count = document.getElementById('elm2-merge-count');
+            count.textContent = String(left);
+            // each new number eases in (scale + fade) while the ring eases down one step
+            count.style.animation = 'none';
+            void count.getBoundingClientRect();
+            count.style.animation = 'elm2-count-in .5s cubic-bezier(.05, .7, .1, 1)';
+            if (left > 0) setArc(left / total);
+            if (race) setLamps();
+        };
+        setArc(1);
+        void arc.getBoundingClientRect();
+        arc.style.transition = '';
+        fill.style.transition = '';
+        render();
+        placeMergeOverlay(ov);
+        ov.classList.add('visible');
+        // Final gate, then the merge click itself. Returns false when the pair is not mergeable.
+        const stop = (ready) => {
+            hideMergeModal();
+            console.log('[elm2] Auto-merge not done:', ready.reason);
+            if (ready.reason === 'the pair changed') return;
+            if (ready.review) return; // needs a human: stays on screen, no toast
+            if (CFG.AUTO_SKIP_BLOCKED) { skipToNext('not merged, ' + ready.reason); }
+            else showMergeNotice('Auto-merge stopped: ' + ready.reason + '.');
+        };
+        mergeTimer = setInterval(() => {
+            if (getPairKey() !== key) { cancelAutoMerge(); return; }
+            placeMergeOverlay(ov); // follows the panel if the window is resized or scrolled
+            left--;
+            if (left > 0) { render(); return; }
+            clearInterval(mergeTimer);
+            mergeTimer = null;
+            const ready = mergeReadiness(key);
+            if (!ready.ok) { stop(ready); return; }
+            // 0: the ring (or lamps) goes green; the merge is clicked right away (race lights: after RACE_GO).
+            card.classList.add('done');
+            document.getElementById('elm2-merge-title').textContent = race ? 'GO!' : 'Merging…';
+            render();
+            const fire = (btn) => {
+                card.classList.add('fired');
+                mergedPairKey = key;
+                console.log('[elm2] Auto-merging pair');
+                btn.click();
+                setTimeout(hideMergeModal, LINGER);
+                // Watchdog: a merge shows a "Merge completed" card. If it never comes (for example a
+                // confirmation dialog is waiting), the console says so.
+                setTimeout(() => {
+                    if (getPairKey() !== key || completionCardVisible()) return;
+                    const dlg = document.querySelector('bolt-dialog');
+                    console.log('[elm2] Merge Contacts clicked but no "Merge completed" card;', dlg ? 'dialog open: ' + dlg.textContent.replace(/\s+/g, ' ').trim().slice(0, 160) : 'no dialog open');
+                }, 6000);
+            };
+            if (!race) { fire(ready.btn); return; }
+            mergeTimer = setTimeout(() => {
+                mergeTimer = null;
+                const again = mergeReadiness(key);
+                if (!again.ok) { stop(again); return; }
+                fire(again.btn);
+            }, RACE_GO);
+        }, TICK);
+    }
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && mergeTimer) cancelAutoMerge('Auto-merge cancelled'); });
+
+    // =========================================================
     // MAIN AUTOMATION LOOP
     //
-    // IMPORTANT: this only ever fills in field selections. It never clicks
-    // "Merge Contacts" itself. The classic script worked the same way — its
-    // "Auto-Click FAB" setting only fired the FAB's *first* click (which
-    // triggers conflict detection/auto-resolution); the FAB's second click,
-    // the one that actually commits the merge, always required a human,
-    // even with that setting on. Merging here stays exactly as manual.
+    // Each pair: blockers -> (skip or stop) -> apply picks per "Use picks from" if the pair is
+    // inside the slider range -> twins check -> optional auto-merge (cancel window above).
     // =========================================================
+    // True while the review form was off screen (for example behind the "Merge completed" card). The
+    // pair that shows up next is a new one even if its key (names + queue position) matches the last:
+    // a merge removes a pair from the queue, so the next pair can land on the same position, and
+    // duplicates usually share their names.
+    let formWasAbsent = false;
     function attemptAutoResolve() {
-        if (!isDedupReviewPage()) return;
+        if (!isDedupReviewPage() || completionCardVisible()) { formWasAbsent = true; return; }
         if (!getContactNames().filter(Boolean).length) return; // page still loading
+        if (formWasAbsent) {
+            formWasAbsent = false;
+            currentQueuePositionKey = '';
+            mergedPairKey = '';
+            skipInFlightKey = '';
+        }
+        resetStaleRows();
         snapshotNativeSelections(); // capture Bolt's defaults before anything below can click a row
         const pairKey = getPairKey();
         if (pairKey !== currentQueuePositionKey) {
             currentQueuePositionKey = pairKey;
+            pairFirstSeenAt = Date.now();
             resolutionAttempted = false;
             conflictWarningShown = false;
             appealWarningShown = false;
+            previewPicks(null);
+            cancelAutoMerge();
             delete document.body.dataset.csvDept;
-            delete document.body.dataset.csvUid;
+            delete document.body.dataset.csvSpark1;
+            delete document.body.dataset.csvSpark2;
         }
         const blockers = getAllBlockers();
         applyBlockStyling(blockers);
@@ -1211,25 +2486,32 @@
             console.log('[elm2] Blocked:', blockers.map(b => b.type + (b.reason ? ' (' + b.reason + ')' : '')).join(', '),
                 '| auto-skip', CFG.AUTO_SKIP_BLOCKED ? 'ON' : 'OFF');
             if (CFG.AUTO_SKIP_BLOCKED) {
-                setTimeout(() => {
-                    const ok = clickNextDuplicate();
-                    console.log('[elm2] Clicked Next duplicate:', ok);
-                }, 1200);
+                setTimeout(() => skipToNext('blocked', blockerLabel(blockers)), 1200);
             }
             return;
         }
         if (!resolutionAttempted) console.log('[elm2] Not blocked — allowed dept:', CFG.ALLOWED_DEPARTMENT, '| detected:', detectActualDepartment().dept);
         if (resolutionAttempted) return;
-        if (!CFG.AUTO_RESOLVE_FIELDS) return;
+        // Wait for Element451 to apply its own default picks before we touch
+        // anything, so we can record them first (give up after 3s in case Bolt
+        // made no picks on this pair).
+        const bolt = getDiffRows().filter(r => r.element.dataset.elm2AiSide).length;
+        if (bolt === 0 && Date.now() - pairFirstSeenAt < 3000) return;
+        // At the Low / Medium Auto-Apply levels the decision depends on Bolt's score, which can
+        // render a moment after the field rows: wait for it (up to 3s) before deciding.
+        const lvl = CFG.RANGE_LEVEL;
+        if (lvl >= 1 && lvl < 4 && !getScoreChipLevel() && Date.now() - pairFirstSeenAt < 3000) return;
         resolutionAttempted = true;
         // Two-phase, mirroring the classic script: resolve now, then re-verify
         // shortly after in case more Workflow/Source rows loaded in the meantime.
         runAutoResolution();
+        const phaseOnePairKey = pairKey;
         setTimeout(() => {
+            if (getPairKey() !== phaseOnePairKey) return; // moved on already
             const laterBlockers = getAllBlockers();
             applyBlockStyling(laterBlockers);
             if (laterBlockers.length > 0) {
-                if (CFG.AUTO_SKIP_BLOCKED) { clickNextDuplicate(); }
+                if (CFG.AUTO_SKIP_BLOCKED) { skipToNext('blocked', blockerLabel(laterBlockers)); }
                 return;
             }
             runAutoResolution();
@@ -1237,20 +2519,46 @@
             console.log('[elm2] Resolution done —', _rows.length, 'fields,',
                 _rows.filter(r => r.element.dataset.elm2ScriptSide).length, 'with our suggestion,',
                 _rows.filter(r => r.element.dataset.elm2AiSide).length, 'with a Bolt default captured');
+            const _byRule = {};
+            _rows.forEach(r => { const rl = r.element.dataset.elm2Rule; if (r.element.dataset.elm2ScriptSide) _byRule[rl || '(unknown)'] = (_byRule[rl || '(unknown)'] || 0) + 1; });
+            console.log('[elm2] Suggestions by rule:', JSON.stringify(_byRule));
+            computeAutoApplyForPair();
+            // Why a pick did / did not land: range inputs now, then each of our rows' state once the clicks have settled.
+            console.log('[elm2] Range check — slider level', CFG.RANGE_LEVEL, '| score chip:', getScoreChipLevel() || '(not read)',
+                '| chips on page:', document.querySelectorAll('elm-deduplication-score-chip').length + ' (' + Array.from(document.querySelectorAll('elm-deduplication-score-chip .bolt-chip')).map(c => chipLevel(c) || '?').join(',') + ')',
+                '| in range:', pairInRange, '| use picks from:', CFG.USE_PICKS, '| applying:', autoApplyThisPair);
+            setTimeout(() => {
+                if (getPairKey() !== phaseOnePairKey) return;
+                getDiffRows().filter(r => r.element.dataset.elm2ScriptSide).forEach(r => {
+                    const landed = r.nativeSide === r.element.dataset.elm2ScriptSide;
+                    console.log('[elm2] Pick check —', r.label, '| ours:', r.element.dataset.elm2ScriptSide, '| selected now:', r.nativeSide || '(none)',
+                        '| rule:', r.element.dataset.elm2Rule, landed ? '| OK' : '| NOT APPLIED');
+                });
+            }, 1200);
+            // Outside the slider range: skipped with Auto-Skip on (no popup), otherwise left for you.
+            // (Slider on None = no pair is in range, so with Auto-Skip on every pair is skipped.)
+            if (!pairInRange && CFG.AUTO_SKIP_BLOCKED) {
+                skipToNext('outside the slider range', 'Range');
+                return;
+            }
+            // Possible twins: with Auto-Skip on the pair is skipped with no popup; otherwise it is
+            // left for you with a warning popup. A twins pair is never auto-merged.
+            // (There is no separate "Low score" popup.)
             if (!conflictWarningShown && CONFLICT_ROW_THRESHOLD > 0) {
                 const { conflictCount, shouldWarn, conflicts } = checkForConflictingRecords();
                 if (shouldWarn) {
                     conflictWarningShown = true;
-                    alert(`⚠️ Warning: ${conflictCount} conflicting signal(s) detected!\n\nConflicts found in: ${conflicts.join(', ')}\n\nThese entries might be twins or two different people. Please review carefully before merging.`);
+                    if (CFG.AUTO_SKIP_BLOCKED) {
+                        skipToNext('possible twins: ' + conflicts.join(', '), 'Twins');
+                    } else {
+                        alert(`⚠️ Warning: ${conflictCount} conflicting signal${conflictCount === 1 ? '' : 's'} detected!\n\nConflicts found in: ${conflicts.join(', ')}\n\nThese entries might be twins or two different people. Please review carefully before merging.`);
+                    }
+                    return;
                 }
             }
-            const scoreLevel = getScoreChipLevel();
-            if (scoreLevel === 'low' && !conflictWarningShown) {
-                conflictWarningShown = true;
-                alert('⚠️ Bolt confidence score is "Low" for this pair. Please review carefully before merging.');
-            }
-            // Resolution stops here. Reviewing the selections and clicking
-            // "Merge Contacts" is always a human decision.
+            // "When done" = Merge: start the cancel window (the merge itself is clicked there,
+            // after a final safety re-check).
+            if (pairInRange && CFG.WHEN_DONE === 'merge') setTimeout(() => startAutoMerge(phaseOnePairKey), 500);
         }, 600);
     }
     // Tracks merges regardless of who clicks "Merge Contacts" (always a
@@ -1263,20 +2571,56 @@
         btn.addEventListener('click', () => {
             awaitingMergeResult = true;
             lastMergeContactNamesKey = getPairKey();
+            // Worked out now (the rows are gone after the merge), shown when the Merge completed card appears.
+            const st = mergeStats();
+            pendingMergeToast = { text: 'Merge: ' + (st.applicant ? 'Applicant' : st.total > 0 ? st.agree + '/' + st.total : 'Bolt'), at: Date.now() };
         });
     }
+    // After a merge Element451 replaces the form with a "Merge completed" card
+    // (bolt-card.merge-completion-state) holding "View merged contact" and "Next duplicate".
+    // That card is the real merge-success signal: count the merge, then press "Next duplicate"
+    // (not shown on the last pair, in which case nothing is clicked). Handled once per card.
+    const completionCardVisible = () => Array.from(document.querySelectorAll('.merge-completion-state')).some(c => c.getClientRects().length);
+    let skipToggleWarned = false;
+    function syncSkipToggles() {
+        document.body.classList.toggle('elm2-next-after-merge', CFG.NEXT_AFTER_MERGE);
+        if (!CFG.NEXT_AFTER_MERGE || skipToggleWarned) return;
+        const on = document.querySelector('bolt-slide-toggle.skip-merge-completion-toggle button[aria-checked="true"], bolt-slide-toggle.merge-completion-skip-toggle button[aria-checked="true"]');
+        if (on) {
+            skipToggleWarned = true;
+            console.warn('[elm2] Element\'s "Skip merge completion screen" is ON: the Merge completed card never shows, so Next after merge cannot work. Turn that switch off (it stays visible while it is on).');
+        }
+    }
+    function checkMergeCompletion() {
+        const card = document.querySelector('.merge-completion-state');
+        if (!card || card.dataset.elm2Handled || !card.getClientRects().length) return; // absent, handled, or hidden
+        card.dataset.elm2Handled = '1';
+        formWasAbsent = true; // the next pair is a new one, whatever its key says
+        if (pendingMergeToast && Date.now() - pendingMergeToast.at < 20000 && toastsEnabled()) showMergeNotice(pendingMergeToast.text, true);
+        pendingMergeToast = null;
+        const sentence = card.querySelector('.bolt-body-large');
+        const qpm = getQueuePosition();
+        console.log('[elm2] Merged' + (qpm ? ' ' + qpm.current + '/' + qpm.total : '') + ' |', sentence ? sentence.textContent.trim() : (card.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 90));
+
+        if (awaitingMergeResult) {
+            awaitingMergeResult = false;
+            if (CFG.SHOW_MERGE_COUNTER) incrementMergeCount();
+        }
+        if (!CFG.NEXT_AFTER_MERGE) return;
+        setTimeout(() => {
+            const btn = Array.from(card.querySelectorAll('.merge-completion-actions button'))
+                .find(b => /^next duplicate$/i.test(b.textContent.trim()));
+            if (!card.isConnected) return;
+            if (btn && !btn.disabled) { console.log('[elm2] Next duplicate after merge'); btn.click(); }
+            else console.log('[elm2] No "Next duplicate" button after merge (last pair?)');
+        }, 900);
+    }
     function checkForMergeResult() {
+        checkMergeCompletion();
         if (!awaitingMergeResult) return;
-        // BEST EFFORT: no merge-success element existed in the reference
-        // snapshot. Detect success as "the pair on screen changed" after
-        // Merge Contacts was clicked, which is the one thing guaranteed to
-        // happen whether the UI shows a toast or just advances the queue.
-        // NOTE: this only fires once the pair on screen has already
-        // changed, meaning the app already advanced the queue on its own —
-        // do NOT also call clickNextDuplicate() here, that would skip an
-        // extra pair. An "auto-navigate after merge" feature isn't safe to
-        // add back until there's a real merge-success indicator that can
-        // tell "merged" apart from "nothing happened yet" (see README).
+        // Fallback for a merge without the completion card: success is "the pair on screen changed"
+        // after Merge Contacts was clicked. It only fires once the app has already moved on, so it
+        // never presses Next duplicate itself.
         const pairKey = getPairKey();
         if (pairKey && pairKey !== lastMergeContactNamesKey) {
             awaitingMergeResult = false;
@@ -1289,8 +2633,16 @@
         bindMergeButtonTracking();
         checkForMergeResult();
         injectMergeCounter();
+        colorScoreChips();
+        syncHeaderColor(); // the header is on every page, not just the review page
+        injectPager();
+        stripFilterTooltips();
+        syncSkipToggles();
         if (isDedupReviewPage()) {
-            annotateRowPickBadges();
+            syncBoltBlue();
+            annotateRowColors();
+            pinReviewQueueNav();
+            annotateApplicantSide();
             injectPickComparisonBar();
         }
     }, 750);
@@ -1322,7 +2674,8 @@
 
         const settingsBtn = document.createElement('button');
         settingsBtn.id = 'elm-settings-btn';
-        settingsBtn.innerHTML = '⚙';
+        // Inline SVG (Material "settings" outlined icon, 20px): a "⚙" text glyph renders as a colour emoji on macOS
+        settingsBtn.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46a.5.5 0 0 0-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65A.488.488 0 0 0 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1a.5.5 0 0 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zm-1.98-1.71c.04.31.05.52.05.73s-.02.43-.05.73l-.14 1.13.89.7 1.08.84-.7 1.21-1.27-.51-1.04-.42-.9.68c-.43.32-.84.56-1.25.73l-1.06.43-.16 1.13-.2 1.35h-1.4l-.19-1.35-.16-1.13-1.06-.43c-.43-.18-.83-.41-1.23-.71l-.91-.7-1.06.43-1.27.51-.7-1.21 1.08-.84.89-.7-.14-1.13c-.03-.31-.05-.54-.05-.74s.02-.43.05-.73l.14-1.13-.89-.7-1.08-.84.7-1.21 1.27.51 1.04.42.9-.68c.43-.32.84-.56 1.25-.73l1.06-.43.16-1.13.2-1.35h1.39l.19 1.35.16 1.13 1.06.43c.43.18.83.41 1.23.71l.91.7 1.06-.43 1.27-.51.7 1.21-1.07.85-.89.7.14 1.13zM12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0 6c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/></svg>';
         settingsBtn.title = 'Settings';
         settingsBtn.onclick = (e) => { e.stopPropagation(); toggleSettingsPane(); };
         controlsWrapper.appendChild(settingsBtn);
@@ -1370,15 +2723,54 @@
         pane.id = 'elm-settings-pane';
         pane.innerHTML = `
             <div class="settings-header">
-                <span>Settings (New Layout) · ${BUILD}</span>
-                <button id="elm-settings-close" style="background:none;border:none;font-size:20px;cursor:pointer;">&times;</button>
+                <div>
+                    <div class="settings-title">Settings</div>
+                    <div class="settings-build">New layout · ${BUILD}</div>
+                </div>
+                <button id="elm-settings-close" aria-label="Close settings">&times;</button>
             </div>
             <div class="settings-body">
                 <div class="settings-section-title">Automation</div>
-                <div class="setting-row"><label>Auto-Resolve Fields</label>${toggleHtml('elm-auto-resolve-fields')}</div>
-                <div class="setting-row"><label>Auto-Skip Blocked</label>${toggleHtml('elm-auto-skip-blocked')}</div>
+                <div class="setting-row elm-slider-head"><label>Pairs in range</label><span id="elm-apply-level-label" class="elm-level-label"></span></div>
+                <div class="elm-slider">
+                    <div class="m3s" id="elm-m3s">
+                        <input type="range" id="elm-apply-level" min="0" max="4" step="1" aria-label="Pairs in range">
+                        <div class="m3s-active"></div>
+                        <div class="m3s-inactive"></div>
+                        <div class="m3s-dots"><span style="--i:0"></span><span style="--i:1"></span><span style="--i:2"></span><span style="--i:3"></span><span style="--i:4"></span></div>
+                        <div class="m3s-handle"><span class="m3s-bubble" id="elm-m3s-bubble"></span></div>
+                    </div>
+                    <div class="m3s-labels"><span style="--i:0">None</span><span style="--i:1">High</span><span style="--i:2">Medium</span><span style="--i:3">Low</span><span style="--i:4">All</span></div>
+                </div>
+                <div id="elm-apply-level-desc" class="elm-level-desc"></div>
+                <div class="setting-row elm-seg-head"><label>Use picks from</label></div>
+                <div class="elm-seg" id="elm-use-picks" role="radiogroup" aria-label="Use picks from">
+                    <button type="button" role="radio" data-v="bolt">Bolt's</button>
+                    <button type="button" role="radio" data-v="ours">Ours</button>
+                </div>
+                <div id="elm-use-picks-desc" class="elm-level-desc"></div>
+                <div class="setting-row elm-seg-head"><label>When done</label></div>
+                <div class="elm-seg" id="elm-when-done" role="radiogroup" aria-label="When done">
+                    <button type="button" role="radio" data-v="wait">Wait for me</button>
+                    <button type="button" role="radio" data-v="merge">Merge</button>
+                </div>
+                <div id="elm-when-done-desc" class="elm-level-desc"></div>
+                <div class="setting-row" id="elm-countdown-row">
+                    <label for="elm-merge-countdown">Merge countdown</label>
+                    <select id="elm-merge-countdown">
+                        <option value="2">2 seconds</option><option value="3">3 seconds</option><option value="4">4 seconds</option><option value="race">4 seconds, race lights</option>
+                        <option value="5">5 seconds</option><option value="6">6 seconds</option><option value="8">8 seconds</option>
+                        <option value="10">10 seconds</option><option value="15">15 seconds</option>
+                    </select>
+                </div>
+                <div class="setting-row"><label>Auto-Skip</label>${toggleHtml('elm-auto-skip-blocked')}</div>
+                <div class="elm-level-desc elm-skip-desc">Skips blocked, out-of-range and possible-twins pairs with no popup. Off: stops on them instead.</div>
+                <div class="setting-row"><label>Next after merge</label>${toggleHtml('elm-next-after-merge')}</div>
+                <div class="elm-level-desc elm-next-desc">After a merge (yours or an auto-merge), presses "Next duplicate" on the "Merge completed" card, and hides Element\'s own "Skip merge completion screen" switches (which would remove that card).</div>
                 <div class="settings-section-title">Display</div>
-                <div class="setting-row"><label>Show Merge Counter</label>${toggleHtml('elm-show-merge-counter')}</div>
+                <div class="setting-row"><label>Highlight Rows</label>${toggleHtml('elm-highlight-rows')}</div>
+                <div class="setting-row"><label>Toasts</label>${toggleHtml('elm-outcome-toasts')}</div>
+                <div class="elm-level-desc elm-toast-desc">Short "Merge: 2/3" and "Skip: Appeal" toasts. Always on while Auto-Skip or auto-merge is on; always off when no pairs are in range (slider on None).</div>
                 <div class="settings-section-title">Department</div>
                 <div class="setting-row">
                     <label>Allowed Department</label>
@@ -1396,13 +2788,97 @@
         function toggleHtml(id) {
             return `<label class="elm-toggle-switch"><input type="checkbox" id="${id}"><span class="elm-toggle-slider"></span></label>`;
         }
-        setupToggle('elm-auto-resolve-fields', 'elm_auto_click_fab');
-        setupToggle('elm-auto-skip-blocked', 'elm_auto_skip_blocked');
-        setupToggle('elm-show-merge-counter', 'elm_show_merge_counter', () => { document.getElementById('elm-controls-wrapper')?.remove(); injectMergeCounter(); });
-        function setupToggle(elementId, storageKey, onChange) {
+        const levelSlider = document.getElementById('elm-apply-level');
+        const levelLabel = document.getElementById('elm-apply-level-label');
+        const levelNames = ['None', 'High', 'Medium', 'Low', 'All'];
+        const levelDescs = [
+            'No pairs in range. Auto-Skip on skips every pair (a scan); off leaves them for you.',
+            'Pairs with a High Bolt score.',
+            'Pairs with a High or Medium Bolt score.',
+            'Pairs with a High, Medium or Low Bolt score.',
+            'Every pair, even one with no Bolt score.'
+        ];
+        const syncLevel = () => {
+            levelSlider.value = CFG.RANGE_LEVEL;
+            const idx = parseInt(levelSlider.value, 10);
+            document.getElementById('elm-m3s').style.setProperty('--p', idx / 4);
+            document.querySelectorAll('#elm-m3s .m3s-dots span').forEach((d, i) => {
+                d.className = i < idx ? 'on' : i > idx ? 'off' : 'here';
+            });
+            document.querySelectorAll('#elm-settings-pane .m3s-labels span').forEach((l, i) => l.classList.toggle('sel', i === idx));
+            document.getElementById('elm-m3s-bubble').textContent = levelNames[idx];
+            levelLabel.textContent = levelNames[idx];
+            document.getElementById('elm-apply-level-desc').textContent = levelDescs[idx];
+            // With the slider on None, "Use picks from" and "When done" have nothing to act on.
+            ['elm-use-picks', 'elm-when-done'].forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.classList.toggle('elm-seg-disabled', idx === 0);
+                el.querySelectorAll('button').forEach(b => { b.disabled = idx === 0; });
+            });
+        };
+        syncLevel();
+        levelSlider.addEventListener('input', () => {
+            localStorage.setItem('elm_range_level2', levelSlider.value);
+            syncLevel();
+            if (CFG.RANGE_LEVEL === 0) cancelAutoMerge('Auto-merge cancelled');
+            reapplyForLevel();
+        });
+        function setupSegmented(id, get, set, describe, onChange) {
+            const el = document.getElementById(id);
+            const desc = document.getElementById(id + '-desc');
+            const sync = () => {
+                el.querySelectorAll('button').forEach(b => b.setAttribute('aria-checked', String(b.dataset.v === get())));
+                desc.textContent = describe(get());
+            };
+            sync();
+            el.addEventListener('click', (e) => {
+                const b = e.target.closest('button');
+                if (!b) return;
+                set(b.dataset.v);
+                sync();
+                if (onChange) onChange();
+            });
+        }
+        setupSegmented('elm-use-picks', () => CFG.USE_PICKS, v => localStorage.setItem('elm_use_picks', v),
+            v => v === 'ours' ? 'Our rules are applied on pairs in range, including the applicant rule.' : "Bolt's picks are kept on pairs in range. Ours only fills rows Bolt left unselected.",
+            reapplyForLevel);
+        setupSegmented('elm-when-done', () => CFG.WHEN_DONE, v => { try { sessionStorage.setItem('elm_when_done', v); } catch (e) { /* ignore */ } },
+            v => v === 'merge' ? 'Merges decided pairs after a countdown with a Cancel button. Resets to "Wait for me" each browser session.' : 'You review the picks and click Merge Contacts yourself.',
+            () => { if (CFG.WHEN_DONE !== 'merge') cancelAutoMerge('Auto-merge cancelled'); });
+        const countdownSelect = document.getElementById('elm-merge-countdown');
+        const countdownRow = document.getElementById('elm-countdown-row');
+        const syncCountdown = () => {
+            // only relevant when merging is on and the slider isn't on None
+            const active = CFG.WHEN_DONE === 'merge' && CFG.RANGE_LEVEL > 0;
+            countdownSelect.disabled = !active;
+            countdownRow.style.opacity = active ? '' : '.38';
+        };
+        countdownSelect.value = CFG.COUNTDOWN_STYLE === 'race' ? 'race' : String(CFG.MERGE_COUNTDOWN);
+        countdownSelect.addEventListener('change', () => localStorage.setItem('elm_merge_countdown', countdownSelect.value));
+        document.getElementById('elm-when-done').addEventListener('click', syncCountdown);
+        levelSlider.addEventListener('input', syncCountdown);
+        syncLevel();
+        syncCountdown();
+        // Toasts: the switch is forced off (slider None) or on (Auto-Skip / auto-merge) and greyed out.
+        const toastsEl = document.getElementById('elm-outcome-toasts');
+        const syncToasts = () => {
+            const off = toastsForcedOff(), on = toastsForcedOn();
+            toastsEl.checked = !off && (on || getBoolSetting('elm_outcome_toasts', true));
+            toastsEl.disabled = off || on;
+            toastsEl.closest('.setting-row').style.opacity = (off || on) ? '.38' : '';
+        };
+        toastsEl.addEventListener('change', () => localStorage.setItem('elm_outcome_toasts', String(toastsEl.checked)));
+        document.getElementById('elm-when-done').addEventListener('click', syncToasts);
+        levelSlider.addEventListener('input', syncToasts);
+        setupToggle('elm-auto-skip-blocked', 'elm_auto_skip_blocked', syncToasts);
+        syncToasts();
+        setupToggle('elm-next-after-merge', 'elm_next_after_merge');
+        setupToggle('elm-highlight-rows', 'elm_highlight_rows');
+        function setupToggle(elementId, storageKey, onChange, defaultValue = true) {
             const el = document.getElementById(elementId);
             if (!el) return;
-            el.checked = getBoolSetting(storageKey, true);
+            el.checked = getBoolSetting(storageKey, defaultValue);
             el.addEventListener('change', () => {
                 localStorage.setItem(storageKey, String(el.checked));
                 if (onChange) onChange();

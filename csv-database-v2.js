@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      1
+// @version      2.22
 // @description  Tracks duplicate entries in a CSV database stored in browser localStorage — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -34,6 +34,9 @@
 
     const STORAGE_KEY = 'elm_csv_database';
     const SHOW_API_STATUS_TOAST = true;
+    const UI_KEY = 'elm_show_db_ui';
+    function showDbUi() { try { return localStorage.getItem(UI_KEY) !== 'false'; } catch (e) { return true; } }
+    function applyDbUiSetting() { if (document.body) document.body.classList.toggle('csv-db-ui-off', !showDbUi()); }
 
     // =========================================================
     // CSS
@@ -50,36 +53,50 @@
             white-space: nowrap;
             vertical-align: middle;
         }
+        /* right-align the badges so they line up down the column whatever their width:
+           the badge's parent becomes a flex row and the badge takes the free space on its left
+           (float covers a parent that stays a block) */
+        :has(> .csv-dept-badge) { display: flex; align-items: center; }
+        .csv-dept-badge { margin-left: auto; float: right; }
         .csv-dept-badge[data-dept="Grad/IA"]      { background: #e3f2fd; color: #1565c0; }
         .csv-dept-badge[data-dept="UnderGrad"]    { background: #f3e5f5; color: #6a1b9a; }
         .csv-dept-badge[data-dept="Forbidden"]    { background: #fce4ec; color: #c2185b; }
         .csv-dept-badge[data-dept="Appeal"]       { background: #fff8e1; color: #f57f17; }
         .csv-dept-badge[data-dept="Ignored"]      { background: #f5f5f5; color: #616161; }
 
-        #csv-api-toast {
-            position: fixed; bottom: 16px; left: 16px; display: flex; align-items: center; gap: 10px;
-            padding: 8px 16px 8px 12px; border-radius: 10px; background: rgba(255, 255, 255, 0.75);
-            font-size: 12px; font-weight: 500; color: #333; z-index: 9999; opacity: 0;
-            transition: opacity 0.35s ease; pointer-events: none; max-width: 340px; box-shadow: 0 2px 12px rgba(0,0,0,0.1);
-        }
-        #csv-api-toast.visible { opacity: 1; }
+        /* Shared toast stack (same rules as in the main script; whichever loads first creates it) */
+        #elm2-toast-stack { position: fixed; left: 16px; bottom: 16px; z-index: 10000; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+        .elm2-toast { display: flex; align-items: center; gap: 12px; box-sizing: border-box; min-height: 48px; max-width: 340px; padding: 8px 16px 8px 12px; border-radius: 4px; background: #2f3236; color: #f1f3f7; font: 400 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .25px; box-shadow: 0 1px 3px rgba(0,0,0,.3), 0 4px 8px 3px rgba(0,0,0,.15); opacity: 0; transform: translateY(8px); transition: opacity .25s cubic-bezier(.2, 0, 0, 1), transform .25s cubic-bezier(.2, 0, 0, 1); }
+        .elm2-toast.visible { opacity: 1; transform: none; }
         .csv-toast-dot { position: relative; width: 18px; height: 18px; flex-shrink: 0; }
         .csv-toast-dot-inner { position: absolute; top: 50%; left: 50%; width: 8px; height: 8px; border-radius: 50%; transform: translate(-50%, -50%); }
         .csv-toast-dot-outer { position: absolute; top: 50%; left: 50%; width: 16px; height: 16px; border-radius: 50%; transform: translate(-50%, -50%); animation: csvPulse 1.8s ease-in-out infinite; }
-        #csv-api-toast.success .csv-toast-dot-inner { background: #2e7d32; }
-        #csv-api-toast.success .csv-toast-dot-outer { background: rgba(46, 125, 50, 0.3); }
-        #csv-api-toast.fallback .csv-toast-dot-inner { background: #e65100; }
-        #csv-api-toast.fallback .csv-toast-dot-outer { background: rgba(230, 81, 0, 0.3); }
-        #csv-api-toast.error .csv-toast-dot-inner { background: #c62828; }
-        #csv-api-toast.error .csv-toast-dot-outer { background: rgba(198, 40, 40, 0.3); }
+          .csv-toast.success .csv-toast-dot-inner { background: #2e7d32; }
+          .csv-toast.success .csv-toast-dot-outer { background: rgba(46, 125, 50, 0.3); }
+          .csv-toast.fallback .csv-toast-dot-inner { background: #e65100; }
+          .csv-toast.fallback .csv-toast-dot-outer { background: rgba(230, 81, 0, 0.3); }
+          .csv-toast.error .csv-toast-dot-inner { background: #c62828; }
+          .csv-toast.error .csv-toast-dot-outer { background: rgba(198, 40, 40, 0.3); }
         @keyframes csvPulse { 0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.6; } 50% { transform: translate(-50%, -50%) scale(1.5); opacity: 0.2; } }
 
-        #elm-db-size-badge { display: flex; align-items: center; background: #f5f5f5; border-radius: 20px; border: 1px solid #ddd; padding: 2px; white-space: nowrap; cursor: default; }
-        #elm-db-size-label { font-weight: 600; font-size: 14px; color: #555; padding: 4px 12px; }
-        .settings-action-btn { display: block; width: 100%; text-align: left; padding: 8px 10px; margin: 6px 0; border: 1px solid #ddd; border-radius: 8px; background: #fafafa; cursor: pointer; font-size: 13px; }
-        .settings-action-btn:hover { background: #f0f0f0; }
-        .settings-action-btn.danger { color: #c62828; border-color: #f2c2c2; }
+        /* tonal assist-chip style pill, matches the merge counter */
+        #elm-db-size-badge { display: flex; align-items: center; height: 32px; box-sizing: border-box; padding: 0 12px; background: #e6e1db; border: none; border-radius: 8px; white-space: nowrap; cursor: default; }
+        #elm-db-size-label { font: 500 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .1px; color: #1a1c20; padding: 0; }
+        /* Material 3 buttons: Download/Upload are tonal, Clear is an outlined error button */
+        .settings-action-btn {
+            display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; height: 40px; margin: 8px 0; padding: 0 24px; box-sizing: border-box;
+            border: none; border-radius: 20px; background: var(--md-primary-container, #fde3cc); color: var(--md-on-primary-container, #5a2800);
+            font: 500 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .1px; cursor: pointer;
+            transition: box-shadow .2s cubic-bezier(.2, 0, 0, 1), background-color .2s cubic-bezier(.2, 0, 0, 1);
+        }
+        .settings-action-btn:hover { box-shadow: 0 1px 2px rgba(0,0,0,.3), 0 1px 3px 1px rgba(0,0,0,.15); background: color-mix(in srgb, var(--md-primary, #ef6c00) 24%, #fff); }
+        .settings-action-btn:active { background: color-mix(in srgb, var(--md-primary, #ef6c00) 30%, #fff); box-shadow: none; }
+        .settings-action-btn:focus-visible { outline: 2px solid var(--md-primary, #ef6c00); outline-offset: 2px; }
+        .settings-action-btn.danger { background: transparent; border: 1px solid #73777f; color: #b3261e; }
+        .settings-action-btn.danger:hover { background: rgba(179, 38, 30, .08); box-shadow: none; }
         #elm-db-upload-input { display: none; }
+        /* "Show Database UI" off: hide the header counter and the list-view chips only */
+        body.csv-db-ui-off #elm-db-size-badge, body.csv-db-ui-off .csv-dept-badge { display: none !important; }
     `;
     const styleEl = document.createElement('style');
     styleEl.textContent = dbCss;
@@ -103,27 +120,68 @@
     // =========================================================
     // ID / NAME EXTRACTION (detail page)
     // =========================================================
-    function extractUniqueId() {
-        const url = window.location.href;
-        const patterns = [
-            /\/duplicates?\/([a-f0-9]{24})/i,
-            /\/deduplication[a-z-]*\/([a-f0-9]{24})/i,
-            /[?&](?:id|contactId|duplicateId)=([a-f0-9]{24})/i
-        ];
-        for (const p of patterns) {
-            const m = url.match(p);
-            if (m) return m[1].toLowerCase();
+    // The review queue URL never changes per profile, so the database is keyed on
+    // the Spark ID of each contact in the pair (Spark ID 1 = left/A, Spark ID 2 =
+    // right/B), read from the "Spark Id: ..." diff row.
+    function getDomSparkIds() {
+        const re = /Spark Id:\s*([^\s,|]+)/i;
+        const rows = document.querySelectorAll('elm-duplicate-field-diff-form .diff-row');
+        for (const row of rows) {
+            const btns = row.querySelectorAll(':scope > .diff-value-button');
+            const l = btns[0] && btns[0].textContent.match(re);
+            const r = btns[1] && btns[1].textContent.match(re);
+            if (l || r) return { a: l ? l[1] : '', b: r ? r[1] : '' };
         }
-        return null;
+        return { a: '', b: '' };
+    }
+    function sameSparkPair(e, a, b) {
+        const x = [e.sparkId1 || '', e.sparkId2 || ''].filter(Boolean).sort().join('|');
+        const y = [a, b].filter(Boolean).sort().join('|');
+        return !!x && x === y;
+    }
+    function escRe(t) { return t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+    function containsId(text, id) {
+        return !!id && id.length >= 4 && new RegExp('(^|[^A-Za-z0-9])' + escRe(id) + '($|[^A-Za-z0-9])').test(text);
+    }
+    // Privacy: only the first 3 letters of the first and last name are ever stored.
+    // A cut-off name is stored as "Jon..." so it reads as shortened; names of 3 letters
+    // or fewer are kept as-is, and an already-shortened name is left alone.
+    const ELLIPSIS = '...';
+    function trunc3(t) {
+        t = (t || '').trim();
+        if (t.endsWith(ELLIPSIS)) return t;
+        return t.length > 3 ? t.slice(0, 3) + ELLIPSIS : t;
+    }
+    function nameBase(t) { return (t || '').trim().replace(/\.\.\.$/, ''); }
+    function needsShortening(t) { t = (t || '').trim(); return t.length > 3 && !t.endsWith(ELLIPSIS); }
+    function maskNames(text, ...names) {
+        let out = text || '';
+        names.forEach(n => {
+            n = (n || '').trim();
+            if (n.length > 3) out = out.replace(new RegExp(escRe(n), 'gi'), trunc3(n));
+        });
+        return out;
+    }
+    // Both contacts' names (card A and card B), already cut to 3 letters, plus the
+    // full text so it can be masked out of row contents. Contact 1 is the first
+    // non-empty card, as before.
+    function splitName(full) {
+        const parts = (full || '').trim().split(/\s+/).filter(Boolean);
+        return { first: parts[0] || '', last: parts.slice(1).join(' ') };
     }
     function extractNames() {
         const form = document.querySelector('elm-duplicate-field-diff-form');
         if (!form) return { firstName: '', lastName: '' };
         const nameEls = form.querySelectorAll('.contact-card-name');
-        const fullName = nameEls[0] ? nameEls[0].textContent.trim() : (nameEls[1] ? nameEls[1].textContent.trim() : '');
-        if (!fullName) return { firstName: '', lastName: '' };
-        const parts = fullName.split(/\s+/);
-        return { firstName: parts[0] || '', lastName: parts.slice(1).join(' ') };
+        const n1 = splitName(nameEls[0] && nameEls[0].textContent);
+        const n2 = splitName(nameEls[1] && nameEls[1].textContent);
+        const c1 = n1.first ? n1 : n2;
+        const c2 = n1.first ? n2 : { first: '', last: '' };
+        return {
+            firstName: trunc3(c1.first), lastName: trunc3(c1.last),
+            firstName2: trunc3(c2.first), lastName2: trunc3(c2.last),
+            full: [c1.first, c1.last, c2.first, c2.last]
+        };
     }
     // Row(s) highlighted by Element451-UI-Perfection-v2.user.js as the trigger
     // for the current lockdown (mirrors the classic .blocked-row read).
@@ -142,7 +200,18 @@
     function getDatabase() {
         try {
             const data = localStorage.getItem(STORAGE_KEY);
-            return data ? JSON.parse(data) : [];
+            const db = data ? JSON.parse(data) : [];
+            // entries saved before name truncation existed are shortened (and re-saved) here
+            let changed = false;
+            db.forEach(e => {
+                if ([e.firstName, e.lastName, e.firstName2, e.lastName2].some(needsShortening)) {
+                    e.rowContents = maskNames(e.rowContents, e.firstName, e.lastName, e.firstName2, e.lastName2);
+                    e.firstName = trunc3(e.firstName); e.lastName = trunc3(e.lastName); e.firstName2 = trunc3(e.firstName2); e.lastName2 = trunc3(e.lastName2);
+                    changed = true;
+                }
+            });
+            if (changed) localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+            return db;
         } catch (e) {
             console.error('CSV Database: Error reading database', e);
             return [];
@@ -153,70 +222,90 @@
         catch (e) { console.error('CSV Database: Error saving database', e); }
     }
     function recordEntry(dept) {
-        if (!dept) return;
-        const uniqueId = extractUniqueId();
-        if (!uniqueId) return;
-        const bodyUid = document.body.dataset.csvUid;
-        if (bodyUid && bodyUid !== uniqueId) return; // stale signal mid-navigation
-        const { firstName, lastName } = extractNames();
-        if (!firstName && !lastName) return; // page content not ready
+        if (!dept) return false;
+        const sparks = getDomSparkIds();
+        if (!sparks.a && !sparks.b) return false;
+        // stale signal mid-navigation: the main script's Spark IDs must match the page
+        if (document.body.dataset.csvSpark1 !== sparks.a || document.body.dataset.csvSpark2 !== sparks.b) return false;
+        const { firstName, lastName, firstName2, lastName2, full } = extractNames();
+        if (!firstName && !lastName) return false; // page content not ready
         const db = getDatabase();
-        const rowContents = getBlockedRowText(dept);
-        const newEntry = { firstName, lastName, dept, rowContents, uniqueId };
-        const existingIdx = db.findIndex(entry => entry.uniqueId === uniqueId);
+        const rowContents = maskNames(getBlockedRowText(dept), ...full);
+        const newEntry = { firstName, lastName, firstName2, lastName2, dept, rowContents, sparkId1: sparks.a, sparkId2: sparks.b };
+        const existingIdx = db.findIndex(entry => sameSparkPair(entry, sparks.a, sparks.b));
         if (existingIdx !== -1) {
             const old = db[existingIdx];
-            if (old.dept === dept && old.firstName === firstName && old.lastName === lastName && old.rowContents === rowContents) return;
+            if (old.dept === dept && old.firstName === firstName && old.lastName === lastName
+                && old.firstName2 === firstName2 && old.lastName2 === lastName2 && old.rowContents === rowContents
+                && old.sparkId1 === sparks.a && old.sparkId2 === sparks.b) return true;
             db[existingIdx] = newEntry;
             saveDatabase(db);
-            return;
+            return true;
         }
         db.push(newEntry);
         saveDatabase(db);
+        return true;
     }
+    // The main script asks for the current pair to be recorded right before it skips it, so a
+    // fast skip can't beat the 1-second poll. It keeps asking until this reports success.
+    document.addEventListener('elm2-record-pair', (e) => {
+        if (!e.detail) return;
+        e.detail.handled = true;
+        e.detail.recorded = recordEntry(document.body.dataset.csvDept);
+    });
 
     // =========================================================
     // API STATUS TOAST
     // =========================================================
-    let toastEl = null;
-    let toastTimer = null;
+    // Shared toast stack with the main script (bottom-left, newest at the bottom, stacks upward).
+    function toastStack() {
+        let st = document.getElementById('elm2-toast-stack');
+        if (!st) { st = document.createElement('div'); st.id = 'elm2-toast-stack'; document.body.appendChild(st); }
+        return st;
+    }
     function showApiToast(message, type) {
         if (!SHOW_API_STATUS_TOAST) return;
-        if (!toastEl) {
-            toastEl = document.createElement('div');
-            toastEl.id = 'csv-api-toast';
-            document.body.appendChild(toastEl);
+        const st = toastStack();
+        // the same message again just refreshes the existing toast instead of stacking a copy
+        let el = Array.from(st.children).find(c => c.dataset.key === 'csv:' + message);
+        if (!el) {
+            el = document.createElement('div');
+            el.dataset.key = 'csv:' + message;
+            st.appendChild(el);
+            requestAnimationFrame(() => el.classList.add('visible'));
+            while (st.children.length > 4) st.firstChild.remove();
         }
-        toastEl.innerHTML =
+        el.className = 'elm2-toast csv-toast ' + type + ' visible';
+        el.innerHTML =
             '<span class="csv-toast-dot"><span class="csv-toast-dot-outer"></span><span class="csv-toast-dot-inner"></span></span>' +
             '<span class="csv-toast-text"></span>';
-        toastEl.querySelector('.csv-toast-text').textContent = message;
-        toastEl.className = type + ' visible';
-        if (toastTimer) clearTimeout(toastTimer);
-        toastTimer = setTimeout(() => { toastEl.classList.remove('visible'); }, 4000);
+        el.querySelector('.csv-toast-text').textContent = message;
+        clearTimeout(el._t);
+        el._t = setTimeout(() => { el.classList.remove('visible'); setTimeout(() => el.remove(), 250); }, 4000);
     }
     let lastAnnotationSource = null; // 'api' | 'db-fallback' | null
 
     // =========================================================
     // ROW MATCHING (name-text based — same approach as the classic script)
     // =========================================================
+    function startsWord(text, prefix) { return new RegExp('(^|[^a-z0-9])' + escRe(prefix)).test(text); }
     function matchRowToDbEntry(row, db, usedDbIndices) {
         const rowText = row.textContent.trim().toLowerCase();
         for (let i = 0; i < db.length; i++) {
             if (usedDbIndices.has(i)) continue;
             const entry = db[i];
-            const first = (entry.firstName || '').trim().toLowerCase();
-            const last = (entry.lastName || '').trim().toLowerCase();
-            if (first.length > 1 && last.length > 1 && rowText.includes(first) && rowText.includes(last)) {
+            if (containsId(row.textContent, entry.sparkId1) || containsId(row.textContent, entry.sparkId2)) {
                 usedDbIndices.add(i);
                 return entry;
             }
-        }
-        for (let i = 0; i < db.length; i++) {
-            if (usedDbIndices.has(i)) continue;
-            const entry = db[i];
-            const last = (entry.lastName || '').trim().toLowerCase();
-            if (last.length > 3 && rowText.includes(last)) {
+            // The list rows don't show Spark IDs, so rows are matched on names. Only
+            // 3-letter prefixes are stored, so require BOTH contacts of the pair (the
+            // master and the duplicate columns) to match, not just one name.
+            const has = (f, l) => f.length >= 2 && l.length >= 2 && startsWord(rowText, f) && startsWord(rowText, l);
+            const f1 = nameBase(entry.firstName).toLowerCase(), l1 = nameBase(entry.lastName).toLowerCase();
+            const f2 = nameBase(entry.firstName2).toLowerCase(), l2 = nameBase(entry.lastName2).toLowerCase();
+            const second = f2 && l2;
+            if (has(f1, l1) && (!second || has(f2, l2))) {
                 usedDbIndices.add(i);
                 return entry;
             }
@@ -270,6 +359,12 @@
             apiPageCache.delete(oldestKey);
         }
         clearStaleAnnotations();
+        // The list URL no longer changes per page, so a page change can't be detected from it any
+        // more. Each capture of fresh list data is the signal instead: toast every time.
+        if (!isReviewDetailPage()) {
+            lastAnnotationSource = 'api';
+            showApiToast('API: data captured successfully', 'success');
+        }
         annotateQueueTable();
         setTimeout(annotateQueueTable, 100);
         setTimeout(annotateQueueTable, 500);
@@ -282,15 +377,67 @@
             if (badge) badge.remove();
         });
     }
+    // Collects Spark IDs from an API record, wherever they live: scalars under a key
+    // containing "spark" (e.g. master.spark_id), and "Spark Id: <id>" text inside any
+    // string value.
+    const SPARK_TEXT = /spark[\s_-]*id\W{0,3}([A-Za-z0-9-]{4,})/gi;
+    function collectSparkIds(obj, path, out) {
+        if (obj === null || typeof obj !== 'object') return;
+        for (const k of Object.keys(obj)) {
+            if (!path && (k === 'ai_analysis' || k === 'feedback')) continue; // free text, not profile data
+            const v = obj[k];
+            const here = (path ? path + '.' + k : k).replace(/\.\d+/g, '[]');
+            if (/spark/i.test(k)) {
+                (Array.isArray(v) ? v : [v]).forEach(x => {
+                    if (typeof x === 'string' || typeof x === 'number') { out.push(String(x).trim()); }
+                });
+            }
+            // identities: [{ type: 'Spark_...', <value field>: '<id>' }] -> take the value from the siblings
+            if (typeof v === 'string' && /^spark/i.test(v) && !Array.isArray(obj)) {
+                ['value', 'id', 'identifier', 'external_id', 'identity', 'key', 'number', 'code'].forEach(f => {
+                    if (f !== k && (typeof obj[f] === 'string' || typeof obj[f] === 'number')) out.push(String(obj[f]).trim());
+                });
+            }
+            if (typeof v === 'string' && /spark/i.test(v)) {
+                let m;
+                SPARK_TEXT.lastIndex = 0;
+                while ((m = SPARK_TEXT.exec(v))) out.push(m[1]);
+            }
+            if (v && typeof v === 'object') collectSparkIds(v, here, out);
+        }
+    }
     function parseApiEntries(entries) {
         const sample = entries[0];
+        if (!sample || typeof sample !== 'object') return null;
         const idField = sample._id ? '_id' : sample.id ? 'id' : null;
-        if (!idField) return null;
-        return entries.map(e => ({
-            uniqueId: (e[idField] || '').toLowerCase(),
-            name: e.name || e.full_name || '',
-            duplicateName: e.duplicate_name || ''
-        }));
+        const parsed = entries.map((e, i) => {
+            const sparks = [];
+            collectSparkIds(e, '', sparks);
+            return {
+                uniqueId: ((idField && e[idField]) || 'api-' + i).toString().toLowerCase(),
+                name: e.name || e.full_name || '',
+                duplicateName: e.duplicate_name || '',
+                sparks: sparks.filter(Boolean),
+                raw: JSON.stringify(e)
+            };
+        });
+        return parsed;
+    }
+    // A list record matches a database entry when it carries all of the entry's
+    // Spark IDs (both contacts of the pair; a contact can be in several pairs, so
+    // one shared ID alone isn't enough when the entry has two).
+    function dbEntryForApi(api, db) {
+        if (!api) return null;
+        for (const entry of db) {
+            const ids = [entry.sparkId1, entry.sparkId2].filter(Boolean);
+            if (!ids.length) continue;
+            if (api.sparks.length) {
+                if (ids.every(id => api.sparks.includes(id))) return entry;
+            } else if (ids.some(id => containsId(api.raw, id))) {
+                return entry;
+            }
+        }
+        return null;
     }
 
     (function interceptXHR() {
@@ -348,7 +495,6 @@
             const entries = performance.getEntriesByType('resource');
             const match = entries.slice().reverse().find(e => /duplicate|dedup/i.test(e.name) && !e.name.match(/\/duplicates?\/[a-f0-9]{24}/i));
             if (!match) return;
-            console.log('CSV Database: Re-fetching first page data from', match.name);
             fetch(match.name).then(r => r.json()).then(data => {
                 const entries2 = data.data || data.items || data.results || (Array.isArray(data) ? data : null);
                 if (!entries2 || !Array.isArray(entries2) || entries2.length === 0) return;
@@ -434,23 +580,22 @@
             lastAnnotationSource = 'api';
             showApiToast('API: data captured successfully', 'success');
         }
-        const dbMap = {};
-        db.forEach(entry => { dbMap[entry.uniqueId] = entry; });
         const usedApiIndices = new Set();
+        const usedDbIndices = new Set();
         const indexFallbackSafe = apiDuplicatesList && rows.length === apiDuplicatesList.length;
         rows.forEach((row, rowIndex) => {
             let uniqueId = row.getAttribute('data-csv-uid');
-            if (!uniqueId && apiDuplicatesList) {
-                const matched = matchRowToApiEntry(row, apiDuplicatesList, usedApiIndices);
-                if (matched) uniqueId = matched.uniqueId;
-                if (!uniqueId && indexFallbackSafe && apiDuplicatesList[rowIndex] && !usedApiIndices.has(rowIndex)) {
-                    uniqueId = apiDuplicatesList[rowIndex].uniqueId;
+            let api = uniqueId ? apiDuplicatesList.find(a => a.uniqueId === uniqueId) : null;
+            if (!api && apiDuplicatesList) {
+                api = matchRowToApiEntry(row, apiDuplicatesList, usedApiIndices);
+                if (!api && indexFallbackSafe && apiDuplicatesList[rowIndex] && !usedApiIndices.has(rowIndex)) {
+                    api = apiDuplicatesList[rowIndex];
                     usedApiIndices.add(rowIndex);
                 }
-                if (uniqueId) row.setAttribute('data-csv-uid', uniqueId);
+                if (api) row.setAttribute('data-csv-uid', api.uniqueId);
             }
-            if (!uniqueId) return;
-            const dbEntry = dbMap[uniqueId];
+            // Spark ID found in the API record first; otherwise name/ID text on the row
+            const dbEntry = dbEntryForApi(api, db) || matchRowToDbEntry(row, db, usedDbIndices);
             if (!dbEntry) {
                 const b = row.querySelector('.csv-dept-badge'); if (b) b.remove();
                 row.removeAttribute('data-csv-dept');
@@ -506,8 +651,8 @@
     function toCSV() {
         const db = getDatabase();
         if (db.length === 0) return '';
-        const headers = ['Firstname', 'Lastname', 'Dept.', 'Row Contents', 'Unique ID'];
-        const rows = db.map(e => [e.firstName, e.lastName, e.dept, e.rowContents, e.uniqueId]
+        const headers = ['Firstname', 'Lastname', 'Firstname 2', 'Lastname 2', 'Dept.', 'Spark ID 1', 'Spark ID 2', 'Row Contents'];
+        const rows = db.map(e => [e.firstName, e.lastName, e.firstName2, e.lastName2, e.dept, e.sparkId1, e.sparkId2, e.rowContents]
             .map(v => `"${(v || '').replace(/"/g, '""')}"`).join(','));
         return [headers.join(','), ...rows].join('\n');
     }
@@ -568,10 +713,10 @@
         section.id = 'elm-settings-db-section';
         section.innerHTML = `
             <div class="settings-section-title">Database</div>
-            <button id="elm-settings-download-btn" class="settings-action-btn">⬇ Download Database</button>
-            <button id="elm-settings-upload-btn" class="settings-action-btn">⬆ Upload &amp; Replace Database</button>
+            <button id="elm-settings-download-btn" class="settings-action-btn"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/></svg> Download Database</button>
+            <button id="elm-settings-upload-btn" class="settings-action-btn"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M5 20h14v-2H5v2zm0-10h4v6h6v-6h4l-7-7-7 7z"/></svg> Upload &amp; Replace Database</button>
             <input type="file" id="elm-db-upload-input" accept=".csv">
-            <button id="elm-settings-clear-btn" class="settings-action-btn danger">✖ Clear Database</button>
+            <button id="elm-settings-clear-btn" class="settings-action-btn danger"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg> Clear Database</button>
         `;
         settingsBody.appendChild(section);
         document.getElementById('elm-settings-download-btn').onclick = () => {
@@ -600,9 +745,27 @@
                     const lines = text.trim().split('\n');
                     if (lines.length < 2) { alert('CSV file is empty or has no data rows.'); uploadInput.value = ''; return; }
                     const entries = [];
+                    // Columns are found by header name, so files exported by any earlier
+                    // version (different column order, or the old 5-column "Unique ID"
+                    // format with no Spark IDs) still import.
+                    const header = parseCSVLine(lines[0]).map(h => h.trim().toLowerCase());
+                    const col = (name, fallback) => { const i = header.indexOf(name); return i !== -1 ? i : fallback; };
+                    const idx = {
+                        first: col('firstname', 0), last: col('lastname', 1),
+                        first2: col('firstname 2', -1), last2: col('lastname 2', -1),
+                        dept: col('dept.', 2), rows: col('row contents', 3),
+                        s1: col('spark id 1', -1), s2: col('spark id 2', -1)
+                    };
+                    const get = (cols, i) => (i >= 0 && i < cols.length ? cols[i] : '');
                     for (let i = 1; i < lines.length; i++) {
                         const cols = parseCSVLine(lines[i]);
-                        if (cols.length >= 5) entries.push({ firstName: cols[0], lastName: cols[1], dept: cols[2], rowContents: cols[3], uniqueId: cols[4] });
+                        if (cols.length < 4) continue;
+                        entries.push({
+                            firstName: trunc3(get(cols, idx.first)), lastName: trunc3(get(cols, idx.last)),
+                            firstName2: trunc3(get(cols, idx.first2)), lastName2: trunc3(get(cols, idx.last2)),
+                            dept: get(cols, idx.dept), rowContents: get(cols, idx.rows),
+                            sparkId1: get(cols, idx.s1), sparkId2: get(cols, idx.s2)
+                        });
                     }
                     if (entries.length === 0) { alert('No valid entries found in CSV file.'); uploadInput.value = ''; return; }
                     if (!confirm(`Replace current database with ${entries.length} entries from "${file.name}"?`)) { uploadInput.value = ''; return; }
@@ -629,7 +792,24 @@
             }
         };
     }
-    setInterval(() => { injectDbBadge(); injectDbSettingsSection(); }, 1000);
+    // "Show Database UI" lives under Display, right after the "Highlight Rows" toggle.
+    function injectDbUiToggle() {
+        if (document.getElementById('elm-show-db-ui')) return;
+        const highlight = document.getElementById('elm-highlight-rows');
+        const anchor = highlight && highlight.closest('.setting-row');
+        if (!anchor) return;
+        const row = document.createElement('div');
+        row.className = 'setting-row';
+        row.innerHTML = '<label>Show Database UI</label><label class="elm-toggle-switch"><input type="checkbox" id="elm-show-db-ui"><span class="elm-toggle-slider"></span></label>';
+        anchor.insertAdjacentElement('afterend', row);
+        const uiToggle = document.getElementById('elm-show-db-ui');
+        uiToggle.checked = showDbUi();
+        uiToggle.addEventListener('change', () => {
+            try { localStorage.setItem(UI_KEY, String(uiToggle.checked)); } catch (e) { /* ignore */ }
+            applyDbUiSetting();
+        });
+    }
+    setInterval(() => { applyDbUiSetting(); injectDbBadge(); injectDbSettingsSection(); injectDbUiToggle(); }, 1000);
 
     // =========================================================
     // AUTO-RECORD: poll body[data-csv-dept] set by UI-Perfection-v2
@@ -640,5 +820,5 @@
         updateDbSizeBadge();
     }, 1000);
 
-    console.log('%cCSV Database (new layout) loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
+    console.log('%cCSV Database (new layout) v2.22 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
 })();

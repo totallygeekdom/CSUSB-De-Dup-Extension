@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.141
+// @version      2.142
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-141'; // keep in sync with @version (2.141)
+    const BUILD = 'v2-build-142'; // keep in sync with @version (2.142)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -2183,11 +2183,12 @@
     // The "Merge: 2/3" toast is worked out at the merge click (the rows are gone afterwards) but only shown
     // once Element's "Merge completed" card is seen, so it never announces a merge that did not happen.
     let pendingMergeToast = null;
-    // Outcome toasts ("Merge: 2/3", "Skip: Appeal") follow the Outcome toasts switch, except that they are
-    // always on while Auto-Skip or auto-merge (When done = Merge, slider not on None) is on.
+    // Toasts ("Merge: 2/3", "Skip: Appeal") follow the Toasts switch, except that they are forced off while the
+    // slider is on None (a scan) and forced on while Auto-Skip or auto-merge (When done = Merge) is on.
     const autoMergeOn = () => CFG.WHEN_DONE === 'merge' && CFG.RANGE_LEVEL > 0;
-    const toastsForced = () => CFG.AUTO_SKIP_BLOCKED || autoMergeOn();
-    const toastsEnabled = () => toastsForced() || getBoolSetting('elm_outcome_toasts', true);
+    const toastsForcedOff = () => CFG.RANGE_LEVEL === 0;
+    const toastsForcedOn = () => !toastsForcedOff() && (CFG.AUTO_SKIP_BLOCKED || autoMergeOn());
+    const toastsEnabled = () => !toastsForcedOff() && (toastsForcedOn() || getBoolSetting('elm_outcome_toasts', true));
     // Notices ("Auto-merge cancelled", "Rows per page ...") use the shared toast stack that
     // csv-database-v2.js also uses for its API toast: bottom-left, newest at the bottom.
     function toastStack() {
@@ -2764,12 +2765,12 @@
                 </div>
                 <div class="setting-row"><label>Auto-Skip</label>${toggleHtml('elm-auto-skip-blocked')}</div>
                 <div class="elm-level-desc elm-skip-desc">Skips blocked, out-of-range and possible-twins pairs with no popup. Off: stops on them instead.</div>
-                <div class="setting-row"><label>Outcome toasts</label>${toggleHtml('elm-outcome-toasts')}</div>
-                <div class="elm-level-desc elm-toast-desc">Short toasts after each outcome: "Merge: 2/3" once a merge completes, "Skip: Appeal" when a pair is skipped. Always on while Auto-Skip or auto-merge is on.</div>
                 <div class="setting-row"><label>Next after merge</label>${toggleHtml('elm-next-after-merge')}</div>
                 <div class="elm-level-desc elm-next-desc">After a merge (yours or an auto-merge), presses "Next duplicate" on the "Merge completed" card, and hides Element\'s own "Skip merge completion screen" switches (which would remove that card).</div>
                 <div class="settings-section-title">Display</div>
                 <div class="setting-row"><label>Highlight Rows</label>${toggleHtml('elm-highlight-rows')}</div>
+                <div class="setting-row"><label>Toasts</label>${toggleHtml('elm-outcome-toasts')}</div>
+                <div class="elm-level-desc elm-toast-desc">Short "Merge: 2/3" and "Skip: Appeal" toasts. Always on while Auto-Skip or auto-merge is on; always off when no pairs are in range (slider on None).</div>
                 <div class="settings-section-title">Department</div>
                 <div class="setting-row">
                     <label>Allowed Department</label>
@@ -2859,13 +2860,13 @@
         levelSlider.addEventListener('input', syncCountdown);
         syncLevel();
         syncCountdown();
-        // Outcome toasts: the switch is forced on and greyed out while Auto-Skip or auto-merge is on.
+        // Toasts: the switch is forced off (slider None) or on (Auto-Skip / auto-merge) and greyed out.
         const toastsEl = document.getElementById('elm-outcome-toasts');
         const syncToasts = () => {
-            const forced = toastsForced();
-            toastsEl.checked = forced || getBoolSetting('elm_outcome_toasts', true);
-            toastsEl.disabled = forced;
-            toastsEl.closest('.setting-row').style.opacity = forced ? '.38' : '';
+            const off = toastsForcedOff(), on = toastsForcedOn();
+            toastsEl.checked = !off && (on || getBoolSetting('elm_outcome_toasts', true));
+            toastsEl.disabled = off || on;
+            toastsEl.closest('.setting-row').style.opacity = (off || on) ? '.38' : '';
         };
         toastsEl.addEventListener('change', () => localStorage.setItem('elm_outcome_toasts', String(toastsEl.checked)));
         document.getElementById('elm-when-done').addEventListener('click', syncToasts);

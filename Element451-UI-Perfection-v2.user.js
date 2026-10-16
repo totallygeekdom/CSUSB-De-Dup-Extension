@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.135
+// @version      2.136
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-135'; // keep in sync with @version (2.135)
+    const BUILD = 'v2-build-136'; // keep in sync with @version (2.136)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -134,7 +134,7 @@
         #elm2-toast-stack { position: fixed; left: 16px; bottom: 16px; z-index: 10000; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
         .elm2-toast { display: flex; align-items: center; gap: 12px; box-sizing: border-box; min-height: 48px; max-width: 340px; padding: 8px 16px 8px 12px; border-radius: 4px; background: #2f3236; color: #f1f3f7; font: 400 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .25px; box-shadow: var(--md-elev-3); opacity: 0; transform: translateY(8px); transition: opacity .25s var(--md-ease), transform .25s var(--md-ease); }
         .elm2-toast.visible { opacity: 1; transform: none; }
-        .elm2-toast.elm2-notice { padding-left: 16px; }
+        .elm2-toast.elm2-notice, .elm2-toast.elm2-result { padding-left: 16px; }
         /* Material 3 dialog: 32% scrim, tonal container, hero indicator, headline + supporting text,
            filled error button. Container radius = button radius (24) + gap (16) so the corners nest. */
         #elm2-merge-overlay {
@@ -1405,7 +1405,10 @@
     // Skips to the next pair, but first has the CSV database script (if installed) record this
     // one, retrying for up to 3s until it confirms, so a fast skip never loses an entry.
     let skipInFlightKey = '';
-    function skipToNext(reason) {
+    // Only while auto-merge is actually running (When done = Merge, slider not on None) is every skip
+    // announced with a short label ("Skip: Appeal"); plain scans and manual sessions stay quiet.
+    function skipToNext(reason, label) {
+        if (label && CFG.WHEN_DONE === 'merge' && CFG.RANGE_LEVEL > 0) showMergeNotice('Skip: ' + label, true);
         const key = getPairKey();
         if (skipInFlightKey === key) return; // already skipping this pair
         skipInFlightKey = key;
@@ -1561,6 +1564,20 @@
         if (idMismatch.mismatch) blockers.push({ type: 'student-id-mismatch', ...idMismatch });
         if (isStudentIgnored()) blockers.push({ type: 'ignored' });
         return blockers;
+    }
+    function blockerLabel(blockers) {
+        const names = [];
+        blockers.forEach(b => {
+            let n = '';
+            if (b.type === 'appeal') n = 'Appeal';
+            else if (b.type === 'department') n = b.reason === 'Grad/IA' ? 'Graduate/IA' : (b.reason || 'Department');
+            else if (b.type === 'student-id-mismatch') n = 'Student ID';
+            else if (b.type === 'forbidden') n = 'Forbidden';
+            else if (b.type === 'ignored') n = 'Ignored';
+            else n = b.type;
+            if (n && !names.includes(n)) names.push(n);
+        });
+        return names.join(' + ');
     }
     function applyBlockStyling(blockers) {
         document.body.classList.remove('elm2-blocked');
@@ -2183,15 +2200,17 @@
     function hideMergeBar() {
         document.querySelectorAll('#elm2-toast-stack .elm2-notice').forEach(t => t.remove());
     }
-    function showMergeNotice(text) {
+    // keep = true: a short outcome toast ("Skip: Twins", "Merge: 2/3") that must survive the pair change,
+    // whereas ordinary notices are cleared by hideMergeBar() when the pair changes.
+    function showMergeNotice(text, keep) {
         const st = toastStack();
         const el = document.createElement('div');
-        el.className = 'elm2-toast elm2-notice';
+        el.className = 'elm2-toast' + (keep ? ' elm2-result' : ' elm2-notice');
         el.setAttribute('role', 'status');
         el.textContent = text;
         st.appendChild(el);
         requestAnimationFrame(() => el.classList.add('visible'));
-        setTimeout(() => { el.classList.remove('visible'); setTimeout(() => el.remove(), 250); }, 6000);
+        setTimeout(() => { el.classList.remove('visible'); setTimeout(() => el.remove(), 250); }, keep ? 4500 : 6000);
         while (st.children.length > 4) st.firstChild.remove();
     }
     // The countdown itself: a centred dialog over a dimmed page, with a draining ring around the
@@ -2248,6 +2267,13 @@
     }
     // The auto-merge brief: who, Bolt's score, how often the script agrees with Bolt, and what it
     // chose over Bolt. Built from DOM nodes (no HTML strings, so contact names are never parsed as markup).
+    // How the script's picks compare with Bolt's on the pair on screen (also the source of the "Merge: 2/3" toast).
+    function mergeStats() {
+        const rows = getDiffRows().filter(r => r.isConflict);
+        const picks = rows.filter(r => r.element.dataset.elm2ScriptSide && r.element.dataset.elm2AiSide);
+        const over = picks.filter(r => r.element.dataset.elm2ScriptSide !== r.element.dataset.elm2AiSide);
+        return { picks, over, total: picks.length, agree: picks.length - over.length, applicant: !!findApplicantSide() };
+    }
     function renderMergeBrief(box) {
         const line = (cls) => { const d = document.createElement('div'); d.className = 'brief-line ' + (cls || ''); box.appendChild(d); return d; };
         const text = (parent, t) => parent.appendChild(document.createTextNode(t));
@@ -2261,8 +2287,7 @@
             text(l, 'Bolt score: ');
             strong(l, score.charAt(0).toUpperCase() + score.slice(1), 'brief-score brief-score-' + score);
         }
-        const picks = getDiffRows().filter(r => r.isConflict && r.element.dataset.elm2ScriptSide && r.element.dataset.elm2AiSide);
-        const over = picks.filter(r => r.element.dataset.elm2ScriptSide !== r.element.dataset.elm2AiSide);
+        const { picks, over } = mergeStats();
         if (picks.length === 0) { text(line(), "No script picks; Bolt's picks stand."); return; }
         const agree = line();
         text(agree, 'Script agrees with ');
@@ -2308,7 +2333,7 @@
         if (!pre.ok) {
             console.log('[elm2] Auto-merge not started:', pre.reason);
             if (pre.reason === 'the pair changed') return;
-            if (CFG.AUTO_SKIP_BLOCKED) skipToNext('not merged, ' + pre.reason);
+            if (CFG.AUTO_SKIP_BLOCKED) skipToNext('not merged, ' + pre.reason, 'Review');
             else showMergeNotice('Auto-merge stopped: ' + pre.reason + '.');
             return;
         }
@@ -2373,7 +2398,7 @@
             hideMergeModal();
             console.log('[elm2] Auto-merge not done:', ready.reason);
             if (ready.reason === 'the pair changed') return;
-            if (CFG.AUTO_SKIP_BLOCKED) { skipToNext('not merged, ' + ready.reason); }
+            if (CFG.AUTO_SKIP_BLOCKED) { skipToNext('not merged, ' + ready.reason, 'Review'); }
             else showMergeNotice('Auto-merge stopped: ' + ready.reason + '.');
         };
         mergeTimer = setInterval(() => {
@@ -2390,6 +2415,8 @@
             document.getElementById('elm2-merge-title').textContent = race ? 'GO!' : 'Merging…';
             render();
             const fire = (btn) => {
+                const st = mergeStats();
+                showMergeNotice('Merge: ' + (st.applicant ? 'Applicant' : st.total > 0 ? st.agree + '/' + st.total : 'Bolt'), true);
                 card.classList.add('fired');
                 mergedPairKey = key;
                 console.log('[elm2] Auto-merging pair');
@@ -2458,7 +2485,7 @@
             console.log('[elm2] Blocked:', blockers.map(b => b.type + (b.reason ? ' (' + b.reason + ')' : '')).join(', '),
                 '| auto-skip', CFG.AUTO_SKIP_BLOCKED ? 'ON' : 'OFF');
             if (CFG.AUTO_SKIP_BLOCKED) {
-                setTimeout(() => skipToNext('blocked'), 1200);
+                setTimeout(() => skipToNext('blocked', blockerLabel(blockers)), 1200);
             }
             return;
         }
@@ -2483,7 +2510,7 @@
             const laterBlockers = getAllBlockers();
             applyBlockStyling(laterBlockers);
             if (laterBlockers.length > 0) {
-                if (CFG.AUTO_SKIP_BLOCKED) { skipToNext('blocked'); }
+                if (CFG.AUTO_SKIP_BLOCKED) { skipToNext('blocked', blockerLabel(laterBlockers)); }
                 return;
             }
             runAutoResolution();
@@ -2510,7 +2537,7 @@
             // Outside the slider range: skipped with Auto-Skip on (no popup), otherwise left for you.
             // (Slider on None = no pair is in range, so with Auto-Skip on every pair is skipped.)
             if (!pairInRange && CFG.AUTO_SKIP_BLOCKED) {
-                skipToNext('outside the slider range');
+                skipToNext('outside the slider range', 'Range');
                 return;
             }
             // Possible twins: with Auto-Skip on the pair is skipped with no popup; otherwise it is
@@ -2521,7 +2548,7 @@
                 if (shouldWarn) {
                     conflictWarningShown = true;
                     if (CFG.AUTO_SKIP_BLOCKED) {
-                        skipToNext('possible twins: ' + conflicts.join(', '));
+                        skipToNext('possible twins: ' + conflicts.join(', '), 'Twins');
                     } else {
                         alert(`⚠️ Warning: ${conflictCount} conflicting signal${conflictCount === 1 ? '' : 's'} detected!\n\nConflicts found in: ${conflicts.join(', ')}\n\nThese entries might be twins or two different people. Please review carefully before merging.`);
                     }

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.133
+// @version      2.134
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-133'; // keep in sync with @version (2.133)
+    const BUILD = 'v2-build-134'; // keep in sync with @version (2.134)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -142,8 +142,9 @@
             background: rgba(0, 0, 0, .32); opacity: 0; pointer-events: none; transition: opacity .2s var(--md-ease);
         }
         #elm2-merge-overlay.visible { opacity: 1; pointer-events: auto; }
+        /* the overlay is sized to the merge panel by placeMergeOverlay(); without a panel it covers the page */
         #elm2-merge-overlay .elm2-merge-card {
-            box-sizing: border-box; width: min(360px, calc(100vw - 32px)); padding: 40px 16px 16px; border-radius: 40px;
+            box-sizing: border-box; width: 360px; max-width: calc(100% - 32px); padding: 40px 16px 16px; border-radius: 40px;
             background: #efebe6; color: #1a1c20; box-shadow: var(--md-elev-3); text-align: center;
             font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif;
             transform: scale(.85); opacity: 0; transition: transform .25s cubic-bezier(.05, .7, .1, 1), opacity .15s linear;
@@ -2204,6 +2205,22 @@
         }
         return ov;
     }
+    // The scrim and the dialog belong to the merge panel (the review sidebar), not the whole page:
+    // size the overlay to the visible part of that panel, which also centres the card in it.
+    function placeMergeOverlay(ov) {
+        const form = getDiffForm();
+        let panel = form && (form.closest('elm-review-duplicates-sidebar') || form.closest('bolt-stackable-sidebar') || form.querySelector('form.diff-form') || form);
+        let r = panel ? panel.getBoundingClientRect() : null;
+        const vw = window.innerWidth, vh = window.innerHeight;
+        // an ancestor that is basically the whole page is not "the panel": use the form itself
+        if (r && r.width >= vw * 0.95 && r.height >= vh * 0.95 && form) r = form.getBoundingClientRect();
+        if (!r || r.width < 200 || r.height < 200) { ov.style.inset = '0'; ov.style.left = ov.style.top = ov.style.width = ov.style.height = ''; return; }
+        const left = Math.max(r.left, 0), top = Math.max(r.top, 0);
+        const right = Math.min(r.right, vw), bottom = Math.min(r.bottom, vh);
+        ov.style.inset = 'auto';
+        ov.style.left = left + 'px'; ov.style.top = top + 'px';
+        ov.style.width = Math.max(0, right - left) + 'px'; ov.style.height = Math.max(0, bottom - top) + 'px';
+    }
     function hideMergeModal() {
         const ov = document.getElementById('elm2-merge-overlay');
         if (ov) ov.classList.remove('visible');
@@ -2336,6 +2353,7 @@
         arc.style.transition = '';
         fill.style.transition = '';
         render();
+        placeMergeOverlay(ov);
         ov.classList.add('visible');
         // Final gate, then the merge click itself. Returns false when the pair is not mergeable.
         const stop = (ready) => {
@@ -2347,6 +2365,7 @@
         };
         mergeTimer = setInterval(() => {
             if (getPairKey() !== key) { cancelAutoMerge(); return; }
+            placeMergeOverlay(ov); // follows the panel if the window is resized or scrolled
             left--;
             if (left > 0) { render(); return; }
             clearInterval(mergeTimer);

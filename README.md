@@ -12,7 +12,7 @@ chip). Two v2 scripts target it:
 
 | Script | File | Current version |
 |---|---|---|
-| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.136` (`v2-build-136`, shown in the settings pane) |
+| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.137` (`v2-build-137`, shown in the settings pane) |
 | CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.22` |
 
 **Full documentation: [`Full-Documentation-v2.md`](Full-Documentation-v2.md)** (architecture, every setting,
@@ -37,7 +37,7 @@ the resolution rules, auto-merge, every website restyle, the database format, li
   comparison. Rows Bolt leaves unselected and no rule covers (Milestones, Sources, ...) are filled: side with data,
   then the more recent profile (Created date), then the selected email's side, then an arbitrary stable side. A rule that
   applies but cannot decide (dual personal email, address tie, csusb.major / school on both sides) with no Bolt pick
-  means the pair needs manual review and is never auto-merged.
+  means the pair needs manual review: it is never auto-merged and never skipped.
 - **Review-page visuals**: Bolt-vs-ours pick colours (green agree, blue Bolt, orange ours), applicant band,
   comparison bar with *Use Bolt AI picks* / *Use our picks* and a blue **hover preview** of what each would
   select, High / Medium / Low score-chip colours, a pinned queue nav.

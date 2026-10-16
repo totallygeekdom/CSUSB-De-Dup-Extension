@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.136
+// @version      2.137
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-136'; // keep in sync with @version (2.136)
+    const BUILD = 'v2-build-137'; // keep in sync with @version (2.137)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -2318,7 +2318,8 @@
         const unresolved = getDiffRows().filter(r => r.isConflict && !r.nativeSide && !r.otherSelected);
         if (unresolved.length > 0) {
             unresolved.forEach(r => console.log('[elm2] Needs review:', r.label || '(unnamed)', '| A:', r.values[0].textContent, '| B:', r.values[1].textContent));
-            return { ok: false, reason: unresolved.length + ' field(s) need review (' + unresolved.map(r => r.label || '(unnamed)').join(', ') + ')' };
+            const fields = Array.from(new Set(unresolved.map(r => r.label || '(unnamed)')));
+            return { ok: false, reason: unresolved.length + ' field(s) need review (' + fields.join(', ') + ')', review: fields.slice(0, 3).join(', ') + (fields.length > 3 ? ' +' + (fields.length - 3) : '') };
         }
         if (CONFLICT_ROW_THRESHOLD > 0 && checkForConflictingRecords().shouldWarn) return { ok: false, reason: 'possible twins' };
         const btn = getSidebarActionButton('Merge Contacts');
@@ -2333,7 +2334,9 @@
         if (!pre.ok) {
             console.log('[elm2] Auto-merge not started:', pre.reason);
             if (pre.reason === 'the pair changed') return;
-            if (CFG.AUTO_SKIP_BLOCKED) skipToNext('not merged, ' + pre.reason, 'Review');
+            // A pair that needs a human is never skipped: it stays on screen (whatever Auto-Skip says).
+            if (pre.review) { showMergeNotice('Review: ' + pre.review, true); return; }
+            if (CFG.AUTO_SKIP_BLOCKED) skipToNext('not merged, ' + pre.reason);
             else showMergeNotice('Auto-merge stopped: ' + pre.reason + '.');
             return;
         }
@@ -2398,7 +2401,8 @@
             hideMergeModal();
             console.log('[elm2] Auto-merge not done:', ready.reason);
             if (ready.reason === 'the pair changed') return;
-            if (CFG.AUTO_SKIP_BLOCKED) { skipToNext('not merged, ' + ready.reason, 'Review'); }
+            if (ready.review) { showMergeNotice('Review: ' + ready.review, true); return; }
+            if (CFG.AUTO_SKIP_BLOCKED) { skipToNext('not merged, ' + ready.reason); }
             else showMergeNotice('Auto-merge stopped: ' + ready.reason + '.');
         };
         mergeTimer = setInterval(() => {

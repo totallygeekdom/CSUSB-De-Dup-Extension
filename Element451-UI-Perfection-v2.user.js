@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.138
+// @version      2.139
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-138'; // keep in sync with @version (2.138)
+    const BUILD = 'v2-build-139'; // keep in sync with @version (2.139)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -1558,18 +1558,18 @@
         if (idMismatch.mismatch) blockers.push({ type: 'student-id-mismatch', ...idMismatch });
         return blockers;
     }
+    // One reason per skipped pair, by priority: Range > Forbidden > Student ID > Grad/IA (wrong department)
+    // > Appeal. (Twins is only reached by pairs that passed all of these.)
     function blockerLabel(blockers) {
-        const names = [];
-        blockers.forEach(b => {
-            let n = '';
-            if (b.type === 'appeal') n = 'Appeal';
-            else if (b.type === 'department') n = b.reason === 'Grad/IA' ? 'Graduate/IA' : (b.reason || 'Department');
-            else if (b.type === 'student-id-mismatch') n = 'Student ID';
-            else if (b.type === 'forbidden') n = 'Forbidden';
-            else n = b.type;
-            if (n && !names.includes(n)) names.push(n);
-        });
-        return names.join(' + ');
+        computeAutoApplyForPair();
+        if (!pairInRange) return 'Range';
+        const has = (t) => blockers.find(b => b.type === t);
+        if (has('forbidden')) return 'Forbidden';
+        if (has('student-id-mismatch')) return 'Student ID';
+        const dept = has('department');
+        if (dept) return dept.reason === 'Grad/IA' ? 'Graduate/IA' : (dept.reason || 'Department');
+        if (has('appeal')) return 'Appeal';
+        return blockers.length ? blockers[0].type : '';
     }
     function applyBlockStyling(blockers) {
         document.body.classList.remove('elm2-blocked');

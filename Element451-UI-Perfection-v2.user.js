@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.139
+// @version      2.140
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-139'; // keep in sync with @version (2.139)
+    const BUILD = 'v2-build-140'; // keep in sync with @version (2.140)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -2180,6 +2180,9 @@
     let mergeTimer = null;
     let mergeBarTimer = null;
     let mergedPairKey = '';
+    // The "Merge: 2/3" toast is worked out at the merge click (the rows are gone afterwards) but only shown
+    // once Element's "Merge completed" card is seen, so it never announces a merge that did not happen.
+    let pendingMergeToast = null;
     // Notices ("Auto-merge cancelled", "Rows per page ...") use the shared toast stack that
     // csv-database-v2.js also uses for its API toast: bottom-left, newest at the bottom.
     function toastStack() {
@@ -2410,7 +2413,7 @@
             render();
             const fire = (btn) => {
                 const st = mergeStats();
-                showMergeNotice('Merge: ' + (st.applicant ? 'Applicant' : st.total > 0 ? st.agree + '/' + st.total : 'Bolt'), true);
+                pendingMergeToast = { text: 'Merge: ' + (st.applicant ? 'Applicant' : st.total > 0 ? st.agree + '/' + st.total : 'Bolt'), at: Date.now() };
                 card.classList.add('fired');
                 mergedPairKey = key;
                 console.log('[elm2] Auto-merging pair');
@@ -2586,6 +2589,8 @@
         if (!card || card.dataset.elm2Handled || !card.getClientRects().length) return; // absent, handled, or hidden
         card.dataset.elm2Handled = '1';
         formWasAbsent = true; // the next pair is a new one, whatever its key says
+        if (pendingMergeToast && Date.now() - pendingMergeToast.at < 20000) showMergeNotice(pendingMergeToast.text, true);
+        pendingMergeToast = null;
         const sentence = card.querySelector('.bolt-body-large');
         const qpm = getQueuePosition();
         console.log('[elm2] Merged' + (qpm ? ' ' + qpm.current + '/' + qpm.total : '') + ' |', sentence ? sentence.textContent.trim() : (card.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 90));

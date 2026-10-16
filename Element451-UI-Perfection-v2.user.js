@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.132
+// @version      2.133
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-132'; // keep in sync with @version (2.132)
+    const BUILD = 'v2-build-133'; // keep in sync with @version (2.133)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -2366,7 +2366,7 @@
                 // Watchdog: a merge shows a "Merge completed" card. If it never comes (for example a
                 // confirmation dialog is waiting), the console says so.
                 setTimeout(() => {
-                    if (getPairKey() !== key || Array.from(document.querySelectorAll('.merge-completion-state')).some(c => c.getClientRects().length)) return;
+                    if (getPairKey() !== key || completionCardVisible()) return;
                     const dlg = document.querySelector('bolt-dialog');
                     console.log('[elm2] Merge Contacts clicked but no "Merge completed" card;', dlg ? 'dialog open: ' + dlg.textContent.replace(/\s+/g, ' ').trim().slice(0, 160) : 'no dialog open');
                 }, 6000);
@@ -2388,9 +2388,20 @@
     // Each pair: blockers -> (skip or stop) -> apply picks per "Use picks from" if the pair is
     // inside the slider range -> twins check -> optional auto-merge (cancel window above).
     // =========================================================
+    // True while the review form was off screen (for example behind the "Merge completed" card). The
+    // pair that shows up next is a new one even if its key (names + queue position) matches the last:
+    // a merge removes a pair from the queue, so the next pair can land on the same position, and
+    // duplicates usually share their names.
+    let formWasAbsent = false;
     function attemptAutoResolve() {
-        if (!isDedupReviewPage()) return;
+        if (!isDedupReviewPage() || completionCardVisible()) { formWasAbsent = true; return; }
         if (!getContactNames().filter(Boolean).length) return; // page still loading
+        if (formWasAbsent) {
+            formWasAbsent = false;
+            currentQueuePositionKey = '';
+            mergedPairKey = '';
+            skipInFlightKey = '';
+        }
         resetStaleRows();
         snapshotNativeSelections(); // capture Bolt's defaults before anything below can click a row
         const pairKey = getPairKey();
@@ -2506,6 +2517,7 @@
     // (bolt-card.merge-completion-state) holding "View merged contact" and "Next duplicate".
     // That card is the real merge-success signal: count the merge, then press "Next duplicate"
     // (not shown on the last pair, in which case nothing is clicked). Handled once per card.
+    const completionCardVisible = () => Array.from(document.querySelectorAll('.merge-completion-state')).some(c => c.getClientRects().length);
     let skipToggleWarned = false;
     function syncSkipToggles() {
         document.body.classList.toggle('elm2-next-after-merge', CFG.NEXT_AFTER_MERGE);
@@ -2520,6 +2532,7 @@
         const card = document.querySelector('.merge-completion-state');
         if (!card || card.dataset.elm2Handled || !card.getClientRects().length) return; // absent, handled, or hidden
         card.dataset.elm2Handled = '1';
+        formWasAbsent = true; // the next pair is a new one, whatever its key says
         const sentence = card.querySelector('.bolt-body-large');
         const qpm = getQueuePosition();
         console.log('[elm2] Merged' + (qpm ? ' ' + qpm.current + '/' + qpm.total : '') + ' |', sentence ? sentence.textContent.trim() : (card.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 90));

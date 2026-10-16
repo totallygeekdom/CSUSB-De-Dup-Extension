@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.134
+// @version      2.135
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-134'; // keep in sync with @version (2.134)
+    const BUILD = 'v2-build-135'; // keep in sync with @version (2.135)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -799,6 +799,19 @@
             let parsed = {};
             const parts = cleaned.split(',').map(p => p.trim()).filter(p => p);
             const parseStreetPart = (streetPart) => {
+                // A street chunk with no comma after it can still carry "<state> <zip>" and a bare unit
+                // ("3600 Mountain Avenue 13E Ca 92404"): peel those off so the street parses cleanly.
+                const szTail = streetPart.match(/\s+([A-Za-z]{2})\s+(\d{5}(?:-\d{4})?)\s*$/);
+                if (szTail) {
+                    if (!parsed.state) parsed.state = szTail[1];
+                    if (!parsed.zip) parsed.zip = szTail[2];
+                    streetPart = streetPart.substring(0, szTail.index).trim();
+                }
+                const bareUnit = streetPart.match(/^(\d+[A-Za-z]?\s+(?:\S+\s+)+?(?:st|street|ave|avenue|blvd|boulevard|dr|drive|rd|road|ln|lane|ct|court|cir|circle|trl|trail|way|pl|place|pkwy|parkway|hwy|highway|ter|terrace)\.?)\s+((?=[a-z0-9-]*\d)[a-z0-9-]{1,5})$/i);
+                if (bareUnit) {
+                    parsed.sec_unit_num = bareUnit[2].toLowerCase();
+                    streetPart = bareUnit[1];
+                }
                 const unitPatterns = [
                     /\s+(?:apt|apartment|unit|ste|suite|spc|space)\.?\s*#?\s*[a-z0-9-]+$/i,
                     /\s+#\s*[a-z0-9-]+$/i

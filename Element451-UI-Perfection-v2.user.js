@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.147
+// @version      2.148
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-147'; // keep in sync with @version (2.147)
+    const BUILD = 'v2-build-148'; // keep in sync with @version (2.148)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -188,7 +188,7 @@
         #elm2-kart-lane .elm2-kart .flame { opacity: 0; }
         #elm2-kart-lane .elm2-kart.boost .flame, #elm2-kart-lane .elm2-kart.go .flame { opacity: 1; animation: elm2-kart-b .1s steps(1) infinite; }
         #elm2-kart-lane .elm2-kart.go svg { animation: none; }
-        @keyframes elm2-kart-bob { 0% { margin-top: 0; } 50% { margin-top: -4px; } }
+        @keyframes elm2-kart-bob { 0% { margin-top: 0; } 50% { margin-top: -3px; } }
         @keyframes elm2-kart-a { 0% { opacity: 1; } 50% { opacity: 0; } }
         @keyframes elm2-kart-b { 0% { opacity: 0; } 50% { opacity: 1; } }
         #elm2-merge-overlay .elm2-lamps { display: none; }
@@ -2273,31 +2273,56 @@
     // (16px in from the edge), boosts at 3 and drives under the panel from 1. The lane is exactly that strip, so the
     // kart is clipped at the panel's edge (which looks like going under it), sits above the page dimming and
     // below the toasts (z-index 9990 < 10000).
+    // The driver is the CSUSB coyote (blue fur, grey muzzle and ear linings, white jersey) in side profile.
     const KART = {
-        pal: { k: '#1b1b22', r: '#e53935', d: '#a8201a', l: '#ff8a80', y: '#ffd54f', Y: '#f9a825', b: '#42a5f5', g: '#9e9e9e', G: '#616161', o: '#ff9800', O: '#ffee58' },
+        pal: { K: '#0b1633', B: '#2a62c9', D: '#173f8f', L: '#6a9bf5', G: '#b4bac2', g: '#7a8189', W: '#ffffff', w: '#d9dfe8', N: '#101217', M: '#5a1620', P: '#e8727d', k: '#1b1b22', S: '#aeb4bd', s: '#7a818a', Y: '#ffd54f', o: '#ff9800', O: '#ffee58' },
         body: [
-            '..........kkkkkk..........',
-            '.........kyyyyyyk.........',
-            '.........kyyyyyYbk........',
-            '.........kyyyyybbbk.......',
-            '.........kyyyyyyyyk.......',
-            '..........kkkkkkkk........',
-            '...kkkkkkkkkrrrrrkkkkkk...',
-            '..krrrrrrrrrrrrrrrrrrrrk..',
-            '.kolllrrrrrrrrrrrrrrrrrrk.',
-            '.kkrrrrrrrrrrrrrrrrrrrrrk.',
-            '..kdddddddddddddddddddrk..',
-            '...kkkkkkkkkkkkkkkkkkkk...'],
-        wheelsA: ['...kkkk............kkkk..', '..kGggGk..........kGggGk.', '..kgGGgk..........kgGGgk.', '...kkkk............kkkk..'],
-        wheelsB: ['...kkkk............kkkk..', '..kGGggk..........kGGggk.', '..kggGGk..........kggGGk.', '...kkkk............kkkk..'],
-        flame: ['oO', 'OoO', 'oO']
+            '........................................',
+            '..............KK............KK..........',
+            '.............KBBK..........KBBK.........',
+            '.............KBGBK........KBGBK.........',
+            '............KBBGGBK......KBGGBBK........',
+            '............KBBBGBBKKKKKKBBGBBBK........',
+            '...........KBLBBBBBBBBBBBBBBBBBBKK......',
+            '..........KBLLBBBBBBBBBBBBBBBBBBBBK.....',
+            '..........KBLBBBDDDDBBBBBBBBBBGGGGGK....',
+            '..........KBBBBBDWWWWDBBBBBBGGGGGGGGK...',
+            '..........KBBBBBBWWKKWBBBBBGGGGGGGGGNNK.',
+            '..........KDBBBBBBWWWWBBBBGGGGGGGGGGNNNK',
+            '..........KDBBBBBBBBBBBBGGGGGGGGGGGGNNNK',
+            '...........KDBBBBBBBBBBBGGKKKKKKKKGGGNK.',
+            '...........KDDBBBBBBBBBBBGKMMMMMMMKGGK..',
+            '............KKDBBBBBBBBBBGKMWMWMWMKKK...',
+            '..............KKDBBBBBBBBGGKKWKWKKK.....',
+            '...............KKDBBBBBBBBBGGKKK........',
+            '..............KWWWWWWWWWWBBBBBBK...KK...',
+            '.............KWWWWWWWWWWWWBBBBBBBKKBBK..',
+            '............KWWWWWwwWWWWWWBBBBBBBBBBNK..',
+            '.KKKKKKK.KKKKKKKKKKKKKKKKKKKKKKKKKKNK...',
+            'KggggggKKBBBBBBBBBBBBBBBBBBBBBBBBBBBBBK.',
+            'KgggggggKBBWWWWWWWWWWWWWWWWWWWWWWWWBBBBK',
+            'KKKKKKKKKDDDDDDDDDDDDDDDDDDDDDDDDDDDDDK.',
+            '.........KKKKKKKKKKKKKKKKKKKKKKKKKKKKK..'],
+        wheelsA: [
+            '.....KKKKKK..................KKKKKK.....',
+            '....KgSSSSgK................KgSSSSgK....',
+            '....KgSSggSK................KgSSggSK....',
+            '....KgSggggK................KgSggggK....',
+            '.....KKKKKK..................KKKKKK.....'],
+        wheelsB: [
+            '.....KKKKKK..................KKKKKK.....',
+            '....KgSSSSgK................KgSSSSgK....',
+            '....KgSggSSK................KgSggSSK....',
+            '....KgggggSK................KgggggSK....',
+            '.....KKKKKK..................KKKKKK.....'],
+        flame: ['.oO', 'oOOO', '.oO']
     };
-    const KART_PX = 4, KART_W = 26, KART_H = 16;
+    const KART_PX = 3, KART_W = 40, KART_H = 31;
     function kartSvg() {
         const rects = (rows, y0, x0) => rows.map((r, y) => Array.from(r).map((c, x) => c !== '.' && KART.pal[c] ? `<rect x="${x + (x0 || 0)}" y="${y + y0}" width="1" height="1" fill="${KART.pal[c]}"/>` : '').join('')).join('');
         return `<svg viewBox="0 0 ${KART_W} ${KART_H}" width="${KART_W * KART_PX}" height="${KART_H * KART_PX}" shape-rendering="crispEdges">` +
-            `<g class="body">${rects(KART.body, 0)}</g><g class="wa">${rects(KART.wheelsA, 12)}</g><g class="wb">${rects(KART.wheelsB, 12)}</g>` +
-            `<g class="flame">${rects(KART.flame, 7, -3)}</g></svg>`;
+            `<g class="body">${rects(KART.body, 0)}</g><g class="wa">${rects(KART.wheelsA, 26)}</g><g class="wb">${rects(KART.wheelsB, 26)}</g>` +
+            `<g class="flame">${rects(KART.flame, 22, -4)}</g></svg>`;
     }
     function removeKartLane() {
         const lane = document.getElementById('elm2-kart-lane');

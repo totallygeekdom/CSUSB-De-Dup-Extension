@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.151
+// @version      2.152
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-151'; // keep in sync with @version (2.151)
+    const BUILD = 'v2-build-152'; // keep in sync with @version (2.152)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -181,16 +181,33 @@
            then all three go green with "GO!". */
         #elm2-kart-lane { position: fixed; top: 0; bottom: 0; overflow: hidden; z-index: 9990; pointer-events: none; }
         #elm2-kart-lane .elm2-kart { position: absolute; will-change: transform; }
+        #elm2-kart-lane .elm2-kart svg { display: block; overflow: visible; animation: elm2-kart-bob .5s steps(1) infinite; }
         #elm2-kart-lane .elm2-kart.flip svg { transform: scaleX(-1); }
-        #elm2-kart-lane .elm2-kart svg { display: block; animation: elm2-kart-bob .5s steps(1) infinite; overflow: visible; }
-        #elm2-kart-lane .elm2-kart .wa { animation: elm2-kart-a .24s steps(1) infinite; }
-        #elm2-kart-lane .elm2-kart .wb { animation: elm2-kart-b .24s steps(1) infinite; }
-        #elm2-kart-lane .elm2-kart .flame { opacity: 0; }
-        #elm2-kart-lane .elm2-kart.boost .flame, #elm2-kart-lane .elm2-kart.go .flame { opacity: 1; animation: elm2-kart-b .1s steps(1) infinite; }
+        #elm2-kart-lane .elm2-kart.c1 { --c: #29b6f6; --c2: #e1f5fe; } /* Mario Kart mini-turbo colours */
+        #elm2-kart-lane .elm2-kart.c2 { --c: #ff9800; --c2: #ffe0b2; }
+        #elm2-kart-lane .elm2-kart.c3 { --c: #b44cff; --c2: #f3d9ff; }
+        #elm2-kart-lane .elm2-kart .hubA { animation: elm2-kart-a .24s steps(1) infinite; }
+        #elm2-kart-lane .elm2-kart .hubB { animation: elm2-kart-b .24s steps(1) infinite; }
+        #elm2-kart-lane .elm2-kart .sparks, #elm2-kart-lane .elm2-kart .flame, #elm2-kart-lane .elm2-kart .lines { opacity: 0; }
+        #elm2-kart-lane .elm2-kart .sp { fill: var(--c, #fff); }
+        #elm2-kart-lane .elm2-kart .lines path { fill: var(--c, #fff); }
+        #elm2-kart-lane .elm2-kart .flame { transform-box: fill-box; transform-origin: 100% 50%; }
+        #elm2-kart-lane .elm2-kart.c1 .sparks, #elm2-kart-lane .elm2-kart.c2 .sparks, #elm2-kart-lane .elm2-kart.c3 .sparks { opacity: 1; }
+        #elm2-kart-lane .elm2-kart.c1 .flame, #elm2-kart-lane .elm2-kart.c2 .flame, #elm2-kart-lane .elm2-kart.c3 .flame { opacity: 1; scale: .5 1; animation: elm2-kart-flame .1s steps(1) infinite; }
+        #elm2-kart-lane .elm2-kart.c2 .flame { scale: .75 1; }
+        #elm2-kart-lane .elm2-kart.c3 .flame { scale: 1 1; }
+        #elm2-kart-lane .elm2-kart .sp { animation: elm2-kart-spark .16s steps(1) infinite; }
+        #elm2-kart-lane .elm2-kart .s2, #elm2-kart-lane .elm2-kart .s5 { animation-delay: -.05s; }
+        #elm2-kart-lane .elm2-kart .s3, #elm2-kart-lane .elm2-kart .s6 { animation-delay: -.1s; }
+        #elm2-kart-lane .elm2-kart .s4, #elm2-kart-lane .elm2-kart .s7 { animation-delay: -.13s; }
         #elm2-kart-lane .elm2-kart.go svg { animation: none; }
+        #elm2-kart-lane .elm2-kart.go .flame { scale: 1.6 1.3; }
+        #elm2-kart-lane .elm2-kart.go .lines { opacity: 1; }
         @keyframes elm2-kart-bob { 0% { margin-top: 0; } 50% { margin-top: -4px; } }
         @keyframes elm2-kart-a { 0% { opacity: 1; } 50% { opacity: 0; } }
         @keyframes elm2-kart-b { 0% { opacity: 0; } 50% { opacity: 1; } }
+        @keyframes elm2-kart-flame { 0% { transform: scaleY(1); } 50% { transform: scaleY(.7); } }
+        @keyframes elm2-kart-spark { 0% { opacity: 1; } 33% { opacity: 0; } 66% { opacity: .6; } }
         #elm2-merge-overlay .elm2-lamps { display: none; }
         #elm2-merge-overlay .elm2-merge-card.race .elm2-ring svg, #elm2-merge-overlay .elm2-merge-card.race #elm2-merge-count { display: none; }
         #elm2-merge-overlay .elm2-merge-card.race .elm2-lamps { position: absolute; left: 0; right: 0; top: 50%; height: 68px; margin-top: -34px; box-sizing: border-box; padding: 0 12px; border-radius: 34px; background: #1f2124; box-shadow: inset 0 2px 6px rgba(0,0,0,.5); display: flex; align-items: center; justify-content: space-between; }
@@ -2273,45 +2290,13 @@
     // (16px in from the edge), boosts at 3 and drives under the panel from 1. The lane is exactly that strip, so the
     // kart is clipped at the panel's edge (which looks like going under it), sits above the page dimming and
     // below the toasts (z-index 9990 < 10000).
-    // The driver is the CSUSB coyote (blue fur, grey muzzle and ear linings, white jersey) in side profile,
-    // upright in a go-kart. Proportions follow the Super Mario Kart sprite sheet the sprite was modelled on
-    // (about a 30 px canvas, 7 px wheels at the bottom corners, a thin pan between them, a head that is half the
-    // sprite's height, a 1 px dark outline); every pixel is original. Two frames differ only in the wheel hubs.
+    // The driver is the CSUSB coyote in side profile, upright in a go-kart, drawn as pixel art. Proportions follow
+    // the Super Mario Kart sprite sheet it was modelled on (about a 30 px canvas, 7 px wheels at the bottom corners,
+    // a thin pan between them, a head half the sprite's height, a 1 px dark outline); every pixel is original.
+    // It is stored as 31 short rows and drawn as one SVG path per colour (runs of pixels), so it is tiny.
     const KART = {
-        pal: { a: '#2f6fd6', b: '#6fa3f7', c: '#1a4aa0', d: '#0d1530', e: '#b9bfc7', f: '#e1e5ea', g: '#7f8791', h: '#ffffff', i: '#cfd6e2', j: '#14171d', k: '#6b1a28', l: '#343f48', m: '#8794a0', n: '#d3dce3', o: '#8a929c', p: '#5b626c', q: '#ff9800', r: '#ffee58' },
-        frameA: [
-            '..............................',
-            '.............d................',
-            '......dd....dcd...............',
-            '.....dbcd..dbecd..............',
-            '.....dbecdddbeed..............',
-            '.....dbeebbbaaacd.............',
-            '.....dbaaaacccccd.............',
-            '.....dbaaaaahhhcddd...........',
-            '....dbaaaaaahjjafffdddd.......',
-            '....dbaaaaaahjjeeeeffjjd......',
-            '....dbaaeaaaaeeeeeeeejjd......',
-            '....dcaeeeaaaaeeeeeeedd.......',
-            '.....dcaaaaaaaakhkhkhd........',
-            '......dcaaaaaacdddddd.........',
-            '.......daaaaaacd..............',
-            '.......dbaaaaacd.....dd.......',
-            '......ddcaaaaacd....djjd......',
-            '.....dccdaaaaahd....djjd......',
-            '.....dcciihhhhhfdddddjjd......',
-            '.dddddcciihhhhhabbbbccjd......',
-            'dooooocciihhhhhaacccccdjd.....',
-            'ppoooocciihhhhhhhdddccdjd.....',
-            'dpppppcciihhhhhhd...dd.djd....',
-            '.dddddccdaaaaaacdddddd..ddd...',
-            '..dllldabaaaaaaabbbbbcddllld..',
-            '.dlllllaaaaaaaaaaaaaacdllllld.',
-            'dllmnmllhhhhhhhhhhhhhallmnmlld',
-            'dllmlmllaaaaaaaaaaaaacllmlmlld',
-            'dllmmmllcccccccccccccdllmmmlld',
-            '.dllllldddddddddddddd.dllllld.',
-            '..dllld................dllld..'],
-        frameB: [
+        pal: { a: '#2f6fd6', b: '#6fa3f7', c: '#1a4aa0', d: '#0d1530', e: '#b9bfc7', f: '#e1e5ea', g: '#7f8791', h: '#ffffff', i: '#cfd6e2', j: '#14171d', k: '#6b1a28', l: '#343f48', m: '#8794a0', n: '#d3dce3', o: '#8a929c', p: '#5b626c' },
+        rows: [
             '..............................',
             '.............d................',
             '......dd....dcd...............',
@@ -2340,33 +2325,41 @@
             '.dlllllaaaaaaaaaaaaaacdllllld.',
             'dllmmmllhhhhhhhhhhhhhallmmmlld',
             'dllmlmllaaaaaaaaaaaaacllmlmlld',
-            'dllmnmllcccccccccccccdllmnmlld',
+            'dllmmmllcccccccccccccdllmmmlld',
             '.dllllldddddddddddddd.dllllld.',
             '..dllld................dllld..'],
-        flame: ['.12', '1222', '.12'],
-        flamePal: { 1: '#ff9800', 2: '#ffee58' }
+        w: 30, h: 31
     };
-    const KART_PX = 4, KART_W = 30, KART_H = 31;
+    const KART_PX = 4, KART_W = KART.w, KART_H = KART.h, KART_PAD_L = 22; // 22 px of room on the left for the flame
     function kartSvg() {
-        const rects = (rows, y0, x0, pal) => rows.map((r, y) => Array.from(r).map((c, x) => c !== '.' && pal[c] ? `<rect x="${x + (x0 || 0)}" y="${y + y0}" width="1" height="1" fill="${pal[c]}"/>` : '').join('')).join('');
-        return `<svg viewBox="0 0 ${KART_W} ${KART_H}" width="${KART_W * KART_PX}" height="${KART_H * KART_PX}" shape-rendering="crispEdges">` +
-            `<g class="wa">${rects(KART.frameA, 0, 0, KART.pal)}</g><g class="wb">${rects(KART.frameB, 0, 0, KART.pal)}</g>` +
-            `<g class="flame">${rects(KART.flame, 20, -4, KART.flamePal)}</g></svg>`;
+        const runs = {};
+        KART.rows.forEach((r, y) => { let x = 0; while (x < r.length) { const c = r[x]; if (c === '.') { x++; continue; } let e = x; while (e < r.length && r[e] === c) e++; runs[c] = (runs[c] || '') + 'M' + x + ' ' + y + 'h' + (e - x) + 'v1h-' + (e - x) + 'z'; x = e; } });
+        const body = Object.keys(runs).map(c => `<path fill="${KART.pal[c]}" d="${runs[c]}"/>`).join('');
+        const cross = (x, y, n) => `<path class="sp s${n}" d="M${x + 1} ${y}h1v1h-1zM${x} ${y + 1}h3v1h-3zM${x + 1} ${y + 2}h1v1h-1z"/>`;
+        // wheel hubs (the bright pixel) flip between two spots to look like spinning
+        const hubs = '<g class="hubA"><path fill="#d3dce3" d="M4 26h1v1h-1zM25 26h1v1h-1z"/></g><g class="hubB"><path fill="#d3dce3" d="M4 28h1v1h-1zM25 28h1v1h-1z"/></g>';
+        // colour-coded charge, like a Mario Kart drift: sparks at the wheels and a flame at the exhaust
+        // (blue, then orange, then purple), plus speed lines once it drives off; --c/--c2 come from the stage class
+        const sparks = cross(0, 28, 1) + cross(8, 29, 2) + cross(13, 27, 3) + cross(-2, 24, 4) + cross(21, 29, 5) + cross(28, 27, 6) + cross(30, 24, 7);
+        const flame = '<g class="flame"><path style="fill:var(--c,#ff9800)" d="M-9 20h9v3h-9zM-16 21h7v1h-7z"/><path style="fill:var(--c2,#ffe0b2)" d="M-11 21h11v1h-11zM-5 20h5v3h-5z"/><path fill="#fff" d="M-6 21h6v1h-6z"/></g>';
+        const lines = '<g class="lines"><path d="M-22 12h9v1h-9zM-18 18h12v1h-12zM-21 25h10v1h-10z"/></g>';
+        return `<svg viewBox="-${KART_PAD_L} 0 ${KART_W + KART_PAD_L} ${KART_H}" width="${(KART_W + KART_PAD_L) * KART_PX}" height="${KART_H * KART_PX}" shape-rendering="crispEdges">` +
+            lines + flame + body + hubs + `<g class="sparks">${sparks}</g></svg>`;
     }
     function removeKartLane() {
         const lane = document.getElementById('elm2-kart-lane');
         if (lane) lane.remove();
     }
-    function buildKartLane(card) {
+    function buildKartLane() {
         removeKartLane();
         if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return null;
         const r = mergePanelRect();
         if (!r) return null;
-        const vw = window.innerWidth, pad = 16, kw = KART_W * KART_PX, kh = KART_H * KART_PX;
+        const vw = window.innerWidth, pad = 40, bodyW = KART_W * KART_PX, boxW = (KART_W + KART_PAD_L) * KART_PX;
         const leftGutter = r.left, rightGutter = vw - r.right;
         const onLeft = leftGutter >= rightGutter;
         const laneW = Math.max(leftGutter, rightGutter);
-        if (laneW < kw + pad * 2) return null; // not enough room in the strip
+        if (laneW < bodyW + pad * 2) return null; // not enough room in the strip
         const lane = document.createElement('div');
         lane.id = 'elm2-kart-lane';
         lane.style.left = (onLeft ? 0 : r.right) + 'px';
@@ -2374,23 +2367,24 @@
         const kart = document.createElement('div');
         kart.className = 'elm2-kart' + (onLeft ? '' : ' flip');
         kart.innerHTML = kartSvg();
-        const cr = card.getBoundingClientRect();
-        const x0 = onLeft ? pad : laneW - pad - kw;
-        kart.style.left = x0 + 'px';
-        kart.style.top = Math.round(cr.top + cr.height / 2 - kh / 2) + 'px';
+        // the wheels touch the bottom edge of the screen; the body starts `pad` px in from the screen edge
+        const left = onLeft ? pad - KART_PAD_L * KART_PX : laneW - pad - bodyW;
+        kart.style.left = left + 'px';
+        kart.style.bottom = '0';
         lane.appendChild(kart);
         document.body.appendChild(lane);
-        // distance to be completely under the panel (clipped away by the lane edge)
-        kart._dist = onLeft ? laneW - x0 : -(x0 + kw);
+        // far enough to be completely under the panel, flame and speed lines included (the lane clips at its edge)
+        kart._dist = onLeft ? laneW - left : -(left + boxW);
         return kart;
     }
-    // Mario Kart start: a rocket-start boost (flames + a jolt) when the countdown shows 3, then the kart
-    // drives off under the panel from 1 so it is gone by the time the merge is clicked.
-    function boostKart(kart) {
+    // Mario Kart start: the kart charges while the lights count down, like a drift mini-turbo (blue sparks and a small
+    // flame at 3, orange at 2, purple at 1), with a rocket-start jolt at 3; it drives off under the panel from 1 with a
+    // full-size purple boost and speed lines so it is gone by the time the merge is clicked.
+    function chargeKart(kart, stage) {
         if (!kart || !kart.isConnected) return;
-        kart.classList.add('boost');
-        kart.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(' + (kart.classList.contains('flip') ? -10 : 10) + 'px)', offset: .25 }, { transform: 'translateX(0)' }], { duration: 450, easing: 'steps(3, end)' });
-        setTimeout(() => kart.classList.remove('boost'), 450);
+        kart.classList.remove('c1', 'c2', 'c3');
+        kart.classList.add('c' + stage);
+        if (stage === 1) kart.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(' + (kart.classList.contains('flip') ? -12 : 12) + 'px)', offset: .3 }, { transform: 'translateX(0)' }], { duration: 450, easing: 'steps(3, end)' });
     }
     function driveKart(kart, ms) {
         if (!kart || !kart.isConnected) return;
@@ -2587,8 +2581,9 @@
             count.style.animation = 'elm2-count-in .5s cubic-bezier(.05, .7, .1, 1)';
             if (left > 0) setArc(left / total);
             if (race) setLamps();
-            if (race && left === 3) boostKart(kart);
-            if (race && left === 1) driveKart(kart, 1300);
+            if (race && left === 3) chargeKart(kart, 1);
+            if (race && left === 2) chargeKart(kart, 2);
+            if (race && left === 1) { chargeKart(kart, 3); driveKart(kart, 1300); }
         };
         setArc(1);
         void arc.getBoundingClientRect();
@@ -2598,7 +2593,7 @@
         render();
         placeMergeOverlay(ov);
         ov.classList.add('visible');
-        if (race) kart = buildKartLane(card); // (the card is laid out now that the overlay is placed and visible)
+        if (race) kart = buildKartLane();
         // Final gate, then the merge click itself. Returns false when the pair is not mergeable.
         const stop = (ready) => {
             hideMergeModal();

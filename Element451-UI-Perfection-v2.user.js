@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.142
+// @version      2.143
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-142'; // keep in sync with @version (2.142)
+    const BUILD = 'v2-build-143'; // keep in sync with @version (2.143)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -152,8 +152,8 @@
         #elm2-merge-overlay.visible .elm2-merge-card { transform: scale(1); opacity: 1; }
         #elm2-merge-overlay .elm2-ring { position: relative; width: 160px; height: 160px; margin: 0 auto 24px; }
         #elm2-merge-overlay .elm2-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
-        #elm2-merge-overlay .elm2-ring-track { fill: none; stroke: #f9dedc; stroke-width: 8; }
-        #elm2-merge-overlay .elm2-ring-arc { fill: none; stroke: #b3261e; stroke-width: 8; stroke-linecap: round; stroke-dasharray: 276.46 276.46; stroke-dashoffset: 0; transition: stroke-dasharray .6s cubic-bezier(.2, 0, 0, 1), stroke-dashoffset .6s cubic-bezier(.2, 0, 0, 1), stroke .3s linear; }
+        #elm2-merge-overlay .elm2-ring-track { fill: none; stroke: #f9dedc; stroke-width: 6; }
+        #elm2-merge-overlay .elm2-ring-arc { fill: none; stroke: #b3261e; stroke-width: 6; stroke-linecap: round; stroke-dashoffset: 0; transition: stroke-dasharray .6s cubic-bezier(.2, 0, 0, 1), stroke-dashoffset .6s cubic-bezier(.2, 0, 0, 1), stroke .3s linear; }
         #elm2-merge-overlay #elm2-merge-count { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 57px; line-height: 64px; font-weight: 400; color: #b3261e; }
         #elm2-merge-overlay #elm2-merge-title { margin: 0 8px 8px; font-size: 24px; line-height: 32px; font-weight: 400; color: #1a1c20; }
         #elm2-merge-overlay #elm2-merge-summary { margin: 0 12px 32px; font-size: 15px; line-height: 22px; letter-spacing: .15px; color: #434750; }
@@ -174,8 +174,8 @@
         body.elm2-next-after-merge bolt-slide-toggle.merge-completion-skip-toggle:has(button[aria-checked="false"]) { display: none !important; }
         /* At 0 a green ring is drawn from 12 o'clock counter-clockwise (the circle is mirrored, so its
            path runs the other way) while the red arc fades out. */
-        #elm2-merge-overlay .elm2-ring-fill { fill: none; stroke: #2e7d32; stroke-width: 8; stroke-linecap: round; stroke-dasharray: 0.01 276.46; opacity: 0; transition: stroke-dasharray .7s cubic-bezier(.2, 0, 0, 1), opacity .15s linear; }
-        #elm2-merge-overlay .elm2-merge-card.done .elm2-ring-fill { opacity: 1; stroke-dasharray: 276.46 276.46; }
+        #elm2-merge-overlay .elm2-ring-fill { fill: none; stroke: #2e7d32; stroke-width: 6; stroke-linecap: round; opacity: 0; transition: stroke-dasharray .7s cubic-bezier(.2, 0, 0, 1), opacity .15s linear; }
+        #elm2-merge-overlay .elm2-merge-card.done .elm2-ring-fill { opacity: 1; }
         #elm2-merge-overlay .elm2-merge-card.done .elm2-ring-arc { opacity: 0; transition: opacity .3s linear; }
         /* "Race lights" countdown style: three lamps instead of the ring. Red lamps light one per second (3, 2, 1),
            then all three go green with "GO!". */
@@ -2223,7 +2223,7 @@
             ov.innerHTML = `
                 <div class="elm2-merge-card" role="alertdialog" aria-live="polite" aria-labelledby="elm2-merge-title" aria-describedby="elm2-merge-summary">
                     <div class="elm2-ring">
-                        <svg viewBox="0 0 100 100" aria-hidden="true"><circle class="elm2-ring-track" cx="50" cy="50" r="44"></circle><circle class="elm2-ring-arc" cx="50" cy="50" r="44"></circle><circle class="elm2-ring-fill" cx="50" cy="50" r="44" transform="translate(0,100) scale(1,-1)"></circle></svg>
+                        <svg viewBox="0 0 100 100" aria-hidden="true"><circle class="elm2-ring-track" cx="50" cy="50" r="44"></circle><path class="elm2-ring-arc"></path><path class="elm2-ring-fill"></path></svg>
                         <span id="elm2-merge-count"></span>
                         <div class="elm2-lamps" aria-hidden="true"><i></i><i></i><i></i></div>
                     </div>
@@ -2371,11 +2371,50 @@
         // the end of its dash, which made the end bit sit visibly left of its mark (6 o'clock at half
         // time), so the dash is pulled in by one cap radius at each end and the rounded tips land
         // exactly on the marks. At 0 it fills completely (and turns green).
-        const CIRC = 276.46;
-        const CAP = 4; // stroke-width 8 -> cap radius 4, in viewBox units
+        // The ring is Material 3 Expressive's wavy circular progress: the progress arc and the green fill are
+        // the same sine-wave curve around the circle (WAVES crests, amplitude AMP) and the waves travel
+        // around it while the countdown runs. Dash lengths are measured on that curve (C).
+        const WAVES = 12, AMP = 1.9, RAD = 44, PTS = 360;
+        const wavy = (phase, dir) => {
+            let d = '';
+            for (let k = 0; k <= PTS; k++) {
+                const th = dir * k * 2 * Math.PI / PTS;
+                const r = RAD + AMP * Math.sin(WAVES * th + phase);
+                d += (k ? 'L' : 'M') + (50 + r * Math.cos(th)).toFixed(2) + ' ' + (50 + r * Math.sin(th)).toFixed(2);
+            }
+            return d;
+        };
+        const waveLength = () => {
+            let len = 0, px = 0, py = 0;
+            for (let k = 0; k <= PTS; k++) {
+                const th = k * 2 * Math.PI / PTS, r = RAD + AMP * Math.sin(WAVES * th);
+                const x = 50 + r * Math.cos(th), y = 50 + r * Math.sin(th);
+                if (k) len += Math.hypot(x - px, y - py);
+                px = x; py = y;
+            }
+            return len;
+        };
+        const C = waveLength();
+        const CAP = 3; // stroke-width 6 -> cap radius 3, in viewBox units
+        let wavePhase = 0;
+        const drawWaves = () => { arc.setAttribute('d', wavy(wavePhase, 1)); fill.setAttribute('d', wavy(wavePhase, -1)); };
+        drawWaves();
+        const waveId = (ov._waveId = (ov._waveId || 0) + 1);
+        if (!race && !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) {
+            let last = performance.now();
+            const loop = (now) => {
+                if (ov._waveId !== waveId || !ov.classList.contains('visible')) return;
+                wavePhase -= (now - last) / 1000 * 2.6;
+                last = now;
+                drawWaves();
+                requestAnimationFrame(loop);
+            };
+            requestAnimationFrame(loop);
+        }
+        fill.style.strokeDasharray = '0.01 ' + C;
         const setArc = (frac) => {
-            if (frac >= 1) { arc.style.strokeDasharray = CIRC + ' ' + CIRC; arc.style.strokeDashoffset = '0'; return; }
-            arc.style.strokeDasharray = Math.max(0.01, CIRC * frac - 2 * CAP) + ' ' + CIRC;
+            if (frac >= 1) { arc.style.strokeDasharray = C + ' ' + C; arc.style.strokeDashoffset = '0'; return; }
+            arc.style.strokeDasharray = Math.max(0.01, C * frac - 2 * CAP) + ' ' + C;
             arc.style.strokeDashoffset = String(-CAP);
         };
         const render = () => {
@@ -2415,6 +2454,7 @@
             if (!ready.ok) { stop(ready); return; }
             // 0: the ring (or lamps) goes green; the merge is clicked right away (race lights: after RACE_GO).
             card.classList.add('done');
+            fill.style.strokeDasharray = C + ' ' + C;
             document.getElementById('elm2-merge-title').textContent = race ? 'GO!' : 'Merging…';
             render();
             const fire = (btn) => {

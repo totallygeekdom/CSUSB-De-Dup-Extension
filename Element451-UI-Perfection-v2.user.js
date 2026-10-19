@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.153
+// @version      2.154
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-153'; // keep in sync with @version (2.153)
+    const BUILD = 'v2-build-154'; // keep in sync with @version (2.154)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -184,7 +184,7 @@
         #elm2-kart-lane .elm2-kart svg { display: block; overflow: visible; animation: elm2-kart-bob .5s steps(1) infinite; }
         #elm2-kart-lane .elm2-kart.flip svg { transform: scaleX(-1); }
         #elm2-kart-lane .elm2-kart.c1 { --c: #29b6f6; --c2: #e1f5fe; } /* Mario Kart mini-turbo colours */
-        #elm2-kart-lane .elm2-kart.c2 { --c: #ff9800; --c2: #ffe0b2; }
+        #elm2-kart-lane .elm2-kart.c2 { --c: #ffc107; --c2: #fff3c4; }
         #elm2-kart-lane .elm2-kart.c3 { --c: #b44cff; --c2: #f3d9ff; }
         #elm2-kart-lane .elm2-kart .hubA { animation: elm2-kart-a .24s steps(1) infinite; }
         #elm2-kart-lane .elm2-kart .hubB { animation: elm2-kart-b .24s steps(1) infinite; }
@@ -2378,17 +2378,22 @@
         return kart;
     }
     // Mario Kart start: the kart charges while the lights count down, like a drift mini-turbo (blue sparks and a small
-    // flame at 3, orange at 2, purple at 1), with a rocket-start jolt at 3; it stays put until the lights go green, then
+    // flame at 3, yellow at 2, purple at 1), revving back and forth harder at each stage; it stays put until the lights go green, then
     // drives off under the panel with a full-size purple boost and speed lines.
     function chargeKart(kart, stage) {
         if (!kart || !kart.isConnected) return;
         kart.classList.remove('c1', 'c2', 'c3');
         kart.classList.add('c' + stage);
-        if (stage === 1) kart.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(' + (kart.classList.contains('flip') ? -12 : 12) + 'px)', offset: .3 }, { transform: 'translateX(0)' }], { duration: 450, easing: 'steps(3, end)' });
+        // the kart revs back and forth on the spot, harder at each stage (until it drives off)
+        if (kart._shake) kart._shake.cancel();
+        const a = [4, 7, 10][stage - 1] * (kart.classList.contains('flip') ? -1 : 1);
+        const at = (x) => ({ transform: 'translateX(' + x + 'px)', easing: 'steps(1, end)' });
+        kart._shake = kart.animate([at(0), at(a), at(-a / 2), at(a / 2)], { duration: 200 - stage * 30, iterations: Infinity });
     }
     function driveKart(kart, ms) {
         if (!kart || !kart.isConnected) return;
         kart.classList.add('go');
+        if (kart._shake) kart._shake.cancel();
         kart.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(' + kart._dist + 'px)' }], { duration: ms, easing: 'cubic-bezier(.55, 0, 1, .55)', fill: 'forwards' });
     }
     function hideMergeModal() {

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.155
+// @version      2.156
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-155'; // keep in sync with @version (2.155)
+    const BUILD = 'v2-build-156'; // keep in sync with @version (2.156)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -2386,9 +2386,9 @@
         kart.classList.add('c' + stage);
         // one shake (a quick lurch forward and back) for each colour, a little bigger every time
         if (kart._shake) kart._shake.cancel();
-        const a = [10, 14, 18][stage - 1] * (kart.classList.contains('flip') ? -1 : 1);
+        const a = [3, 4, 6][stage - 1] * (kart.classList.contains('flip') ? -1 : 1);
         const at = (x) => ({ transform: 'translateX(' + x + 'px)', easing: 'steps(1, end)' });
-        kart._shake = kart.animate([at(0), at(a), at(-a / 3), at(a / 3), at(0)], { duration: 400 });
+        kart._shake = kart.animate([at(0), at(a), at(-a / 2), at(0)], { duration: 320 });
     }
     function driveKart(kart, ms) {
         if (!kart || !kart.isConnected) return;

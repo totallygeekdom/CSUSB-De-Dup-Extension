@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.156
+// @version      2.157
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-156'; // keep in sync with @version (2.156)
+    const BUILD = 'v2-build-157'; // keep in sync with @version (2.157)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -2378,15 +2378,15 @@
         return kart;
     }
     // Mario Kart start: the kart charges while the lights count down, like a drift mini-turbo (blue sparks and a small
-    // flame at 3, yellow at 2, purple at 1), one shake per colour, a little bigger each time; it stays put until the lights go green, then
+    // flame at 3, yellow at 2, purple at 1), the same single shake for each colour; it stays put until the lights go green, then
     // drives off under the panel with a full-size purple boost and speed lines.
     function chargeKart(kart, stage) {
         if (!kart || !kart.isConnected) return;
         kart.classList.remove('c1', 'c2', 'c3');
         kart.classList.add('c' + stage);
-        // one shake (a quick lurch forward and back) for each colour, a little bigger every time
+        // the same single shake (a quick nudge forward and back) for each colour
         if (kart._shake) kart._shake.cancel();
-        const a = [3, 4, 6][stage - 1] * (kart.classList.contains('flip') ? -1 : 1);
+        const a = 4 * (kart.classList.contains('flip') ? -1 : 1);
         const at = (x) => ({ transform: 'translateX(' + x + 'px)', easing: 'steps(1, end)' });
         kart._shake = kart.animate([at(0), at(a), at(-a / 2), at(0)], { duration: 320 });
     }

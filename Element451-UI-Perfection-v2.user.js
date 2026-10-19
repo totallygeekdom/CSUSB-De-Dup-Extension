@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.148
+// @version      2.150
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-148'; // keep in sync with @version (2.148)
+    const BUILD = 'v2-build-150'; // keep in sync with @version (2.150)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -2273,56 +2273,94 @@
     // (16px in from the edge), boosts at 3 and drives under the panel from 1. The lane is exactly that strip, so the
     // kart is clipped at the panel's edge (which looks like going under it), sits above the page dimming and
     // below the toasts (z-index 9990 < 10000).
-    // The driver is the CSUSB coyote (blue fur, grey muzzle and ear linings, white jersey) in side profile.
+    // The driver is the CSUSB coyote (blue fur, grey muzzle and ear linings, white jersey) in side profile,
+    // sitting upright in a go-kart: a thin blue pan between two big exposed wheels, bumpers, a steering wheel and
+    // a small rear engine. Two frames that differ only in the wheel hubs, flipped every 0.24 s.
     const KART = {
-        pal: { K: '#0b1633', B: '#2a62c9', D: '#173f8f', L: '#6a9bf5', G: '#b4bac2', g: '#7a8189', W: '#ffffff', w: '#d9dfe8', N: '#101217', M: '#5a1620', P: '#e8727d', k: '#1b1b22', S: '#aeb4bd', s: '#7a818a', Y: '#ffd54f', o: '#ff9800', O: '#ffee58' },
-        body: [
-            '........................................',
-            '..............KK............KK..........',
-            '.............KBBK..........KBBK.........',
-            '.............KBGBK........KBGBK.........',
-            '............KBBGGBK......KBGGBBK........',
-            '............KBBBGBBKKKKKKBBGBBBK........',
-            '...........KBLBBBBBBBBBBBBBBBBBBKK......',
-            '..........KBLLBBBBBBBBBBBBBBBBBBBBK.....',
-            '..........KBLBBBDDDDBBBBBBBBBBGGGGGK....',
-            '..........KBBBBBDWWWWDBBBBBBGGGGGGGGK...',
-            '..........KBBBBBBWWKKWBBBBBGGGGGGGGGNNK.',
-            '..........KDBBBBBBWWWWBBBBGGGGGGGGGGNNNK',
-            '..........KDBBBBBBBBBBBBGGGGGGGGGGGGNNNK',
-            '...........KDBBBBBBBBBBBGGKKKKKKKKGGGNK.',
-            '...........KDDBBBBBBBBBBBGKMMMMMMMKGGK..',
-            '............KKDBBBBBBBBBBGKMWMWMWMKKK...',
-            '..............KKDBBBBBBBBGGKKWKWKKK.....',
-            '...............KKDBBBBBBBBBGGKKK........',
-            '..............KWWWWWWWWWWBBBBBBK...KK...',
-            '.............KWWWWWWWWWWWWBBBBBBBKKBBK..',
-            '............KWWWWWwwWWWWWWBBBBBBBBBBNK..',
-            '.KKKKKKK.KKKKKKKKKKKKKKKKKKKKKKKKKKNK...',
-            'KggggggKKBBBBBBBBBBBBBBBBBBBBBBBBBBBBBK.',
-            'KgggggggKBBWWWWWWWWWWWWWWWWWWWWWWWWBBBBK',
-            'KKKKKKKKKDDDDDDDDDDDDDDDDDDDDDDDDDDDDDK.',
-            '.........KKKKKKKKKKKKKKKKKKKKKKKKKKKKK..'],
-        wheelsA: [
-            '.....KKKKKK..................KKKKKK.....',
-            '....KgSSSSgK................KgSSSSgK....',
-            '....KgSSggSK................KgSSggSK....',
-            '....KgSggggK................KgSggggK....',
-            '.....KKKKKK..................KKKKKK.....'],
-        wheelsB: [
-            '.....KKKKKK..................KKKKKK.....',
-            '....KgSSSSgK................KgSSSSgK....',
-            '....KgSggSSK................KgSggSSK....',
-            '....KgggggSK................KgggggSK....',
-            '.....KKKKKK..................KKKKKK.....'],
-        flame: ['.oO', 'oOOO', '.oO']
+        pal: { a: '#2f6fd6', b: '#6fa3f7', c: '#1a4aa0', d: '#0d1530', e: '#b9bfc7', f: '#e1e5ea', g: '#7f8791', h: '#ffffff', i: '#cfd6e2', j: '#14171d', k: '#6b1a28', l: '#343f48', m: '#8794a0', n: '#d3dce3', o: '#8a929c', p: '#5b626c', q: '#ff9800', r: '#ffee58' },
+        frameA: [
+            '....................................',
+            '................d...................',
+            '........d......dcd..................',
+            '.......dcd....dbcd..................',
+            '.......dbfd..dbaecd.................',
+            '.......dbefddbaeecd.................',
+            '.......dcaabbaaaacdd................',
+            '........daaaaaccccccd...............',
+            '.......dbaaaaaahhhhdcdd.............',
+            '.......dbaaaaaahhjjfeffddd..........',
+            '......dcaaaaaaahhjjeeeefjjd.........',
+            '.......daaaaaaaaeeeeeeeejjd.........',
+            '.......dcaaaeaaaaeeeeeeedd..........',
+            '........dcaeeeaaackhkhkhd...........',
+            '.........daaaaaacddddddd............',
+            '........ddbaaaaacd......dd..........',
+            '.......dcccaaaaahd.....djjd.........',
+            '.......dcciihhhhhfddddddjjd.........',
+            '.......dcciihhhhaabbbbccjjd.........',
+            '.......dcciihhhhaacccccccjd.........',
+            '..ddddddcciihhhhhhddddccdjd.........',
+            'ddooooodcciihhhhhhfd..dd.djd........',
+            'pppoooodcciihhhhhhhd.....djd........',
+            'pppppppdcchaaaaaaacdddddddjddd......',
+            'ddpppplllllaaaaaaaabbbbbbllllldddd..',
+            '..daalllllllhhhhhhhhhhhhlllllllbbcd.',
+            '..dclllmmmlllcccccccccclllmmmlllccd.',
+            '...dllmmnmmllddddddddddllmmnmmlldd..',
+            '...dllmmlmmlld........dllmmlmmlld...',
+            '...dllmmmmmlld........dllmmmmmlld...',
+            '...dlllmmmllld........dlllmmmllld...',
+            '....dllllllld..........dllllllld....',
+            '.....dllllld............dllllld.....',
+            '......ddddd..............ddddd......',
+            '....................................',
+            '....................................'],
+        frameB: [
+            '....................................',
+            '................d...................',
+            '........d......dcd..................',
+            '.......dcd....dbcd..................',
+            '.......dbfd..dbaecd.................',
+            '.......dbefddbaeecd.................',
+            '.......dcaabbaaaacdd................',
+            '........daaaaaccccccd...............',
+            '.......dbaaaaaahhhhdcdd.............',
+            '.......dbaaaaaahhjjfeffddd..........',
+            '......dcaaaaaaahhjjeeeefjjd.........',
+            '.......daaaaaaaaeeeeeeeejjd.........',
+            '.......dcaaaeaaaaeeeeeeedd..........',
+            '........dcaeeeaaackhkhkhd...........',
+            '.........daaaaaacddddddd............',
+            '........ddbaaaaacd......dd..........',
+            '.......dcccaaaaahd.....djjd.........',
+            '.......dcciihhhhhfddddddjjd.........',
+            '.......dcciihhhhaabbbbccjjd.........',
+            '.......dcciihhhhaacccccccjd.........',
+            '..ddddddcciihhhhhhddddccdjd.........',
+            'ddooooodcciihhhhhhfd..dd.djd........',
+            'pppoooodcciihhhhhhhd.....djd........',
+            'pppppppdcchaaaaaaacdddddddjddd......',
+            'ddpppplllllaaaaaaaabbbbbbllllldddd..',
+            '..daalllllllhhhhhhhhhhhhlllllllbbcd.',
+            '..dclllmmmlllcccccccccclllmmmlllccd.',
+            '...dllmmmmmllddddddddddllmmmmmlldd..',
+            '...dllmmlmmlld........dllmmlmmlld...',
+            '...dllmmnmmlld........dllmmnmmlld...',
+            '...dlllmmmllld........dlllmmmllld...',
+            '....dllllllld..........dllllllld....',
+            '.....dllllld............dllllld.....',
+            '......ddddd..............ddddd......',
+            '....................................',
+            '....................................'],
+        flame: ['.12', '1222', '.12'],
+        flamePal: { 1: '#ff9800', 2: '#ffee58' }
     };
-    const KART_PX = 3, KART_W = 40, KART_H = 31;
+    const KART_PX = 3, KART_W = 36, KART_H = 36;
     function kartSvg() {
-        const rects = (rows, y0, x0) => rows.map((r, y) => Array.from(r).map((c, x) => c !== '.' && KART.pal[c] ? `<rect x="${x + (x0 || 0)}" y="${y + y0}" width="1" height="1" fill="${KART.pal[c]}"/>` : '').join('')).join('');
+        const rects = (rows, y0, x0, pal) => rows.map((r, y) => Array.from(r).map((c, x) => c !== '.' && pal[c] ? `<rect x="${x + (x0 || 0)}" y="${y + y0}" width="1" height="1" fill="${pal[c]}"/>` : '').join('')).join('');
         return `<svg viewBox="0 0 ${KART_W} ${KART_H}" width="${KART_W * KART_PX}" height="${KART_H * KART_PX}" shape-rendering="crispEdges">` +
-            `<g class="body">${rects(KART.body, 0)}</g><g class="wa">${rects(KART.wheelsA, 26)}</g><g class="wb">${rects(KART.wheelsB, 26)}</g>` +
-            `<g class="flame">${rects(KART.flame, 22, -4)}</g></svg>`;
+            `<g class="wa">${rects(KART.frameA, 0, 0, KART.pal)}</g><g class="wb">${rects(KART.frameB, 0, 0, KART.pal)}</g>` +
+            `<g class="flame">${rects(KART.flame, 22, -4, KART.flamePal)}</g></svg>`;
     }
     function removeKartLane() {
         const lane = document.getElementById('elm2-kart-lane');

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.152
+// @version      2.153
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-152'; // keep in sync with @version (2.152)
+    const BUILD = 'v2-build-153'; // keep in sync with @version (2.153)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -2378,8 +2378,8 @@
         return kart;
     }
     // Mario Kart start: the kart charges while the lights count down, like a drift mini-turbo (blue sparks and a small
-    // flame at 3, orange at 2, purple at 1), with a rocket-start jolt at 3; it drives off under the panel from 1 with a
-    // full-size purple boost and speed lines so it is gone by the time the merge is clicked.
+    // flame at 3, orange at 2, purple at 1), with a rocket-start jolt at 3; it stays put until the lights go green, then
+    // drives off under the panel with a full-size purple boost and speed lines.
     function chargeKart(kart, stage) {
         if (!kart || !kart.isConnected) return;
         kart.classList.remove('c1', 'c2', 'c3');
@@ -2583,7 +2583,7 @@
             if (race) setLamps();
             if (race && left === 3) chargeKart(kart, 1);
             if (race && left === 2) chargeKart(kart, 2);
-            if (race && left === 1) { chargeKart(kart, 3); driveKart(kart, 1300); }
+            if (race && left === 1) chargeKart(kart, 3);
         };
         setArc(1);
         void arc.getBoundingClientRect();
@@ -2615,6 +2615,7 @@
             // 0: the ring (or lamps) goes green; the merge is clicked right away (race lights: after RACE_GO).
             card.classList.add('done');
             fill.style.strokeDasharray = C + ' ' + C;
+            if (race) driveKart(kart, 700); // green: GO
             document.getElementById('elm2-merge-title').textContent = race ? 'GO!' : 'Merging…';
             render();
             const fire = (btn) => {

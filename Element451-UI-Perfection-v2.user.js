@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.145
+// @version      2.147
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-145'; // keep in sync with @version (2.145)
+    const BUILD = 'v2-build-147'; // keep in sync with @version (2.147)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -179,6 +179,18 @@
         #elm2-merge-overlay .elm2-merge-card.done .elm2-ring-arc { opacity: 0; transition: opacity .3s linear; }
         /* "Race lights" countdown style: three lamps instead of the ring. Red lamps light one per second (3, 2, 1),
            then all three go green with "GO!". */
+        #elm2-kart-lane { position: fixed; top: 0; bottom: 0; overflow: hidden; z-index: 9990; pointer-events: none; }
+        #elm2-kart-lane .elm2-kart { position: absolute; will-change: transform; }
+        #elm2-kart-lane .elm2-kart.flip svg { transform: scaleX(-1); }
+        #elm2-kart-lane .elm2-kart svg { display: block; animation: elm2-kart-bob .5s steps(1) infinite; overflow: visible; }
+        #elm2-kart-lane .elm2-kart .wa { animation: elm2-kart-a .24s steps(1) infinite; }
+        #elm2-kart-lane .elm2-kart .wb { animation: elm2-kart-b .24s steps(1) infinite; }
+        #elm2-kart-lane .elm2-kart .flame { opacity: 0; }
+        #elm2-kart-lane .elm2-kart.boost .flame, #elm2-kart-lane .elm2-kart.go .flame { opacity: 1; animation: elm2-kart-b .1s steps(1) infinite; }
+        #elm2-kart-lane .elm2-kart.go svg { animation: none; }
+        @keyframes elm2-kart-bob { 0% { margin-top: 0; } 50% { margin-top: -4px; } }
+        @keyframes elm2-kart-a { 0% { opacity: 1; } 50% { opacity: 0; } }
+        @keyframes elm2-kart-b { 0% { opacity: 0; } 50% { opacity: 1; } }
         #elm2-merge-overlay .elm2-lamps { display: none; }
         #elm2-merge-overlay .elm2-merge-card.race .elm2-ring svg, #elm2-merge-overlay .elm2-merge-card.race #elm2-merge-count { display: none; }
         #elm2-merge-overlay .elm2-merge-card.race .elm2-lamps { position: absolute; left: 0; right: 0; top: 50%; height: 68px; margin-top: -34px; box-sizing: border-box; padding: 0 12px; border-radius: 34px; background: #1f2124; box-shadow: inset 0 2px 6px rgba(0,0,0,.5); display: flex; align-items: center; justify-content: space-between; }
@@ -2238,21 +2250,101 @@
     }
     // The scrim and the dialog belong to the merge panel (the review sidebar), not the whole page:
     // size the overlay to the visible part of that panel, which also centres the card in it.
-    function placeMergeOverlay(ov) {
+    function mergePanelRect() {
         const form = getDiffForm();
-        let panel = form && (form.closest('elm-review-duplicates-sidebar') || form.closest('bolt-stackable-sidebar') || form.querySelector('form.diff-form') || form);
+        const panel = form && (form.closest('elm-review-duplicates-sidebar') || form.closest('bolt-stackable-sidebar') || form.querySelector('form.diff-form') || form);
         let r = panel ? panel.getBoundingClientRect() : null;
         const vw = window.innerWidth, vh = window.innerHeight;
         // an ancestor that is basically the whole page is not "the panel": use the form itself
         if (r && r.width >= vw * 0.95 && r.height >= vh * 0.95 && form) r = form.getBoundingClientRect();
-        if (!r || r.width < 200 || r.height < 200) { ov.style.inset = '0'; ov.style.left = ov.style.top = ov.style.width = ov.style.height = ''; return; }
+        return r && r.width >= 200 && r.height >= 200 ? r : null;
+    }
+    function placeMergeOverlay(ov) {
+        const r = mergePanelRect();
+        const vw = window.innerWidth, vh = window.innerHeight;
+        if (!r) { ov.style.inset = '0'; ov.style.left = ov.style.top = ov.style.width = ov.style.height = ''; return; }
         const left = Math.max(r.left, 0), top = Math.max(r.top, 0);
         const right = Math.min(r.right, vw), bottom = Math.min(r.bottom, vh);
         ov.style.inset = 'auto';
         ov.style.left = left + 'px'; ov.style.top = top + 'px';
         ov.style.width = Math.max(0, right - left) + 'px'; ov.style.height = Math.max(0, bottom - top) + 'px';
     }
+    // ---- Race lights: a pixel-art kart waits in the shaded strip between the panel and the screen edge
+    // (16px in from the edge), boosts at 3 and drives under the panel from 1. The lane is exactly that strip, so the
+    // kart is clipped at the panel's edge (which looks like going under it), sits above the page dimming and
+    // below the toasts (z-index 9990 < 10000).
+    const KART = {
+        pal: { k: '#1b1b22', r: '#e53935', d: '#a8201a', l: '#ff8a80', y: '#ffd54f', Y: '#f9a825', b: '#42a5f5', g: '#9e9e9e', G: '#616161', o: '#ff9800', O: '#ffee58' },
+        body: [
+            '..........kkkkkk..........',
+            '.........kyyyyyyk.........',
+            '.........kyyyyyYbk........',
+            '.........kyyyyybbbk.......',
+            '.........kyyyyyyyyk.......',
+            '..........kkkkkkkk........',
+            '...kkkkkkkkkrrrrrkkkkkk...',
+            '..krrrrrrrrrrrrrrrrrrrrk..',
+            '.kolllrrrrrrrrrrrrrrrrrrk.',
+            '.kkrrrrrrrrrrrrrrrrrrrrrk.',
+            '..kdddddddddddddddddddrk..',
+            '...kkkkkkkkkkkkkkkkkkkk...'],
+        wheelsA: ['...kkkk............kkkk..', '..kGggGk..........kGggGk.', '..kgGGgk..........kgGGgk.', '...kkkk............kkkk..'],
+        wheelsB: ['...kkkk............kkkk..', '..kGGggk..........kGGggk.', '..kggGGk..........kggGGk.', '...kkkk............kkkk..'],
+        flame: ['oO', 'OoO', 'oO']
+    };
+    const KART_PX = 4, KART_W = 26, KART_H = 16;
+    function kartSvg() {
+        const rects = (rows, y0, x0) => rows.map((r, y) => Array.from(r).map((c, x) => c !== '.' && KART.pal[c] ? `<rect x="${x + (x0 || 0)}" y="${y + y0}" width="1" height="1" fill="${KART.pal[c]}"/>` : '').join('')).join('');
+        return `<svg viewBox="0 0 ${KART_W} ${KART_H}" width="${KART_W * KART_PX}" height="${KART_H * KART_PX}" shape-rendering="crispEdges">` +
+            `<g class="body">${rects(KART.body, 0)}</g><g class="wa">${rects(KART.wheelsA, 12)}</g><g class="wb">${rects(KART.wheelsB, 12)}</g>` +
+            `<g class="flame">${rects(KART.flame, 7, -3)}</g></svg>`;
+    }
+    function removeKartLane() {
+        const lane = document.getElementById('elm2-kart-lane');
+        if (lane) lane.remove();
+    }
+    function buildKartLane(card) {
+        removeKartLane();
+        if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return null;
+        const r = mergePanelRect();
+        if (!r) return null;
+        const vw = window.innerWidth, pad = 16, kw = KART_W * KART_PX, kh = KART_H * KART_PX;
+        const leftGutter = r.left, rightGutter = vw - r.right;
+        const onLeft = leftGutter >= rightGutter;
+        const laneW = Math.max(leftGutter, rightGutter);
+        if (laneW < kw + pad * 2) return null; // not enough room in the strip
+        const lane = document.createElement('div');
+        lane.id = 'elm2-kart-lane';
+        lane.style.left = (onLeft ? 0 : r.right) + 'px';
+        lane.style.width = laneW + 'px';
+        const kart = document.createElement('div');
+        kart.className = 'elm2-kart' + (onLeft ? '' : ' flip');
+        kart.innerHTML = kartSvg();
+        const cr = card.getBoundingClientRect();
+        const x0 = onLeft ? pad : laneW - pad - kw;
+        kart.style.left = x0 + 'px';
+        kart.style.top = Math.round(cr.top + cr.height / 2 - kh / 2) + 'px';
+        lane.appendChild(kart);
+        document.body.appendChild(lane);
+        // distance to be completely under the panel (clipped away by the lane edge)
+        kart._dist = onLeft ? laneW - x0 : -(x0 + kw);
+        return kart;
+    }
+    // Mario Kart start: a rocket-start boost (flames + a jolt) when the countdown shows 3, then the kart
+    // drives off under the panel from 1 so it is gone by the time the merge is clicked.
+    function boostKart(kart) {
+        if (!kart || !kart.isConnected) return;
+        kart.classList.add('boost');
+        kart.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(' + (kart.classList.contains('flip') ? -10 : 10) + 'px)', offset: .25 }, { transform: 'translateX(0)' }], { duration: 450, easing: 'steps(3, end)' });
+        setTimeout(() => kart.classList.remove('boost'), 450);
+    }
+    function driveKart(kart, ms) {
+        if (!kart || !kart.isConnected) return;
+        kart.classList.add('go');
+        kart.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(' + kart._dist + 'px)' }], { duration: ms, easing: 'cubic-bezier(.55, 0, 1, .55)', fill: 'forwards' });
+    }
     function hideMergeModal() {
+        removeKartLane();
         const ov = document.getElementById('elm2-merge-overlay');
         if (ov) ov.classList.remove('visible');
     }
@@ -2361,6 +2453,8 @@
         const TICK = race ? (total * 1000 - RACE_GO) / total : 1000; // race: 4 steps of 925 ms + 300 ms GO = 4 s
         card.classList.toggle('race', race);
         const lamps = Array.from(ov.querySelectorAll('.elm2-lamps i'));
+        removeKartLane();
+        let kart = null;
         const setLamps = () => lamps.forEach((l, i) => {
             // red lamps at 3, 2, 1 seconds left; all green at 0
             l.className = left <= 0 ? 'green' : (i < Math.max(0, 4 - left) ? 'red' : '');
@@ -2439,6 +2533,8 @@
             count.style.animation = 'elm2-count-in .5s cubic-bezier(.05, .7, .1, 1)';
             if (left > 0) setArc(left / total);
             if (race) setLamps();
+            if (race && left === 3) boostKart(kart);
+            if (race && left === 1) driveKart(kart, 1300);
         };
         setArc(1);
         void arc.getBoundingClientRect();
@@ -2448,6 +2544,7 @@
         render();
         placeMergeOverlay(ov);
         ov.classList.add('visible');
+        if (race) kart = buildKartLane(card); // (the card is laid out now that the overlay is placed and visible)
         // Final gate, then the merge click itself. Returns false when the pair is not mergeable.
         const stop = (ready) => {
             hideMergeModal();

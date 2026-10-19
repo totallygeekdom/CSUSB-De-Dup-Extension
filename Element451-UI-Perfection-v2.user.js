@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.143
+// @version      2.144
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-143'; // keep in sync with @version (2.143)
+    const BUILD = 'v2-build-144'; // keep in sync with @version (2.144)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -152,7 +152,7 @@
         #elm2-merge-overlay.visible .elm2-merge-card { transform: scale(1); opacity: 1; }
         #elm2-merge-overlay .elm2-ring { position: relative; width: 160px; height: 160px; margin: 0 auto 24px; }
         #elm2-merge-overlay .elm2-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
-        #elm2-merge-overlay .elm2-ring-track { fill: none; stroke: #f9dedc; stroke-width: 6; }
+        #elm2-merge-overlay .elm2-ring-track { fill: none; stroke: #f9dedc; stroke-width: 6; stroke-linecap: round; }
         #elm2-merge-overlay .elm2-ring-arc { fill: none; stroke: #b3261e; stroke-width: 6; stroke-linecap: round; stroke-dashoffset: 0; transition: stroke-dasharray .6s cubic-bezier(.2, 0, 0, 1), stroke-dashoffset .6s cubic-bezier(.2, 0, 0, 1), stroke .3s linear; }
         #elm2-merge-overlay #elm2-merge-count { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 57px; line-height: 64px; font-weight: 400; color: #b3261e; }
         #elm2-merge-overlay #elm2-merge-title { margin: 0 8px 8px; font-size: 24px; line-height: 32px; font-weight: 400; color: #1a1c20; }
@@ -2223,7 +2223,7 @@
             ov.innerHTML = `
                 <div class="elm2-merge-card" role="alertdialog" aria-live="polite" aria-labelledby="elm2-merge-title" aria-describedby="elm2-merge-summary">
                     <div class="elm2-ring">
-                        <svg viewBox="0 0 100 100" aria-hidden="true"><circle class="elm2-ring-track" cx="50" cy="50" r="44"></circle><path class="elm2-ring-arc"></path><path class="elm2-ring-fill"></path></svg>
+                        <svg viewBox="0 0 100 100" aria-hidden="true"><path class="elm2-ring-track"></path><path class="elm2-ring-arc"></path><path class="elm2-ring-fill"></path></svg>
                         <span id="elm2-merge-count"></span>
                         <div class="elm2-lamps" aria-hidden="true"><i></i><i></i><i></i></div>
                     </div>
@@ -2397,7 +2397,9 @@
         const C = waveLength();
         const CAP = 3; // stroke-width 6 -> cap radius 3, in viewBox units
         let wavePhase = 0;
-        const drawWaves = () => { arc.setAttribute('d', wavy(wavePhase, 1)); fill.setAttribute('d', wavy(wavePhase, -1)); };
+        const track = ov.querySelector('.elm2-ring-track');
+        // the track is the same wave as the arc (a plain circle showed through the waves and left gaps at the ends)
+        const drawWaves = () => { const d = wavy(wavePhase, 1); track.setAttribute('d', d); arc.setAttribute('d', d); fill.setAttribute('d', wavy(wavePhase, -1)); };
         drawWaves();
         const waveId = (ov._waveId = (ov._waveId || 0) + 1);
         if (!race && !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) {

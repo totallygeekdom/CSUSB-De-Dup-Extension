@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.144
+// @version      2.145
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-144'; // keep in sync with @version (2.144)
+    const BUILD = 'v2-build-145'; // keep in sync with @version (2.145)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -152,7 +152,7 @@
         #elm2-merge-overlay.visible .elm2-merge-card { transform: scale(1); opacity: 1; }
         #elm2-merge-overlay .elm2-ring { position: relative; width: 160px; height: 160px; margin: 0 auto 24px; }
         #elm2-merge-overlay .elm2-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
-        #elm2-merge-overlay .elm2-ring-track { fill: none; stroke: #f9dedc; stroke-width: 6; stroke-linecap: round; }
+        #elm2-merge-overlay .elm2-ring-track { fill: none; stroke: #f9dedc; stroke-width: 6; stroke-linecap: round; transition: stroke-dasharray .6s cubic-bezier(.2, 0, 0, 1), stroke-dashoffset .6s cubic-bezier(.2, 0, 0, 1), opacity .3s linear; }
         #elm2-merge-overlay .elm2-ring-arc { fill: none; stroke: #b3261e; stroke-width: 6; stroke-linecap: round; stroke-dashoffset: 0; transition: stroke-dasharray .6s cubic-bezier(.2, 0, 0, 1), stroke-dashoffset .6s cubic-bezier(.2, 0, 0, 1), stroke .3s linear; }
         #elm2-merge-overlay #elm2-merge-count { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 57px; line-height: 64px; font-weight: 400; color: #b3261e; }
         #elm2-merge-overlay #elm2-merge-title { margin: 0 8px 8px; font-size: 24px; line-height: 32px; font-weight: 400; color: #1a1c20; }
@@ -185,7 +185,7 @@
         #elm2-merge-overlay .elm2-lamps i { width: 40px; height: 40px; border-radius: 50%; background: #3a3d42; box-shadow: inset 0 2px 4px rgba(0,0,0,.6); transition: background-color .08s linear, box-shadow .08s linear; }
         #elm2-merge-overlay .elm2-lamps i.red { background: #ff3b30; box-shadow: 0 0 14px 3px rgba(255, 59, 48, .65), inset 0 -3px 6px rgba(0,0,0,.25); }
         #elm2-merge-overlay .elm2-lamps i.green { background: #34d058; box-shadow: 0 0 14px 3px rgba(52, 208, 88, .7), inset 0 -3px 6px rgba(0,0,0,.2); }
-        #elm2-merge-overlay .elm2-merge-card.done .elm2-ring-track { stroke: #cfe8d0; }
+        #elm2-merge-overlay .elm2-merge-card.done .elm2-ring-track { opacity: 0 !important; }
         #elm2-merge-overlay .elm2-merge-card.fired #elm2-merge-cancel { opacity: .38; pointer-events: none; }
         #elm2-merge-overlay .elm2-merge-card.done #elm2-merge-count { color: #2e7d32; }
         @keyframes elm2-count-in { from { opacity: 0; transform: scale(.7); } to { opacity: 1; transform: scale(1); } }
@@ -2223,7 +2223,7 @@
             ov.innerHTML = `
                 <div class="elm2-merge-card" role="alertdialog" aria-live="polite" aria-labelledby="elm2-merge-title" aria-describedby="elm2-merge-summary">
                     <div class="elm2-ring">
-                        <svg viewBox="0 0 100 100" aria-hidden="true"><path class="elm2-ring-track"></path><path class="elm2-ring-arc"></path><path class="elm2-ring-fill"></path></svg>
+                        <svg viewBox="0 0 100 100" aria-hidden="true"><circle class="elm2-ring-track" cx="50" cy="50" r="44"></circle><path class="elm2-ring-arc"></path><path class="elm2-ring-fill"></path></svg>
                         <span id="elm2-merge-count"></span>
                         <div class="elm2-lamps" aria-hidden="true"><i></i><i></i><i></i></div>
                     </div>
@@ -2355,6 +2355,7 @@
         const fill = ov.querySelector('.elm2-ring-fill');
         fill.style.transition = 'none';
         arc.style.transition = 'none';
+        ov.querySelector('.elm2-ring-track').style.transition = 'none';
         card.classList.remove('done', 'fired');
         const race = CFG.COUNTDOWN_STYLE === 'race';
         const TICK = race ? (total * 1000 - RACE_GO) / total : 1000; // race: 4 steps of 925 ms + 300 ms GO = 4 s
@@ -2374,7 +2375,7 @@
         // The ring is Material 3 Expressive's wavy circular progress: the progress arc and the green fill are
         // the same sine-wave curve around the circle (WAVES crests, amplitude AMP) and the waves travel
         // around it while the countdown runs. Dash lengths are measured on that curve (C).
-        const WAVES = 12, AMP = 1.9, RAD = 44, PTS = 360;
+        const WAVES = 12, AMP = 2.2, RAD = 44, PTS = 360;
         const wavy = (phase, dir) => {
             let d = '';
             for (let k = 0; k <= PTS; k++) {
@@ -2397,9 +2398,7 @@
         const C = waveLength();
         const CAP = 3; // stroke-width 6 -> cap radius 3, in viewBox units
         let wavePhase = 0;
-        const track = ov.querySelector('.elm2-ring-track');
-        // the track is the same wave as the arc (a plain circle showed through the waves and left gaps at the ends)
-        const drawWaves = () => { const d = wavy(wavePhase, 1); track.setAttribute('d', d); arc.setAttribute('d', d); fill.setAttribute('d', wavy(wavePhase, -1)); };
+        const drawWaves = () => { arc.setAttribute('d', wavy(wavePhase, 1)); fill.setAttribute('d', wavy(wavePhase, -1)); };
         drawWaves();
         const waveId = (ov._waveId = (ov._waveId || 0) + 1);
         if (!race && !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) {
@@ -2414,7 +2413,19 @@
             requestAnimationFrame(loop);
         }
         fill.style.strokeDasharray = '0.01 ' + C;
+        // Like Material 3 Expressive's wavy circular progress, the track is a plain circle drawn only where the
+        // wave is not, with a small gap (GAP, between the rounded tips) at each junction.
+        const track = ov.querySelector('.elm2-ring-track');
+        const CIRCLE = 2 * Math.PI * RAD, GAP = 3.5;
+        const setTrack = (frac) => {
+            const end = CIRCLE - GAP - CAP;
+            const start = Math.min(end - 0.01, frac * CIRCLE + GAP + CAP);
+            track.style.strokeDasharray = Math.max(0.01, end - start) + ' ' + CIRCLE;
+            track.style.strokeDashoffset = String(-start);
+            track.style.opacity = frac >= 1 || end - start < 0.5 ? '0' : '1';
+        };
         const setArc = (frac) => {
+            setTrack(frac);
             if (frac >= 1) { arc.style.strokeDasharray = C + ' ' + C; arc.style.strokeDashoffset = '0'; return; }
             arc.style.strokeDasharray = Math.max(0.01, C * frac - 2 * CAP) + ' ' + C;
             arc.style.strokeDashoffset = String(-CAP);
@@ -2433,6 +2444,7 @@
         void arc.getBoundingClientRect();
         arc.style.transition = '';
         fill.style.transition = '';
+        track.style.transition = '';
         render();
         placeMergeOverlay(ov);
         ov.classList.add('visible');

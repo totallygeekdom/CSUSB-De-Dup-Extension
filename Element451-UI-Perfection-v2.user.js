@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.164
+// @version      2.165
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-164'; // keep in sync with @version (2.164)
+    const BUILD = 'v2-build-165'; // keep in sync with @version (2.165)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -339,11 +339,11 @@
         .elm2-pager .elm2-pager-go { height: 32px; padding: 0 16px; border: none; border-radius: 16px; background: var(--md-primary-container); color: var(--md-on-primary-container); font-family: inherit; font-weight: 500; font-size: 14px; line-height: 20px; cursor: pointer; transition: box-shadow .2s var(--md-ease); }
         .elm2-pager .elm2-pager-go:hover { box-shadow: var(--md-elev-1); }
         /* M3 Expressive search bar, 56 px; the header row is kept 56 px tall even while the search is closed, so nothing shifts when it opens: Element's expanded header search
-           (it already slides open) and the History search (slides open the same way). Fill #F5F5F5, orange ring on focus. */
+           (it already slides open) and the History search (slides open the same way). Fill #F5F5F5, no outline. */
         bolt-expandable-search:has(.input-wrapper:not([style*="width: 0px"])) .bolt-form-field-input-wrapper:not(#elm2x),
         .elm2-hs-field { display: flex !important; flex-direction: row; align-items: center; box-sizing: border-box; height: 56px; min-height: 0; padding: 0 12px 0 16px; border: none !important; border-radius: 28px; background: var(--md-search-fill) !important; box-shadow: none !important; transition: box-shadow .2s var(--md-ease); }
         bolt-expandable-search:has(.input-wrapper:not([style*="width: 0px"])) .bolt-form-field-input-wrapper:not(#elm2x):focus-within,
-        .elm2-hs-field:focus-within { box-shadow: inset 0 0 0 2px var(--md-primary) !important; }
+        .elm2-hs-field:focus-within { box-shadow: none !important; }
         bolt-expandable-search:has(.input-wrapper:not([style*="width: 0px"])) .bolt-form-field-wrapper:not(#elm2x),
         bolt-expandable-search:has(.input-wrapper:not([style*="width: 0px"])) .bolt-form-field-infix:not(#elm2x),
         bolt-expandable-search:has(.input-wrapper:not([style*="width: 0px"])) bolt-form-field:not(#elm2x) { min-height: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important; background: transparent !important; box-shadow: none !important; outline: none !important; }

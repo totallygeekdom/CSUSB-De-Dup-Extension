@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.170
+// @version      2.171
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-170'; // keep in sync with @version (2.170)
+    const BUILD = 'v2-build-171'; // keep in sync with @version (2.171)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -1350,27 +1350,40 @@
         return 'index0';
     }
     function histOffset(mode, page, limit) { return mode === 'item' ? (page - 1) * limit : mode === 'index1' ? page : page - 1; }
-    // Partial name matching, in any word order, against the whole record: one word matches anywhere
-    // ("First" finds First Last); two words must both appear ("Last First" finds First Last); with
-    // three or more words one of them may be missing ("First Middle Last" finds First Last).
-    function histMatches(rec, words) {
-        const text = histText(rec);
-        const hit = words.filter(w => text.includes(w)).length;
-        return hit >= (words.length >= 3 ? words.length - 1 : words.length);
-    }
-    const histText = (rec) => JSON.stringify(rec, (k, v) => (k === 'ai_analysis' || k === 'feedback') ? undefined : v).toLowerCase();
-    function histSnippet(rec, words) {
-        let hit = '';
+    // Word-based partial matching over every value of the record (names, emails, reviewer, method,
+    // summary, IDs, dates...); field names are not searched. Each typed word must be the start of a
+    // word in the record ("lov" finds Lovelace, "ovel" does not), in any order. A word with an @, a
+    // digit or punctuation (an email, ID or date such as 2026-10-20) is matched inside the whole value
+    // instead. One word matches anywhere ("Last" or "First" finds First Last); two words must both
+    // match ("Last First" finds First Last); with three or more words one may be missing
+    // ("First Middle Last" finds First Last).
+    function histIndex(rec) {
+        const values = [], tokens = [];
         (function walk(o) {
-            if (hit || o === null || typeof o !== 'object') return;
-            for (const k of Object.keys(o)) {
-                if (k === 'ai_analysis' || k === 'feedback') continue;
-                const v = o[k];
-                if ((typeof v === 'string' || typeof v === 'number') && words.some(w => String(v).toLowerCase().includes(w))) { hit = String(v); return; }
-                walk(v);
+            if (o === null || o === undefined) return;
+            if (typeof o === 'string' || typeof o === 'number') {
+                const v = String(o).toLowerCase();
+                values.push(v);
+                v.split(/[^a-z0-9]+/).forEach(t => { if (t) tokens.push(t); });
+            } else if (typeof o === 'object') {
+                Object.keys(o).forEach(k => { if (k !== 'ai_analysis' && k !== 'feedback') walk(o[k]); });
             }
         })(rec);
-        return hit;
+        return { values, tokens };
+    }
+    const histWordHits = (idx, w) => /^[a-z]+$/.test(w) ? idx.tokens.some(t => t.startsWith(w)) : idx.values.some(v => v.includes(w));
+    function histMatches(rec, words) {
+        const idx = histIndex(rec);
+        const hit = words.filter(w => histWordHits(idx, w)).length;
+        return hit >= (words.length >= 3 ? words.length - 1 : words.length);
+    }
+    // The first value that contains one of the words, shown in the status line.
+    function histSnippet(rec, words) {
+        const idx = histIndex(rec);
+        const w = words.find(x => histWordHits(idx, x));
+        if (!w) return '';
+        const v = idx.values.find(val => (/^[a-z]+$/.test(w) ? val.split(/[^a-z0-9]+/).some(t => t.startsWith(w)) : val.includes(w)));
+        return v ? (v.length > 60 ? v.slice(0, 60) + '…' : v) : '';
     }
     function histClearHits() { document.querySelectorAll('.elm2-search-hit').forEach(r => r.classList.remove('elm2-search-hit')); }
     async function histGoTo(page, rowIndex) {

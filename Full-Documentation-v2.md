@@ -6,7 +6,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 | Script | File | Current version |
 |---|---|---|
 | UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.178`, shown in the settings pane and console as `v2-build-178` |
-| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.25` |
+| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.26` |
 
 The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
 `Full-Documentation-v127.0.md`) are unchanged and target the old merge page.
@@ -367,7 +367,7 @@ A badge is placed in `.cdk-column-flagged` (falling back to signals, then the ro
 
 ### 11.6 Import / export
 
-- **Download**: `elm_database_YYYY-MM-DD.ods` (an OpenDocument spreadsheet, opens in Excel, LibreOffice and Google Sheets). Columns, in order: `Firstname, Lastname, Firstname 2, Lastname 2, Spark ID 1, Spark ID 2, Dept., Merged, Script vs Bolt, Row Contents`. Column widths are preset (resize them in the spreadsheet), nothing wraps (a line break inside a value is written as ` | `), the header row is bold and shaded, and **filter buttons are on Dept. and Merged only** (they sit side by side so the filter range covers just those two). The `.ods` is written by the script itself (a small stored-zip writer; no libraries).
+- **Download**: `elm_database_YYYY-MM-DD.ods` (an OpenDocument spreadsheet, opens in Excel, LibreOffice and Google Sheets). Columns, in order: `Firstname, Lastname, Firstname 2, Lastname 2, Spark ID 1, Spark ID 2, Dept., Merged, Script vs Bolt, Row Contents`. Column widths are preset (resize them in the spreadsheet), text never wraps (a value that already contains line breaks keeps them as lines in the cell), the header row is bold and shaded, and **filter buttons are on Dept. and Merged only** (they sit side by side so the filter range covers just those two). The `.ods` is written by the script itself (a small stored-zip writer; no libraries).
 - **Merged** is `Y` once the Merge completed card confirms the merge, `N` for a recorded pair that was not merged (skipped, blocked or left for you), and blank for entries recorded before this column existed.
 - **Script vs Bolt** is the auto-merge brief in one line, e.g. `2/3 agree · script chose 1 over Bolt: Email, Address`, `Applicant · script chose 1 over Bolt: Address`, `3/3 agree`, or `Bolt's picks` when the script made no picks on a merged pair. (With *Use picks from = Bolt* the wording flips to `Bolt chose N over script`.) Field names only, no personal data.
 - How the data gets there: the main script keeps `body.dataset.csvChoice` up to date for the pair on screen; at the Merge Contacts click it remembers the pair's Spark IDs and the line, asks the database script to record the pair (`elm2-record-pair`), and when the Merge completed card appears sends `elm2-pair-merged` (`detail: { a, b, choice }`), which sets Merged = Y.

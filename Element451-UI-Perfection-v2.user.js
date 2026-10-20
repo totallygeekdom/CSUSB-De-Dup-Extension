@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.174
+// @version      2.175
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-174'; // keep in sync with @version (2.174)
+    const BUILD = 'v2-build-175'; // keep in sync with @version (2.175)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -358,17 +358,21 @@
         .elm2-hs-field button[hidden] { display: none; }
         .elm2-hs-field svg { flex: 0 0 auto; width: 24px; height: 24px; }
         bolt-table-header-actions { min-height: 56px; align-items: center; }
-        .elm2-hs-field .elm2-hs-toggle { margin: 0 8px 0 -8px; }
-        /* the History field slides open from its icon, like Element's own */
-        .elm2-hsearch { box-sizing: border-box; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; width: 100%; min-height: 56px; margin: 0 0 12px; color: var(--md-on-surface); font: 400 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; }
-        .elm2-hsearch .elm2-hs-field { width: 56px; padding: 0 12px !important; overflow: hidden; background: transparent !important; transition: width .3s cubic-bezier(.2, 0, 0, 1), background-color .3s, box-shadow .2s; }
-        .elm2-hsearch.open .elm2-hs-field { width: min(420px, 100%); padding: 0 12px 0 16px !important; background: var(--md-search-fill) !important; }
-        .elm2-hsearch .elm2-hs-field input { flex: 1 1 auto; min-width: 0; opacity: 0; transition: opacity .2s; }
-        .elm2-hsearch.open .elm2-hs-field input { opacity: 1; transition-delay: .1s; }
-        .elm2-hsearch:not(.open) .elm2-hs-field input, .elm2-hsearch:not(.open) .elm2-hs-clear, .elm2-hsearch:not(.open) .elm2-hs-prev, .elm2-hsearch:not(.open) .elm2-hs-next, .elm2-hsearch:not(.open) .elm2-hs-status { display: none; }
+        /* The History field opens like Element's own search: the icon stays put and the input area slides
+           open (width + fade) while the pill hugs its content; Previous/Next fade and slide in after it. */
+        .elm2-hsearch { box-sizing: border-box; display: flex; flex-wrap: wrap; align-items: center; width: 100%; min-height: 56px; margin: 0 0 12px; color: var(--md-on-surface); font: 400 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+        .elm2-hsearch .elm2-hs-field { flex: 0 0 auto; width: auto; padding: 0 8px !important; background: transparent !important; transition: background-color .25s cubic-bezier(.2, 0, 0, 1); }
+        .elm2-hsearch.open .elm2-hs-field { background: var(--md-search-fill) !important; }
+        .elm2-hsearch .elm2-hs-field .elm2-hs-toggle { margin: 0; }
+        .elm2-hsearch .elm2-hs-wrap { display: flex; align-items: center; width: 0; overflow: hidden; opacity: 0; transition: width .3s cubic-bezier(.2, 0, 0, 1), opacity .2s linear; }
+        .elm2-hsearch.open .elm2-hs-wrap { width: 300px; opacity: 1; transition: width .3s cubic-bezier(.2, 0, 0, 1), opacity .2s linear .08s; }
+        .elm2-hsearch .elm2-hs-wrap input { flex: 1 1 auto; min-width: 0; }
+        .elm2-hsearch .elm2-hs-actions { display: flex; gap: 8px; box-sizing: border-box; max-width: 0; padding-left: 0; overflow: hidden; opacity: 0; visibility: hidden; transition: max-width .3s cubic-bezier(.2, 0, 0, 1), padding-left .3s cubic-bezier(.2, 0, 0, 1), opacity .15s linear, visibility 0s .3s; }
+        .elm2-hsearch.open .elm2-hs-actions { max-width: 340px; padding-left: 12px; opacity: 1; visibility: visible; transition: max-width .3s cubic-bezier(.2, 0, 0, 1), padding-left .3s cubic-bezier(.2, 0, 0, 1), opacity .2s linear .12s, visibility 0s; }
+        .elm2-hsearch:not(.open) .elm2-hs-status { display: none; }
+        .elm2-hsearch .elm2-hs-status:not(:empty) { animation: elm2HsFade .2s linear; }
+        @keyframes elm2HsFade { from { opacity: 0; } to { opacity: 1; } }
         .elm2-hsearch:not(.open) .elm2-hs-field:focus-within { box-shadow: none !important; }
-        .elm2-hsearch .elm2-hs-field .elm2-hs-toggle { margin: 0 0 0 -4px; }
-        .elm2-hsearch.open .elm2-hs-field .elm2-hs-toggle { margin: 0 8px 0 -8px; }
         /* in the header row, just left of the pager (same spot as the review queue's search icon) */
         .elm2-hsearch.inline { display: inline-flex; flex: 0 0 auto; flex-wrap: nowrap; width: auto; margin: 0 8px 0 auto; vertical-align: middle; }
         .elm2-hsearch.inline .elm2-hs-status { order: -1; flex: 0 0 auto; max-width: 420px; margin: 0 4px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
@@ -1533,9 +1537,9 @@
         bar.className = 'elm2-hsearch';
         const SEARCH_ICON = '<svg viewBox="0 0 20 20" aria-hidden="true"><path fill="currentColor" d="M13.792 12.167h-.856l-.303-.293a7 7 0 0 0 1.7-4.582 7.041 7.041 0 1 0-7.041 7.041 7 7 0 0 0 4.582-1.7l.293.303v.856l5.416 5.406 1.615-1.615zm-6.5 0a4.87 4.87 0 0 1-4.875-4.875 4.87 4.87 0 0 1 4.875-4.875 4.87 4.87 0 0 1 4.875 4.875 4.87 4.87 0 0 1-4.875 4.875"/></svg>';
         bar.innerHTML = '<div class="elm2-hs-field"><button type="button" class="elm2-hs-toggle" aria-label="Search merged profiles" title="Search merged profiles">' + SEARCH_ICON + '</button>' +
-            '<input type="text" placeholder="Search merged profiles" aria-label="Search merged profiles" autocomplete="off">' +
-            '<button type="button" class="elm2-hs-clear" aria-label="Clear search" title="Clear search" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button></div>' +
-            '<button type="button" class="elm2-hs-prev" disabled>Previous match</button><button type="button" class="elm2-hs-next" disabled>Next match</button>' +
+            '<div class="elm2-hs-wrap"><input type="text" placeholder="Search merged profiles" aria-label="Search merged profiles" autocomplete="off">' +
+            '<button type="button" class="elm2-hs-clear" aria-label="Clear search" title="Clear search" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button></div></div>' +
+            '<div class="elm2-hs-actions"><button type="button" class="elm2-hs-prev" disabled>Previous match</button><button type="button" class="elm2-hs-next" disabled>Next match</button></div>' +
             '<div class="elm2-hs-status"></div>';
         placeHistorySearch(bar, table);
         const ui = { status: bar.querySelector('.elm2-hs-status'), prev: bar.querySelector('.elm2-hs-prev'), next: bar.querySelector('.elm2-hs-next'), clear: bar.querySelector('.elm2-hs-clear') };

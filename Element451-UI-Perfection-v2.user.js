@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.175
+// @version      2.176
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-175'; // keep in sync with @version (2.175)
+    const BUILD = 'v2-build-176'; // keep in sync with @version (2.176)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -1277,7 +1277,8 @@
                 '<span class="elm2-pager-total"></span><button type="button" class="elm2-pager-go">Go</button>';
             label.parentElement.insertBefore(box, label);
             const pageEl = box.querySelector('.elm2-pager-page');
-            const go = () => { const page = parseInt(pageEl.value, 10); if (page > 0) pagerGoToPage(pag, page); };
+            // 0 or a negative number goes to page 1 (pagerGoToPage also caps a too-large number at the last page)
+            const go = () => { const n = parseInt(pageEl.value, 10); if (isNaN(n)) return; if (n < 1) pageEl.value = '1'; pagerGoToPage(pag, Math.max(1, n)); };
             box.querySelector('.elm2-pager-go').addEventListener('click', go);
             box.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
         }

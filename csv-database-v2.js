@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.24
+// @version      2.25
 // @description  Tracks duplicate entries in a database stored in browser localStorage (exports an .ods spreadsheet) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -680,7 +680,7 @@
         { header: 'Dept.', key: 'dept', width: 2.8 },
         { header: 'Merged', key: 'merged', width: 2.2 },
         { header: 'Script vs Bolt', key: 'choice', width: 9 },
-        { header: 'Row Contents', key: 'rowContents', width: 15, wrap: true }
+        { header: 'Row Contents', key: 'rowContents', width: 15 }
     ];
     function dbRows(db) {
         return [DB_COLUMNS.map(c => c.header), ...db.map(e => DB_COLUMNS.map(c => String(e[c.key] || '')))];
@@ -812,7 +812,8 @@
     function odsCell(value, style) {
         const attrs = style ? ' table:style-name="' + style + '"' : '';
         if (value === '') return '<table:table-cell' + attrs + '/>';
-        const paras = String(value).split(/\r?\n/).map(l => '<text:p>' + xmlEsc(l) + '</text:p>').join('');
+        // one line per cell (nothing wraps): line breaks in a value become " | "
+        const paras = '<text:p>' + xmlEsc(String(value).replace(/\s*\r?\n\s*/g, ' | ')) + '</text:p>';
         return '<table:table-cell' + attrs + ' office:value-type="string" calcext:value-type="string">' + paras + '</table:table-cell>';
     }
     function buildOds(rows) {
@@ -820,10 +821,9 @@
             '" xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0" xmlns:calcext="urn:org:documentfoundation:names:experimental:calc:xmlns:calcext:1.0"';
         const colStyles = DB_COLUMNS.map((c, i) => '<style:style style:name="co' + i + '" style:family="table-column"><style:table-column-properties style:column-width="' + c.width + 'cm"/></style:style>').join('');
         const cellStyles =
-            '<style:style style:name="head" style:family="table-cell"><style:table-cell-properties fo:background-color="#fde3cc" fo:padding="0.1cm" style:vertical-align="middle"/><style:text-properties fo:font-weight="bold"/></style:style>' +
-            '<style:style style:name="body" style:family="table-cell"><style:table-cell-properties style:vertical-align="top"/></style:style>' +
-            '<style:style style:name="wrap" style:family="table-cell"><style:table-cell-properties fo:wrap-option="wrap" style:vertical-align="top"/></style:style>';
-        const body = rows.map((r, ri) => '<table:table-row>' + DB_COLUMNS.map((c, ci) => odsCell(r[ci] == null ? '' : r[ci], ri === 0 ? 'head' : (c.wrap || c.key === 'choice' ? 'wrap' : 'body'))).join('') + '</table:table-row>').join('');
+            '<style:style style:name="head" style:family="table-cell"><style:table-cell-properties fo:background-color="#fde3cc" fo:padding="0.1cm" fo:wrap-option="no-wrap" style:vertical-align="middle"/><style:text-properties fo:font-weight="bold"/></style:style>' +
+            '<style:style style:name="body" style:family="table-cell"><style:table-cell-properties fo:wrap-option="no-wrap" style:vertical-align="middle"/></style:style>';
+        const body = rows.map((r, ri) => '<table:table-row>' + DB_COLUMNS.map((c, ci) => odsCell(r[ci] == null ? '' : r[ci], ri === 0 ? 'head' : 'body')).join('') + '</table:table-row>').join('');
         // Filter buttons on Dept. and Merged only: the filter range spans just those two columns.
         const colLetter = (key) => String.fromCharCode(65 + DB_COLUMNS.findIndex(c => c.key === key));
         const filterRange = colLetter('dept') + '1:' + colLetter('merged') + rows.length;
@@ -981,5 +981,5 @@
         updateDbSizeBadge();
     }, 1000);
 
-    console.log('%cCSV Database (new layout) v2.24 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
+    console.log('%cCSV Database (new layout) v2.25 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
 })();

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.172
+// @version      2.173
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-172'; // keep in sync with @version (2.172)
+    const BUILD = 'v2-build-173'; // keep in sync with @version (2.173)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -371,12 +371,12 @@
         .elm2-hsearch.open .elm2-hs-field .elm2-hs-toggle { margin: 0 8px 0 -8px; }
         /* in the header row, just left of the pager (same spot as the review queue's search icon) */
         .elm2-hsearch.inline { display: inline-flex; flex: 0 0 auto; flex-wrap: nowrap; width: auto; margin: 0 8px 0 auto; vertical-align: middle; }
-        .elm2-hsearch.inline .elm2-hs-status { order: -1; flex: 0 0 auto; max-width: 360px; margin: 0 4px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
+        .elm2-hsearch.inline .elm2-hs-status { order: -1; flex: 0 0 auto; max-width: 420px; margin: 0 4px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
         .elm2-hsearch.inline .elm2-hs-status:empty { display: none; }
-        .elm2-hsearch .elm2-hs-prev, .elm2-hsearch .elm2-hs-next { white-space: nowrap; height: 48px; padding: 0 20px; border: none; border-radius: 24px; background: var(--md-primary-container); color: var(--md-on-primary-container); font: 500 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; cursor: pointer; transition: box-shadow .2s var(--md-ease); }
+        .elm2-hsearch .elm2-hs-prev, .elm2-hsearch .elm2-hs-next { white-space: nowrap; height: 32px; padding: 0 16px; border: none; border-radius: 16px; background: var(--md-primary-container); color: var(--md-on-primary-container); font: 500 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; cursor: pointer; transition: box-shadow .2s var(--md-ease); }
         .elm2-hsearch .elm2-hs-prev:hover:not(:disabled), .elm2-hsearch .elm2-hs-next:hover:not(:disabled) { box-shadow: var(--md-elev-1); }
         .elm2-hsearch .elm2-hs-prev:disabled, .elm2-hsearch .elm2-hs-next:disabled { opacity: .45; cursor: default; }
-        .elm2-hsearch .elm2-hs-status { flex-basis: 100%; color: var(--md-on-surface-variant); font-size: 13px; }
+        .elm2-hsearch .elm2-hs-status { flex-basis: 100%; color: var(--md-on-surface); font-size: 16px; line-height: 24px; }
         bolt-row.elm2-search-hit { outline: 3px solid var(--md-primary); outline-offset: -3px; background: color-mix(in srgb, var(--md-primary) 12%, transparent) !important; }
         #elm2-pick-compare-bar {
             display: flex; align-items: center; gap: 12px; flex-wrap: wrap;

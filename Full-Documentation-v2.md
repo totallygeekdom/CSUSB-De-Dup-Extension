@@ -5,8 +5,8 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.181`, shown in the settings pane and console as `v2-build-181` |
-| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.32` |
+| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.182`, shown in the settings pane and console as `v2-build-182` |
+| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.34` |
 
 The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
 `Full-Documentation-v127.0.md`) are unchanged and target the old merge page.
@@ -367,7 +367,7 @@ A badge is placed in `.cdk-column-flagged` (falling back to signals, then the ro
 
 ### 11.6 Import / export
 
-- **Download**: `elm_database_YYYY-MM-DD.xlsx` (an Excel workbook; also opens in LibreOffice and Google Sheets). Columns, in order: `Firstname, Lastname, Firstname 2, Lastname 2, Spark ID 1, Spark ID 2, Dept., Merged, Script vs Bolt, Row Contents`. Column widths are preset (resize them in the spreadsheet), text never wraps (a value that already contains line breaks keeps them as lines in the cell), the header row is bold, shaded and **frozen**, and **filter buttons are on Dept. and Merged only** (they sit side by side so the filter range covers just those two). The workbook is written by the script itself (a small stored-zip writer; no libraries). It was an `.ods` before 2.32: Excel had to repair that and ignored its frozen row, so the export is `.xlsx` now; the importer still reads `.ods`.
+- **Download**: `elm_database_YYYY-MM-DD.xlsx` (an Excel workbook; also opens in LibreOffice and Google Sheets). Columns, in order: `Bolt Score, Firstname, Lastname, Firstname 2, Lastname 2, Spark ID 1, Spark ID 2, Dept., Merged, Script vs Bolt, Row Contents`. **Bolt Score** (High / Medium / Low) is the score chip on the merge screen, read by the main script (`body.dataset.csvScore`) and stored on the entry the first time it is seen; blank if the chip never showed. Column widths are preset (resize them in the spreadsheet), text never wraps (a value that already contains line breaks keeps them as lines in the cell), the header row is bold, shaded and **frozen**, and the **filter buttons are on Bolt Score, Dept. and Merged only** (one filter over the whole table, with the dropdown buttons hidden on every other column). The workbook is written by the script itself (a small stored-zip writer; no libraries). It was an `.ods` before 2.32: Excel had to repair that and ignored its frozen row, so the export is `.xlsx` now; the importer still reads `.ods`.
 - **Struck-through Spark ID**: on a merged pair the Spark ID that was merged away is struck through (grey, line through) in its Spark ID cell. The kept ID is the side selected on the `Spark Id:` row of the merge screen at the Merge click ('left' = Contact A); if that row has no selected side nothing is struck. The strike is stored as `lostSpark` on the entry, and a re-imported `.xlsx` / `.ods` keeps it (read back from the cell style).
 - **Struck-through names**: on a merged pair the first and last name that was **not kept** are struck through too (the side not selected on the First name / Last name row at the Merge click; Contact A = the Firstname / Lastname columns, Contact B = the "2" columns). Nothing is struck when the two names are the same, differ only in case, or one is blank. Stored as `lostFirst` / `lostLast` ('a' or 'b') and read back from the cell font / style on import. (The row labels are matched as `first name` and `last name` / `surname`; if Element labels them differently nothing is struck.)
 - **Merged** is `Y` once the Merge completed card confirms the merge, `N` for a recorded pair that was not merged (skipped, blocked or left for you), and blank for entries recorded before this column existed.
@@ -389,7 +389,7 @@ Header `DB: N` pill, the Database section of the settings pane, the **Show Datab
 | Channel | Direction | Mechanism |
 |---|---|---|
 | Department + Spark IDs | main → CSV | `document.body.dataset.csvDept`, `csvSpark1`, `csvSpark2` |
-| Script vs Bolt line | main → CSV | `document.body.dataset.csvChoice`; `elm2-pair-merged` event (`detail.a/.b/.choice/.lost/.names`) after a confirmed merge |
+| Script vs Bolt line, Bolt score | main → CSV | `document.body.dataset.csvChoice`, `csvScore`; `elm2-pair-merged` event (`detail.a/.b/.choice/.lost/.names`) after a confirmed merge |
 | "Record before skipping" | main → CSV | `elm2-record-pair` event on `document`; the CSV script sets `event.detail.handled` / `.recorded` |
 | Blocked-row text | main → CSV | `.diff-row.elm2-blocked-row` elements |
 | UI injection targets | main → CSV | `#elm-controls-wrapper` (badge), `#elm-settings-pane .settings-body` (Database section), `#elm-highlight-rows` row (Show Database UI toggle) |
@@ -463,5 +463,5 @@ Header `DB: N` pill, the Database section of the settings pane, the **Show Datab
 - **Automation rework**: slider None → High → Medium → Low → All (an earlier build had an Applicant stop, removed because applicants can have any score), **Use picks from**, **When done** with the cancel countdown (dialog with draining stepped ring), **Merge countdown** setting, Auto-Skip covering blocked / out-of-range / twins pairs, no popups for skipped pairs, scan mode.
 - **CSV Database v2**: keyed on Spark IDs (the URL no longer changes), names stored as 3-letter prefixes, two-contact columns, header-based import, list matching via the list API's `identities[]`, record-before-skip handshake, right-aligned badges, Show Database UI toggle, shared toast stack.
 - **Website restyles**: orange Material 3 palette sampled from Element's header, Material 3 tabs, compact Advanced Filters panel, list pager (Page box + Go), hover preview on the comparison buttons, gear icon as an SVG.
-- **History search** (2.181): search every page of the History list through the history API (see section 10).
+- **History search** (2.182): search every page of the History list through the history API (see section 10).
 - **Fixes along the way**: stall on identical consecutive names / disabled Next button, twins warning signal count, cut-off date text in filters, clipped filters panel, selected-chip colour specificity.

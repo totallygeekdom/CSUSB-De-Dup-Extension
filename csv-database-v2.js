@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.32
+// @version      2.34
 // @description  Tracks duplicate entries in a database stored in browser localStorage (exports an .xlsx spreadsheet) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -238,7 +238,9 @@
         const merged = old && old.merged === 'Y' ? 'Y' : 'N';
         // Script vs Bolt is only kept for a merged pair (it is filled in by the 'elm2-pair-merged' event below)
         const choice = merged === 'Y' ? (old.choice || '') : '';
-        const newEntry = { firstName, lastName, firstName2, lastName2, dept, rowContents, sparkId1: sparks.a, sparkId2: sparks.b, merged, choice };
+        // Bolt's score (high / medium / low) as read from the score chip by the main script; kept once seen
+        const score = document.body.dataset.csvScore || (old && old.score) || '';
+        const newEntry = { firstName, lastName, firstName2, lastName2, dept, rowContents, sparkId1: sparks.a, sparkId2: sparks.b, merged, choice, score };
         if (old && old.lostSpark) newEntry.lostSpark = old.lostSpark;
         if (old && old.lostFirst) newEntry.lostFirst = old.lostFirst;
         if (old && old.lostLast) newEntry.lostLast = old.lostLast;
@@ -246,7 +248,7 @@
             if (old.dept === dept && old.firstName === firstName && old.lastName === lastName
                 && old.firstName2 === firstName2 && old.lastName2 === lastName2 && old.rowContents === rowContents
                 && old.sparkId1 === sparks.a && old.sparkId2 === sparks.b
-                && (old.merged || '') === merged && (old.choice || '') === choice) return true;
+                && (old.merged || '') === merged && (old.choice || '') === choice && (old.score || '') === score) return true;
             db[existingIdx] = newEntry;
             saveDatabase(db);
             return true;
@@ -679,6 +681,7 @@
     // Merged and Script vs Bolt sit between Spark ID 2 and Row Contents.
     // width is in cm, as the spreadsheet stores it (the columns can be resized there).
     const DB_COLUMNS = [
+        { header: 'Bolt Score', key: 'score', width: 2.6 },
         { header: 'Firstname', key: 'firstName', width: 2.6 },
         { header: 'Lastname', key: 'lastName', width: 2.6 },
         { header: 'Firstname 2', key: 'firstName2', width: 2.6 },
@@ -692,10 +695,11 @@
     ];
     // Each data row carries .struck, the set of column indexes to strike through: the Spark ID that was merged
     // away (lostSpark) when the pair was merged.
+    const capFirst = (t) => { t = String(t || ''); return t.charAt(0).toUpperCase() + t.slice(1).toLowerCase(); };
     function dbRows(db) {
         const rows = db.map(e => {
             // Script vs Bolt is only exported for a merged pair
-            const r = DB_COLUMNS.map(c => String((c.key === 'choice' && e.merged !== 'Y') ? '' : (e[c.key] || '')));
+            const r = DB_COLUMNS.map(c => String((c.key === 'choice' && e.merged !== 'Y') ? '' : c.key === 'score' ? capFirst(e.score) : (e[c.key] || '')));
             r.struck = new Set();
             const lostCol = { firstName: 'a', firstName2: 'b', lastName: 'a', lastName2: 'b' };
             DB_COLUMNS.forEach((c, i) => {
@@ -739,7 +743,7 @@
             first2: col('firstname 2', -1), last2: col('lastname 2', -1),
             dept: col('dept.', 2), rows: col('row contents', 3),
             s1: col('spark id 1', -1), s2: col('spark id 2', -1),
-            merged: col('merged', -1), choice: col('script vs bolt', -1)
+            merged: col('merged', -1), choice: col('script vs bolt', -1), score: col('bolt score', -1)
         };
         const get = (cols, i) => (i >= 0 && i < cols.length ? String(cols[i] == null ? '' : cols[i]) : '');
         const entries = [];
@@ -756,7 +760,7 @@
                 firstName2: trunc3(get(cols, idx.first2)), lastName2: trunc3(get(cols, idx.last2)),
                 dept: get(cols, idx.dept), rowContents: get(cols, idx.rows),
                 sparkId1: get(cols, idx.s1), sparkId2: get(cols, idx.s2),
-                merged: m === 'Y' || m === 'N' ? m : '', choice: m === 'Y' ? get(cols, idx.choice) : '',
+                merged: m === 'Y' || m === 'N' ? m : '', choice: m === 'Y' ? get(cols, idx.choice) : '', score: get(cols, idx.score).trim().toLowerCase(),
                 ...(lost ? { lostSpark: lost } : {}),
                 ...(lostFirst ? { lostFirst } : {}), ...(lostLast ? { lostLast } : {})
             });
@@ -849,14 +853,15 @@
         const cols = DB_COLUMNS.map((c, i) => '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + Math.round(c.width * 5.4 * 10) / 10 + '" customWidth="1"/>').join('');
         const sheetRows = rows.map((r, ri) => '<row r="' + (ri + 1) + '">' +
             DB_COLUMNS.map((c, ci) => xlsxCell(r[ci] == null ? '' : String(r[ci]), colLetter(ci) + (ri + 1), ri === 0 ? 1 : (r.struck && r.struck.has(ci) ? 2 : 0))).join('') + '</row>').join('');
-        // Filter buttons on Dept. and Merged only: the filter range spans just those two columns.
-        const di = DB_COLUMNS.findIndex(c => c.key === 'dept'), mi = DB_COLUMNS.findIndex(c => c.key === 'merged');
-        const filterRef = colLetter(di) + '1:' + colLetter(mi) + nRows;
+        // One filter over the whole table, with the buttons hidden on every column except Bolt Score, Dept. and Merged.
+        const filterKeys = ['score', 'dept', 'merged'];
+        const filterRef = 'A1:' + colLetter(nCols - 1) + nRows;
+        const hiddenButtons = DB_COLUMNS.map((c, i) => filterKeys.includes(c.key) ? '' : '<filterColumn colId="' + i + '" hiddenButton="1"/>').join('');
         const sheet = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
             '<dimension ref="A1:' + colLetter(nCols - 1) + nRows + '"/>' +
             '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A2" sqref="A2"/></sheetView></sheetViews>' +
             '<sheetFormatPr defaultRowHeight="15"/><cols>' + cols + '</cols><sheetData>' + sheetRows + '</sheetData>' +
-            '<autoFilter ref="' + filterRef + '"/></worksheet>';
+            '<autoFilter ref="' + filterRef + '">' + hiddenButtons + '</autoFilter></worksheet>';
         const styles = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
             '<fonts count="3"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font>' +
             '<font><strike/><sz val="11"/><color rgb="FF8A8A8A"/><name val="Calibri"/></font></fonts>' +
@@ -870,7 +875,7 @@
             '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
         const wb = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
             '<sheets><sheet name="Database" sheetId="1" r:id="rId1"/></sheets>' +
-            '<definedNames><definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">Database!$' + colLetter(di) + '$1:$' + colLetter(mi) + '$' + nRows + '</definedName></definedNames></workbook>';
+            '<definedNames><definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">Database!$A$1:$' + colLetter(nCols - 1) + '$' + nRows + '</definedName></definedNames></workbook>';
         const wbRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
             '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>' +
             '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>';
@@ -1075,5 +1080,5 @@
         updateDbSizeBadge();
     }, 1000);
 
-    console.log('%cCSV Database (new layout) v2.32 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
+    console.log('%cCSV Database (new layout) v2.34 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
 })();

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.167
+// @version      2.168
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-167'; // keep in sync with @version (2.167)
+    const BUILD = 'v2-build-168'; // keep in sync with @version (2.168)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -1350,6 +1350,13 @@
         return 'index0';
     }
     function histOffset(mode, page, limit) { return mode === 'item' ? (page - 1) * limit : mode === 'index1' ? page : page - 1; }
+    // Every word typed must appear in the record, except that with three or more words (e.g. a middle
+    // name was typed that the other record doesn't have) only the first and last word are required.
+    function histMatches(rec, words) {
+        const text = histText(rec);
+        const need = words.length > 2 ? [words[0], words[words.length - 1]] : words;
+        return need.every(w => text.includes(w));
+    }
     const histText = (rec) => JSON.stringify(rec, (k, v) => (k === 'ai_analysis' || k === 'feedback') ? undefined : v).toLowerCase();
     function histSnippet(rec, words) {
         let hit = '';
@@ -1398,12 +1405,13 @@
                     const key = rows.length ? JSON.stringify(rows[0]) : '';
                     if (!rows.length || key === h.prevKey) { h.end = true; break; } // empty or a repeat: past the last page
                     h.prevKey = key; h.rows = rows; h.i = 0;
+                    if (h.page === 1) console.log('[elm2] history record sample (strings shortened):', JSON.stringify(rows[0], (k, v) => typeof v === 'string' && v.length > 40 ? v.slice(0, 40) + '…' : v));
                     if (rows.length < h.limit) h.pages = h.page; // a short page is the last
                 }
                 while (h.i < h.rows.length) {
                     const rec = h.rows[h.i++];
                     h.scanned++;
-                    if (!h.words.every(w => histText(rec).includes(w))) continue;
+                    if (!histMatches(rec, h.words)) continue;
                     h.found++;
                     say('Match ' + h.found + ': page ' + h.page + ', row ' + h.i + (histSnippet(rec, h.words) ? ' · ' + histSnippet(rec, h.words) : ''));
                     histGoTo(h.page, h.i - 1);
@@ -1455,7 +1463,10 @@
     // above the table, full width.
     function placeHistorySearch(bar, table) {
         const pags = Array.from(document.querySelectorAll('mat-paginator'));
-        const pag = pags.find(p => table.compareDocumentPosition(p) & Node.DOCUMENT_POSITION_PRECEDING);
+        // the top paginator: the first one in the page that comes before the rows (the table element may
+        // itself contain it, so the rows are the reference, not the table)
+        const rows = table.querySelector('.bolt-table-rows-wrap') || table;
+        const pag = pags.find(p => rows.compareDocumentPosition(p) & Node.DOCUMENT_POSITION_PRECEDING);
         if (!pag) { table.parentElement.insertBefore(bar, table); return; }
         bar.classList.add('inline');
         let anchor = pag;

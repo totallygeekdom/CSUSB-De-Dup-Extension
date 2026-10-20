@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.169
+// @version      2.170
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-169'; // keep in sync with @version (2.169)
+    const BUILD = 'v2-build-170'; // keep in sync with @version (2.170)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -365,7 +365,7 @@
         .elm2-hsearch.open .elm2-hs-field { width: min(420px, 100%); padding: 0 12px 0 16px !important; background: var(--md-search-fill) !important; }
         .elm2-hsearch .elm2-hs-field input { flex: 1 1 auto; min-width: 0; opacity: 0; transition: opacity .2s; }
         .elm2-hsearch.open .elm2-hs-field input { opacity: 1; transition-delay: .1s; }
-        .elm2-hsearch:not(.open) .elm2-hs-field input, .elm2-hsearch:not(.open) .elm2-hs-clear, .elm2-hsearch:not(.open) .elm2-hs-next, .elm2-hsearch:not(.open) .elm2-hs-status { display: none; }
+        .elm2-hsearch:not(.open) .elm2-hs-field input, .elm2-hsearch:not(.open) .elm2-hs-clear, .elm2-hsearch:not(.open) .elm2-hs-prev, .elm2-hsearch:not(.open) .elm2-hs-next, .elm2-hsearch:not(.open) .elm2-hs-status { display: none; }
         .elm2-hsearch:not(.open) .elm2-hs-field:focus-within { box-shadow: none !important; }
         .elm2-hsearch .elm2-hs-field .elm2-hs-toggle { margin: 0 0 0 -4px; }
         .elm2-hsearch.open .elm2-hs-field .elm2-hs-toggle { margin: 0 8px 0 -8px; }
@@ -373,9 +373,9 @@
         .elm2-hsearch.inline { display: inline-flex; flex: 0 0 auto; flex-wrap: nowrap; width: auto; margin: 0 8px 0 auto; position: relative; vertical-align: middle; }
         .elm2-hsearch.inline .elm2-hs-status { position: absolute; top: 100%; right: 0; z-index: 5; flex-basis: auto; margin-top: 4px; padding: 4px 12px; border-radius: 8px; background: #fff; box-shadow: var(--md-elev-1); white-space: nowrap; }
         .elm2-hsearch.inline .elm2-hs-status:empty { display: none; }
-        .elm2-hsearch .elm2-hs-next { white-space: nowrap; height: 48px; padding: 0 20px; border: none; border-radius: 24px; background: var(--md-primary-container); color: var(--md-on-primary-container); font: 500 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; cursor: pointer; transition: box-shadow .2s var(--md-ease); }
-        .elm2-hsearch .elm2-hs-next:hover:not(:disabled) { box-shadow: var(--md-elev-1); }
-        .elm2-hsearch .elm2-hs-next:disabled { opacity: .45; cursor: default; }
+        .elm2-hsearch .elm2-hs-prev, .elm2-hsearch .elm2-hs-next { white-space: nowrap; height: 48px; padding: 0 20px; border: none; border-radius: 24px; background: var(--md-primary-container); color: var(--md-on-primary-container); font: 500 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; cursor: pointer; transition: box-shadow .2s var(--md-ease); }
+        .elm2-hsearch .elm2-hs-prev:hover:not(:disabled), .elm2-hsearch .elm2-hs-next:hover:not(:disabled) { box-shadow: var(--md-elev-1); }
+        .elm2-hsearch .elm2-hs-prev:disabled, .elm2-hsearch .elm2-hs-next:disabled { opacity: .45; cursor: default; }
         .elm2-hsearch .elm2-hs-status { flex-basis: 100%; color: var(--md-on-surface-variant); font-size: 13px; }
         bolt-row.elm2-search-hit { outline: 3px solid var(--md-primary); outline-offset: -3px; background: color-mix(in srgb, var(--md-primary) 12%, transparent) !important; }
         #elm2-pick-compare-bar {
@@ -1350,12 +1350,13 @@
         return 'index0';
     }
     function histOffset(mode, page, limit) { return mode === 'item' ? (page - 1) * limit : mode === 'index1' ? page : page - 1; }
-    // Every word typed must appear in the record, except that with three or more words (e.g. a middle
-    // name was typed that the other record doesn't have) only the first and last word are required.
+    // Partial name matching, in any word order, against the whole record: one word matches anywhere
+    // ("First" finds First Last); two words must both appear ("Last First" finds First Last); with
+    // three or more words one of them may be missing ("First Middle Last" finds First Last).
     function histMatches(rec, words) {
         const text = histText(rec);
-        const need = words.length > 2 ? [words[0], words[words.length - 1]] : words;
-        return need.every(w => text.includes(w));
+        const hit = words.filter(w => text.includes(w)).length;
+        return hit >= (words.length >= 3 ? words.length - 1 : words.length);
     }
     const histText = (rec) => JSON.stringify(rec, (k, v) => (k === 'ai_analysis' || k === 'feedback') ? undefined : v).toLowerCase();
     function histSnippet(rec, words) {
@@ -1387,13 +1388,34 @@
     // The scan state of the current search. It is resumable: "Next match" carries on from the record
     // after the last hit, so a search pauses at each match instead of running to the last page.
     let hs = null;
+    // Matches found so far are kept (h.matches, h.cursor is the one on screen) so Previous match can go back.
+    function histButtons(h, ui) {
+        ui.prev.disabled = !(h && h.cursor > 0);
+        ui.next.disabled = !(h && h.matches.length && (h.cursor < h.matches.length - 1 || !h.end));
+    }
+    function histShowMatch(h, ui) {
+        const m = h.matches[h.cursor];
+        ui.status.textContent = 'Match ' + (h.cursor + 1) + (h.end ? ' of ' + h.matches.length : '') + ': page ' + m.page + ', row ' + (m.row + 1) + (m.snippet ? ' · ' + m.snippet : '');
+        histGoTo(m.page, m.row);
+    }
+    function histNext(ui) {
+        const h = hs;
+        if (!h || h.busy) return;
+        if (h.cursor < h.matches.length - 1) { h.cursor++; histShowMatch(h, ui); histButtons(h, ui); }
+        else histAdvance(ui);
+    }
+    function histPrev(ui) {
+        const h = hs;
+        if (!h || h.busy || h.cursor < 1) return;
+        h.cursor--; histShowMatch(h, ui); histButtons(h, ui);
+    }
     async function histAdvance(ui) {
         const h = hs;
         if (!h || h.busy) return;
         const run = h.run;
         const say = (t) => { ui.status.textContent = t; };
         h.busy = true;
-        ui.next.disabled = true;
+        ui.next.disabled = true; ui.prev.disabled = true;
         try {
             while (run === histRun) {
                 if (!h.rows || h.i >= h.rows.length) {
@@ -1413,8 +1435,9 @@
                     h.scanned++;
                     if (!histMatches(rec, h.words)) continue;
                     h.found++;
-                    say('Match ' + h.found + ': page ' + h.page + ', row ' + h.i + (histSnippet(rec, h.words) ? ' · ' + histSnippet(rec, h.words) : ''));
-                    histGoTo(h.page, h.i - 1);
+                    h.matches.push({ page: h.page, row: h.i - 1, snippet: histSnippet(rec, h.words) });
+                    h.cursor = h.matches.length - 1;
+                    histShowMatch(h, ui);
                     return;
                 }
                 if (h.rows.length && h.i >= h.rows.length && h.page >= h.pages) h.end = true;
@@ -1427,7 +1450,7 @@
             if (run === histRun) say('Search failed on page ' + h.page + ': ' + e.message);
         } finally {
             h.busy = false;
-            if (run === histRun) ui.next.disabled = !(h.found > 0 && !h.end);
+            if (run === histRun) histButtons(h, ui);
         }
     }
     async function histSearch(query, ui) {
@@ -1435,7 +1458,7 @@
         const run = ++histRun;
         histClearHits();
         hs = null;
-        ui.next.disabled = true;
+        ui.next.disabled = true; ui.prev.disabled = true;
         if (!words.length) { ui.status.textContent = 'Type a name, email or Spark ID.'; return; }
         if (!histReq) { ui.status.textContent = 'No history request captured yet. Go to another page of the list (or reload this one), then search.'; return; }
         const limit = Math.max(1, parseInt(new URL(histReq.url).searchParams.get('limit'), 10) || 50);
@@ -1446,7 +1469,7 @@
             return;
         }
         if (run !== histRun) return;
-        hs = { run, words, limit, page: 0, rows: null, i: 0, scanned: 0, found: 0, prevKey: null, end: false, busy: false,
+        hs = { run, words, limit, page: 0, rows: null, i: 0, scanned: 0, found: 0, matches: [], cursor: -1, prevKey: null, end: false, busy: false,
                pages: st ? Math.min(HIST_MAX_PAGES, st.pages) : HIST_MAX_PAGES, pagesKnown: !!st };
         histAdvance(ui);
     }
@@ -1454,7 +1477,7 @@
         histRun++; hs = null;
         input.value = '';
         ui.status.textContent = '';
-        ui.next.disabled = true; ui.clear.hidden = true;
+        ui.next.disabled = true; ui.prev.disabled = true; ui.clear.hidden = true;
         histClearHits();
     }
     // Goes in the header row just before the pager (where the review queue has its search icon). The
@@ -1499,10 +1522,10 @@
         bar.innerHTML = '<div class="elm2-hs-field"><button type="button" class="elm2-hs-toggle" aria-label="Search merged profiles" title="Search merged profiles">' + SEARCH_ICON + '</button>' +
             '<input type="text" placeholder="Search merged profiles" aria-label="Search merged profiles" autocomplete="off">' +
             '<button type="button" class="elm2-hs-clear" aria-label="Clear search" title="Clear search" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button></div>' +
-            '<button type="button" class="elm2-hs-next" disabled>Next match</button>' +
+            '<button type="button" class="elm2-hs-prev" disabled>Previous match</button><button type="button" class="elm2-hs-next" disabled>Next match</button>' +
             '<div class="elm2-hs-status"></div>';
         placeHistorySearch(bar, table);
-        const ui = { status: bar.querySelector('.elm2-hs-status'), next: bar.querySelector('.elm2-hs-next'), clear: bar.querySelector('.elm2-hs-clear') };
+        const ui = { status: bar.querySelector('.elm2-hs-status'), prev: bar.querySelector('.elm2-hs-prev'), next: bar.querySelector('.elm2-hs-next'), clear: bar.querySelector('.elm2-hs-clear') };
         const input = bar.querySelector('input[type=text]');
         const setOpen = (open) => {
             bar.classList.toggle('open', open);
@@ -1516,7 +1539,8 @@
             if (bar.classList.contains('open') && !bar.contains(e.target) && !input.value.trim() && !hs) setOpen(false);
         };
         document.addEventListener('mousedown', clickAway, true);
-        ui.next.addEventListener('click', () => histAdvance(ui));
+        ui.next.addEventListener('click', () => histNext(ui));
+        ui.prev.addEventListener('click', () => histPrev(ui));
         ui.clear.addEventListener('click', () => { histClear(ui, input); input.focus(); });
         input.addEventListener('input', () => { ui.clear.hidden = !input.value && !hs; });
         input.addEventListener('keydown', (e) => {

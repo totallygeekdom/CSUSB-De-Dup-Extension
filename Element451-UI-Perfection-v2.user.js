@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.180
+// @version      2.181
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-180'; // keep in sync with @version (2.180)
+    const BUILD = 'v2-build-181'; // keep in sync with @version (2.181)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -1813,6 +1813,21 @@
         }
         return null;
     }
+    // Which contact's first / last name the merge drops: 'a' (Contact A, left) or 'b' when the other side is
+    // selected on that name row and the two names really differ (not just in case, and not "-").
+    function lostNameSides() {
+        const out = { first: '', last: '' };
+        const lost = (re) => {
+            const row = getDiffRows().find(r => re.test(r.label || ''));
+            if (!row || !row.nativeSide) return '';
+            const l = row.values[0].textContent.trim().toLowerCase(), r = row.values[1].textContent.trim().toLowerCase();
+            if (l === r || isBlankValue(l) || isBlankValue(r)) return '';
+            return row.nativeSide === 'left' ? 'b' : 'a';
+        };
+        out.first = lost(/\bfirst\s*name\b/i);
+        out.last = lost(/\b(last\s*name|surname|family\s*name)\b/i);
+        return out;
+    }
     function getSparkIds() {
         const re = /Spark Id:\s*([^\s,|]+)/i;
         for (const row of getDiffRows()) {
@@ -3182,7 +3197,7 @@
     function sendMergedToDatabase() {
         const r = pendingMergeRecord;
         pendingMergeRecord = null;
-        if (r && Date.now() - r.at < 20000) document.dispatchEvent(new CustomEvent('elm2-pair-merged', { detail: { a: r.a, b: r.b, choice: r.choice, lost: r.lost } }));
+        if (r && Date.now() - r.at < 20000) document.dispatchEvent(new CustomEvent('elm2-pair-merged', { detail: { a: r.a, b: r.b, choice: r.choice, lost: r.lost, names: r.names } }));
     }
     function bindMergeButtonTracking() {
         const btn = getSidebarActionButton('Merge Contacts');
@@ -3199,7 +3214,7 @@
             const sp = getSparkIds();
             // lost = the Spark ID that is merged away (the side not selected on the Spark Id row), '' if unknown
             const keep = keptSparkSide();
-            pendingMergeRecord = { a: sp.a, b: sp.b, choice: choiceSummary("Bolt's picks"), lost: keep === 'left' ? sp.b : keep === 'right' ? sp.a : '', at: Date.now() };
+            pendingMergeRecord = { a: sp.a, b: sp.b, choice: choiceSummary("Bolt's picks"), lost: keep === 'left' ? sp.b : keep === 'right' ? sp.a : '', names: lostNameSides(), at: Date.now() };
             document.dispatchEvent(new CustomEvent('elm2-record-pair', { detail: {} }));
         });
     }

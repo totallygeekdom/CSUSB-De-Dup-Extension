@@ -13,7 +13,7 @@ chip). Two v2 scripts target it:
 | Script | File | Current version |
 |---|---|---|
 | UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.181` (`v2-build-181`, shown in the settings pane) |
-| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.30` |
+| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.31` |
 
 **Full documentation: [`Full-Documentation-v2.md`](Full-Documentation-v2.md)** (architecture, every setting,
 the resolution rules, auto-merge, every website restyle, the database format, limitations).

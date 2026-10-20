@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.178
+// @version      2.179
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-178'; // keep in sync with @version (2.178)
+    const BUILD = 'v2-build-179'; // keep in sync with @version (2.179)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -1804,6 +1804,15 @@
     // The review queue is a single URL (.../bolt/review-queue) that never changes per
     // profile, so a pair is identified by the Spark ID of each contact, read from
     // the "Spark Id: ..." row of the diff form. Returns { a, b } (either may be '').
+    // Which contact's Spark ID the merge keeps: the side selected on the "Spark Id:" row ('left' = Contact A,
+    // 'right' = Contact B), or null when that row has no selected side.
+    function keptSparkSide() {
+        const re = /Spark Id:\s*([^\s,|]+)/i;
+        for (const row of getDiffRows()) {
+            if (re.test(row.values[0].textContent) || re.test(row.values[1].textContent)) return row.nativeSide || null;
+        }
+        return null;
+    }
     function getSparkIds() {
         const re = /Spark Id:\s*([^\s,|]+)/i;
         for (const row of getDiffRows()) {
@@ -3115,7 +3124,7 @@
     function sendMergedToDatabase() {
         const r = pendingMergeRecord;
         pendingMergeRecord = null;
-        if (r && Date.now() - r.at < 20000) document.dispatchEvent(new CustomEvent('elm2-pair-merged', { detail: { a: r.a, b: r.b, choice: r.choice } }));
+        if (r && Date.now() - r.at < 20000) document.dispatchEvent(new CustomEvent('elm2-pair-merged', { detail: { a: r.a, b: r.b, choice: r.choice, lost: r.lost } }));
     }
     function bindMergeButtonTracking() {
         const btn = getSidebarActionButton('Merge Contacts');
@@ -3130,7 +3139,9 @@
             // For the database: which pair this was and what the script chose over Bolt, then record the
             // pair now (the poll might not have run yet).
             const sp = getSparkIds();
-            pendingMergeRecord = { a: sp.a, b: sp.b, choice: choiceSummary("Bolt's picks"), at: Date.now() };
+            // lost = the Spark ID that is merged away (the side not selected on the Spark Id row), '' if unknown
+            const keep = keptSparkSide();
+            pendingMergeRecord = { a: sp.a, b: sp.b, choice: choiceSummary("Bolt's picks"), lost: keep === 'left' ? sp.b : keep === 'right' ? sp.a : '', at: Date.now() };
             document.dispatchEvent(new CustomEvent('elm2-record-pair', { detail: {} }));
         });
     }

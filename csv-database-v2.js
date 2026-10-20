@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.26
+// @version      2.28
 // @description  Tracks duplicate entries in a database stored in browser localStorage (exports an .ods spreadsheet) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -238,6 +238,7 @@
         const merged = old && old.merged === 'Y' ? 'Y' : 'N';
         const choice = merged === 'Y' ? (old.choice || '') : (document.body.dataset.csvChoice || (old && old.choice) || '');
         const newEntry = { firstName, lastName, firstName2, lastName2, dept, rowContents, sparkId1: sparks.a, sparkId2: sparks.b, merged, choice };
+        if (old && old.lostSpark) newEntry.lostSpark = old.lostSpark;
         if (old) {
             if (old.dept === dept && old.firstName === firstName && old.lastName === lastName
                 && old.firstName2 === firstName2 && old.lastName2 === lastName2 && old.rowContents === rowContents
@@ -269,6 +270,7 @@
         if (idx === -1) { console.log('[csv] merged pair is not in the database:', d.a, d.b); return; }
         db[idx].merged = 'Y';
         if (d.choice) db[idx].choice = d.choice;
+        if (d.lost) db[idx].lostSpark = d.lost; // the Spark ID merged away: struck through in the export
         saveDatabase(db);
     });
 
@@ -682,8 +684,16 @@
         { header: 'Script vs Bolt', key: 'choice', width: 9 },
         { header: 'Row Contents', key: 'rowContents', width: 15 }
     ];
+    // Each data row carries .struck, the set of column indexes to strike through: the Spark ID that was merged
+    // away (lostSpark) when the pair was merged.
     function dbRows(db) {
-        return [DB_COLUMNS.map(c => c.header), ...db.map(e => DB_COLUMNS.map(c => String(e[c.key] || '')))];
+        const rows = db.map(e => {
+            const r = DB_COLUMNS.map(c => String(e[c.key] || ''));
+            r.struck = new Set();
+            DB_COLUMNS.forEach((c, i) => { if ((c.key === 'sparkId1' || c.key === 'sparkId2') && e.lostSpark && r[i] === e.lostSpark) r.struck.add(i); });
+            return r;
+        });
+        return [DB_COLUMNS.map(c => c.header), ...rows];
     }
     function parseCSVLine(line) {
         const result = [];
@@ -725,12 +735,14 @@
             const cols = rows[i];
             if (cols.length < 4) continue;
             const m = get(cols, idx.merged).trim().toUpperCase().charAt(0);
+            const lost = cols.struck && cols.struck.has(idx.s1) ? get(cols, idx.s1) : cols.struck && cols.struck.has(idx.s2) ? get(cols, idx.s2) : '';
             entries.push({
                 firstName: trunc3(get(cols, idx.first)), lastName: trunc3(get(cols, idx.last)),
                 firstName2: trunc3(get(cols, idx.first2)), lastName2: trunc3(get(cols, idx.last2)),
                 dept: get(cols, idx.dept), rowContents: get(cols, idx.rows),
                 sparkId1: get(cols, idx.s1), sparkId2: get(cols, idx.s2),
-                merged: m === 'Y' || m === 'N' ? m : '', choice: get(cols, idx.choice)
+                merged: m === 'Y' || m === 'N' ? m : '', choice: get(cols, idx.choice),
+                ...(lost ? { lostSpark: lost } : {})
             });
         }
         return entries;
@@ -822,8 +834,9 @@
         const colStyles = DB_COLUMNS.map((c, i) => '<style:style style:name="co' + i + '" style:family="table-column"><style:table-column-properties style:column-width="' + c.width + 'cm"/></style:style>').join('');
         const cellStyles =
             '<style:style style:name="head" style:family="table-cell"><style:table-cell-properties fo:background-color="#fde3cc" fo:padding="0.1cm" fo:wrap-option="no-wrap" style:vertical-align="middle"/><style:text-properties fo:font-weight="bold"/></style:style>' +
+            '<style:style style:name="lost" style:family="table-cell"><style:table-cell-properties fo:wrap-option="no-wrap" style:vertical-align="middle"/><style:text-properties style:text-line-through-style="solid" style:text-line-through-type="single" fo:color="#8a8a8a"/></style:style>' +
             '<style:style style:name="body" style:family="table-cell"><style:table-cell-properties fo:wrap-option="no-wrap" style:vertical-align="middle"/></style:style>';
-        const body = rows.map((r, ri) => '<table:table-row>' + DB_COLUMNS.map((c, ci) => odsCell(r[ci] == null ? '' : r[ci], ri === 0 ? 'head' : 'body')).join('') + '</table:table-row>').join('');
+        const body = rows.map((r, ri) => '<table:table-row>' + DB_COLUMNS.map((c, ci) => odsCell(r[ci] == null ? '' : r[ci], ri === 0 ? 'head' : (r.struck && r.struck.has(ci) ? 'lost' : 'body'))).join('') + '</table:table-row>').join('');
         // Filter buttons on Dept. and Merged only: the filter range spans just those two columns.
         const colLetter = (key) => String.fromCharCode(65 + DB_COLUMNS.findIndex(c => c.key === key));
         const filterRange = colLetter('dept') + '1:' + colLetter('merged') + rows.length;
@@ -835,11 +848,24 @@
             '</office:spreadsheet></office:body></office:document-content>';
         const manifest = '<?xml version="1.0" encoding="UTF-8"?><manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.2">' +
             '<manifest:file-entry manifest:full-path="/" manifest:version="1.2" manifest:media-type="application/vnd.oasis.opendocument.spreadsheet"/>' +
-            '<manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/></manifest:manifest>';
+            '<manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/>' +
+            '<manifest:file-entry manifest:full-path="settings.xml" manifest:media-type="text/xml"/></manifest:manifest>';
+        // View settings: the header row is frozen (a vertical split below row 1) so it stays put when scrolling.
+        const item = (name, type, val) => '<config:config-item config:name="' + name + '" config:type="' + type + '">' + val + '</config:config-item>';
+        const settings = '<?xml version="1.0" encoding="UTF-8"?><office:document-settings xmlns:office="' + NS.office + '" xmlns:config="urn:oasis:names:tc:opendocument:xmlns:config:1.0" office:version="1.2">' +
+            '<office:settings><config:config-item-set config:name="ooo:view-settings"><config:config-item-map-indexed config:name="Views"><config:config-item-map-entry>' +
+            item('ViewId', 'string', 'view1') +
+            '<config:config-item-map-named config:name="Tables"><config:config-item-map-entry config:name="Database">' +
+            item('HorizontalSplitMode', 'short', 0) + item('VerticalSplitMode', 'short', 2) + item('HorizontalSplitPosition', 'int', 0) + item('VerticalSplitPosition', 'int', 1) +
+            item('ActiveSplitRange', 'short', 2) + item('PositionLeft', 'int', 0) + item('PositionRight', 'int', 0) + item('PositionTop', 'int', 0) + item('PositionBottom', 'int', 1) +
+            '</config:config-item-map-entry></config:config-item-map-named>' +
+            item('ActiveTable', 'string', 'Database') +
+            '</config:config-item-map-entry></config:config-item-map-indexed></config:config-item-set></office:settings></office:document-settings>';
         return zipStore([
             { name: 'mimetype', text: 'application/vnd.oasis.opendocument.spreadsheet' },
             { name: 'META-INF/manifest.xml', text: manifest },
-            { name: 'content.xml', text: content }
+            { name: 'content.xml', text: content },
+            { name: 'settings.xml', text: settings }
         ]);
     }
     function odsRows(xml) {
@@ -847,11 +873,22 @@
         if (doc.getElementsByTagName('parsererror').length) throw new Error('the spreadsheet could not be read');
         const sheet = doc.getElementsByTagNameNS(NS.table, 'table')[0];
         if (!sheet) throw new Error('no sheet found');
+        // cell styles with a strike-through (the merged-away Spark ID), by style name
+        const STYLE_NS = 'urn:oasis:names:tc:opendocument:xmlns:style:1.0';
+        const struckStyles = new Set();
+        Array.from(doc.getElementsByTagNameNS(STYLE_NS, 'style')).forEach(st => {
+            Array.from(st.getElementsByTagNameNS(STYLE_NS, 'text-properties')).forEach(tp => {
+                const v = tp.getAttributeNS(STYLE_NS, 'text-line-through-style');
+                if (v && v !== 'none') struckStyles.add(st.getAttributeNS(STYLE_NS, 'name'));
+            });
+        });
         const rows = [];
         Array.from(sheet.getElementsByTagNameNS(NS.table, 'table-row')).forEach(tr => {
             const cells = [];
+            cells.struck = new Set();
             Array.from(tr.children).forEach(td => {
                 if (td.localName !== 'table-cell' && td.localName !== 'covered-table-cell') return;
+                if (struckStyles.has(td.getAttributeNS(NS.table, 'style-name'))) cells.struck.add(cells.length);
                 const text = Array.from(td.getElementsByTagNameNS(NS.text, 'p')).map(p => p.textContent).join('\n');
                 const rep = Math.min(parseInt(td.getAttributeNS(NS.table, 'number-columns-repeated'), 10) || 1, text ? 50 : 1);
                 for (let k = 0; k < rep; k++) cells.push(text);
@@ -981,5 +1018,5 @@
         updateDbSizeBadge();
     }, 1000);
 
-    console.log('%cCSV Database (new layout) v2.26 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
+    console.log('%cCSV Database (new layout) v2.28 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
 })();

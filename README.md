@@ -12,8 +12,8 @@ chip). Two v2 scripts target it:
 
 | Script | File | Current version |
 |---|---|---|
-| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.178` (`v2-build-178`, shown in the settings pane) |
-| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.26` |
+| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.179` (`v2-build-179`, shown in the settings pane) |
+| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.28` |
 
 **Full documentation: [`Full-Documentation-v2.md`](Full-Documentation-v2.md)** (architecture, every setting,
 the resolution rules, auto-merge, every website restyle, the database format, limitations).
@@ -50,7 +50,7 @@ the resolution rules, auto-merge, every website restyle, the database format, li
   URL no longer changes per pair), stores names as 3-letter prefixes (`Jon...`), shows right-aligned department
   badges on the list page (matched through the list API's `identities[]`, falling back to names), exports an
   **`.ods` spreadsheet** (columns `Firstname, Lastname, Firstname 2, Lastname 2, Spark ID 1, Spark ID 2, Dept., Merged, Script vs Bolt, Row Contents`;
-  preset column widths, filter buttons on Dept. and Merged; Merged = Y/N, Script vs Bolt = what the script chose over Bolt)
+  preset column widths, frozen header row, filter buttons on Dept. and Merged, the merged-away Spark ID struck through; Merged = Y/N, Script vs Bolt = what the script chose over Bolt)
   and imports `.ods` or `.csv` (columns are read by header name so older files still load), and has a **Show Database UI** toggle (under
   Display). Before every auto-skip the main script asks it to record the pair first.
 

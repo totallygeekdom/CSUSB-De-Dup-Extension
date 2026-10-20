@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.165
+// @version      2.166
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-165'; // keep in sync with @version (2.165)
+    const BUILD = 'v2-build-166'; // keep in sync with @version (2.166)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -1467,6 +1467,12 @@
             else histClear(ui, input);
         };
         bar.querySelector('.elm2-hs-toggle').addEventListener('click', () => setOpen(!bar.classList.contains('open')));
+        // Clicking away from an empty search closes it (a search with text, or one in progress, stays open).
+        const clickAway = (e) => {
+            if (!bar.isConnected) { document.removeEventListener('mousedown', clickAway, true); return; }
+            if (bar.classList.contains('open') && !bar.contains(e.target) && !input.value.trim() && !hs) setOpen(false);
+        };
+        document.addEventListener('mousedown', clickAway, true);
         ui.next.addEventListener('click', () => histAdvance(ui));
         ui.clear.addEventListener('click', () => { histClear(ui, input); input.focus(); });
         input.addEventListener('input', () => { ui.clear.hidden = !input.value && !hs; });

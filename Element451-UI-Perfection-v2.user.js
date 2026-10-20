@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.171
+// @version      2.172
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-171'; // keep in sync with @version (2.171)
+    const BUILD = 'v2-build-172'; // keep in sync with @version (2.172)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -370,8 +370,8 @@
         .elm2-hsearch .elm2-hs-field .elm2-hs-toggle { margin: 0 0 0 -4px; }
         .elm2-hsearch.open .elm2-hs-field .elm2-hs-toggle { margin: 0 8px 0 -8px; }
         /* in the header row, just left of the pager (same spot as the review queue's search icon) */
-        .elm2-hsearch.inline { display: inline-flex; flex: 0 0 auto; flex-wrap: nowrap; width: auto; margin: 0 8px 0 auto; position: relative; vertical-align: middle; }
-        .elm2-hsearch.inline .elm2-hs-status { position: absolute; top: 100%; right: 0; z-index: 5; flex-basis: auto; margin-top: 4px; padding: 4px 12px; border-radius: 8px; background: #fff; box-shadow: var(--md-elev-1); white-space: nowrap; }
+        .elm2-hsearch.inline { display: inline-flex; flex: 0 0 auto; flex-wrap: nowrap; width: auto; margin: 0 8px 0 auto; vertical-align: middle; }
+        .elm2-hsearch.inline .elm2-hs-status { order: -1; flex: 0 0 auto; max-width: 360px; margin: 0 4px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
         .elm2-hsearch.inline .elm2-hs-status:empty { display: none; }
         .elm2-hsearch .elm2-hs-prev, .elm2-hsearch .elm2-hs-next { white-space: nowrap; height: 48px; padding: 0 20px; border: none; border-radius: 24px; background: var(--md-primary-container); color: var(--md-on-primary-container); font: 500 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; cursor: pointer; transition: box-shadow .2s var(--md-ease); }
         .elm2-hsearch .elm2-hs-prev:hover:not(:disabled), .elm2-hsearch .elm2-hs-next:hover:not(:disabled) { box-shadow: var(--md-elev-1); }

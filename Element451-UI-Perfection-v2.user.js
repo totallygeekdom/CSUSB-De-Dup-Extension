@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.176
+// @version      2.177
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-176'; // keep in sync with @version (2.176)
+    const BUILD = 'v2-build-177'; // keep in sync with @version (2.177)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -3239,6 +3239,9 @@
         let pane = document.getElementById('elm-settings-pane');
         if (!pane) { injectSettingsPane(); overlay = document.getElementById('elm-settings-overlay'); pane = document.getElementById('elm-settings-pane'); }
         const shouldOpen = forceState !== undefined ? forceState : !pane.classList.contains('open');
+        // The pane is created on the first click. Without a reflow in between, the browser sees it
+        // already open and skips the slide-in.
+        void pane.offsetWidth;
         pane.classList.toggle('open', shouldOpen);
         overlay.classList.toggle('open', shouldOpen);
     }

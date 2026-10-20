@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.25
+// @version      2.26
 // @description  Tracks duplicate entries in a database stored in browser localStorage (exports an .ods spreadsheet) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -812,8 +812,8 @@
     function odsCell(value, style) {
         const attrs = style ? ' table:style-name="' + style + '"' : '';
         if (value === '') return '<table:table-cell' + attrs + '/>';
-        // one line per cell (nothing wraps): line breaks in a value become " | "
-        const paras = '<text:p>' + xmlEsc(String(value).replace(/\s*\r?\n\s*/g, ' | ')) + '</text:p>';
+        // text never wraps, but a value that already has line breaks keeps them (one paragraph per line)
+        const paras = String(value).split(/\r?\n/).map(l => '<text:p>' + xmlEsc(l) + '</text:p>').join('');
         return '<table:table-cell' + attrs + ' office:value-type="string" calcext:value-type="string">' + paras + '</table:table-cell>';
     }
     function buildOds(rows) {
@@ -981,5 +981,5 @@
         updateDbSizeBadge();
     }, 1000);
 
-    console.log('%cCSV Database (new layout) v2.25 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
+    console.log('%cCSV Database (new layout) v2.26 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
 })();

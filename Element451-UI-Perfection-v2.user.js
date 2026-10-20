@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.160
+// @version      2.161
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-160'; // keep in sync with @version (2.160)
+    const BUILD = 'v2-build-161'; // keep in sync with @version (2.161)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -351,6 +351,10 @@
         bolt-expandable-search:has(.input-wrapper:not([style*="width: 0px"])) .bolt-input-element:not(#elm2x),
         .elm2-hs-field input { width: 100%; height: 56px; padding: 0 !important; border: none !important; outline: none !important; background: transparent !important; box-shadow: none !important; color: var(--md-on-surface) !important; font: 400 16px/24px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif !important; letter-spacing: .5px; }
         bolt-expandable-search:has(.input-wrapper:not([style*="width: 0px"])) .bolt-input-element::placeholder, .elm2-hs-field input::placeholder { color: var(--md-on-surface-variant); opacity: 1; }
+        .elm2-hs-field .elm2-hs-clear { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; margin: 0 -6px 0 6px; padding: 0 !important; border-radius: 50% !important; background: transparent !important; color: var(--md-on-surface-variant) !important; }
+        .elm2-hs-field .elm2-hs-clear[hidden] { display: none; }
+        .elm2-hs-field .elm2-hs-clear:hover { background: color-mix(in srgb, var(--md-on-surface) 8%, transparent) !important; box-shadow: none !important; }
+        .elm2-hs-field .elm2-hs-clear svg { width: 20px; height: 20px; margin: 0; }
         .elm2-hs-field svg { flex: 0 0 auto; width: 24px; height: 24px; margin-right: 12px; color: var(--md-on-surface-variant); }
         .elm2-hsearch { box-sizing: border-box; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; width: 100%; margin: 0 0 12px; color: var(--md-on-surface); font: 400 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; }
         .elm2-hsearch .elm2-hs-field { flex: 0 1 360px; min-height: 44px; min-width: 220px; padding: 0 14px; border-radius: 22px; }
@@ -359,12 +363,7 @@
         .elm2-hsearch button { height: 40px; padding: 0 20px; border: none; border-radius: 20px; background: var(--md-primary-container); color: var(--md-on-primary-container); font: 500 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; cursor: pointer; transition: box-shadow .2s var(--md-ease); }
         .elm2-hsearch button:hover:not(:disabled) { box-shadow: var(--md-elev-1); }
         .elm2-hsearch button:disabled { opacity: .45; cursor: default; }
-        .elm2-hsearch label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
         .elm2-hsearch .elm2-hs-status { flex-basis: 100%; color: var(--md-on-surface-variant); font-size: 13px; }
-        .elm2-hsearch .elm2-hs-results { flex-basis: 100%; padding: 0 16px !important; border-radius: 16px; background: var(--md-surface-container-low, #f7f4f1); margin: 0; padding: 0; list-style: none; max-height: 220px; overflow-y: auto; }
-        .elm2-hsearch .elm2-hs-results li { display: flex; align-items: center; gap: 12px; padding: 6px 0; border-top: 1px solid var(--md-outline-variant, rgba(0,0,0,.12)); }
-        .elm2-hsearch .elm2-hs-results li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .elm2-hsearch .elm2-hs-results li button { height: 32px; padding: 0 14px; }
         bolt-row.elm2-search-hit { outline: 3px solid var(--md-primary); outline-offset: -3px; background: color-mix(in srgb, var(--md-primary) 12%, transparent) !important; }
         #elm2-pick-compare-bar {
             display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
@@ -1365,61 +1364,78 @@
         const row = document.querySelectorAll('.bolt-table-rows-wrap bolt-row.cdk-row')[rowIndex];
         if (row) { row.classList.add('elm2-search-hit'); row.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
     }
+    // The scan state of the current search. It is resumable: "Next match" carries on from the record
+    // after the last hit, so a search pauses at each match instead of running to the last page.
+    let hs = null;
+    async function histAdvance(ui) {
+        const h = hs;
+        if (!h || h.busy) return;
+        const run = h.run;
+        const say = (t) => { ui.status.textContent = t; };
+        h.busy = true;
+        ui.go.disabled = true; ui.next.disabled = true;
+        try {
+            while (run === histRun) {
+                if (!h.rows || h.i >= h.rows.length) {
+                    if (h.end || h.page >= h.pages) { h.end = true; break; }
+                    h.page++;
+                    say('Searching page ' + h.page + (h.pagesKnown ? ' of ' + h.pages : '') + '…  ' + h.found + ' found');
+                    const { rows } = await histFetchPage(h.limit, histOffset(histMode, h.page, h.limit));
+                    if (run !== histRun) return;
+                    const key = rows.length ? JSON.stringify(rows[0]) : '';
+                    if (!rows.length || key === h.prevKey) { h.end = true; break; } // empty or a repeat: past the last page
+                    h.prevKey = key; h.rows = rows; h.i = 0;
+                    if (rows.length < h.limit) h.pages = h.page; // a short page is the last
+                }
+                while (h.i < h.rows.length) {
+                    const rec = h.rows[h.i++];
+                    h.scanned++;
+                    if (!h.words.every(w => histText(rec).includes(w))) continue;
+                    h.found++;
+                    say('Match ' + h.found + ': page ' + h.page + ', row ' + h.i + (histSnippet(rec, h.words) ? ' · ' + histSnippet(rec, h.words) : ''));
+                    histGoTo(h.page, h.i - 1);
+                    return;
+                }
+                if (h.rows.length && h.i >= h.rows.length && h.page >= h.pages) h.end = true;
+                else await sleep(HIST_DELAY_MS);
+            }
+            if (run === histRun) say(h.found ? 'No more matches (' + h.found + ' found, ' + h.scanned + ' records scanned).' : 'No match in ' + h.scanned + ' records (' + h.page + ' pages).');
+        } catch (e) {
+            console.log('[elm2] history search failed:', e);
+            h.end = true;
+            if (run === histRun) say('Search failed on page ' + h.page + ': ' + e.message);
+        } finally {
+            h.busy = false;
+            if (run === histRun) { ui.go.disabled = false; ui.next.disabled = !(h.found > 0 && !h.end); }
+        }
+    }
     async function histSearch(query, ui) {
         const words = query.toLowerCase().split(/\s+/).filter(Boolean);
         const run = ++histRun;
-        const say = (t) => { ui.status.textContent = t; };
-        ui.results.innerHTML = '';
         histClearHits();
-        if (!words.length) { say('Type a name, email or Spark ID.'); return; }
-        if (!histReq) { say('No history request captured yet. Go to another page of the list (or reload this one), then search.'); return; }
+        hs = null;
+        ui.next.disabled = true;
+        if (!words.length) { ui.status.textContent = 'Type a name, email or Spark ID.'; return; }
+        if (!histReq) { ui.status.textContent = 'No history request captured yet. Go to another page of the list (or reload this one), then search.'; return; }
         const limit = Math.max(1, parseInt(new URL(histReq.url).searchParams.get('limit'), 10) || 50);
-        ui.go.disabled = true; ui.stop.disabled = false;
-        let page = 0, scanned = 0, found = 0, prevKey = null, pages = HIST_MAX_PAGES;
         const pag = document.querySelector('mat-paginator');
         const st = pag && readPagerState(pag);
-        if (st) pages = Math.min(pages, st.pages);
-        const done = (msg) => { say(msg); ui.go.disabled = false; ui.stop.disabled = true; };
-        try {
-            if (!histMode) histMode = await histDetectMode(limit);
-            while (page < pages) {
-                if (run !== histRun) { done('Stopped on page ' + page + ': ' + found + ' found, ' + scanned + ' records scanned.'); return; }
-                page++;
-                say('Searching page ' + page + (st ? ' of ' + pages : '') + '…  ' + scanned + ' scanned, ' + found + ' found');
-                const { rows } = await histFetchPage(limit, histOffset(histMode, page, limit));
-                if (run !== histRun) { done('Stopped on page ' + page + '.'); return; }
-                const key = rows.length ? JSON.stringify(rows[0]) : '';
-                if (!rows.length || key === prevKey) break; // empty or a repeat: past the last page
-                prevKey = key;
-                let firstHit = -1;
-                rows.forEach((rec, i) => {
-                    scanned++;
-                    if (!words.every(w => histText(rec).includes(w))) return;
-                    found++;
-                    if (firstHit < 0) firstHit = i;
-                    const li = document.createElement('li');
-                    const label = document.createElement('span');
-                    label.textContent = 'Page ' + page + ', row ' + (i + 1) + ' · ' + histSnippet(rec, words);
-                    const btn = document.createElement('button');
-                    btn.type = 'button'; btn.textContent = 'Go to page ' + page;
-                    const pg = page, idx = i;
-                    btn.addEventListener('click', () => histGoTo(pg, idx));
-                    li.append(label, btn);
-                    ui.results.appendChild(li);
-                });
-                if (firstHit >= 0 && ui.first.checked) {
-                    done('Found on page ' + page + ', row ' + (firstHit + 1) + '.');
-                    histGoTo(page, firstHit);
-                    return;
-                }
-                if (rows.length < limit) break;
-                await sleep(HIST_DELAY_MS);
-            }
-            done(found ? 'Done: ' + found + ' match' + (found === 1 ? '' : 'es') + ' in ' + scanned + ' records.' : 'No match in ' + scanned + ' records (' + page + ' pages).');
-        } catch (e) {
-            console.log('[elm2] history search failed:', e);
-            done('Search failed on page ' + page + ': ' + e.message);
+        ui.go.disabled = true;
+        try { if (!histMode) histMode = await histDetectMode(limit); } catch (e) {
+            if (run === histRun) { ui.status.textContent = 'Search failed: ' + e.message; ui.go.disabled = false; }
+            return;
         }
+        if (run !== histRun) return;
+        hs = { run, words, limit, page: 0, rows: null, i: 0, scanned: 0, found: 0, prevKey: null, end: false, busy: false,
+               pages: st ? Math.min(HIST_MAX_PAGES, st.pages) : HIST_MAX_PAGES, pagesKnown: !!st };
+        histAdvance(ui);
+    }
+    function histClear(ui, input) {
+        histRun++; hs = null;
+        input.value = '';
+        ui.status.textContent = '';
+        ui.go.disabled = false; ui.next.disabled = true; ui.clear.hidden = true;
+        histClearHits();
     }
     function injectHistorySearch() {
         const wrap = document.querySelector('.bolt-table-rows-wrap');
@@ -1429,16 +1445,18 @@
         const bar = document.createElement('div');
         bar.className = 'elm2-hsearch';
         bar.innerHTML = '<div class="elm2-hs-field"><svg viewBox="0 0 20 20" aria-hidden="true"><path fill="currentColor" d="M13.792 12.167h-.856l-.303-.293a7 7 0 0 0 1.7-4.582 7.041 7.041 0 1 0-7.041 7.041 7 7 0 0 0 4.582-1.7l.293.303v.856l5.416 5.406 1.615-1.615zm-6.5 0a4.87 4.87 0 0 1-4.875-4.875 4.87 4.87 0 0 1 4.875-4.875 4.87 4.87 0 0 1 4.875 4.875 4.87 4.87 0 0 1-4.875 4.875"/></svg>' +
-            '<input type="search" placeholder="Search merged profiles" aria-label="Search merged profiles" autocomplete="off"></div>' +
-            '<button type="button" class="elm2-hs-go">Search all pages</button><button type="button" class="elm2-hs-stop" disabled>Stop</button>' +
-            '<label><input type="checkbox" class="elm2-hs-first" checked> Stop at first match</label>' +
-            '<div class="elm2-hs-status"></div><ul class="elm2-hs-results"></ul>';
+            '<input type="text" placeholder="Search merged profiles" aria-label="Search merged profiles" autocomplete="off">' +
+            '<button type="button" class="elm2-hs-clear" aria-label="Clear search" title="Clear search" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button></div>' +
+            '<button type="button" class="elm2-hs-go">Search</button><button type="button" class="elm2-hs-next" disabled>Next match</button>' +
+            '<div class="elm2-hs-status"></div>';
         table.parentElement.insertBefore(bar, table);
-        const ui = { status: bar.querySelector('.elm2-hs-status'), results: bar.querySelector('.elm2-hs-results'), go: bar.querySelector('.elm2-hs-go'), stop: bar.querySelector('.elm2-hs-stop'), first: bar.querySelector('.elm2-hs-first') };
-        const input = bar.querySelector('input[type=search]');
-        ui.go.addEventListener('click', () => histSearch(input.value, ui));
-        ui.stop.addEventListener('click', () => { histRun++; });
-        input.addEventListener('keydown', (e) => { if (e.key === 'Enter') histSearch(input.value, ui); });
+        const ui = { status: bar.querySelector('.elm2-hs-status'), go: bar.querySelector('.elm2-hs-go'), next: bar.querySelector('.elm2-hs-next'), clear: bar.querySelector('.elm2-hs-clear') };
+        const input = bar.querySelector('input[type=text]');
+        ui.go.addEventListener('click', () => { ui.clear.hidden = false; histSearch(input.value, ui); });
+        ui.next.addEventListener('click', () => histAdvance(ui));
+        ui.clear.addEventListener('click', () => { histClear(ui, input); input.focus(); });
+        input.addEventListener('input', () => { ui.clear.hidden = !input.value && !hs; });
+        input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { ui.clear.hidden = false; histSearch(input.value, ui); } });
     }
     // Each filter section carries a title="..." attribute that pops a native tooltip on hover
     // anywhere inside it; the section already shows its title, so the attribute is removed.

@@ -6,7 +6,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 | Script | File | Current version |
 |---|---|---|
 | UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.180`, shown in the settings pane and console as `v2-build-180` |
-| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.28` |
+| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.29` |
 
 The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
 `Full-Documentation-v127.0.md`) are unchanged and target the old merge page.
@@ -371,7 +371,7 @@ A badge is placed in `.cdk-column-flagged` (falling back to signals, then the ro
 - **Header row frozen** (it stays visible when you scroll; set through the file's view settings, so an app that ignores those just shows a normal row).
 - **Struck-through Spark ID**: on a merged pair the Spark ID that was merged away is struck through (grey, line through) in its Spark ID cell. The kept ID is the side selected on the `Spark Id:` row of the merge screen at the Merge click ('left' = Contact A); if that row has no selected side nothing is struck. The strike is stored as `lostSpark` on the entry, and an `.ods` re-imported keeps it (read back from the cell style).
 - **Merged** is `Y` once the Merge completed card confirms the merge, `N` for a recorded pair that was not merged (skipped, blocked or left for you), and blank for entries recorded before this column existed.
-- **Script vs Bolt** is the auto-merge brief in one line, e.g. `2/3 agree · script chose 1 over Bolt: Email, Address`, `Applicant · script chose 1 over Bolt: Address`, `3/3 agree`, or `Bolt's picks` when the script made no picks on a merged pair. (With *Use picks from = Bolt* the wording flips to `Bolt chose N over script`.) Field names only, no personal data.
+- **Script vs Bolt** is only filled for a merged pair (Merged = Y); it is blank for every other row. It is the auto-merge brief in one line, e.g. `2/3 agree · script chose 1 over Bolt: Email, Address`, `Applicant · script chose 1 over Bolt: Address`, `3/3 agree`, or `Bolt's picks` when the script made no picks on a merged pair. (With *Use picks from = Bolt* the wording flips to `Bolt chose N over script`.) Field names only, no personal data.
 - How the data gets there: the main script keeps `body.dataset.csvChoice` up to date for the pair on screen; at the Merge Contacts click it remembers the pair's Spark IDs and the line, asks the database script to record the pair (`elm2-record-pair`), and when the Merge completed card appears sends `elm2-pair-merged` (`detail: { a, b, choice }`), which sets Merged = Y.
 - **Upload & Replace**: accepts `.ods` (reads `content.xml` from the zip, inflating with the browser's `DecompressionStream`) and `.csv`. Columns are read **by header name**, so files from earlier versions (a different column order, or the oldest 5-column `Unique ID` format, which gets no Spark IDs and matches by name only) still import. Names are shortened on import.
 - **Clear Database**: asks for confirmation.

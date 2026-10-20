@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.161
+// @version      2.162
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-161'; // keep in sync with @version (2.161)
+    const BUILD = 'v2-build-162'; // keep in sync with @version (2.162)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -1373,7 +1373,7 @@
         const run = h.run;
         const say = (t) => { ui.status.textContent = t; };
         h.busy = true;
-        ui.go.disabled = true; ui.next.disabled = true;
+        ui.next.disabled = true;
         try {
             while (run === histRun) {
                 if (!h.rows || h.i >= h.rows.length) {
@@ -1406,7 +1406,7 @@
             if (run === histRun) say('Search failed on page ' + h.page + ': ' + e.message);
         } finally {
             h.busy = false;
-            if (run === histRun) { ui.go.disabled = false; ui.next.disabled = !(h.found > 0 && !h.end); }
+            if (run === histRun) ui.next.disabled = !(h.found > 0 && !h.end);
         }
     }
     async function histSearch(query, ui) {
@@ -1420,9 +1420,8 @@
         const limit = Math.max(1, parseInt(new URL(histReq.url).searchParams.get('limit'), 10) || 50);
         const pag = document.querySelector('mat-paginator');
         const st = pag && readPagerState(pag);
-        ui.go.disabled = true;
         try { if (!histMode) histMode = await histDetectMode(limit); } catch (e) {
-            if (run === histRun) { ui.status.textContent = 'Search failed: ' + e.message; ui.go.disabled = false; }
+            if (run === histRun) ui.status.textContent = 'Search failed: ' + e.message;
             return;
         }
         if (run !== histRun) return;
@@ -1434,7 +1433,7 @@
         histRun++; hs = null;
         input.value = '';
         ui.status.textContent = '';
-        ui.go.disabled = false; ui.next.disabled = true; ui.clear.hidden = true;
+        ui.next.disabled = true; ui.clear.hidden = true;
         histClearHits();
     }
     function injectHistorySearch() {
@@ -1447,12 +1446,11 @@
         bar.innerHTML = '<div class="elm2-hs-field"><svg viewBox="0 0 20 20" aria-hidden="true"><path fill="currentColor" d="M13.792 12.167h-.856l-.303-.293a7 7 0 0 0 1.7-4.582 7.041 7.041 0 1 0-7.041 7.041 7 7 0 0 0 4.582-1.7l.293.303v.856l5.416 5.406 1.615-1.615zm-6.5 0a4.87 4.87 0 0 1-4.875-4.875 4.87 4.87 0 0 1 4.875-4.875 4.87 4.87 0 0 1 4.875 4.875 4.87 4.87 0 0 1-4.875 4.875"/></svg>' +
             '<input type="text" placeholder="Search merged profiles" aria-label="Search merged profiles" autocomplete="off">' +
             '<button type="button" class="elm2-hs-clear" aria-label="Clear search" title="Clear search" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button></div>' +
-            '<button type="button" class="elm2-hs-go">Search</button><button type="button" class="elm2-hs-next" disabled>Next match</button>' +
+            '<button type="button" class="elm2-hs-next" disabled>Next match</button>' +
             '<div class="elm2-hs-status"></div>';
         table.parentElement.insertBefore(bar, table);
-        const ui = { status: bar.querySelector('.elm2-hs-status'), go: bar.querySelector('.elm2-hs-go'), next: bar.querySelector('.elm2-hs-next'), clear: bar.querySelector('.elm2-hs-clear') };
+        const ui = { status: bar.querySelector('.elm2-hs-status'), next: bar.querySelector('.elm2-hs-next'), clear: bar.querySelector('.elm2-hs-clear') };
         const input = bar.querySelector('input[type=text]');
-        ui.go.addEventListener('click', () => { ui.clear.hidden = false; histSearch(input.value, ui); });
         ui.next.addEventListener('click', () => histAdvance(ui));
         ui.clear.addEventListener('click', () => { histClear(ui, input); input.focus(); });
         input.addEventListener('input', () => { ui.clear.hidden = !input.value && !hs; });

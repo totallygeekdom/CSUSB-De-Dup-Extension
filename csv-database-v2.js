@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.28
+// @version      2.29
 // @description  Tracks duplicate entries in a database stored in browser localStorage (exports an .ods spreadsheet) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -236,7 +236,8 @@
         // Merged (Y/N) and "Script vs Bolt" come from the main script: the choice is what it chose over Bolt on
         // the pair on screen; Merged turns Y when the merge is confirmed (see 'elm2-pair-merged' below).
         const merged = old && old.merged === 'Y' ? 'Y' : 'N';
-        const choice = merged === 'Y' ? (old.choice || '') : (document.body.dataset.csvChoice || (old && old.choice) || '');
+        // Script vs Bolt is only kept for a merged pair (it is filled in by the 'elm2-pair-merged' event below)
+        const choice = merged === 'Y' ? (old.choice || '') : '';
         const newEntry = { firstName, lastName, firstName2, lastName2, dept, rowContents, sparkId1: sparks.a, sparkId2: sparks.b, merged, choice };
         if (old && old.lostSpark) newEntry.lostSpark = old.lostSpark;
         if (old) {
@@ -688,7 +689,8 @@
     // away (lostSpark) when the pair was merged.
     function dbRows(db) {
         const rows = db.map(e => {
-            const r = DB_COLUMNS.map(c => String(e[c.key] || ''));
+            // Script vs Bolt is only exported for a merged pair
+            const r = DB_COLUMNS.map(c => String((c.key === 'choice' && e.merged !== 'Y') ? '' : (e[c.key] || '')));
             r.struck = new Set();
             DB_COLUMNS.forEach((c, i) => { if ((c.key === 'sparkId1' || c.key === 'sparkId2') && e.lostSpark && r[i] === e.lostSpark) r.struck.add(i); });
             return r;
@@ -741,7 +743,7 @@
                 firstName2: trunc3(get(cols, idx.first2)), lastName2: trunc3(get(cols, idx.last2)),
                 dept: get(cols, idx.dept), rowContents: get(cols, idx.rows),
                 sparkId1: get(cols, idx.s1), sparkId2: get(cols, idx.s2),
-                merged: m === 'Y' || m === 'N' ? m : '', choice: get(cols, idx.choice),
+                merged: m === 'Y' || m === 'N' ? m : '', choice: m === 'Y' ? get(cols, idx.choice) : '',
                 ...(lost ? { lostSpark: lost } : {})
             });
         }
@@ -1018,5 +1020,5 @@
         updateDbSizeBadge();
     }, 1000);
 
-    console.log('%cCSV Database (new layout) v2.28 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
+    console.log('%cCSV Database (new layout) v2.29 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
 })();

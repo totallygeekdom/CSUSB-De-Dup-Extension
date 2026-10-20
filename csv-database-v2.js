@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.30
+// @version      2.31
 // @description  Tracks duplicate entries in a database stored in browser localStorage (exports an .ods spreadsheet) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -842,11 +842,11 @@
         if (value === '') return '<table:table-cell' + attrs + '/>';
         // text never wraps, but a value that already has line breaks keeps them (one paragraph per line)
         const paras = String(value).split(/\r?\n/).map(l => '<text:p>' + xmlEsc(l) + '</text:p>').join('');
-        return '<table:table-cell' + attrs + ' office:value-type="string" calcext:value-type="string">' + paras + '</table:table-cell>';
+        return '<table:table-cell' + attrs + ' office:value-type="string">' + paras + '</table:table-cell>';
     }
     function buildOds(rows) {
         const ns = 'xmlns:office="' + NS.office + '" xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" xmlns:text="' + NS.text + '" xmlns:table="' + NS.table +
-            '" xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0" xmlns:calcext="urn:org:documentfoundation:names:experimental:calc:xmlns:calcext:1.0"';
+            '" xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0"';
         const colStyles = DB_COLUMNS.map((c, i) => '<style:style style:name="co' + i + '" style:family="table-column"><style:table-column-properties style:column-width="' + c.width + 'cm"/></style:style>').join('');
         const cellStyles =
             '<style:style style:name="head" style:family="table-cell"><style:table-cell-properties fo:background-color="#fde3cc" fo:padding="0.1cm" fo:wrap-option="no-wrap" style:vertical-align="middle"/><style:text-properties fo:font-weight="bold"/></style:style>' +
@@ -865,7 +865,15 @@
         const manifest = '<?xml version="1.0" encoding="UTF-8"?><manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.2">' +
             '<manifest:file-entry manifest:full-path="/" manifest:version="1.2" manifest:media-type="application/vnd.oasis.opendocument.spreadsheet"/>' +
             '<manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/>' +
+            '<manifest:file-entry manifest:full-path="styles.xml" manifest:media-type="text/xml"/>' +
+            '<manifest:file-entry manifest:full-path="meta.xml" manifest:media-type="text/xml"/>' +
             '<manifest:file-entry manifest:full-path="settings.xml" manifest:media-type="text/xml"/></manifest:manifest>';
+        // The usual companion parts every spreadsheet app writes: default styles and document metadata.
+        const styles = '<?xml version="1.0" encoding="UTF-8"?><office:document-styles xmlns:office="' + NS.office + '" xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" ' +
+            'xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0" office:version="1.2"><office:styles><style:default-style style:family="table-cell"/></office:styles>' +
+            '<office:automatic-styles/><office:master-styles/></office:document-styles>';
+        const meta = '<?xml version="1.0" encoding="UTF-8"?><office:document-meta xmlns:office="' + NS.office + '" xmlns:meta="urn:oasis:names:tc:opendocument:xmlns:meta:1.0" office:version="1.2">' +
+            '<office:meta><meta:generator>Element451 Database</meta:generator></office:meta></office:document-meta>';
         // View settings: the header row is frozen (a vertical split below row 1) so it stays put when scrolling.
         const item = (name, type, val) => '<config:config-item config:name="' + name + '" config:type="' + type + '">' + val + '</config:config-item>';
         const settings = '<?xml version="1.0" encoding="UTF-8"?><office:document-settings xmlns:office="' + NS.office + '" xmlns:config="urn:oasis:names:tc:opendocument:xmlns:config:1.0" office:version="1.2">' +
@@ -881,6 +889,8 @@
             { name: 'mimetype', text: 'application/vnd.oasis.opendocument.spreadsheet' },
             { name: 'META-INF/manifest.xml', text: manifest },
             { name: 'content.xml', text: content },
+            { name: 'styles.xml', text: styles },
+            { name: 'meta.xml', text: meta },
             { name: 'settings.xml', text: settings }
         ]);
     }
@@ -1034,5 +1044,5 @@
         updateDbSizeBadge();
     }, 1000);
 
-    console.log('%cCSV Database (new layout) v2.30 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
+    console.log('%cCSV Database (new layout) v2.31 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
 })();

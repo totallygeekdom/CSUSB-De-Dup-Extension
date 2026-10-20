@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.158
+// @version      2.159
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-158'; // keep in sync with @version (2.158)
+    const BUILD = 'v2-build-159'; // keep in sync with @version (2.159)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -91,6 +91,7 @@
             --md-outline: #73777f;
             --md-surface-container-low: #f7f4f1;
             --md-surface-container: #f1ede8;
+            --md-surface-container-high: #ece7e2;
             --md-surface-container-highest: #e6e1db;
             --md-error: #b3261e;
             --md-elev-1: 0 1px 2px rgba(0,0,0,.3), 0 1px 3px 1px rgba(0,0,0,.15);
@@ -336,15 +337,29 @@
         .elm2-pager-input:focus { outline: none; border: 2px solid var(--md-primary); padding: 0 7px; }
         .elm2-pager .elm2-pager-go { height: 32px; padding: 0 16px; border: none; border-radius: 16px; background: var(--md-primary-container); color: var(--md-on-primary-container); font-family: inherit; font-weight: 500; font-size: 14px; line-height: 20px; cursor: pointer; transition: box-shadow .2s var(--md-ease); }
         .elm2-pager .elm2-pager-go:hover { box-shadow: var(--md-elev-1); }
-        .elm2-hsearch { box-sizing: border-box; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; width: 100%; margin: 0 0 12px; padding: 12px 16px; border-radius: 12px; background: var(--md-surface-container, #f3f0ec); color: var(--md-on-surface); font: 400 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; }
-        .elm2-hsearch input[type=search] { flex: 1 1 260px; min-width: 200px; height: 40px; box-sizing: border-box; padding: 0 12px; border: 1px solid var(--md-outline); border-radius: 8px; background: transparent; color: var(--md-on-surface); font: inherit; }
-        .elm2-hsearch input[type=search]:focus { outline: none; border: 2px solid var(--md-primary); padding: 0 11px; }
-        .elm2-hsearch button { height: 40px; padding: 0 20px; border: none; border-radius: 20px; background: var(--md-primary-container); color: var(--md-on-primary-container); font: 500 14px/20px inherit; font-family: inherit; cursor: pointer; transition: box-shadow .2s var(--md-ease); }
+        /* M3 Expressive search bar: used by Element's expanded header search and by the History search */
+        bolt-expandable-search:has(.input-wrapper:not([style*="width: 0px"])) .bolt-form-field-input-wrapper:not(#elm2x),
+        .elm2-hs-field { display: flex !important; flex-direction: row; align-items: center; box-sizing: border-box; min-height: 56px; min-width: 280px; padding: 0 16px; border: none !important; border-radius: 28px; background: var(--md-surface-container-high, #ece7e2) !important; box-shadow: none !important; transition: box-shadow .2s var(--md-ease), background-color .2s var(--md-ease); }
+        bolt-expandable-search:has(.input-wrapper:not([style*="width: 0px"])) .bolt-form-field-input-wrapper:not(#elm2x):focus-within,
+        .elm2-hs-field:focus-within { box-shadow: var(--md-elev-1) !important; background: var(--md-surface-container-highest) !important; }
+        bolt-expandable-search:has(.input-wrapper:not([style*="width: 0px"])) .bolt-form-field-wrapper:not(#elm2x),
+        bolt-expandable-search:has(.input-wrapper:not([style*="width: 0px"])) .bolt-form-field-infix:not(#elm2x),
+        bolt-expandable-search:has(.input-wrapper:not([style*="width: 0px"])) bolt-form-field:not(#elm2x) { border: none !important; background: transparent !important; box-shadow: none !important; outline: none !important; }
+        bolt-expandable-search:has(.input-wrapper:not([style*="width: 0px"])) .bolt-form-field-infix { flex: 1 1 auto; min-width: 0; }
+        bolt-expandable-search:has(.input-wrapper:not([style*="width: 0px"])) .bolt-form-field-suffix { order: -1; margin: 0 12px 0 0 !important; }
+        bolt-expandable-search:has(.input-wrapper:not([style*="width: 0px"])) .bolt-form-field-suffix button { color: var(--md-on-surface-variant) !important; }
+        bolt-expandable-search:has(.input-wrapper:not([style*="width: 0px"])) .bolt-input-element:not(#elm2x),
+        .elm2-hs-field input { width: 100%; height: 56px; padding: 0 !important; border: none !important; outline: none !important; background: transparent !important; box-shadow: none !important; color: var(--md-on-surface) !important; font: 400 16px/24px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif !important; letter-spacing: .5px; }
+        bolt-expandable-search:has(.input-wrapper:not([style*="width: 0px"])) .bolt-input-element::placeholder, .elm2-hs-field input::placeholder { color: var(--md-on-surface-variant); opacity: 1; }
+        .elm2-hs-field svg { flex: 0 0 auto; width: 24px; height: 24px; margin-right: 12px; color: var(--md-on-surface-variant); }
+        .elm2-hsearch { box-sizing: border-box; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; width: 100%; margin: 0 0 12px; color: var(--md-on-surface); font: 400 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+        .elm2-hsearch .elm2-hs-field { flex: 1 1 320px; }
+        .elm2-hsearch button { height: 40px; padding: 0 20px; border: none; border-radius: 20px; background: var(--md-primary-container); color: var(--md-on-primary-container); font: 500 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; cursor: pointer; transition: box-shadow .2s var(--md-ease); }
         .elm2-hsearch button:hover:not(:disabled) { box-shadow: var(--md-elev-1); }
         .elm2-hsearch button:disabled { opacity: .45; cursor: default; }
         .elm2-hsearch label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
         .elm2-hsearch .elm2-hs-status { flex-basis: 100%; color: var(--md-on-surface-variant); font-size: 13px; }
-        .elm2-hsearch .elm2-hs-results { flex-basis: 100%; margin: 0; padding: 0; list-style: none; max-height: 220px; overflow-y: auto; }
+        .elm2-hsearch .elm2-hs-results { flex-basis: 100%; padding: 0 16px !important; border-radius: 16px; background: var(--md-surface-container-low, #f7f4f1); margin: 0; padding: 0; list-style: none; max-height: 220px; overflow-y: auto; }
         .elm2-hsearch .elm2-hs-results li { display: flex; align-items: center; gap: 12px; padding: 6px 0; border-top: 1px solid var(--md-outline-variant, rgba(0,0,0,.12)); }
         .elm2-hsearch .elm2-hs-results li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .elm2-hsearch .elm2-hs-results li button { height: 32px; padding: 0 14px; }
@@ -1411,7 +1426,8 @@
         const table = wrap.closest('bolt-table, [role="table"], table') || wrap;
         const bar = document.createElement('div');
         bar.className = 'elm2-hsearch';
-        bar.innerHTML = '<input type="search" placeholder="Search merged profiles (name, email or Spark ID)" aria-label="Search merged profiles" autocomplete="off">' +
+        bar.innerHTML = '<div class="elm2-hs-field"><svg viewBox="0 0 20 20" aria-hidden="true"><path fill="currentColor" d="M13.792 12.167h-.856l-.303-.293a7 7 0 0 0 1.7-4.582 7.041 7.041 0 1 0-7.041 7.041 7 7 0 0 0 4.582-1.7l.293.303v.856l5.416 5.406 1.615-1.615zm-6.5 0a4.87 4.87 0 0 1-4.875-4.875 4.87 4.87 0 0 1 4.875-4.875 4.87 4.87 0 0 1 4.875 4.875 4.87 4.87 0 0 1-4.875 4.875"/></svg>' +
+            '<input type="search" placeholder="Search merged profiles (name, email or Spark ID)" aria-label="Search merged profiles" autocomplete="off"></div>' +
             '<button type="button" class="elm2-hs-go">Search all pages</button><button type="button" class="elm2-hs-stop" disabled>Stop</button>' +
             '<label><input type="checkbox" class="elm2-hs-first" checked> Stop at first match</label>' +
             '<div class="elm2-hs-status"></div><ul class="elm2-hs-results"></ul>';

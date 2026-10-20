@@ -12,8 +12,8 @@ chip). Two v2 scripts target it:
 
 | Script | File | Current version |
 |---|---|---|
-| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.157` (`v2-build-157`, shown in the settings pane) |
-| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.22` |
+| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.158` (`v2-build-158`, shown in the settings pane) |
+| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.23` |
 
 **Full documentation: [`Full-Documentation-v2.md`](Full-Documentation-v2.md)** (architecture, every setting,
 the resolution rules, auto-merge, every website restyle, the database format, limitations).
@@ -43,6 +43,7 @@ the resolution rules, auto-merge, every website restyle, the database format, li
   select, High / Medium / Low score-chip colours, a pinned queue nav.
 - **Website restyles (Material 3, orange palette sampled from Element's header)**: gear icon and settings pane,
   Review Queue / History tabs, a compact Advanced Filters panel, a Page box with Go on the list paginator,
+  a **merged-profile search** on the History page (pages through the history API for a name, email or Spark ID),
   and one shared toast stack (bottom-left) for both scripts.
 - **CSV Database v2**: records blocked / skipped pairs keyed on the two contacts' **Spark IDs** (the review
   URL no longer changes per pair), stores names as 3-letter prefixes (`Jon...`), shows right-aligned department

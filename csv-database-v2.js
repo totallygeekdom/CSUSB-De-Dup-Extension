@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.22
+// @version      2.23
 // @description  Tracks duplicate entries in a CSV database stored in browser localStorage — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -451,7 +451,7 @@
             this.addEventListener('load', function () {
                 try {
                     if (!this._csvDbUrl || typeof this.responseText !== 'string') return;
-                    if (!/duplicate|dedup/i.test(this._csvDbUrl)) return;
+                    if (!/duplicate|dedup/i.test(this._csvDbUrl) || /\/duplicates\/history(\?|$)/.test(this._csvDbUrl)) return;
                     if (this._csvDbUrl.match(/\/duplicates?\/[a-f0-9]{24}/i)) return;
                     const data = JSON.parse(this.responseText);
                     const entries = data.data || data.items || data.results || (Array.isArray(data) ? data : null);
@@ -469,7 +469,7 @@
             const url = typeof input === 'string' ? input : (input instanceof Request ? input.url : '');
             return origFetch.apply(this, arguments).then(response => {
                 try {
-                    if (!url || !/duplicate|dedup/i.test(url)) return response;
+                    if (!url || !/duplicate|dedup/i.test(url) || /\/duplicates\/history(\?|$)/.test(url)) return response;
                     if (url.match(/\/duplicates?\/[a-f0-9]{24}/i)) return response;
                     response.clone().json().then(data => {
                         const entries = data.data || data.items || data.results || (Array.isArray(data) ? data : null);
@@ -493,7 +493,7 @@
         firstPageFetchAttempted = true;
         try {
             const entries = performance.getEntriesByType('resource');
-            const match = entries.slice().reverse().find(e => /duplicate|dedup/i.test(e.name) && !e.name.match(/\/duplicates?\/[a-f0-9]{24}/i));
+            const match = entries.slice().reverse().find(e => /duplicate|dedup/i.test(e.name) && !/\/duplicates\/history(\?|$)/.test(e.name) && !e.name.match(/\/duplicates?\/[a-f0-9]{24}/i));
             if (!match) return;
             fetch(match.name).then(r => r.json()).then(data => {
                 const entries2 = data.data || data.items || data.results || (Array.isArray(data) ? data : null);
@@ -820,5 +820,5 @@
         updateDbSizeBadge();
     }, 1000);
 
-    console.log('%cCSV Database (new layout) v2.22 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
+    console.log('%cCSV Database (new layout) v2.23 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
 })();

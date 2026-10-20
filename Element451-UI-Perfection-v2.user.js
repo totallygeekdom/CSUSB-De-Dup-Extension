@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.168
+// @version      2.169
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-168'; // keep in sync with @version (2.168)
+    const BUILD = 'v2-build-169'; // keep in sync with @version (2.169)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -1462,6 +1462,15 @@
     // and moved up a level if it does not (up to 3 levels). Without a pager above the table it sits
     // above the table, full width.
     function placeHistorySearch(bar, table) {
+        // Element's own slot for header actions: the second div of the table header, where the review
+        // queue keeps its search and filter buttons. It is empty on the History page.
+        const slot = document.querySelector('.bolt-table-top-bar .bolt-table-header-wrapper > div:last-child');
+        if (slot && !slot.querySelector('bolt-table-header-actions')) {
+            bar.classList.add('inline');
+            slot.appendChild(bar);
+            console.log('[elm2] history search placed in the table header actions slot');
+            return;
+        }
         const pags = Array.from(document.querySelectorAll('mat-paginator'));
         // the top paginator: the first one in the page that comes before the rows (the table element may
         // itself contain it, so the rows are the reference, not the table)

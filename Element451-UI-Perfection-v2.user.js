@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.166
+// @version      2.167
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-166'; // keep in sync with @version (2.166)
+    const BUILD = 'v2-build-167'; // keep in sync with @version (2.167)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -369,7 +369,11 @@
         .elm2-hsearch:not(.open) .elm2-hs-field:focus-within { box-shadow: none !important; }
         .elm2-hsearch .elm2-hs-field .elm2-hs-toggle { margin: 0 0 0 -4px; }
         .elm2-hsearch.open .elm2-hs-field .elm2-hs-toggle { margin: 0 8px 0 -8px; }
-        .elm2-hsearch .elm2-hs-next { height: 48px; padding: 0 20px; border: none; border-radius: 24px; background: var(--md-primary-container); color: var(--md-on-primary-container); font: 500 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; cursor: pointer; transition: box-shadow .2s var(--md-ease); }
+        /* in the header row, just left of the pager (same spot as the review queue's search icon) */
+        .elm2-hsearch.inline { display: inline-flex; flex: 0 0 auto; flex-wrap: nowrap; width: auto; margin: 0 8px 0 auto; position: relative; vertical-align: middle; }
+        .elm2-hsearch.inline .elm2-hs-status { position: absolute; top: 100%; right: 0; z-index: 5; flex-basis: auto; margin-top: 4px; padding: 4px 12px; border-radius: 8px; background: #fff; box-shadow: var(--md-elev-1); white-space: nowrap; }
+        .elm2-hsearch.inline .elm2-hs-status:empty { display: none; }
+        .elm2-hsearch .elm2-hs-next { white-space: nowrap; height: 48px; padding: 0 20px; border: none; border-radius: 24px; background: var(--md-primary-container); color: var(--md-on-primary-container); font: 500 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; cursor: pointer; transition: box-shadow .2s var(--md-ease); }
         .elm2-hsearch .elm2-hs-next:hover:not(:disabled) { box-shadow: var(--md-elev-1); }
         .elm2-hsearch .elm2-hs-next:disabled { opacity: .45; cursor: default; }
         .elm2-hsearch .elm2-hs-status { flex-basis: 100%; color: var(--md-on-surface-variant); font-size: 13px; }
@@ -1445,6 +1449,25 @@
         ui.next.disabled = true; ui.clear.hidden = true;
         histClearHits();
     }
+    // Goes in the header row just before the pager (where the review queue has its search icon). The
+    // pager's own wrapper is not known, so after inserting, the bar is checked to sit on the pager's line
+    // and moved up a level if it does not (up to 3 levels). Without a pager above the table it sits
+    // above the table, full width.
+    function placeHistorySearch(bar, table) {
+        const pags = Array.from(document.querySelectorAll('mat-paginator'));
+        const pag = pags.find(p => table.compareDocumentPosition(p) & Node.DOCUMENT_POSITION_PRECEDING);
+        if (!pag) { table.parentElement.insertBefore(bar, table); return; }
+        bar.classList.add('inline');
+        let anchor = pag;
+        for (let level = 0; level < 4 && anchor && anchor.parentElement; level++, anchor = anchor.parentElement) {
+            anchor.parentElement.insertBefore(bar, anchor);
+            const b = bar.getBoundingClientRect(), p = pag.getBoundingClientRect();
+            if (b.height && p.height && Math.abs((b.top + b.height / 2) - (p.top + p.height / 2)) < 40) { console.log('[elm2] history search placed (level ' + level + ')'); return; }
+        }
+        bar.classList.remove('inline');
+        table.parentElement.insertBefore(bar, table);
+        console.log('[elm2] history search: pager line not found, placed above the table');
+    }
     function injectHistorySearch() {
         const wrap = document.querySelector('.bolt-table-rows-wrap');
         if (!wrap || !wrap.querySelector('.history-action-chip')) return;
@@ -1458,7 +1481,7 @@
             '<button type="button" class="elm2-hs-clear" aria-label="Clear search" title="Clear search" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button></div>' +
             '<button type="button" class="elm2-hs-next" disabled>Next match</button>' +
             '<div class="elm2-hs-status"></div>';
-        table.parentElement.insertBefore(bar, table);
+        placeHistorySearch(bar, table);
         const ui = { status: bar.querySelector('.elm2-hs-status'), next: bar.querySelector('.elm2-hs-next'), clear: bar.querySelector('.elm2-hs-clear') };
         const input = bar.querySelector('input[type=text]');
         const setOpen = (open) => {

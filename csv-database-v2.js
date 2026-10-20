@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.29
+// @version      2.30
 // @description  Tracks duplicate entries in a database stored in browser localStorage (exports an .ods spreadsheet) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -240,6 +240,8 @@
         const choice = merged === 'Y' ? (old.choice || '') : '';
         const newEntry = { firstName, lastName, firstName2, lastName2, dept, rowContents, sparkId1: sparks.a, sparkId2: sparks.b, merged, choice };
         if (old && old.lostSpark) newEntry.lostSpark = old.lostSpark;
+        if (old && old.lostFirst) newEntry.lostFirst = old.lostFirst;
+        if (old && old.lostLast) newEntry.lostLast = old.lostLast;
         if (old) {
             if (old.dept === dept && old.firstName === firstName && old.lastName === lastName
                 && old.firstName2 === firstName2 && old.lastName2 === lastName2 && old.rowContents === rowContents
@@ -272,6 +274,9 @@
         db[idx].merged = 'Y';
         if (d.choice) db[idx].choice = d.choice;
         if (d.lost) db[idx].lostSpark = d.lost; // the Spark ID merged away: struck through in the export
+        // the first / last name that was not kept ('a' = Contact A = the Firstname / Lastname columns, 'b' = the "2" columns)
+        if (d.names && d.names.first) db[idx].lostFirst = d.names.first;
+        if (d.names && d.names.last) db[idx].lostLast = d.names.last;
         saveDatabase(db);
     });
 
@@ -692,7 +697,12 @@
             // Script vs Bolt is only exported for a merged pair
             const r = DB_COLUMNS.map(c => String((c.key === 'choice' && e.merged !== 'Y') ? '' : (e[c.key] || '')));
             r.struck = new Set();
-            DB_COLUMNS.forEach((c, i) => { if ((c.key === 'sparkId1' || c.key === 'sparkId2') && e.lostSpark && r[i] === e.lostSpark) r.struck.add(i); });
+            const lostCol = { firstName: 'a', firstName2: 'b', lastName: 'a', lastName2: 'b' };
+            DB_COLUMNS.forEach((c, i) => {
+                if ((c.key === 'sparkId1' || c.key === 'sparkId2') && e.lostSpark && r[i] === e.lostSpark) r.struck.add(i);
+                if (r[i] && e.merged === 'Y' && (c.key === 'firstName' || c.key === 'firstName2') && e.lostFirst === lostCol[c.key]) r.struck.add(i);
+                if (r[i] && e.merged === 'Y' && (c.key === 'lastName' || c.key === 'lastName2') && e.lostLast === lostCol[c.key]) r.struck.add(i);
+            });
             return r;
         });
         return [DB_COLUMNS.map(c => c.header), ...rows];
@@ -738,13 +748,17 @@
             if (cols.length < 4) continue;
             const m = get(cols, idx.merged).trim().toUpperCase().charAt(0);
             const lost = cols.struck && cols.struck.has(idx.s1) ? get(cols, idx.s1) : cols.struck && cols.struck.has(idx.s2) ? get(cols, idx.s2) : '';
+            const st = (i) => !!(cols.struck && i >= 0 && cols.struck.has(i));
+            const lostFirst = st(idx.first) ? 'a' : st(idx.first2) ? 'b' : '';
+            const lostLast = st(idx.last) ? 'a' : st(idx.last2) ? 'b' : '';
             entries.push({
                 firstName: trunc3(get(cols, idx.first)), lastName: trunc3(get(cols, idx.last)),
                 firstName2: trunc3(get(cols, idx.first2)), lastName2: trunc3(get(cols, idx.last2)),
                 dept: get(cols, idx.dept), rowContents: get(cols, idx.rows),
                 sparkId1: get(cols, idx.s1), sparkId2: get(cols, idx.s2),
                 merged: m === 'Y' || m === 'N' ? m : '', choice: m === 'Y' ? get(cols, idx.choice) : '',
-                ...(lost ? { lostSpark: lost } : {})
+                ...(lost ? { lostSpark: lost } : {}),
+                ...(lostFirst ? { lostFirst } : {}), ...(lostLast ? { lostLast } : {})
             });
         }
         return entries;
@@ -1020,5 +1034,5 @@
         updateDbSizeBadge();
     }, 1000);
 
-    console.log('%cCSV Database (new layout) v2.29 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
+    console.log('%cCSV Database (new layout) v2.30 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
 })();

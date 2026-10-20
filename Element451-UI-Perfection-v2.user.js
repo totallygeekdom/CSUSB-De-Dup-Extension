@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.159
+// @version      2.160
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-159'; // keep in sync with @version (2.159)
+    const BUILD = 'v2-build-160'; // keep in sync with @version (2.160)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -353,7 +353,9 @@
         bolt-expandable-search:has(.input-wrapper:not([style*="width: 0px"])) .bolt-input-element::placeholder, .elm2-hs-field input::placeholder { color: var(--md-on-surface-variant); opacity: 1; }
         .elm2-hs-field svg { flex: 0 0 auto; width: 24px; height: 24px; margin-right: 12px; color: var(--md-on-surface-variant); }
         .elm2-hsearch { box-sizing: border-box; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; width: 100%; margin: 0 0 12px; color: var(--md-on-surface); font: 400 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; }
-        .elm2-hsearch .elm2-hs-field { flex: 1 1 320px; }
+        .elm2-hsearch .elm2-hs-field { flex: 0 1 360px; min-height: 44px; min-width: 220px; padding: 0 14px; border-radius: 22px; }
+        .elm2-hsearch .elm2-hs-field input { height: 44px; font-size: 15px !important; }
+        .elm2-hsearch .elm2-hs-field svg { width: 20px; height: 20px; margin-right: 10px; }
         .elm2-hsearch button { height: 40px; padding: 0 20px; border: none; border-radius: 20px; background: var(--md-primary-container); color: var(--md-on-primary-container); font: 500 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; cursor: pointer; transition: box-shadow .2s var(--md-ease); }
         .elm2-hsearch button:hover:not(:disabled) { box-shadow: var(--md-elev-1); }
         .elm2-hsearch button:disabled { opacity: .45; cursor: default; }
@@ -1427,7 +1429,7 @@
         const bar = document.createElement('div');
         bar.className = 'elm2-hsearch';
         bar.innerHTML = '<div class="elm2-hs-field"><svg viewBox="0 0 20 20" aria-hidden="true"><path fill="currentColor" d="M13.792 12.167h-.856l-.303-.293a7 7 0 0 0 1.7-4.582 7.041 7.041 0 1 0-7.041 7.041 7 7 0 0 0 4.582-1.7l.293.303v.856l5.416 5.406 1.615-1.615zm-6.5 0a4.87 4.87 0 0 1-4.875-4.875 4.87 4.87 0 0 1 4.875-4.875 4.87 4.87 0 0 1 4.875 4.875 4.87 4.87 0 0 1-4.875 4.875"/></svg>' +
-            '<input type="search" placeholder="Search merged profiles (name, email or Spark ID)" aria-label="Search merged profiles" autocomplete="off"></div>' +
+            '<input type="search" placeholder="Search merged profiles" aria-label="Search merged profiles" autocomplete="off"></div>' +
             '<button type="button" class="elm2-hs-go">Search all pages</button><button type="button" class="elm2-hs-stop" disabled>Stop</button>' +
             '<label><input type="checkbox" class="elm2-hs-first" checked> Stop at first match</label>' +
             '<div class="elm2-hs-status"></div><ul class="elm2-hs-results"></ul>';

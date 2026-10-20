@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.157
+// @version      2.158
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-157'; // keep in sync with @version (2.157)
+    const BUILD = 'v2-build-158'; // keep in sync with @version (2.158)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -336,6 +336,19 @@
         .elm2-pager-input:focus { outline: none; border: 2px solid var(--md-primary); padding: 0 7px; }
         .elm2-pager .elm2-pager-go { height: 32px; padding: 0 16px; border: none; border-radius: 16px; background: var(--md-primary-container); color: var(--md-on-primary-container); font-family: inherit; font-weight: 500; font-size: 14px; line-height: 20px; cursor: pointer; transition: box-shadow .2s var(--md-ease); }
         .elm2-pager .elm2-pager-go:hover { box-shadow: var(--md-elev-1); }
+        .elm2-hsearch { box-sizing: border-box; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; width: 100%; margin: 0 0 12px; padding: 12px 16px; border-radius: 12px; background: var(--md-surface-container, #f3f0ec); color: var(--md-on-surface); font: 400 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+        .elm2-hsearch input[type=search] { flex: 1 1 260px; min-width: 200px; height: 40px; box-sizing: border-box; padding: 0 12px; border: 1px solid var(--md-outline); border-radius: 8px; background: transparent; color: var(--md-on-surface); font: inherit; }
+        .elm2-hsearch input[type=search]:focus { outline: none; border: 2px solid var(--md-primary); padding: 0 11px; }
+        .elm2-hsearch button { height: 40px; padding: 0 20px; border: none; border-radius: 20px; background: var(--md-primary-container); color: var(--md-on-primary-container); font: 500 14px/20px inherit; font-family: inherit; cursor: pointer; transition: box-shadow .2s var(--md-ease); }
+        .elm2-hsearch button:hover:not(:disabled) { box-shadow: var(--md-elev-1); }
+        .elm2-hsearch button:disabled { opacity: .45; cursor: default; }
+        .elm2-hsearch label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+        .elm2-hsearch .elm2-hs-status { flex-basis: 100%; color: var(--md-on-surface-variant); font-size: 13px; }
+        .elm2-hsearch .elm2-hs-results { flex-basis: 100%; margin: 0; padding: 0; list-style: none; max-height: 220px; overflow-y: auto; }
+        .elm2-hsearch .elm2-hs-results li { display: flex; align-items: center; gap: 12px; padding: 6px 0; border-top: 1px solid var(--md-outline-variant, rgba(0,0,0,.12)); }
+        .elm2-hsearch .elm2-hs-results li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .elm2-hsearch .elm2-hs-results li button { height: 32px; padding: 0 14px; }
+        bolt-row.elm2-search-hit { outline: 3px solid var(--md-primary); outline-offset: -3px; background: color-mix(in srgb, var(--md-primary) 12%, transparent) !important; }
         #elm2-pick-compare-bar {
             display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
             padding: 12px 16px; margin: 0 0 12px;
@@ -1243,6 +1256,172 @@
         box.querySelector('.elm2-pager-total').textContent = 'of ' + st.pages;
     }
     function injectPager() { document.querySelectorAll('mat-paginator').forEach(injectPagerInto); }
+
+    // =========================================================
+    // HISTORY SEARCH: find a merged profile by paging the history API
+    // The history page lists 50 merges a page; this searches every page for a name, email or
+    // Spark ID. It replays the page's own request to .../duplicates/history (same URL, same
+    // headers incl. the auth token, captured from the page's last call) with the page number
+    // moved on one step at a time, scanning each page's records until one matches every word
+    // typed. A hit can be jumped to with the page's own paginator, and its row is highlighted.
+    // =========================================================
+    const HIST_URL = /\/duplicates\/history(\?|$)/;
+    const HIST_MAX_PAGES = 600, HIST_DELAY_MS = 200;
+    let histReq = null;      // { url, headers } of the page's last history call
+    let histBusy = false;    // true while our own request is in flight (it must not overwrite histReq)
+    let histRun = 0;
+    let histMode = null;     // how "offset" counts: 'index0' (page 0,1,2…), 'index1' (1,2,3…), 'item' (0,50,100…)
+    function noteHistoryRequest(url, headers) {
+        if (histBusy || !url || !HIST_URL.test(url)) return;
+        try { histReq = { url: new URL(url, window.location.href).href, headers: headers || {} }; histMode = null; } catch (e) { /* bad URL */ }
+    }
+    function headersToObject(h) {
+        const out = {};
+        try {
+            if (!h) return out;
+            if (Array.isArray(h)) h.forEach(([k, v]) => { out[k] = v; });
+            else if (typeof h.forEach === 'function') h.forEach((v, k) => { out[k] = v; });
+            else Object.keys(h).forEach(k => { out[k] = h[k]; });
+        } catch (e) { /* ignore */ }
+        return out;
+    }
+    (function wrapHistoryRequests() {
+        const open = XMLHttpRequest.prototype.open, setHeader = XMLHttpRequest.prototype.setRequestHeader, send = XMLHttpRequest.prototype.send;
+        XMLHttpRequest.prototype.open = function (m, url) { this._elm2Url = String(url); this._elm2Headers = {}; return open.apply(this, arguments); };
+        XMLHttpRequest.prototype.setRequestHeader = function (k, v) { if (this._elm2Headers) this._elm2Headers[k] = v; return setHeader.apply(this, arguments); };
+        XMLHttpRequest.prototype.send = function () { noteHistoryRequest(this._elm2Url, this._elm2Headers); return send.apply(this, arguments); };
+        const nativeFetch = window.fetch;
+        window.fetch = function (input, init) {
+            const url = typeof input === 'string' ? input : (input && input.url) || '';
+            noteHistoryRequest(url, headersToObject((init && init.headers) || (input && input.headers)));
+            return nativeFetch.apply(this, arguments);
+        };
+    })();
+    async function histFetchPage(limit, offset) {
+        const u = new URL(histReq.url);
+        u.searchParams.set('limit', String(limit));
+        u.searchParams.set('offset', String(offset));
+        histBusy = true;
+        let res;
+        try { res = await fetch(u.href, { headers: histReq.headers, credentials: 'include' }); } finally { histBusy = false; }
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        const rows = data.data || data.items || data.results || (Array.isArray(data) ? data : []);
+        return { rows, total: Number(data.total != null ? data.total : data.count) || 0 };
+    }
+    // Works out what "offset" counts by asking for offsets 0 and 1 and comparing.
+    async function histDetectMode(limit) {
+        let a = null;
+        try { a = (await histFetchPage(limit, 0)).rows; } catch (e) { return 'index1'; } // 0 refused: pages start at 1
+        const b = (await histFetchPage(limit, 1)).rows;
+        const j = (r) => JSON.stringify(r);
+        if (!a.length && b.length) return 'index1';
+        if (a.length > 1 && b.length && j(b[0]) === j(a[1])) return 'item';
+        if (a.length && b.length && j(b[0]) === j(a[0])) return 'index1'; // 0 and 1 both give the first page
+        return 'index0';
+    }
+    function histOffset(mode, page, limit) { return mode === 'item' ? (page - 1) * limit : mode === 'index1' ? page : page - 1; }
+    const histText = (rec) => JSON.stringify(rec, (k, v) => (k === 'ai_analysis' || k === 'feedback') ? undefined : v).toLowerCase();
+    function histSnippet(rec, words) {
+        let hit = '';
+        (function walk(o) {
+            if (hit || o === null || typeof o !== 'object') return;
+            for (const k of Object.keys(o)) {
+                if (k === 'ai_analysis' || k === 'feedback') continue;
+                const v = o[k];
+                if ((typeof v === 'string' || typeof v === 'number') && words.some(w => String(v).toLowerCase().includes(w))) { hit = String(v); return; }
+                walk(v);
+            }
+        })(rec);
+        return hit;
+    }
+    function histClearHits() { document.querySelectorAll('.elm2-search-hit').forEach(r => r.classList.remove('elm2-search-hit')); }
+    async function histGoTo(page, rowIndex) {
+        const pag = document.querySelector('mat-paginator');
+        histClearHits();
+        if (pag) {
+            const before = rangeLabelText(pag);
+            await pagerGoToPage(pag, page);
+            await waitForRangeChange(pag, before, 3000);
+            await sleep(500);
+        }
+        const row = document.querySelectorAll('.bolt-table-rows-wrap bolt-row.cdk-row')[rowIndex];
+        if (row) { row.classList.add('elm2-search-hit'); row.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+    }
+    async function histSearch(query, ui) {
+        const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+        const run = ++histRun;
+        const say = (t) => { ui.status.textContent = t; };
+        ui.results.innerHTML = '';
+        histClearHits();
+        if (!words.length) { say('Type a name, email or Spark ID.'); return; }
+        if (!histReq) { say('No history request captured yet. Go to another page of the list (or reload this one), then search.'); return; }
+        const limit = Math.max(1, parseInt(new URL(histReq.url).searchParams.get('limit'), 10) || 50);
+        ui.go.disabled = true; ui.stop.disabled = false;
+        let page = 0, scanned = 0, found = 0, prevKey = null, pages = HIST_MAX_PAGES;
+        const pag = document.querySelector('mat-paginator');
+        const st = pag && readPagerState(pag);
+        if (st) pages = Math.min(pages, st.pages);
+        const done = (msg) => { say(msg); ui.go.disabled = false; ui.stop.disabled = true; };
+        try {
+            if (!histMode) histMode = await histDetectMode(limit);
+            while (page < pages) {
+                if (run !== histRun) { done('Stopped on page ' + page + ': ' + found + ' found, ' + scanned + ' records scanned.'); return; }
+                page++;
+                say('Searching page ' + page + (st ? ' of ' + pages : '') + '…  ' + scanned + ' scanned, ' + found + ' found');
+                const { rows } = await histFetchPage(limit, histOffset(histMode, page, limit));
+                if (run !== histRun) { done('Stopped on page ' + page + '.'); return; }
+                const key = rows.length ? JSON.stringify(rows[0]) : '';
+                if (!rows.length || key === prevKey) break; // empty or a repeat: past the last page
+                prevKey = key;
+                let firstHit = -1;
+                rows.forEach((rec, i) => {
+                    scanned++;
+                    if (!words.every(w => histText(rec).includes(w))) return;
+                    found++;
+                    if (firstHit < 0) firstHit = i;
+                    const li = document.createElement('li');
+                    const label = document.createElement('span');
+                    label.textContent = 'Page ' + page + ', row ' + (i + 1) + ' · ' + histSnippet(rec, words);
+                    const btn = document.createElement('button');
+                    btn.type = 'button'; btn.textContent = 'Go to page ' + page;
+                    const pg = page, idx = i;
+                    btn.addEventListener('click', () => histGoTo(pg, idx));
+                    li.append(label, btn);
+                    ui.results.appendChild(li);
+                });
+                if (firstHit >= 0 && ui.first.checked) {
+                    done('Found on page ' + page + ', row ' + (firstHit + 1) + '.');
+                    histGoTo(page, firstHit);
+                    return;
+                }
+                if (rows.length < limit) break;
+                await sleep(HIST_DELAY_MS);
+            }
+            done(found ? 'Done: ' + found + ' match' + (found === 1 ? '' : 'es') + ' in ' + scanned + ' records.' : 'No match in ' + scanned + ' records (' + page + ' pages).');
+        } catch (e) {
+            console.log('[elm2] history search failed:', e);
+            done('Search failed on page ' + page + ': ' + e.message);
+        }
+    }
+    function injectHistorySearch() {
+        const wrap = document.querySelector('.bolt-table-rows-wrap');
+        if (!wrap || !wrap.querySelector('.history-action-chip')) return;
+        if (document.querySelector('.elm2-hsearch')) return;
+        const table = wrap.closest('bolt-table, [role="table"], table') || wrap;
+        const bar = document.createElement('div');
+        bar.className = 'elm2-hsearch';
+        bar.innerHTML = '<input type="search" placeholder="Search merged profiles (name, email or Spark ID)" aria-label="Search merged profiles" autocomplete="off">' +
+            '<button type="button" class="elm2-hs-go">Search all pages</button><button type="button" class="elm2-hs-stop" disabled>Stop</button>' +
+            '<label><input type="checkbox" class="elm2-hs-first" checked> Stop at first match</label>' +
+            '<div class="elm2-hs-status"></div><ul class="elm2-hs-results"></ul>';
+        table.parentElement.insertBefore(bar, table);
+        const ui = { status: bar.querySelector('.elm2-hs-status'), results: bar.querySelector('.elm2-hs-results'), go: bar.querySelector('.elm2-hs-go'), stop: bar.querySelector('.elm2-hs-stop'), first: bar.querySelector('.elm2-hs-first') };
+        const input = bar.querySelector('input[type=search]');
+        ui.go.addEventListener('click', () => histSearch(input.value, ui));
+        ui.stop.addEventListener('click', () => { histRun++; });
+        input.addEventListener('keydown', (e) => { if (e.key === 'Enter') histSearch(input.value, ui); });
+    }
     // Each filter section carries a title="..." attribute that pops a native tooltip on hover
     // anywhere inside it; the section already shows its title, so the attribute is removed.
     function stripFilterTooltips() {
@@ -2842,6 +3021,7 @@
         colorScoreChips();
         syncHeaderColor(); // the header is on every page, not just the review page
         injectPager();
+        injectHistorySearch();
         stripFilterTooltips();
         syncSkipToggles();
         if (isDedupReviewPage()) {

@@ -5,8 +5,8 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.157`, shown in the settings pane and console as `v2-build-157` |
-| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.22` |
+| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.158`, shown in the settings pane and console as `v2-build-158` |
+| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.23` |
 
 The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
 `Full-Documentation-v127.0.md`) are unchanged and target the old merge page.
@@ -323,6 +323,7 @@ A right-hand Material 3 panel (warm neutral surface, 28px rounded left edge): a 
 
 - **Department badges** (CSV script): a small right-aligned pill in the row's flagged cell (see [11.5](#115-list-page-badges)).
 - **Pager**: next to the paginator's range label (top and bottom paginators) a **Page [n] of N  Go** box. Enter or Go jumps to the page: it sets the paginator component directly if it can be found; otherwise it clicks First/Next page repeatedly, waiting for each page to load ("Going to page N…" toast). Element's "Rows per page: 50" is left as is, because a custom page size could not be set from outside (the page size is not read from the URL and the paginator component was not reachable from a sandboxed script; with `@grant none` build 100 this should be re-checked).
+- **History search** (History tab, above the table): a search box that finds a merged profile by name, email or Spark ID. The page loads 50 merges at a time from `.../v2/users/relationships/duplicates/history?limit=50&offset=N`; the script remembers the page's own last request to that URL (URL and headers, including the auth token) and replays it for page 1, 2, 3… scanning every record of each page (all words typed must appear; free-text `ai_analysis`/`feedback` fields are skipped) until a match or the last page (progress: "Searching page N of M…", with Stop). Before paging it asks for offsets 0 and 1 and compares them to learn whether `offset` counts pages from 0, pages from 1 or records. **Stop at first match** (on by default) jumps to the hit with the pager and outlines its row; with it off every match is listed with a **Go to page N** button. If no request has been captured yet (the page loaded before the script), go to another page of the list once. The CSV script ignores history responses.
 - **Tabs**: the *Review Queue / History* tab bar is restyled as Material 3 primary tabs (48px, label-medium, 3px rounded-top indicator as wide as the label, divider line, hover/press state layers).
 - **Advanced Filters** panel (opened from the list): restyled compactly — a 640px panel (the overlay, its container and the filters host are all set to the same width), a header with a text *Clear All* and a filled *Apply Filters* (disabled grey until a filter changes), tonal white cards on a tinted page, one-line section headers (title + description), labels beside their controls, Material 3 filter chips (outlined; selected = orange tonal with a check mark, the check hidden when unselected), and compact 168px From/To date boxes. Rules are given extra specificity so Element's own chip colours cannot win.
 
@@ -455,4 +456,5 @@ Header `DB: N` pill, the Database section of the settings pane, the **Show Datab
 - **Automation rework**: slider None → High → Medium → Low → All (an earlier build had an Applicant stop, removed because applicants can have any score), **Use picks from**, **When done** with the cancel countdown (dialog with draining stepped ring), **Merge countdown** setting, Auto-Skip covering blocked / out-of-range / twins pairs, no popups for skipped pairs, scan mode.
 - **CSV Database v2**: keyed on Spark IDs (the URL no longer changes), names stored as 3-letter prefixes, two-contact columns, header-based import, list matching via the list API's `identities[]`, record-before-skip handshake, right-aligned badges, Show Database UI toggle, shared toast stack.
 - **Website restyles**: orange Material 3 palette sampled from Element's header, Material 3 tabs, compact Advanced Filters panel, list pager (Page box + Go), hover preview on the comparison buttons, gear icon as an SVG.
+- **History search** (2.158): search every page of the History list through the history API (see section 10).
 - **Fixes along the way**: stall on identical consecutive names / disabled Next button, twins warning signal count, cut-off date text in filters, clipped filters panel, selected-chip colour specificity.

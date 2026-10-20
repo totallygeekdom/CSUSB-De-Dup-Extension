@@ -5,8 +5,8 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.177`, shown in the settings pane and console as `v2-build-177` |
-| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.23` |
+| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.178`, shown in the settings pane and console as `v2-build-178` |
+| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.24` |
 
 The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
 `Full-Documentation-v127.0.md`) are unchanged and target the old merge page.
@@ -367,8 +367,11 @@ A badge is placed in `.cdk-column-flagged` (falling back to signals, then the ro
 
 ### 11.6 Import / export
 
-- **Download**: `elm_csv_database_YYYY-MM-DD.csv`, columns `Firstname, Lastname, Firstname 2, Lastname 2, Dept., Spark ID 1, Spark ID 2, Row Contents`.
-- **Upload & Replace**: reads columns **by header name**, so files from earlier versions (a different column order, or the oldest 5-column `Unique ID` format, which gets no Spark IDs and matches by name only) still import. Names are shortened on import.
+- **Download**: `elm_database_YYYY-MM-DD.ods` (an OpenDocument spreadsheet, opens in Excel, LibreOffice and Google Sheets). Columns, in order: `Firstname, Lastname, Firstname 2, Lastname 2, Spark ID 1, Spark ID 2, Dept., Merged, Script vs Bolt, Row Contents`. Column widths are preset (resize them in the spreadsheet), the header row is bold and shaded, and **filter buttons are on Dept. and Merged only** (they sit side by side so the filter range covers just those two). The `.ods` is written by the script itself (a small stored-zip writer; no libraries).
+- **Merged** is `Y` once the Merge completed card confirms the merge, `N` for a recorded pair that was not merged (skipped, blocked or left for you), and blank for entries recorded before this column existed.
+- **Script vs Bolt** is the auto-merge brief in one line, e.g. `2/3 agree · script chose 1 over Bolt: Email, Address`, `Applicant · script chose 1 over Bolt: Address`, `3/3 agree`, or `Bolt's picks` when the script made no picks on a merged pair. (With *Use picks from = Bolt* the wording flips to `Bolt chose N over script`.) Field names only, no personal data.
+- How the data gets there: the main script keeps `body.dataset.csvChoice` up to date for the pair on screen; at the Merge Contacts click it remembers the pair's Spark IDs and the line, asks the database script to record the pair (`elm2-record-pair`), and when the Merge completed card appears sends `elm2-pair-merged` (`detail: { a, b, choice }`), which sets Merged = Y.
+- **Upload & Replace**: accepts `.ods` (reads `content.xml` from the zip, inflating with the browser's `DecompressionStream`) and `.csv`. Columns are read **by header name**, so files from earlier versions (a different column order, or the oldest 5-column `Unique ID` format, which gets no Spark IDs and matches by name only) still import. Names are shortened on import.
 - **Clear Database**: asks for confirmation.
 
 ### 11.7 UI
@@ -384,6 +387,7 @@ Header `DB: N` pill, the Database section of the settings pane, the **Show Datab
 | Channel | Direction | Mechanism |
 |---|---|---|
 | Department + Spark IDs | main → CSV | `document.body.dataset.csvDept`, `csvSpark1`, `csvSpark2` |
+| Script vs Bolt line | main → CSV | `document.body.dataset.csvChoice`; `elm2-pair-merged` event (`detail.a/.b/.choice`) after a confirmed merge |
 | "Record before skipping" | main → CSV | `elm2-record-pair` event on `document`; the CSV script sets `event.detail.handled` / `.recorded` |
 | Blocked-row text | main → CSV | `.diff-row.elm2-blocked-row` elements |
 | UI injection targets | main → CSV | `#elm-controls-wrapper` (badge), `#elm-settings-pane .settings-body` (Database section), `#elm-highlight-rows` row (Show Database UI toggle) |
@@ -457,5 +461,5 @@ Header `DB: N` pill, the Database section of the settings pane, the **Show Datab
 - **Automation rework**: slider None → High → Medium → Low → All (an earlier build had an Applicant stop, removed because applicants can have any score), **Use picks from**, **When done** with the cancel countdown (dialog with draining stepped ring), **Merge countdown** setting, Auto-Skip covering blocked / out-of-range / twins pairs, no popups for skipped pairs, scan mode.
 - **CSV Database v2**: keyed on Spark IDs (the URL no longer changes), names stored as 3-letter prefixes, two-contact columns, header-based import, list matching via the list API's `identities[]`, record-before-skip handshake, right-aligned badges, Show Database UI toggle, shared toast stack.
 - **Website restyles**: orange Material 3 palette sampled from Element's header, Material 3 tabs, compact Advanced Filters panel, list pager (Page box + Go), hover preview on the comparison buttons, gear icon as an SVG.
-- **History search** (2.177): search every page of the History list through the history API (see section 10).
+- **History search** (2.178): search every page of the History list through the history API (see section 10).
 - **Fixes along the way**: stall on identical consecutive names / disabled Next button, twins warning signal count, cut-off date text in filters, clipped filters panel, selected-chip colour specificity.

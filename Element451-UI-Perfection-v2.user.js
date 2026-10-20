@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.177
+// @version      2.178
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-177'; // keep in sync with @version (2.177)
+    const BUILD = 'v2-build-178'; // keep in sync with @version (2.178)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -1945,6 +1945,8 @@
         else document.body.dataset.csvDept = detectActualDepartment().dept;
         if (sparks.a || sparks.b) { document.body.dataset.csvSpark1 = sparks.a; document.body.dataset.csvSpark2 = sparks.b; }
         else { delete document.body.dataset.csvSpark1; delete document.body.dataset.csvSpark2; }
+        const choice = choiceSummary('');
+        if (choice) document.body.dataset.csvChoice = choice; else delete document.body.dataset.csvChoice;
         // A skipped pair (Auto-Skip on) gets no popup; one left for you does.
         if (appeal && !appealWarningShown && !CFG.AUTO_SKIP_BLOCKED) {
             appealWarningShown = true;
@@ -2741,6 +2743,21 @@
         const over = picks.filter(r => r.element.dataset.elm2ScriptSide !== r.element.dataset.elm2AiSide);
         return { picks, over, total: picks.length, agree: picks.length - over.length, applicant: !!findApplicantSide() };
     }
+    // The same comparison as a short line for the database's "Script vs Bolt" column, in the words of the
+    // auto-merge brief: "2/3 agree · script chose 1 over Bolt: Email, Address", "Applicant · script chose 1 over
+    // Bolt: Address", "3/3 agree". Empty when the script made no picks (unless fallback is given).
+    function choiceSummary(fallback) {
+        const { picks, over, applicant } = mergeStats();
+        if (picks.length === 0) return applicant ? 'Applicant' : (fallback || '');
+        const ours = CFG.USE_PICKS === 'ours';
+        let out = applicant ? 'Applicant' : (picks.length - over.length) + '/' + picks.length + ' agree';
+        if (over.length) {
+            const labels = Array.from(new Set(over.map(r => r.label).filter(Boolean)));
+            out += ' \u00b7 ' + (ours ? 'script' : 'Bolt') + ' chose ' + over.length + ' over ' + (ours ? 'Bolt' : 'script') +
+                (labels.length ? ': ' + labels.slice(0, 4).join(', ') + (labels.length > 4 ? ' +' + (labels.length - 4) + ' more' : '') : '');
+        }
+        return out;
+    }
     function renderMergeBrief(box) {
         const line = (cls) => { const d = document.createElement('div'); d.className = 'brief-line ' + (cls || ''); box.appendChild(d); return d; };
         const text = (parent, t) => parent.appendChild(document.createTextNode(t));
@@ -3005,6 +3022,7 @@
             delete document.body.dataset.csvDept;
             delete document.body.dataset.csvSpark1;
             delete document.body.dataset.csvSpark2;
+            delete document.body.dataset.csvChoice;
         }
         const blockers = getAllBlockers();
         applyBlockStyling(blockers);
@@ -3093,6 +3111,12 @@
     // Tracks merges regardless of who clicks "Merge Contacts" (always a
     // human, per above) so the counter/auto-navigate still work.
     let mergeButtonBound = null;
+    let pendingMergeRecord = null; // { a, b, choice, at }: sent to the database once the merge is confirmed
+    function sendMergedToDatabase() {
+        const r = pendingMergeRecord;
+        pendingMergeRecord = null;
+        if (r && Date.now() - r.at < 20000) document.dispatchEvent(new CustomEvent('elm2-pair-merged', { detail: { a: r.a, b: r.b, choice: r.choice } }));
+    }
     function bindMergeButtonTracking() {
         const btn = getSidebarActionButton('Merge Contacts');
         if (!btn || btn === mergeButtonBound) return;
@@ -3103,6 +3127,11 @@
             // Worked out now (the rows are gone after the merge), shown when the Merge completed card appears.
             const st = mergeStats();
             pendingMergeToast = { text: 'Merge: ' + (st.applicant ? 'Applicant' : st.total > 0 ? st.agree + '/' + st.total : 'Bolt'), at: Date.now() };
+            // For the database: which pair this was and what the script chose over Bolt, then record the
+            // pair now (the poll might not have run yet).
+            const sp = getSparkIds();
+            pendingMergeRecord = { a: sp.a, b: sp.b, choice: choiceSummary("Bolt's picks"), at: Date.now() };
+            document.dispatchEvent(new CustomEvent('elm2-record-pair', { detail: {} }));
         });
     }
     // After a merge Element451 replaces the form with a "Merge completed" card
@@ -3127,6 +3156,7 @@
         formWasAbsent = true; // the next pair is a new one, whatever its key says
         if (pendingMergeToast && Date.now() - pendingMergeToast.at < 20000 && toastsEnabled()) showMergeNotice(pendingMergeToast.text, true);
         pendingMergeToast = null;
+        sendMergedToDatabase();
         const sentence = card.querySelector('.bolt-body-large');
         const qpm = getQueuePosition();
         console.log('[elm2] Merged' + (qpm ? ' ' + qpm.current + '/' + qpm.total : '') + ' |', sentence ? sentence.textContent.trim() : (card.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 90));
@@ -3153,6 +3183,7 @@
         const pairKey = getPairKey();
         if (pairKey && pairKey !== lastMergeContactNamesKey) {
             awaitingMergeResult = false;
+            sendMergedToDatabase();
             if (CFG.SHOW_MERGE_COUNTER) incrementMergeCount();
             return;
         }

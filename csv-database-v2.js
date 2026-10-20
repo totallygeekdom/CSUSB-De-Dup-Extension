@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Element451 - CSV Database (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.23
-// @description  Tracks duplicate entries in a CSV database stored in browser localStorage — adapted for the redesigned Deduplication review-queue UI
+// @version      2.24
+// @description  Tracks duplicate entries in a database stored in browser localStorage (exports an .ods spreadsheet) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
 // @grant        none
@@ -231,13 +231,18 @@
         if (!firstName && !lastName) return false; // page content not ready
         const db = getDatabase();
         const rowContents = maskNames(getBlockedRowText(dept), ...full);
-        const newEntry = { firstName, lastName, firstName2, lastName2, dept, rowContents, sparkId1: sparks.a, sparkId2: sparks.b };
         const existingIdx = db.findIndex(entry => sameSparkPair(entry, sparks.a, sparks.b));
-        if (existingIdx !== -1) {
-            const old = db[existingIdx];
+        const old = existingIdx !== -1 ? db[existingIdx] : null;
+        // Merged (Y/N) and "Script vs Bolt" come from the main script: the choice is what it chose over Bolt on
+        // the pair on screen; Merged turns Y when the merge is confirmed (see 'elm2-pair-merged' below).
+        const merged = old && old.merged === 'Y' ? 'Y' : 'N';
+        const choice = merged === 'Y' ? (old.choice || '') : (document.body.dataset.csvChoice || (old && old.choice) || '');
+        const newEntry = { firstName, lastName, firstName2, lastName2, dept, rowContents, sparkId1: sparks.a, sparkId2: sparks.b, merged, choice };
+        if (old) {
             if (old.dept === dept && old.firstName === firstName && old.lastName === lastName
                 && old.firstName2 === firstName2 && old.lastName2 === lastName2 && old.rowContents === rowContents
-                && old.sparkId1 === sparks.a && old.sparkId2 === sparks.b) return true;
+                && old.sparkId1 === sparks.a && old.sparkId2 === sparks.b
+                && (old.merged || '') === merged && (old.choice || '') === choice) return true;
             db[existingIdx] = newEntry;
             saveDatabase(db);
             return true;
@@ -252,6 +257,19 @@
         if (!e.detail) return;
         e.detail.handled = true;
         e.detail.recorded = recordEntry(document.body.dataset.csvDept);
+    });
+
+    // The main script reports a confirmed merge (the Merge completed card): the pair's entry gets Merged = Y
+    // and the "Script vs Bolt" line worked out at the Merge click.
+    document.addEventListener('elm2-pair-merged', (e) => {
+        const d = e.detail;
+        if (!d) return;
+        const db = getDatabase();
+        const idx = db.findIndex(entry => sameSparkPair(entry, d.a || '', d.b || ''));
+        if (idx === -1) { console.log('[csv] merged pair is not in the database:', d.a, d.b); return; }
+        db[idx].merged = 'Y';
+        if (d.choice) db[idx].choice = d.choice;
+        saveDatabase(db);
     });
 
     // =========================================================
@@ -646,15 +664,26 @@
     setInterval(checkListUrlChange, 500);
 
     // =========================================================
-    // CSV EXPORT / IMPORT (unchanged)
+    // EXPORT / IMPORT: an .ods spreadsheet (column widths, bold header, filter buttons on every
+    // column); .csv files from earlier versions still import.
     // =========================================================
-    function toCSV() {
-        const db = getDatabase();
-        if (db.length === 0) return '';
-        const headers = ['Firstname', 'Lastname', 'Firstname 2', 'Lastname 2', 'Dept.', 'Spark ID 1', 'Spark ID 2', 'Row Contents'];
-        const rows = db.map(e => [e.firstName, e.lastName, e.firstName2, e.lastName2, e.dept, e.sparkId1, e.sparkId2, e.rowContents]
-            .map(v => `"${(v || '').replace(/"/g, '""')}"`).join(','));
-        return [headers.join(','), ...rows].join('\n');
+    // Columns in file order. Dept. and Merged are side by side (they are the two columns with filter buttons);
+    // Merged and Script vs Bolt sit between Spark ID 2 and Row Contents.
+    // width is in cm, as the spreadsheet stores it (the columns can be resized there).
+    const DB_COLUMNS = [
+        { header: 'Firstname', key: 'firstName', width: 2.6 },
+        { header: 'Lastname', key: 'lastName', width: 2.6 },
+        { header: 'Firstname 2', key: 'firstName2', width: 2.6 },
+        { header: 'Lastname 2', key: 'lastName2', width: 2.6 },
+        { header: 'Spark ID 1', key: 'sparkId1', width: 3.8 },
+        { header: 'Spark ID 2', key: 'sparkId2', width: 3.8 },
+        { header: 'Dept.', key: 'dept', width: 2.8 },
+        { header: 'Merged', key: 'merged', width: 2.2 },
+        { header: 'Script vs Bolt', key: 'choice', width: 9 },
+        { header: 'Row Contents', key: 'rowContents', width: 15, wrap: true }
+    ];
+    function dbRows(db) {
+        return [DB_COLUMNS.map(c => c.header), ...db.map(e => DB_COLUMNS.map(c => String(e[c.key] || '')))];
     }
     function parseCSVLine(line) {
         const result = [];
@@ -675,6 +704,162 @@
         }
         result.push(current);
         return result;
+    }
+    // Rows (first = header) -> database entries. Columns are found by header name, so files exported by any
+    // earlier version (different column order, no Merged / Script vs Bolt, or the old 5-column "Unique ID"
+    // format with no Spark IDs) still import.
+    function entriesFromRows(rows) {
+        if (rows.length < 2) return [];
+        const header = rows[0].map(h => String(h).trim().toLowerCase());
+        const col = (name, fallback) => { const i = header.indexOf(name); return i !== -1 ? i : fallback; };
+        const idx = {
+            first: col('firstname', 0), last: col('lastname', 1),
+            first2: col('firstname 2', -1), last2: col('lastname 2', -1),
+            dept: col('dept.', 2), rows: col('row contents', 3),
+            s1: col('spark id 1', -1), s2: col('spark id 2', -1),
+            merged: col('merged', -1), choice: col('script vs bolt', -1)
+        };
+        const get = (cols, i) => (i >= 0 && i < cols.length ? String(cols[i] == null ? '' : cols[i]) : '');
+        const entries = [];
+        for (let i = 1; i < rows.length; i++) {
+            const cols = rows[i];
+            if (cols.length < 4) continue;
+            const m = get(cols, idx.merged).trim().toUpperCase().charAt(0);
+            entries.push({
+                firstName: trunc3(get(cols, idx.first)), lastName: trunc3(get(cols, idx.last)),
+                firstName2: trunc3(get(cols, idx.first2)), lastName2: trunc3(get(cols, idx.last2)),
+                dept: get(cols, idx.dept), rowContents: get(cols, idx.rows),
+                sparkId1: get(cols, idx.s1), sparkId2: get(cols, idx.s2),
+                merged: m === 'Y' || m === 'N' ? m : '', choice: get(cols, idx.choice)
+            });
+        }
+        return entries;
+    }
+
+    // ---- minimal ZIP (stored, no compression) writer and reader: an .ods is a zip of XML files
+    const CRC_TABLE = (() => {
+        const t = new Uint32Array(256);
+        for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; }
+        return t;
+    })();
+    function crc32(bytes) {
+        let c = 0xFFFFFFFF;
+        for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+        return (c ^ 0xFFFFFFFF) >>> 0;
+    }
+    // files: [{ name, text }] in the order given (the ODF mimetype file must be first)
+    function zipStore(files) {
+        const enc = new TextEncoder();
+        const now = new Date();
+        const dosTime = (now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1);
+        const dosDate = ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
+        const parts = [], central = [];
+        let offset = 0;
+        files.forEach(f => {
+            const name = enc.encode(f.name), data = enc.encode(f.text), crc = crc32(data);
+            const lh = new DataView(new ArrayBuffer(30));
+            lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true); lh.setUint16(8, 0, true);
+            lh.setUint16(10, dosTime, true); lh.setUint16(12, dosDate, true); lh.setUint32(14, crc, true);
+            lh.setUint32(18, data.length, true); lh.setUint32(22, data.length, true); lh.setUint16(26, name.length, true); lh.setUint16(28, 0, true);
+            parts.push(new Uint8Array(lh.buffer), name, data);
+            const ch = new DataView(new ArrayBuffer(46));
+            ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true); ch.setUint16(10, 0, true);
+            ch.setUint16(12, dosTime, true); ch.setUint16(14, dosDate, true); ch.setUint32(16, crc, true);
+            ch.setUint32(20, data.length, true); ch.setUint32(24, data.length, true); ch.setUint16(28, name.length, true);
+            ch.setUint32(42, offset, true);
+            central.push(new Uint8Array(ch.buffer), name);
+            offset += 30 + name.length + data.length;
+        });
+        const cdSize = central.reduce((n, a) => n + a.length, 0);
+        const end = new DataView(new ArrayBuffer(22));
+        end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true);
+        end.setUint32(12, cdSize, true); end.setUint32(16, offset, true);
+        return new Blob([...parts, ...central, new Uint8Array(end.buffer)], { type: 'application/vnd.oasis.opendocument.spreadsheet' });
+    }
+    // Reads one file out of a zip (stored or deflated) as text.
+    async function zipReadText(buf, wanted) {
+        const v = new DataView(buf), u8 = new Uint8Array(buf);
+        let eocd = -1;
+        for (let i = buf.byteLength - 22; i >= Math.max(0, buf.byteLength - 65557); i--) { if (v.getUint32(i, true) === 0x06054b50) { eocd = i; break; } }
+        if (eocd < 0) throw new Error('not a zip file');
+        const count = v.getUint16(eocd + 10, true);
+        let p = v.getUint32(eocd + 16, true);
+        for (let n = 0; n < count; n++) {
+            if (v.getUint32(p, true) !== 0x02014b50) break;
+            const method = v.getUint16(p + 10, true), csize = v.getUint32(p + 20, true);
+            const nameLen = v.getUint16(p + 28, true), extraLen = v.getUint16(p + 30, true), commentLen = v.getUint16(p + 32, true);
+            const local = v.getUint32(p + 42, true);
+            const name = new TextDecoder().decode(u8.subarray(p + 46, p + 46 + nameLen));
+            if (name === wanted) {
+                const start = local + 30 + v.getUint16(local + 26, true) + v.getUint16(local + 28, true);
+                const raw = u8.subarray(start, start + csize);
+                if (method === 0) return new TextDecoder().decode(raw);
+                if (method !== 8) throw new Error('unsupported zip compression');
+                const out = await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer();
+                return new TextDecoder().decode(out);
+            }
+            p += 46 + nameLen + extraLen + commentLen;
+        }
+        throw new Error(wanted + ' not found in the file');
+    }
+
+    // ---- the spreadsheet itself
+    const NS = {
+        office: 'urn:oasis:names:tc:opendocument:xmlns:office:1.0', table: 'urn:oasis:names:tc:opendocument:xmlns:table:1.0',
+        text: 'urn:oasis:names:tc:opendocument:xmlns:text:1.0'
+    };
+    const xmlEsc = (t) => String(t).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    function odsCell(value, style) {
+        const attrs = style ? ' table:style-name="' + style + '"' : '';
+        if (value === '') return '<table:table-cell' + attrs + '/>';
+        const paras = String(value).split(/\r?\n/).map(l => '<text:p>' + xmlEsc(l) + '</text:p>').join('');
+        return '<table:table-cell' + attrs + ' office:value-type="string" calcext:value-type="string">' + paras + '</table:table-cell>';
+    }
+    function buildOds(rows) {
+        const ns = 'xmlns:office="' + NS.office + '" xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" xmlns:text="' + NS.text + '" xmlns:table="' + NS.table +
+            '" xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0" xmlns:calcext="urn:org:documentfoundation:names:experimental:calc:xmlns:calcext:1.0"';
+        const colStyles = DB_COLUMNS.map((c, i) => '<style:style style:name="co' + i + '" style:family="table-column"><style:table-column-properties style:column-width="' + c.width + 'cm"/></style:style>').join('');
+        const cellStyles =
+            '<style:style style:name="head" style:family="table-cell"><style:table-cell-properties fo:background-color="#fde3cc" fo:padding="0.1cm" style:vertical-align="middle"/><style:text-properties fo:font-weight="bold"/></style:style>' +
+            '<style:style style:name="body" style:family="table-cell"><style:table-cell-properties style:vertical-align="top"/></style:style>' +
+            '<style:style style:name="wrap" style:family="table-cell"><style:table-cell-properties fo:wrap-option="wrap" style:vertical-align="top"/></style:style>';
+        const body = rows.map((r, ri) => '<table:table-row>' + DB_COLUMNS.map((c, ci) => odsCell(r[ci] == null ? '' : r[ci], ri === 0 ? 'head' : (c.wrap || c.key === 'choice' ? 'wrap' : 'body'))).join('') + '</table:table-row>').join('');
+        // Filter buttons on Dept. and Merged only: the filter range spans just those two columns.
+        const colLetter = (key) => String.fromCharCode(65 + DB_COLUMNS.findIndex(c => c.key === key));
+        const filterRange = colLetter('dept') + '1:' + colLetter('merged') + rows.length;
+        const content = '<?xml version="1.0" encoding="UTF-8"?><office:document-content ' + ns + ' office:version="1.2">' +
+            '<office:automatic-styles>' + colStyles + cellStyles + '</office:automatic-styles>' +
+            '<office:body><office:spreadsheet><table:table table:name="Database">' +
+            DB_COLUMNS.map((c, i) => '<table:table-column table:style-name="co' + i + '"/>').join('') + body + '</table:table>' +
+            '<table:database-ranges><table:database-range table:name="__Anonymous_Sheet_DB__0" table:target-range-address="Database.' + filterRange.replace(':', ':Database.') + '" table:display-filter-buttons="true"/></table:database-ranges>' +
+            '</office:spreadsheet></office:body></office:document-content>';
+        const manifest = '<?xml version="1.0" encoding="UTF-8"?><manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.2">' +
+            '<manifest:file-entry manifest:full-path="/" manifest:version="1.2" manifest:media-type="application/vnd.oasis.opendocument.spreadsheet"/>' +
+            '<manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/></manifest:manifest>';
+        return zipStore([
+            { name: 'mimetype', text: 'application/vnd.oasis.opendocument.spreadsheet' },
+            { name: 'META-INF/manifest.xml', text: manifest },
+            { name: 'content.xml', text: content }
+        ]);
+    }
+    function odsRows(xml) {
+        const doc = new DOMParser().parseFromString(xml, 'application/xml');
+        if (doc.getElementsByTagName('parsererror').length) throw new Error('the spreadsheet could not be read');
+        const sheet = doc.getElementsByTagNameNS(NS.table, 'table')[0];
+        if (!sheet) throw new Error('no sheet found');
+        const rows = [];
+        Array.from(sheet.getElementsByTagNameNS(NS.table, 'table-row')).forEach(tr => {
+            const cells = [];
+            Array.from(tr.children).forEach(td => {
+                if (td.localName !== 'table-cell' && td.localName !== 'covered-table-cell') return;
+                const text = Array.from(td.getElementsByTagNameNS(NS.text, 'p')).map(p => p.textContent).join('\n');
+                const rep = Math.min(parseInt(td.getAttributeNS(NS.table, 'number-columns-repeated'), 10) || 1, text ? 50 : 1);
+                for (let k = 0; k < rep; k++) cells.push(text);
+            });
+            while (cells.length && cells[cells.length - 1] === '') cells.pop();
+            if (cells.length) rows.push(cells);
+        });
+        return rows;
     }
 
     // =========================================================
@@ -715,18 +900,18 @@
             <div class="settings-section-title">Database</div>
             <button id="elm-settings-download-btn" class="settings-action-btn"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/></svg> Download Database</button>
             <button id="elm-settings-upload-btn" class="settings-action-btn"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M5 20h14v-2H5v2zm0-10h4v6h6v-6h4l-7-7-7 7z"/></svg> Upload &amp; Replace Database</button>
-            <input type="file" id="elm-db-upload-input" accept=".csv">
+            <input type="file" id="elm-db-upload-input" accept=".ods,.csv">
             <button id="elm-settings-clear-btn" class="settings-action-btn danger"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg> Clear Database</button>
         `;
         settingsBody.appendChild(section);
         document.getElementById('elm-settings-download-btn').onclick = () => {
-            const csvContent = toCSV();
-            if (!csvContent) { alert('CSV Database is empty — no entries have been recorded yet.'); return; }
-            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const db = getDatabase();
+            if (db.length === 0) { alert('The database is empty — no entries have been recorded yet.'); return; }
+            const blob = buildOds(dbRows(db));
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `elm_csv_database_${new Date().toISOString().slice(0, 10)}.csv`;
+            a.download = `elm_database_${new Date().toISOString().slice(0, 10)}.ods`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -734,52 +919,28 @@
         };
         const uploadInput = document.getElementById('elm-db-upload-input');
         document.getElementById('elm-settings-upload-btn').onclick = () => uploadInput.click();
-        uploadInput.onchange = (e) => {
+        uploadInput.onchange = async (e) => {
             const file = e.target.files[0];
             if (!file) return;
-            if (!file.name.endsWith('.csv')) { alert('Please select a .csv file.'); uploadInput.value = ''; return; }
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                try {
-                    const text = ev.target.result;
-                    const lines = text.trim().split('\n');
-                    if (lines.length < 2) { alert('CSV file is empty or has no data rows.'); uploadInput.value = ''; return; }
-                    const entries = [];
-                    // Columns are found by header name, so files exported by any earlier
-                    // version (different column order, or the old 5-column "Unique ID"
-                    // format with no Spark IDs) still import.
-                    const header = parseCSVLine(lines[0]).map(h => h.trim().toLowerCase());
-                    const col = (name, fallback) => { const i = header.indexOf(name); return i !== -1 ? i : fallback; };
-                    const idx = {
-                        first: col('firstname', 0), last: col('lastname', 1),
-                        first2: col('firstname 2', -1), last2: col('lastname 2', -1),
-                        dept: col('dept.', 2), rows: col('row contents', 3),
-                        s1: col('spark id 1', -1), s2: col('spark id 2', -1)
-                    };
-                    const get = (cols, i) => (i >= 0 && i < cols.length ? cols[i] : '');
-                    for (let i = 1; i < lines.length; i++) {
-                        const cols = parseCSVLine(lines[i]);
-                        if (cols.length < 4) continue;
-                        entries.push({
-                            firstName: trunc3(get(cols, idx.first)), lastName: trunc3(get(cols, idx.last)),
-                            firstName2: trunc3(get(cols, idx.first2)), lastName2: trunc3(get(cols, idx.last2)),
-                            dept: get(cols, idx.dept), rowContents: get(cols, idx.rows),
-                            sparkId1: get(cols, idx.s1), sparkId2: get(cols, idx.s2)
-                        });
-                    }
-                    if (entries.length === 0) { alert('No valid entries found in CSV file.'); uploadInput.value = ''; return; }
-                    if (!confirm(`Replace current database with ${entries.length} entries from "${file.name}"?`)) { uploadInput.value = ''; return; }
-                    saveDatabase(entries);
-                    updateDbSizeBadge();
-                    clearStaleAnnotations();
-                    annotateQueueTable();
-                    alert(`Database replaced with ${entries.length} entries.`);
-                } catch (err) {
-                    alert('Error parsing CSV file: ' + err.message);
-                }
-                uploadInput.value = '';
-            };
-            reader.readAsText(file);
+            const lower = file.name.toLowerCase();
+            try {
+                let rows;
+                if (lower.endsWith('.ods')) rows = odsRows(await zipReadText(await file.arrayBuffer(), 'content.xml'));
+                else if (lower.endsWith('.csv')) rows = (await file.text()).trim().split('\n').map(l => parseCSVLine(l.replace(/\r$/, '')));
+                else { alert('Please select an .ods or .csv file.'); uploadInput.value = ''; return; }
+                if (rows.length < 2) { alert('The file is empty or has no data rows.'); uploadInput.value = ''; return; }
+                const entries = entriesFromRows(rows);
+                if (entries.length === 0) { alert('No valid entries found in the file.'); uploadInput.value = ''; return; }
+                if (!confirm(`Replace current database with ${entries.length} entries from "${file.name}"?`)) { uploadInput.value = ''; return; }
+                saveDatabase(entries);
+                updateDbSizeBadge();
+                clearStaleAnnotations();
+                annotateQueueTable();
+                alert(`Database replaced with ${entries.length} entries.`);
+            } catch (err) {
+                alert('Error reading the file: ' + err.message);
+            }
+            uploadInput.value = '';
         };
         document.getElementById('elm-settings-clear-btn').onclick = () => {
             const db = getDatabase();
@@ -820,5 +981,5 @@
         updateDbSizeBadge();
     }, 1000);
 
-    console.log('%cCSV Database (new layout) v2.23 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
+    console.log('%cCSV Database (new layout) v2.24 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
 })();

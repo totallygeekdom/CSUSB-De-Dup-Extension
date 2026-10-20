@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.179`, shown in the settings pane and console as `v2-build-179` |
+| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.180`, shown in the settings pane and console as `v2-build-180` |
 | CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.28` |
 
 The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
@@ -258,7 +258,7 @@ Only rows where the two sides differ (conflicts) are considered. Rules run **in 
 2. **Filled**: Bolt left the row unselected (typically Milestones, Sources and other `type: …` list rows) and no rule applies. The script picks, in order: the side with data when one side is blank; the **more recent profile** (the contact card's *Created* date); the side of the **selected email**; and finally an **arbitrary but stable** side (a hash of the pair, so a revisited pair gets the same answer). These rows have no Bolt pick to agree with, so they are never green,.
 3. **Needs review**: a rule applied but could not decide (dual personal email with no tiebreak, an address tie or two broken addresses, `csusb.major` or `csusb.school` on both sides) **and** Bolt left the row unselected. The pair is never auto-merged and is **never skipped**: it stays on screen for you (no toast; the console names the fields) whatever Auto-Skip says. Once you have merged it by hand and moved on, auto-merge resumes on the next pair. The console names the rows (`[elm2] Needs review: …`).
 
-**Dual personal-email tiebreak** (both emails personal): prefer the address containing a first name, then a last name (parts of 3+ letters of either contact's name), then the birth year (or its last 3/2 digits) from the DOB rows. If none separates them there is **no pick**; with no Bolt pick either the row *needs review*.
+**Dual personal-email tiebreak** (both emails personal): first the **engagement** numbers (the contact whose profile has more **email opens**, then more **email clicks**; Contact A = left, B = right). The merge screen only holds those numbers in the page while its "Show engagement data" panel is open, so for these pairs the script opens the panel itself (once per pair, waiting up to 4 s for the table, and leaves it open so you can see the numbers) and reads the `#duplicate-engagement-details` table (`N user actions / email opens / email clicks / sms clicks / logins` per contact). If the opens and clicks are tied or there is no panel, it goes on: prefer the address containing a first name, then a last name (parts of 3+ letters of either contact's name), then the birth year (or its last 3/2 digits) from the DOB rows. If none separates them there is **no pick**; with no Bolt pick either the row *needs review*.
 
 **Addresses**: with an applicant side the applicant rule wins (unless the applicant's address is blank and the other has one). Otherwise address rows compare with the built-in `AddressComparer`: a duplicated-component address loses, and for the same address the more complete one wins. Ties are **not** picked (Bolt's pick stands; with none, the row needs review): the same address with equal completeness, different addresses, or both addresses having duplicated parts.
 
@@ -463,5 +463,5 @@ Header `DB: N` pill, the Database section of the settings pane, the **Show Datab
 - **Automation rework**: slider None → High → Medium → Low → All (an earlier build had an Applicant stop, removed because applicants can have any score), **Use picks from**, **When done** with the cancel countdown (dialog with draining stepped ring), **Merge countdown** setting, Auto-Skip covering blocked / out-of-range / twins pairs, no popups for skipped pairs, scan mode.
 - **CSV Database v2**: keyed on Spark IDs (the URL no longer changes), names stored as 3-letter prefixes, two-contact columns, header-based import, list matching via the list API's `identities[]`, record-before-skip handshake, right-aligned badges, Show Database UI toggle, shared toast stack.
 - **Website restyles**: orange Material 3 palette sampled from Element's header, Material 3 tabs, compact Advanced Filters panel, list pager (Page box + Go), hover preview on the comparison buttons, gear icon as an SVG.
-- **History search** (2.179): search every page of the History list through the history API (see section 10).
+- **History search** (2.180): search every page of the History list through the history API (see section 10).
 - **Fixes along the way**: stall on identical consecutive names / disabled Next button, twins warning signal count, cut-off date text in filters, clipped filters panel, selected-chip colour specificity.

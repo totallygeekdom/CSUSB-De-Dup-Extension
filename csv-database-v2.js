@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Element451 - CSV Database (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.31
-// @description  Tracks duplicate entries in a database stored in browser localStorage (exports an .ods spreadsheet) — adapted for the redesigned Deduplication review-queue UI
+// @version      2.32
+// @description  Tracks duplicate entries in a database stored in browser localStorage (exports an .xlsx spreadsheet) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
 // @grant        none
@@ -776,7 +776,7 @@
         return (c ^ 0xFFFFFFFF) >>> 0;
     }
     // files: [{ name, text }] in the order given (the ODF mimetype file must be first)
-    function zipStore(files) {
+    function zipStore(files, mime) {
         const enc = new TextEncoder();
         const now = new Date();
         const dosTime = (now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1);
@@ -802,7 +802,7 @@
         const end = new DataView(new ArrayBuffer(22));
         end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true);
         end.setUint32(12, cdSize, true); end.setUint32(16, offset, true);
-        return new Blob([...parts, ...central, new Uint8Array(end.buffer)], { type: 'application/vnd.oasis.opendocument.spreadsheet' });
+        return new Blob([...parts, ...central, new Uint8Array(end.buffer)], { type: mime });
     }
     // Reads one file out of a zip (stored or deflated) as text.
     async function zipReadText(buf, wanted) {
@@ -837,62 +837,92 @@
         text: 'urn:oasis:names:tc:opendocument:xmlns:text:1.0'
     };
     const xmlEsc = (t) => String(t).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    function odsCell(value, style) {
-        const attrs = style ? ' table:style-name="' + style + '"' : '';
-        if (value === '') return '<table:table-cell' + attrs + '/>';
-        // text never wraps, but a value that already has line breaks keeps them (one paragraph per line)
-        const paras = String(value).split(/\r?\n/).map(l => '<text:p>' + xmlEsc(l) + '</text:p>').join('');
-        return '<table:table-cell' + attrs + ' office:value-type="string">' + paras + '</table:table-cell>';
+    // ---- .xlsx writer (what the Download button produces: Excel reads it natively)
+    const colLetter = (i) => String.fromCharCode(65 + i);
+    function xlsxCell(value, ref, style) {
+        const attr = ' r="' + ref + '"' + (style ? ' s="' + style + '"' : '');
+        if (value === '') return style ? '<c' + attr + '/>' : '';
+        return '<c' + attr + ' t="inlineStr"><is><t xml:space="preserve">' + xmlEsc(value) + '</t></is></c>';
     }
-    function buildOds(rows) {
-        const ns = 'xmlns:office="' + NS.office + '" xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" xmlns:text="' + NS.text + '" xmlns:table="' + NS.table +
-            '" xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0"';
-        const colStyles = DB_COLUMNS.map((c, i) => '<style:style style:name="co' + i + '" style:family="table-column"><style:table-column-properties style:column-width="' + c.width + 'cm"/></style:style>').join('');
-        const cellStyles =
-            '<style:style style:name="head" style:family="table-cell"><style:table-cell-properties fo:background-color="#fde3cc" fo:padding="0.1cm" fo:wrap-option="no-wrap" style:vertical-align="middle"/><style:text-properties fo:font-weight="bold"/></style:style>' +
-            '<style:style style:name="lost" style:family="table-cell"><style:table-cell-properties fo:wrap-option="no-wrap" style:vertical-align="middle"/><style:text-properties style:text-line-through-style="solid" style:text-line-through-type="single" fo:color="#8a8a8a"/></style:style>' +
-            '<style:style style:name="body" style:family="table-cell"><style:table-cell-properties fo:wrap-option="no-wrap" style:vertical-align="middle"/></style:style>';
-        const body = rows.map((r, ri) => '<table:table-row>' + DB_COLUMNS.map((c, ci) => odsCell(r[ci] == null ? '' : r[ci], ri === 0 ? 'head' : (r.struck && r.struck.has(ci) ? 'lost' : 'body'))).join('') + '</table:table-row>').join('');
+    function buildXlsx(rows) {
+        const nCols = DB_COLUMNS.length, nRows = rows.length;
+        const cols = DB_COLUMNS.map((c, i) => '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + Math.round(c.width * 5.4 * 10) / 10 + '" customWidth="1"/>').join('');
+        const sheetRows = rows.map((r, ri) => '<row r="' + (ri + 1) + '">' +
+            DB_COLUMNS.map((c, ci) => xlsxCell(r[ci] == null ? '' : String(r[ci]), colLetter(ci) + (ri + 1), ri === 0 ? 1 : (r.struck && r.struck.has(ci) ? 2 : 0))).join('') + '</row>').join('');
         // Filter buttons on Dept. and Merged only: the filter range spans just those two columns.
-        const colLetter = (key) => String.fromCharCode(65 + DB_COLUMNS.findIndex(c => c.key === key));
-        const filterRange = colLetter('dept') + '1:' + colLetter('merged') + rows.length;
-        const content = '<?xml version="1.0" encoding="UTF-8"?><office:document-content ' + ns + ' office:version="1.2">' +
-            '<office:automatic-styles>' + colStyles + cellStyles + '</office:automatic-styles>' +
-            '<office:body><office:spreadsheet><table:table table:name="Database">' +
-            DB_COLUMNS.map((c, i) => '<table:table-column table:style-name="co' + i + '"/>').join('') + body + '</table:table>' +
-            '<table:database-ranges><table:database-range table:name="__Anonymous_Sheet_DB__0" table:target-range-address="Database.' + filterRange.replace(':', ':Database.') + '" table:display-filter-buttons="true"/></table:database-ranges>' +
-            '</office:spreadsheet></office:body></office:document-content>';
-        const manifest = '<?xml version="1.0" encoding="UTF-8"?><manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.2">' +
-            '<manifest:file-entry manifest:full-path="/" manifest:version="1.2" manifest:media-type="application/vnd.oasis.opendocument.spreadsheet"/>' +
-            '<manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/>' +
-            '<manifest:file-entry manifest:full-path="styles.xml" manifest:media-type="text/xml"/>' +
-            '<manifest:file-entry manifest:full-path="meta.xml" manifest:media-type="text/xml"/>' +
-            '<manifest:file-entry manifest:full-path="settings.xml" manifest:media-type="text/xml"/></manifest:manifest>';
-        // The usual companion parts every spreadsheet app writes: default styles and document metadata.
-        const styles = '<?xml version="1.0" encoding="UTF-8"?><office:document-styles xmlns:office="' + NS.office + '" xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" ' +
-            'xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0" office:version="1.2"><office:styles><style:default-style style:family="table-cell"/></office:styles>' +
-            '<office:automatic-styles/><office:master-styles/></office:document-styles>';
-        const meta = '<?xml version="1.0" encoding="UTF-8"?><office:document-meta xmlns:office="' + NS.office + '" xmlns:meta="urn:oasis:names:tc:opendocument:xmlns:meta:1.0" office:version="1.2">' +
-            '<office:meta><meta:generator>Element451 Database</meta:generator></office:meta></office:document-meta>';
-        // View settings: the header row is frozen (a vertical split below row 1) so it stays put when scrolling.
-        const item = (name, type, val) => '<config:config-item config:name="' + name + '" config:type="' + type + '">' + val + '</config:config-item>';
-        const settings = '<?xml version="1.0" encoding="UTF-8"?><office:document-settings xmlns:office="' + NS.office + '" xmlns:config="urn:oasis:names:tc:opendocument:xmlns:config:1.0" office:version="1.2">' +
-            '<office:settings><config:config-item-set config:name="ooo:view-settings"><config:config-item-map-indexed config:name="Views"><config:config-item-map-entry>' +
-            item('ViewId', 'string', 'view1') +
-            '<config:config-item-map-named config:name="Tables"><config:config-item-map-entry config:name="Database">' +
-            item('HorizontalSplitMode', 'short', 0) + item('VerticalSplitMode', 'short', 2) + item('HorizontalSplitPosition', 'int', 0) + item('VerticalSplitPosition', 'int', 1) +
-            item('ActiveSplitRange', 'short', 2) + item('PositionLeft', 'int', 0) + item('PositionRight', 'int', 0) + item('PositionTop', 'int', 0) + item('PositionBottom', 'int', 1) +
-            '</config:config-item-map-entry></config:config-item-map-named>' +
-            item('ActiveTable', 'string', 'Database') +
-            '</config:config-item-map-entry></config:config-item-map-indexed></config:config-item-set></office:settings></office:document-settings>';
+        const di = DB_COLUMNS.findIndex(c => c.key === 'dept'), mi = DB_COLUMNS.findIndex(c => c.key === 'merged');
+        const filterRef = colLetter(di) + '1:' + colLetter(mi) + nRows;
+        const sheet = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+            '<dimension ref="A1:' + colLetter(nCols - 1) + nRows + '"/>' +
+            '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A2" sqref="A2"/></sheetView></sheetViews>' +
+            '<sheetFormatPr defaultRowHeight="15"/><cols>' + cols + '</cols><sheetData>' + sheetRows + '</sheetData>' +
+            '<autoFilter ref="' + filterRef + '"/></worksheet>';
+        const styles = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+            '<fonts count="3"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font>' +
+            '<font><strike/><sz val="11"/><color rgb="FF8A8A8A"/><name val="Calibri"/></font></fonts>' +
+            '<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>' +
+            '<fill><patternFill patternType="solid"><fgColor rgb="FFFDE3CC"/><bgColor indexed="64"/></patternFill></fill></fills>' +
+            '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
+            '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+            '<cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+            '<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>' +
+            '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs>' +
+            '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+        const wb = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+            '<sheets><sheet name="Database" sheetId="1" r:id="rId1"/></sheets>' +
+            '<definedNames><definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">Database!$' + colLetter(di) + '$1:$' + colLetter(mi) + '$' + nRows + '</definedName></definedNames></workbook>';
+        const wbRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>' +
+            '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>';
+        const rels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>';
+        const types = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+            '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>' +
+            '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+            '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+            '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>';
         return zipStore([
-            { name: 'mimetype', text: 'application/vnd.oasis.opendocument.spreadsheet' },
-            { name: 'META-INF/manifest.xml', text: manifest },
-            { name: 'content.xml', text: content },
-            { name: 'styles.xml', text: styles },
-            { name: 'meta.xml', text: meta },
-            { name: 'settings.xml', text: settings }
-        ]);
+            { name: '[Content_Types].xml', text: types },
+            { name: '_rels/.rels', text: rels },
+            { name: 'xl/workbook.xml', text: wb },
+            { name: 'xl/_rels/workbook.xml.rels', text: wbRels },
+            { name: 'xl/styles.xml', text: styles },
+            { name: 'xl/worksheets/sheet1.xml', text: sheet }
+        ], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    }
+    // ---- .xlsx reader: shared or inline strings, and which cells have a strike-through font
+    async function xlsxRows(buf) {
+        const parse = (t) => { const d = new DOMParser().parseFromString(t, 'application/xml'); if (d.getElementsByTagName('parsererror').length) throw new Error('the spreadsheet could not be read'); return d; };
+        const txt = (el) => Array.from(el.getElementsByTagName('t')).map(t => t.textContent).join('');
+        let shared = [];
+        try { shared = Array.from(parse(await zipReadText(buf, 'xl/sharedStrings.xml')).getElementsByTagName('si')).map(txt); } catch (e) { /* none */ }
+        const struckXf = new Set();
+        try {
+            const st = parse(await zipReadText(buf, 'xl/styles.xml'));
+            const fonts = Array.from(st.getElementsByTagName('fonts')[0].getElementsByTagName('font')).map(f => { const k = f.getElementsByTagName('strike')[0]; return !!k && k.getAttribute('val') !== '0' && k.getAttribute('val') !== 'false'; });
+            Array.from(st.getElementsByTagName('cellXfs')[0].getElementsByTagName('xf')).forEach((xf, i) => { if (fonts[parseInt(xf.getAttribute('fontId'), 10) || 0]) struckXf.add(String(i)); });
+        } catch (e) { /* no styles */ }
+        const sheet = parse(await zipReadText(buf, 'xl/worksheets/sheet1.xml'));
+        const colIndex = (ref) => { const m = /^([A-Z]+)/.exec(ref || ''); if (!m) return -1; let n = 0; for (const ch of m[1]) n = n * 26 + ch.charCodeAt(0) - 64; return n - 1; };
+        const rows = [];
+        Array.from(sheet.getElementsByTagName('row')).forEach(tr => {
+            const cells = [];
+            cells.struck = new Set();
+            Array.from(tr.getElementsByTagName('c')).forEach(c => {
+                const i = colIndex(c.getAttribute('r'));
+                if (i < 0 || i > 60) return;
+                let v = '';
+                const t = c.getAttribute('t');
+                if (t === 'inlineStr') v = txt(c);
+                else { const ve = c.getElementsByTagName('v')[0]; v = ve ? ve.textContent : ''; if (t === 's') v = shared[parseInt(v, 10)] || ''; }
+                while (cells.length < i) cells.push('');
+                cells[i] = v;
+                if (v !== '' && struckXf.has(c.getAttribute('s'))) cells.struck.add(i);
+            });
+            while (cells.length && cells[cells.length - 1] === '') cells.pop();
+            if (cells.length) rows.push(cells);
+        });
+        return rows;
     }
     function odsRows(xml) {
         const doc = new DOMParser().parseFromString(xml, 'application/xml');
@@ -963,18 +993,18 @@
             <div class="settings-section-title">Database</div>
             <button id="elm-settings-download-btn" class="settings-action-btn"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/></svg> Download Database</button>
             <button id="elm-settings-upload-btn" class="settings-action-btn"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M5 20h14v-2H5v2zm0-10h4v6h6v-6h4l-7-7-7 7z"/></svg> Upload &amp; Replace Database</button>
-            <input type="file" id="elm-db-upload-input" accept=".ods,.csv">
+            <input type="file" id="elm-db-upload-input" accept=".xlsx,.ods,.csv">
             <button id="elm-settings-clear-btn" class="settings-action-btn danger"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg> Clear Database</button>
         `;
         settingsBody.appendChild(section);
         document.getElementById('elm-settings-download-btn').onclick = () => {
             const db = getDatabase();
             if (db.length === 0) { alert('The database is empty — no entries have been recorded yet.'); return; }
-            const blob = buildOds(dbRows(db));
+            const blob = buildXlsx(dbRows(db));
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `elm_database_${new Date().toISOString().slice(0, 10)}.ods`;
+            a.download = `elm_database_${new Date().toISOString().slice(0, 10)}.xlsx`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -988,9 +1018,10 @@
             const lower = file.name.toLowerCase();
             try {
                 let rows;
-                if (lower.endsWith('.ods')) rows = odsRows(await zipReadText(await file.arrayBuffer(), 'content.xml'));
+                if (lower.endsWith('.xlsx')) rows = await xlsxRows(await file.arrayBuffer());
+                else if (lower.endsWith('.ods')) rows = odsRows(await zipReadText(await file.arrayBuffer(), 'content.xml'));
                 else if (lower.endsWith('.csv')) rows = (await file.text()).trim().split('\n').map(l => parseCSVLine(l.replace(/\r$/, '')));
-                else { alert('Please select an .ods or .csv file.'); uploadInput.value = ''; return; }
+                else { alert('Please select an .xlsx, .ods or .csv file.'); uploadInput.value = ''; return; }
                 if (rows.length < 2) { alert('The file is empty or has no data rows.'); uploadInput.value = ''; return; }
                 const entries = entriesFromRows(rows);
                 if (entries.length === 0) { alert('No valid entries found in the file.'); uploadInput.value = ''; return; }
@@ -1044,5 +1075,5 @@
         updateDbSizeBadge();
     }, 1000);
 
-    console.log('%cCSV Database (new layout) v2.31 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
+    console.log('%cCSV Database (new layout) v2.32 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
 })();

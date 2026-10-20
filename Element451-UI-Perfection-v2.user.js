@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.179
+// @version      2.180
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-179'; // keep in sync with @version (2.179)
+    const BUILD = 'v2-build-180'; // keep in sync with @version (2.180)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -2019,9 +2019,9 @@
     // =========================================================
     // FIELD RESOLUTION ENGINE
     // Same priority tiers as the classic script's autoResolveRows(), adapted
-    // to operate on diff-row adapters. Dropped: the "email open count" tier
-    // (sourced from a "User Activity" merge-array section that does not
-    // appear to exist in the new layout — verify live before re-adding).
+    // to operate on diff-row adapters. The "email open count" tier is back in
+    // autoDualPersonalEmails(), fed by the collapsible engagement panel
+    // (the "User Activity" section of the classic page no longer exists).
     // =========================================================
     function parseApplicationDate(text) {
         const dateMatch = text.match(/(?:updated at\s*)?(\w{3})\s+(\d{1,2}),?\s+(\d{4})\s*-?\s*(\d{1,2}):(\d{2})\s*(AM|PM)/i);
@@ -2129,7 +2129,7 @@
             // Email preference
             currentRule = 'personal email preferred';
             if (row.label.toLowerCase().includes('email')) {
-                const personalDomains = ['gmail.com', 'yahoo.com', 'icloud.com', 'hotmail.com', 'aol.com', 'me.com', 'outlook.com', 'live.com', 'msn.com', 'protonmail.com', 'proton.me'];
+                const personalDomains = PERSONAL_DOMAINS;
                 const leftIsPersonal = personalDomains.some(d => leftText.toLowerCase().includes('@' + d));
                 const rightIsPersonal = personalDomains.some(d => rightText.toLowerCase().includes('@' + d));
                 if (leftIsPersonal && !rightIsPersonal) { row.element.dataset.elm2AutoResolved = 'true'; applyScriptPick(row, 'left'); return; }
@@ -2204,8 +2204,49 @@
             }
         });
     }
-    // Dual-personal-email tiebreak (name/DOB-in-email). Email-open-count tier
-    // dropped — no "User Activity" section found in the new layout.
+    const PERSONAL_DOMAINS = ['gmail.com', 'yahoo.com', 'icloud.com', 'hotmail.com', 'aol.com', 'me.com', 'outlook.com', 'live.com', 'msn.com', 'protonmail.com', 'proton.me'];
+    // An email row that conflicts, where both sides are personal addresses (the dual-personal tiebreak applies).
+    function rowIsDualPersonalEmail(row) {
+        if (!row.isConflict || !/email/i.test(row.label || '')) return false;
+        const l = row.values[0].textContent.toLowerCase(), r = row.values[1].textContent.toLowerCase();
+        return PERSONAL_DOMAINS.some(d => l.includes('@' + d)) && PERSONAL_DOMAINS.some(d => r.includes('@' + d));
+    }
+    // ENGAGEMENT: the merge screen has a collapsed "Show engagement data" panel; opened, it is a table
+    // (#duplicate-engagement-details) with a row per measure and a cell per contact, e.g. "1743 user actions",
+    // "0 email opens", "0 email clicks", "0 sms clicks", "0 logins". Returns { 'email opens': [a, b], ... } or null
+    // while the table is not on screen.
+    function readEngagement() {
+        const rows = document.querySelectorAll('#duplicate-engagement-details bolt-row');
+        if (!rows.length) return null;
+        const out = {};
+        rows.forEach(r => {
+            const cells = Array.from(r.querySelectorAll('bolt-cell')).map(c => c.textContent.trim());
+            const m = cells.map(t => t.match(/^([\d,]+)\s+(.+)$/i));
+            if (m.length >= 2 && m[0] && m[1]) out[m[0][2].toLowerCase()] = [parseInt(m[0][1].replace(/,/g, ''), 10), parseInt(m[1][1].replace(/,/g, ''), 10)];
+        });
+        return Object.keys(out).length ? out : null;
+    }
+    // Opens the engagement panel once per pair (the data is only in the page while it is expanded). It is left
+    // open afterwards so the numbers the pick was based on are visible.
+    let engagementOpenedFor = '';
+    function requestEngagementPanel() {
+        const key = getPairKey();
+        if (engagementOpenedFor === key) return;
+        const btn = document.querySelector('elm-duplicate-engagement-panel button.engagement-toggle[aria-expanded="false"]');
+        if (!btn) return;
+        engagementOpenedFor = key;
+        console.log('[elm2] opening the engagement panel (dual personal emails)');
+        btn.click();
+    }
+    // True when this pair's decision needs the engagement numbers and they are not available yet.
+    function waitingForEngagement() {
+        if (findApplicantSide() || readEngagement()) return false;
+        if (!getDiffRows().some(rowIsDualPersonalEmail)) return false;
+        if (!document.querySelector('elm-duplicate-engagement-panel')) return false; // no panel: nothing to wait for
+        requestEngagementPanel();
+        return true;
+    }
+    // Dual-personal-email tiebreak: more email opens, then more email clicks, then name/DOB-in-email.
     function autoDualPersonalEmails() {
         currentRule = 'dual personal email tiebreak';
         const rows = getDiffRows().filter(r => r.isConflict && r.element.dataset.elm2DualPersonal && !r.element.dataset.elm2DualResolved);
@@ -2226,10 +2267,24 @@
             return name.split(/[\s-]+/).filter(p => p.length >= 3).some(p => email.includes(p));
         };
         const checkYearInEmail = (email, year) => !!year && (email.includes(year) || email.includes(year.slice(1)) || email.includes(year.slice(2)));
+        const engagement = readEngagement();
         rows.forEach(row => {
             const leftLower = row.values[0].textContent.toLowerCase();
             const rightLower = row.values[1].textContent.toLowerCase();
-            // Priority: first name, then last name, then birth year
+            // Priority: email opens, then email clicks (Contact A = left, B = right), then first name, last name, birth year
+            if (engagement) {
+                for (const measure of ['email opens', 'email clicks']) {
+                    const v = engagement[measure];
+                    if (v && v[0] !== v[1]) {
+                        const side = v[0] > v[1] ? 'left' : 'right';
+                        console.log('[elm2] Dual personal emails: ' + measure + ' A ' + v[0] + ' vs B ' + v[1] + ' ->', side);
+                        currentRule = 'dual personal email: more ' + measure;
+                        row.element.dataset.elm2DualResolved = 'true'; applyScriptPick(row, side);
+                        return;
+                    }
+                }
+                currentRule = 'dual personal email tiebreak';
+            }
             const leftFirst = emailContainsName(leftLower, firstA) || emailContainsName(leftLower, firstB);
             const rightFirst = emailContainsName(rightLower, firstA) || emailContainsName(rightLower, firstB);
             if (leftFirst && !rightFirst) { row.element.dataset.elm2DualResolved = 'true'; applyScriptPick(row, 'left'); return; }
@@ -3024,6 +3079,7 @@
             currentQueuePositionKey = pairKey;
             pairFirstSeenAt = Date.now();
             resolutionAttempted = false;
+            engagementOpenedFor = '';
             conflictWarningShown = false;
             appealWarningShown = false;
             previewPicks(null);
@@ -3057,6 +3113,8 @@
         // render a moment after the field rows: wait for it (up to 3s) before deciding.
         const lvl = CFG.RANGE_LEVEL;
         if (lvl >= 1 && lvl < 4 && !getScoreChipLevel() && Date.now() - pairFirstSeenAt < 3000) return;
+        // Dual personal emails: wait (up to 4s) for the engagement table, which the script opens itself.
+        if (waitingForEngagement() && Date.now() - pairFirstSeenAt < 4000) return;
         resolutionAttempted = true;
         // Two-phase, mirroring the classic script: resolve now, then re-verify
         // shortly after in case more Workflow/Source rows loaded in the meantime.

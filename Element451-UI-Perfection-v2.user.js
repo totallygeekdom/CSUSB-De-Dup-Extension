@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.181
+// @version      2.182
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-181'; // keep in sync with @version (2.181)
+    const BUILD = 'v2-build-182'; // keep in sync with @version (2.182)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -1971,6 +1971,8 @@
         else { delete document.body.dataset.csvSpark1; delete document.body.dataset.csvSpark2; }
         const choice = choiceSummary('');
         if (choice) document.body.dataset.csvChoice = choice; else delete document.body.dataset.csvChoice;
+        const score = getScoreChipLevel(); // Bolt's score for the database's first column (high / medium / low)
+        if (score) document.body.dataset.csvScore = score; else delete document.body.dataset.csvScore;
         // A skipped pair (Auto-Skip on) gets no popup; one left for you does.
         if (appeal && !appealWarningShown && !CFG.AUTO_SKIP_BLOCKED) {
             appealWarningShown = true;
@@ -3103,6 +3105,7 @@
             delete document.body.dataset.csvSpark1;
             delete document.body.dataset.csvSpark2;
             delete document.body.dataset.csvChoice;
+            delete document.body.dataset.csvScore;
         }
         const blockers = getAllBlockers();
         applyBlockStyling(blockers);

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.162
+// @version      2.163
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,7 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-162'; // keep in sync with @version (2.162)
+    const BUILD = 'v2-build-163'; // keep in sync with @version (2.163)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -92,6 +92,7 @@
             --md-surface-container-low: #f7f4f1;
             --md-surface-container: #f1ede8;
             --md-surface-container-high: #ece7e2;
+            --md-search-fill: #f5f5f5;
             --md-surface-container-highest: #e6e1db;
             --md-error: #b3261e;
             --md-elev-1: 0 1px 2px rgba(0,0,0,.3), 0 1px 3px 1px rgba(0,0,0,.15);
@@ -337,32 +338,39 @@
         .elm2-pager-input:focus { outline: none; border: 2px solid var(--md-primary); padding: 0 7px; }
         .elm2-pager .elm2-pager-go { height: 32px; padding: 0 16px; border: none; border-radius: 16px; background: var(--md-primary-container); color: var(--md-on-primary-container); font-family: inherit; font-weight: 500; font-size: 14px; line-height: 20px; cursor: pointer; transition: box-shadow .2s var(--md-ease); }
         .elm2-pager .elm2-pager-go:hover { box-shadow: var(--md-elev-1); }
-        /* M3 Expressive search bar: used by Element's expanded header search and by the History search */
+        /* M3 Expressive search bar, 40 px so the header keeps its height: Element's expanded header search
+           (it already slides open) and the History search (slides open the same way). Fill #F5F5F5, orange ring on focus. */
         bolt-expandable-search:has(.input-wrapper:not([style*="width: 0px"])) .bolt-form-field-input-wrapper:not(#elm2x),
-        .elm2-hs-field { display: flex !important; flex-direction: row; align-items: center; box-sizing: border-box; min-height: 56px; min-width: 280px; padding: 0 16px; border: none !important; border-radius: 28px; background: var(--md-surface-container-high, #ece7e2) !important; box-shadow: none !important; transition: box-shadow .2s var(--md-ease), background-color .2s var(--md-ease); }
+        .elm2-hs-field { display: flex !important; flex-direction: row; align-items: center; box-sizing: border-box; height: 40px; min-height: 0; padding: 0 8px 0 12px; border: none !important; border-radius: 20px; background: var(--md-search-fill) !important; box-shadow: none !important; transition: box-shadow .2s var(--md-ease); }
         bolt-expandable-search:has(.input-wrapper:not([style*="width: 0px"])) .bolt-form-field-input-wrapper:not(#elm2x):focus-within,
-        .elm2-hs-field:focus-within { box-shadow: var(--md-elev-1) !important; background: var(--md-surface-container-highest) !important; }
+        .elm2-hs-field:focus-within { box-shadow: inset 0 0 0 2px var(--md-primary) !important; }
         bolt-expandable-search:has(.input-wrapper:not([style*="width: 0px"])) .bolt-form-field-wrapper:not(#elm2x),
         bolt-expandable-search:has(.input-wrapper:not([style*="width: 0px"])) .bolt-form-field-infix:not(#elm2x),
-        bolt-expandable-search:has(.input-wrapper:not([style*="width: 0px"])) bolt-form-field:not(#elm2x) { border: none !important; background: transparent !important; box-shadow: none !important; outline: none !important; }
+        bolt-expandable-search:has(.input-wrapper:not([style*="width: 0px"])) bolt-form-field:not(#elm2x) { min-height: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important; background: transparent !important; box-shadow: none !important; outline: none !important; }
         bolt-expandable-search:has(.input-wrapper:not([style*="width: 0px"])) .bolt-form-field-infix { flex: 1 1 auto; min-width: 0; }
-        bolt-expandable-search:has(.input-wrapper:not([style*="width: 0px"])) .bolt-form-field-suffix { order: -1; margin: 0 12px 0 0 !important; }
-        bolt-expandable-search:has(.input-wrapper:not([style*="width: 0px"])) .bolt-form-field-suffix button { color: var(--md-on-surface-variant) !important; }
+        bolt-expandable-search:has(.input-wrapper:not([style*="width: 0px"])) .bolt-form-field-suffix { order: -1; margin: 0 4px 0 0 !important; }
+        bolt-expandable-search:has(.input-wrapper:not([style*="width: 0px"])) .bolt-form-field-suffix button { width: 32px !important; height: 32px !important; padding: 4px !important; color: var(--md-on-surface-variant) !important; }
         bolt-expandable-search:has(.input-wrapper:not([style*="width: 0px"])) .bolt-input-element:not(#elm2x),
-        .elm2-hs-field input { width: 100%; height: 56px; padding: 0 !important; border: none !important; outline: none !important; background: transparent !important; box-shadow: none !important; color: var(--md-on-surface) !important; font: 400 16px/24px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif !important; letter-spacing: .5px; }
+        .elm2-hs-field input { width: 100%; height: 40px; padding: 0 !important; border: none !important; outline: none !important; background: transparent !important; box-shadow: none !important; color: var(--md-on-surface) !important; font: 400 16px/24px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif !important; letter-spacing: .5px; }
         bolt-expandable-search:has(.input-wrapper:not([style*="width: 0px"])) .bolt-input-element::placeholder, .elm2-hs-field input::placeholder { color: var(--md-on-surface-variant); opacity: 1; }
-        .elm2-hs-field .elm2-hs-clear { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; margin: 0 -6px 0 6px; padding: 0 !important; border-radius: 50% !important; background: transparent !important; color: var(--md-on-surface-variant) !important; }
-        .elm2-hs-field .elm2-hs-clear[hidden] { display: none; }
-        .elm2-hs-field .elm2-hs-clear:hover { background: color-mix(in srgb, var(--md-on-surface) 8%, transparent) !important; box-shadow: none !important; }
-        .elm2-hs-field .elm2-hs-clear svg { width: 20px; height: 20px; margin: 0; }
-        .elm2-hs-field svg { flex: 0 0 auto; width: 24px; height: 24px; margin-right: 12px; color: var(--md-on-surface-variant); }
+        .elm2-hs-field button { flex: 0 0 auto; border: none !important; outline: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0 !important; border-radius: 50% !important; background: transparent !important; color: var(--md-on-surface-variant) !important; }
+        .elm2-hs-field button:hover { background: color-mix(in srgb, var(--md-on-surface) 8%, transparent) !important; box-shadow: none !important; }
+        .elm2-hs-field button[hidden] { display: none; }
+        .elm2-hs-field svg { flex: 0 0 auto; width: 20px; height: 20px; }
+        .elm2-hs-field .elm2-hs-toggle { margin: 0 6px 0 -4px; }
+        /* the History field slides open from its icon, like Element's own */
         .elm2-hsearch { box-sizing: border-box; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; width: 100%; margin: 0 0 12px; color: var(--md-on-surface); font: 400 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; }
-        .elm2-hsearch .elm2-hs-field { flex: 0 1 360px; min-height: 44px; min-width: 220px; padding: 0 14px; border-radius: 22px; }
-        .elm2-hsearch .elm2-hs-field input { height: 44px; font-size: 15px !important; }
-        .elm2-hsearch .elm2-hs-field svg { width: 20px; height: 20px; margin-right: 10px; }
-        .elm2-hsearch button { height: 40px; padding: 0 20px; border: none; border-radius: 20px; background: var(--md-primary-container); color: var(--md-on-primary-container); font: 500 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; cursor: pointer; transition: box-shadow .2s var(--md-ease); }
-        .elm2-hsearch button:hover:not(:disabled) { box-shadow: var(--md-elev-1); }
-        .elm2-hsearch button:disabled { opacity: .45; cursor: default; }
+        .elm2-hsearch .elm2-hs-field { width: 40px; padding: 0 4px !important; overflow: hidden; background: transparent !important; transition: width .3s cubic-bezier(.2, 0, 0, 1), background-color .3s, box-shadow .2s; }
+        .elm2-hsearch.open .elm2-hs-field { width: min(360px, 100%); padding: 0 8px 0 12px !important; background: var(--md-search-fill) !important; }
+        .elm2-hsearch .elm2-hs-field input { flex: 1 1 auto; min-width: 0; opacity: 0; transition: opacity .2s; }
+        .elm2-hsearch.open .elm2-hs-field input { opacity: 1; transition-delay: .1s; }
+        .elm2-hsearch:not(.open) .elm2-hs-field input, .elm2-hsearch:not(.open) .elm2-hs-clear, .elm2-hsearch:not(.open) .elm2-hs-next, .elm2-hsearch:not(.open) .elm2-hs-status { display: none; }
+        .elm2-hsearch:not(.open) .elm2-hs-field:focus-within { box-shadow: none !important; }
+        .elm2-hsearch .elm2-hs-field .elm2-hs-toggle { margin: 0; }
+        .elm2-hsearch.open .elm2-hs-field .elm2-hs-toggle { margin: 0 6px 0 -4px; }
+        .elm2-hsearch .elm2-hs-next { height: 40px; padding: 0 20px; border: none; border-radius: 20px; background: var(--md-primary-container); color: var(--md-on-primary-container); font: 500 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; cursor: pointer; transition: box-shadow .2s var(--md-ease); }
+        .elm2-hsearch .elm2-hs-next:hover:not(:disabled) { box-shadow: var(--md-elev-1); }
+        .elm2-hsearch .elm2-hs-next:disabled { opacity: .45; cursor: default; }
         .elm2-hsearch .elm2-hs-status { flex-basis: 100%; color: var(--md-on-surface-variant); font-size: 13px; }
         bolt-row.elm2-search-hit { outline: 3px solid var(--md-primary); outline-offset: -3px; background: color-mix(in srgb, var(--md-primary) 12%, transparent) !important; }
         #elm2-pick-compare-bar {
@@ -1443,7 +1451,8 @@
         const table = wrap.closest('bolt-table, [role="table"], table') || wrap;
         const bar = document.createElement('div');
         bar.className = 'elm2-hsearch';
-        bar.innerHTML = '<div class="elm2-hs-field"><svg viewBox="0 0 20 20" aria-hidden="true"><path fill="currentColor" d="M13.792 12.167h-.856l-.303-.293a7 7 0 0 0 1.7-4.582 7.041 7.041 0 1 0-7.041 7.041 7 7 0 0 0 4.582-1.7l.293.303v.856l5.416 5.406 1.615-1.615zm-6.5 0a4.87 4.87 0 0 1-4.875-4.875 4.87 4.87 0 0 1 4.875-4.875 4.87 4.87 0 0 1 4.875 4.875 4.87 4.87 0 0 1-4.875 4.875"/></svg>' +
+        const SEARCH_ICON = '<svg viewBox="0 0 20 20" aria-hidden="true"><path fill="currentColor" d="M13.792 12.167h-.856l-.303-.293a7 7 0 0 0 1.7-4.582 7.041 7.041 0 1 0-7.041 7.041 7 7 0 0 0 4.582-1.7l.293.303v.856l5.416 5.406 1.615-1.615zm-6.5 0a4.87 4.87 0 0 1-4.875-4.875 4.87 4.87 0 0 1 4.875-4.875 4.87 4.87 0 0 1 4.875 4.875 4.87 4.87 0 0 1-4.875 4.875"/></svg>';
+        bar.innerHTML = '<div class="elm2-hs-field"><button type="button" class="elm2-hs-toggle" aria-label="Search merged profiles" title="Search merged profiles">' + SEARCH_ICON + '</button>' +
             '<input type="text" placeholder="Search merged profiles" aria-label="Search merged profiles" autocomplete="off">' +
             '<button type="button" class="elm2-hs-clear" aria-label="Clear search" title="Clear search" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button></div>' +
             '<button type="button" class="elm2-hs-next" disabled>Next match</button>' +
@@ -1451,10 +1460,19 @@
         table.parentElement.insertBefore(bar, table);
         const ui = { status: bar.querySelector('.elm2-hs-status'), next: bar.querySelector('.elm2-hs-next'), clear: bar.querySelector('.elm2-hs-clear') };
         const input = bar.querySelector('input[type=text]');
+        const setOpen = (open) => {
+            bar.classList.toggle('open', open);
+            if (open) setTimeout(() => input.focus(), 150);
+            else histClear(ui, input);
+        };
+        bar.querySelector('.elm2-hs-toggle').addEventListener('click', () => setOpen(!bar.classList.contains('open')));
         ui.next.addEventListener('click', () => histAdvance(ui));
         ui.clear.addEventListener('click', () => { histClear(ui, input); input.focus(); });
         input.addEventListener('input', () => { ui.clear.hidden = !input.value && !hs; });
-        input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { ui.clear.hidden = false; histSearch(input.value, ui); } });
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { ui.clear.hidden = false; histSearch(input.value, ui); }
+            else if (e.key === 'Escape') setOpen(false);
+        });
     }
     // Each filter section carries a title="..." attribute that pops a native tooltip on hover
     // anywhere inside it; the section already shows its title, so the attribute is removed.

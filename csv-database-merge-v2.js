@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - Database Merge (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      1.3
+// @version      1.4
 // @description  Adds a "Merge Databases" page to the CSV Database script: combine several exported databases (and this browser's) into one, with a breakdown
 // @author       You
 // @match        https://*.element451.io/*
@@ -21,7 +21,7 @@
     'use strict';
     if (window.__elm451DbMergeLoaded) return;
     window.__elm451DbMergeLoaded = true;
-    const VERSION = '1.3'; // keep in sync with @version
+    const VERSION = '1.4'; // keep in sync with @version
 
     // =========================================================
     // STORED DATABASE AND FILE FORMATS
@@ -427,40 +427,84 @@
     }
 
     // =========================================================
-    // THE PAGE (a new tab, built with DOM calls)
+    // THE PAGE (a new tab, built with DOM calls), Material 3 Expressive in the orange of the settings pane
     // =========================================================
     const CSS = `
-        :root { --primary:#ef6c00; --primary-text:#b34e00; --on-primary:#fff; --container:#fde3cc; --on-container:#5a2800; --surface:#fffbf8; --low:#f7f4f1; --high:#ece7e2;
-                --on-surface:#1a1c20; --variant:#434750; --outline:#73777f; --ease:cubic-bezier(.2,0,0,1); --spring:cubic-bezier(.34,1.56,.64,1); }
-        * { box-sizing: border-box; }
-        body { margin:0; background:var(--surface); color:var(--on-surface); font:400 15px/22px system-ui,'Segoe UI',Roboto,sans-serif; }
-        main { max-width: 880px; margin: 0 auto; padding: 24px 20px 64px; }
-        h1 { margin:0 0 4px; font:500 28px/36px system-ui,'Segoe UI',Roboto,sans-serif; }
-        h2 { margin:28px 0 8px; font:500 20px/28px system-ui,'Segoe UI',Roboto,sans-serif; }
-        p { margin:0 0 12px; color:var(--variant); }
-        .card { background:var(--low); border-radius:24px; padding:20px; margin:0 0 16px; }
-        .drop { display:flex; flex-direction:column; align-items:center; gap:8px; padding:28px; border:2px dashed var(--outline); border-radius:28px; background:var(--low); text-align:center; transition:background-color .2s var(--ease), border-color .2s var(--ease); }
-        .drop.over { background:var(--container); border-color:var(--primary); }
-        .btn { display:inline-flex; align-items:center; justify-content:center; height:40px; padding:0 24px; border:none; border-radius:20px; font:500 14px/20px system-ui,'Segoe UI',Roboto,sans-serif; cursor:pointer; transition:transform .25s var(--spring), border-radius .25s var(--spring), box-shadow .2s var(--ease); }
-        .btn:active { transform:scale(.96); border-radius:12px; }
-        .btn:hover:not(:disabled) { box-shadow:0 1px 2px rgba(0,0,0,.3),0 1px 3px 1px rgba(0,0,0,.15); }
-        .btn:disabled { opacity:.45; cursor:default; }
-        .filled { background:var(--primary); color:var(--on-primary); } .tonal { background:var(--container); color:var(--on-container); }
-        .text { background:transparent; color:var(--primary-text); padding:0 12px; } .text:hover:not(:disabled) { box-shadow:none; background:rgba(239,108,0,.1); }
-        .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
-        table { width:100%; border-collapse:collapse; font-size:14px; line-height:20px; }
-        th { text-align:left; font-weight:500; color:var(--variant); padding:8px 12px; }
-        td { padding:10px 12px; border-top:1px solid var(--high); vertical-align:top; }
-        td.n, th.n { text-align:right; font-variant-numeric:tabular-nums; }
-        .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; margin:0 0 16px; }
-        .stat { background:var(--low); border-radius:20px; padding:14px 18px; animation:pop .4s var(--spring); }
-        .stat b { display:block; font:600 26px/32px system-ui,'Segoe UI',Roboto,sans-serif; color:var(--primary-text); } .stat span { font-size:12px; letter-spacing:.4px; color:var(--variant); }
-        label.check { display:inline-flex; gap:10px; align-items:center; cursor:pointer; }
-        .x { border:none; background:transparent; color:var(--variant); width:32px; height:32px; border-radius:50%; font-size:18px; cursor:pointer; } .x:hover { background:rgba(0,0,0,.08); }
-        .note { font-size:13px; line-height:18px; color:var(--variant); } .ok { color:#1b6e2d; font-weight:500; } .err { color:#b3261e; }
-        @keyframes pop { from { transform:scale(.9); opacity:0; } to { transform:none; opacity:1; } }
-        @media (prefers-color-scheme: dark) { :root { --primary:#ffb77c; --primary-text:#ffb77c; --on-primary:#4a2300; --container:#6a3500; --on-container:#ffdcc2; --surface:#17120d; --low:#1f1914; --high:#2d2620; --on-surface:#ece0d8; --variant:#d3c3b8; --outline:#9c8d82; } }
+        :root { --primary:#ef6c00; --on-primary:#fff; --primary-text:#a64600; --primary-c:#fde3cc; --on-primary-c:#4a2200;
+                --secondary-c:#ebe0d4; --on-secondary-c:#2f2418; --tertiary-c:#dde7c4; --on-tertiary-c:#222d0c; --error-c:#fcdcd8; --on-error-c:#5c1410;
+                --surface:#fffbf8; --low:#f8f2ec; --mid:#f1e9e1; --high:#e9dfd5; --on-surface:#1e1b17; --variant:#4f4538; --outline:#85766a;
+                --ease:cubic-bezier(.2,0,0,1); --spring:cubic-bezier(.34,1.56,.64,1); }
+        @media (prefers-color-scheme: dark) { :root { --primary:#ffb77c; --on-primary:#4a2300; --primary-text:#ffb77c; --primary-c:#6a3500; --on-primary-c:#ffdcc2;
+                --secondary-c:#4b4034; --on-secondary-c:#f0e0d0; --tertiary-c:#3f4a24; --on-tertiary-c:#dde7c4; --error-c:#5c1410; --on-error-c:#fcdcd8;
+                --surface:#17120d; --low:#1f1914; --mid:#251e18; --high:#2f2820; --on-surface:#ece0d8; --variant:#d3c3b8; --outline:#9c8d82; } }
+        * { box-sizing:border-box; }
+        body { margin:0; background:var(--surface); color:var(--on-surface); font:400 16px/24px system-ui,'Segoe UI',Roboto,sans-serif; letter-spacing:.2px; }
+        main { max-width:960px; margin:0 auto; padding:32px 24px 96px; }
+        svg { width:24px; height:24px; fill:currentColor; flex:none; }
+        .hero { display:flex; align-items:center; gap:20px; margin:0 0 28px; }
+        .hero .badge { width:72px; height:72px; display:grid; place-items:center; border-radius:28px; background:var(--primary); color:var(--on-primary); animation:morph 1.2s var(--spring) both; }
+        .hero .badge svg { width:40px; height:40px; }
+        h1 { margin:0; font:600 40px/48px system-ui,'Segoe UI',Roboto,sans-serif; letter-spacing:-.2px; }
+        .sub { margin:2px 0 0; color:var(--variant); font-size:16px; }
+        h2 { margin:36px 0 12px; font:600 22px/28px system-ui,'Segoe UI',Roboto,sans-serif; display:flex; align-items:center; gap:10px; }
+        .note { font-size:14px; line-height:20px; color:var(--variant); }
+        .card { background:var(--low); border-radius:32px; padding:24px; margin:0 0 16px; animation:pop .5s var(--spring) both; }
+        .card ol { margin:8px 0; padding-left:22px; } .card li { margin:2px 0; }
+        .drop { display:flex; flex-direction:column; align-items:center; text-align:center; gap:6px; padding:40px 24px; border-radius:40px; background:var(--primary-c); color:var(--on-primary-c);
+                outline:3px dashed transparent; outline-offset:-10px; transition:border-radius .5s var(--spring), outline-color .2s var(--ease), transform .4s var(--spring); }
+        .drop .ico { width:72px; height:72px; display:grid; place-items:center; border-radius:50%; background:var(--primary); color:var(--on-primary); margin-bottom:8px; }
+        .drop .ico svg { width:36px; height:36px; }
+        .drop strong { font:600 22px/28px system-ui,'Segoe UI',Roboto,sans-serif; }
+        .drop.over { border-radius:56px 24px 56px 24px; outline-color:var(--primary); transform:scale(1.01); }
+        .btn { display:inline-flex; align-items:center; justify-content:center; gap:10px; height:56px; padding:0 28px; border:none; border-radius:28px; font:600 16px/24px system-ui,'Segoe UI',Roboto,sans-serif; cursor:pointer;
+               transition:transform .3s var(--spring), border-radius .35s var(--spring), box-shadow .2s var(--ease), background-color .2s var(--ease); }
+        .btn:hover:not(:disabled) { border-radius:16px; box-shadow:0 1px 2px rgba(0,0,0,.3),0 2px 6px 2px rgba(0,0,0,.15); }
+        .btn:active:not(:disabled) { transform:scale(.96); border-radius:12px; }
+        .btn:disabled { opacity:.38; cursor:default; }
+        .filled { background:var(--primary); color:var(--on-primary); } .tonal { background:var(--primary-c); color:var(--on-primary-c); }
+        .small { height:40px; padding:0 20px; border-radius:20px; font-size:14px; }
+        .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-top:16px; }
+        .list { display:flex; flex-direction:column; gap:3px; }
+        .item { display:flex; align-items:center; gap:16px; padding:16px 20px; background:var(--low); animation:pop .45s var(--spring) both; }
+        .item:first-child { border-radius:28px 28px 8px 8px; } .item:last-child { border-radius:8px 8px 28px 28px; } .item:only-child { border-radius:28px; }
+        .item .lead { width:48px; height:48px; display:grid; place-items:center; border-radius:16px; background:var(--secondary-c); color:var(--on-secondary-c); }
+        .item .lead.mine { background:var(--tertiary-c); color:var(--on-tertiary-c); border-radius:50%; }
+        .item .txt { flex:1; min-width:0; } .item .name { font:600 17px/24px system-ui,'Segoe UI',Roboto,sans-serif; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .icon-btn { width:44px; height:44px; display:grid; place-items:center; border:none; border-radius:50%; background:transparent; color:var(--variant); cursor:pointer; transition:background-color .2s var(--ease), transform .3s var(--spring); }
+        .icon-btn:hover { background:rgba(128,100,70,.16); } .icon-btn:active { transform:scale(.9); }
+        .chips { display:flex; flex-wrap:wrap; gap:8px; }
+        .chip { display:inline-flex; align-items:center; gap:6px; min-height:32px; padding:4px 14px; border-radius:16px; font:500 14px/20px system-ui,'Segoe UI',Roboto,sans-serif; background:var(--secondary-c); color:var(--on-secondary-c); }
+        .chip svg { width:18px; height:18px; } .chip.kept { background:var(--tertiary-c); color:var(--on-tertiary-c); } .chip.merged { background:var(--primary-c); color:var(--on-primary-c); }
+        .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; margin:0 0 16px; }
+        .stat { border-radius:32px; padding:20px 24px; animation:pop .5s var(--spring) both; }
+        .stat b { display:block; font:600 44px/52px system-ui,'Segoe UI',Roboto,sans-serif; letter-spacing:-.5px; } .stat span { font-size:15px; }
+        .s1 { background:var(--primary-c); color:var(--on-primary-c); border-radius:40px 32px 32px 32px; } .s2 { background:var(--secondary-c); color:var(--on-secondary-c); }
+        .s3 { background:var(--tertiary-c); color:var(--on-tertiary-c); } .s4 { background:var(--mid); color:var(--on-surface); } .s4.warn { background:var(--error-c); color:var(--on-error-c); }
+        .src { display:grid; grid-template-columns:1fr auto; gap:8px 16px; align-items:center; }
+        .conf { padding:16px 20px; border-radius:24px; background:var(--mid); margin:0 0 8px; display:flex; flex-direction:column; gap:10px; animation:pop .4s var(--spring) both; }
+        .conf .who { font:600 16px/22px system-ui,'Segoe UI',Roboto,sans-serif; }
+        .scrim { position:fixed; inset:0; background:rgba(0,0,0,.4); display:grid; place-items:center; padding:24px; animation:fade .2s linear; }
+        .dialog { width:min(440px,100%); background:var(--surface); border-radius:36px; padding:28px; animation:pop .45s var(--spring); }
+        .dialog h3 { margin:0 0 12px; font:600 24px/32px system-ui,'Segoe UI',Roboto,sans-serif; } .dialog p { margin:0 0 24px; color:var(--variant); }
+        .dialog .row { justify-content:flex-end; margin-top:0; } .dialog .text { background:transparent; color:var(--primary-text); }
+        .snack { position:fixed; left:50%; bottom:28px; transform:translate(-50%,0); max-width:min(560px,calc(100% - 32px)); background:#322f2b; color:#f5eee8; padding:14px 22px; border-radius:20px; font-size:15px; animation:rise .4s var(--spring); box-shadow:0 4px 12px rgba(0,0,0,.35); }
+        .err { color:#b3261e; font-weight:500; }
+        @keyframes pop { from { transform:scale(.92) translateY(8px); opacity:0; } to { transform:none; opacity:1; } }
+        @keyframes fade { from { opacity:0; } to { opacity:1; } }
+        @keyframes rise { from { transform:translate(-50%,24px); opacity:0; } to { transform:translate(-50%,0); opacity:1; } }
+        @keyframes morph { 0% { border-radius:50%; transform:scale(.6) rotate(-90deg); } 100% { border-radius:28px; transform:none; } }
+        @media (prefers-reduced-motion: reduce) { * { animation:none !important; transition:none !important; } }
     `;
+    const ICON = {
+        merge: 'M17 20.41 18.41 19 15 15.59 13.59 17zM7.5 8H11v5.59L5.59 19 7 20.41l6-6V8h3.5L12 3.5z',
+        upload: 'M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96M14 13v4h-4v-4H7l5-5 5 5z',
+        file: 'M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8zm2 16H8v-2h8zm0-4H8v-2h8zm-3-5V3.5L18.5 9z',
+        db: 'M2 20h20v-4H2zm2-3h2v2H4zM2 4v4h20V4zm4 3H4V5h2zm-4 7h20v-4H2zm2-3h2v2H4z',
+        close: 'M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z',
+        download: 'M5 20h14v-2H5zM19 9h-4V3H9v6H5l7 7z',
+        check: 'M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z',
+        swap: 'M6.99 11 3 15l3.99 4v-3H14v-2H6.99zM21 9l-3.99-4v3H10v2h7.01v3z'
+    };
 
     function openMergePage() {
         const w = window.open('', '_blank');
@@ -474,13 +518,35 @@
             kids.flat().forEach(k => { if (k != null) el.append(k.nodeType ? k : doc.createTextNode(String(k))); });
             return el;
         };
+        const icon = (name) => { const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true'); const path = doc.createElementNS('http://www.w3.org/2000/svg', 'path'); path.setAttribute('d', ICON[name]); svg.appendChild(path); return svg; };
         const fmt = (n) => Number(n).toLocaleString();
         const dmy = (iso) => (/^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '') || []).slice(1).reverse().join('/') || '';
+        const plural = (n, one, many) => fmt(n) + ' ' + (n === 1 ? one : many);
 
         const files = [];             // { name, entries }
         let includeMine = true;
         let result = null;            // output of mergeSources
         const mine = () => api.read();
+
+        // ---- Material dialog and snackbar (instead of the browser's confirm / status text)
+        function ask(title, text, okLabel) {
+            return new Promise(resolve => {
+                const done = (v) => { scrim.remove(); resolve(v); };
+                const scrim = h('div', { class: 'scrim', onclick: (e) => { if (e.target === scrim) done(false); } },
+                    h('div', { class: 'dialog', role: 'dialog', 'aria-modal': 'true' }, h('h3', null, title), h('p', null, text),
+                        h('div', { class: 'row' }, h('button', { class: 'btn small text', type: 'button', onclick: () => done(false) }, 'Cancel'),
+                            h('button', { class: 'btn small filled', type: 'button', onclick: () => done(true) }, okLabel))));
+                doc.body.appendChild(scrim);
+            });
+        }
+        let snackTimer = 0;
+        function snack(text) {
+            doc.querySelectorAll('.snack').forEach(n => n.remove());
+            const n = h('div', { class: 'snack', role: 'status' }, text);
+            doc.body.appendChild(n);
+            w.clearTimeout(snackTimer);
+            snackTimer = w.setTimeout(() => n.remove(), 4200);
+        }
 
         const body = doc.body;
         body.textContent = '';
@@ -489,48 +555,52 @@
 
         const fileInput = h('input', { type: 'file', multiple: true, accept: '.xlsx,.ods,.csv', style: 'display:none' });
         const dropZone = h('div', { class: 'drop' },
+            h('div', { class: 'ico' }, icon('upload')),
             h('strong', null, 'Drop database files here'),
-            h('span', { class: 'note' }, '.xlsx, .ods or .csv, as many as you like'),
-            h('button', { class: 'btn filled', type: 'button', onclick: () => fileInput.click() }, 'Choose files'));
-        const fileList = h('div', { class: 'card' });
-        const rulesNote = h('div', { class: 'card' },
+            h('span', { class: 'note', style: 'color:inherit;opacity:.8' }, '.xlsx, .ods or .csv, as many as you like'),
+            h('button', { class: 'btn filled', type: 'button', style: 'margin-top:12px', onclick: () => fileInput.click() }, 'Choose files'));
+        const sourceList = h('div', { class: 'list' });
+        const sourceNote = h('p', { class: 'note', style: 'margin:10px 4px 0' });
+        const rules = h('div', { class: 'card' },
             h('strong', null, 'What happens when the same pair is in more than one file'),
-            h('p', { class: 'note', style: 'margin:6px 0 4px' }, 'Two entries are the same pair when they have the same two Spark IDs. When that pair is in several files, only one copy is kept:'),
-            h('ol', { class: 'note', style: 'margin:0 0 6px;padding-left:20px' },
+            h('p', { class: 'note', style: 'margin:8px 0 4px' }, 'Two entries are the same pair when they have the same two Spark IDs. When that pair is in several files, only one copy is kept:'),
+            h('ol', { class: 'note' },
                 h('li', null, 'The newest copy wins (the one with the later Scan Date).'),
                 h('li', null, 'If the dates are the same, the merged copy wins.'),
                 h('li', null, 'If it is still a tie, the copy from the file higher in the list wins.')),
             h('p', { class: 'note', style: 'margin:0' }, 'Pairs that appear in only one file are all kept. Nothing in this browser changes until you press "Replace my database".'));
-        const mergeBtn = h('button', { class: 'btn filled', type: 'button', onclick: runMerge }, 'Merge');
+        const mergeBtn = h('button', { class: 'btn filled', type: 'button', onclick: runMerge }, icon('merge'), 'Merge');
         const out = h('div');
 
         main.append(
-            h('h1', null, 'Merge Databases'),
-            h('p', null, 'Combine databases exported by different people or on different days into one.'),
-            dropZone, fileInput, h('h2', null, 'Sources'), fileList, rulesNote,
-            h('div', { class: 'row' }, mergeBtn), out);
+            h('div', { class: 'hero' }, h('div', { class: 'badge' }, icon('merge')),
+                h('div', null, h('h1', null, 'Merge Databases'), h('p', { class: 'sub' }, 'Combine databases from different people or days into one.'))),
+            dropZone, fileInput,
+            h('h2', null, 'Sources'), sourceList, sourceNote,
+            h('div', { class: 'row' }, mergeBtn),
+            h('h2', null, 'How it works'), rules,
+            out);
 
-        function renderFiles() {
-            fileList.textContent = '';
-            const rows = [];
-            const cur = mine();
-            const mineRow = h('tr', null,
-                h('td', null, h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: includeMine, onchange: (e) => { includeMine = e.target.checked; renderFiles(); } }), 'This browser\'s database')),
-                h('td', { class: 'n' }, fmt(cur.length)), h('td', { class: 'n' }, fmt(cur.filter(isMerged).length)), h('td', null, rangeOf(cur)), h('td', null));
-            rows.push(mineRow);
-            files.forEach((f, i) => rows.push(h('tr', null, h('td', null, f.name), h('td', { class: 'n' }, fmt(f.entries.length)),
-                h('td', { class: 'n' }, fmt(f.entries.filter(isMerged).length)), h('td', null, rangeOf(f.entries)),
-                h('td', { class: 'n' }, h('button', { class: 'x', type: 'button', title: 'Remove', 'aria-label': 'Remove ' + f.name, onclick: () => { files.splice(i, 1); result = null; out.textContent = ''; renderFiles(); } }, '×')))));
-            fileList.append(h('table', null,
-                h('thead', null, h('tr', null, h('th', null, 'Source'), h('th', { class: 'n' }, 'Entries'), h('th', { class: 'n' }, 'Merged'), h('th', null, 'Scan dates'), h('th', null))),
-                h('tbody', null, rows)));
-            const usable = (includeMine ? 1 : 0) + files.length;
-            mergeBtn.disabled = usable < 2;
-            if (usable < 2) fileList.append(h('p', { class: 'note', style: 'margin:10px 0 0' }, 'Add at least one file (with this browser\'s database ticked), or two files, to merge.'));
-        }
         function rangeOf(entries) {
             const ds = entries.map(e => e.scanDate).filter(Boolean).sort();
             return ds.length ? (ds[0] === ds[ds.length - 1] ? dmy(ds[0]) : dmy(ds[0]) + ' – ' + dmy(ds[ds.length - 1])) : 'no dates';
+        }
+        const summary = (entries) => plural(entries.length, 'entry', 'entries') + ' · ' + fmt(entries.filter(isMerged).length) + ' merged · ' + rangeOf(entries);
+        function renderFiles() {
+            sourceList.textContent = '';
+            const cur = mine();
+            sourceList.append(h('div', { class: 'item' },
+                h('div', { class: 'lead mine' }, icon('db')),
+                h('div', { class: 'txt' }, h('div', { class: 'name' }, 'This browser\'s database'), h('div', { class: 'note' }, summary(cur))),
+                h('label', { class: 'note', style: 'display:flex;align-items:center;gap:10px;cursor:pointer' }, 'Include',
+                    h('input', { type: 'checkbox', checked: includeMine, style: 'width:22px;height:22px;accent-color:var(--primary)', onchange: (e) => { includeMine = e.target.checked; renderFiles(); } }))));
+            files.forEach((f, i) => sourceList.append(h('div', { class: 'item' },
+                h('div', { class: 'lead' }, icon('file')),
+                h('div', { class: 'txt' }, h('div', { class: 'name', title: f.name }, f.name), h('div', { class: 'note' }, summary(f.entries))),
+                h('button', { class: 'icon-btn', type: 'button', title: 'Remove', 'aria-label': 'Remove ' + f.name, onclick: () => { files.splice(i, 1); result = null; out.textContent = ''; renderFiles(); } }, icon('close')))));
+            const usable = (includeMine ? 1 : 0) + files.length;
+            mergeBtn.disabled = usable < 2;
+            sourceNote.textContent = usable < 2 ? 'Add at least one file (with this browser\'s database included), or two files, to merge.' : '';
         }
 
         async function addFiles(list) {
@@ -541,13 +611,14 @@
             }
             result = null; out.textContent = '';
             renderFiles();
-            if (problems.length) out.append(h('p', { class: 'err' }, problems.join(' · ')));
+            if (problems.length) snack(problems.join(' · '));
         }
         fileInput.addEventListener('change', () => { addFiles(fileInput.files); fileInput.value = ''; });
         ['dragenter', 'dragover'].forEach(t => dropZone.addEventListener(t, (e) => { e.preventDefault(); dropZone.classList.add('over'); }));
         ['dragleave', 'drop'].forEach(t => dropZone.addEventListener(t, (e) => { e.preventDefault(); dropZone.classList.remove('over'); }));
         dropZone.addEventListener('drop', (e) => addFiles(e.dataTransfer.files));
 
+        const stat = (cls, n, text) => h('div', { class: 'stat ' + cls }, h('b', null, fmt(n)), h('span', null, text));
         function runMerge() {
             const sources = [];
             if (includeMine) sources.push({ name: 'This browser', entries: mine() });
@@ -558,41 +629,44 @@
             out.append(
                 h('h2', null, 'Breakdown'),
                 h('div', { class: 'stats' },
-                    stat(result.unique, 'unique pairs'), stat(result.duplicates, 'duplicates combined'),
-                    stat(merged, 'merged'), stat(result.conflicts.length, 'conflicts')),
-                h('div', { class: 'card' }, h('table', null,
-                    h('thead', null, h('tr', null, h('th', null, 'Source'), h('th', { class: 'n' }, 'Entries'), h('th', { class: 'n' }, 'New pairs'), h('th', { class: 'n' }, 'Replaced an older copy'), h('th', { class: 'n' }, 'Already had a better copy'))),
-                    h('tbody', null, result.stats.map(s => h('tr', null, h('td', null, s.name), h('td', { class: 'n' }, fmt(s.count)), h('td', { class: 'n' }, fmt(s.added)), h('td', { class: 'n' }, fmt(s.replaced)), h('td', { class: 'n' }, fmt(s.lost))))))),
-                conflictsCard(),
-                h('div', { class: 'row' },
-                    h('button', { class: 'btn filled', type: 'button', onclick: download }, 'Download merged database (.xlsx)'),
-                    h('button', { class: 'btn tonal', type: 'button', onclick: apply }, 'Replace my database with this')),
-                h('p', { class: 'note', id: 'status', style: 'margin-top:12px' }));
+                    stat('s1', result.unique, 'unique pairs'), stat('s2', result.duplicates, 'duplicates combined'),
+                    stat('s3', merged, 'merged'), stat('s4' + (result.conflicts.length ? ' warn' : ''), result.conflicts.length, 'conflicts')),
+                h('h2', null, 'By source'),
+                h('div', { class: 'list' }, result.stats.map(s => h('div', { class: 'item' },
+                    h('div', { class: 'txt' }, h('div', { class: 'name' }, s.name), h('div', { class: 'note' }, plural(s.count, 'entry', 'entries'))),
+                    h('div', { class: 'chips' },
+                        h('span', { class: 'chip kept' }, icon('check'), plural(s.added, 'new pair', 'new pairs')),
+                        h('span', { class: 'chip' }, icon('swap'), fmt(s.replaced) + ' replaced an older copy'),
+                        h('span', { class: 'chip' }, fmt(s.lost) + ' had a newer copy elsewhere'))))),
+                conflictsBlock(),
+                h('div', { class: 'row', style: 'margin-top:28px' },
+                    h('button', { class: 'btn filled', type: 'button', onclick: download }, icon('download'), 'Download merged database (.xlsx)'),
+                    h('button', { class: 'btn tonal', type: 'button', onclick: apply }, 'Replace my database with this')));
+            out.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
-        const stat = (n, text) => h('div', { class: 'stat' }, h('b', null, fmt(n)), h('span', null, text));
-        function conflictsCard() {
+        function conflictsBlock() {
             const c = result.conflicts;
-            if (!c.length) return h('p', { class: 'note' }, 'No conflicts: no pair was seen in different states.');
-            const shown = c.slice(0, 200);
-            const side = (x) => (x.merged === 'Y' ? 'merged' : 'not merged') + ', ' + (x.dept || '?') + (x.date ? ', ' + dmy(x.date) : '');
-            return h('div', { class: 'card' }, h('strong', null, 'Conflicts'),
-                h('p', { class: 'note' }, 'The same pair was in a different state in two sources. The winner is the copy that was kept.'),
-                h('table', null,
-                    h('thead', null, h('tr', null, h('th', null, 'Pair'), h('th', null, 'Copy in earlier source'), h('th', null, 'Copy in later source'), h('th', null, 'Kept'))),
-                    h('tbody', null, shown.map(x => h('tr', null, h('td', null, x.names), h('td', null, x.a.src + ': ' + side(x.a)), h('td', null, x.b.src + ': ' + side(x.b)), h('td', null, x.winner))))),
-                c.length > shown.length ? h('p', { class: 'note' }, '…and ' + fmt(c.length - shown.length) + ' more.') : null);
+            if (!c.length) return h('div', null, h('h2', null, 'Conflicts'), h('p', { class: 'note' }, 'No conflicts: no pair was in a different state in two sources.'));
+            const side = (x) => (x.merged === 'Y' ? 'merged' : 'not merged') + ' · ' + (x.dept || '?') + (x.date ? ' · ' + dmy(x.date) : '');
+            return h('div', null, h('h2', null, 'Conflicts'),
+                h('p', { class: 'note', style: 'margin:0 4px 12px' }, 'The same pair was in a different state in two sources. The copy marked "kept" is the newest.'),
+                c.slice(0, 200).map(x => h('div', { class: 'conf' }, h('div', { class: 'who' }, x.names),
+                    h('div', { class: 'chips' },
+                        h('span', { class: 'chip' + (x.winner === x.a.src ? ' kept' : '') }, x.winner === x.a.src ? icon('check') : null, x.a.src + ': ' + side(x.a)),
+                        h('span', { class: 'chip' + (x.winner === x.b.src ? ' kept' : '') }, x.winner === x.b.src ? icon('check') : null, x.b.src + ': ' + side(x.b))))),
+                c.length > 200 ? h('p', { class: 'note' }, '…and ' + fmt(c.length - 200) + ' more.') : null);
         }
-        const say = (text, cls) => { const s = doc.getElementById('status'); if (s) { s.textContent = text; s.className = 'note ' + (cls || ''); } };
         function download() {
-            const a = h('a', { href: URL.createObjectURL(api.exportBlob(result.entries)), download: api.fileName ? api.fileName() : 'elm_database.xlsx' });
+            const a = h('a', { href: URL.createObjectURL(api.exportBlob(result.entries)), download: api.fileName() });
             body.appendChild(a); a.click(); a.remove();
-            say('Downloaded ' + fmt(result.unique) + ' entries.', 'ok');
+            snack('Downloaded ' + plural(result.unique, 'entry', 'entries') + '.');
         }
-        function apply() {
+        async function apply() {
             if (!result) return;
-            if (!w.confirm('Replace this browser\'s database with the merged one (' + fmt(result.unique) + ' entries)? This cannot be undone. Download the merged file first if you want a backup.')) return;
+            const ok = await ask('Replace your database?', 'This browser\'s database will become the merged one (' + plural(result.unique, 'entry', 'entries') + '). This cannot be undone, so download the merged file first if you want a backup.', 'Replace');
+            if (!ok) return;
             api.write(result.entries);
-            say('Done: this browser\'s database now has ' + fmt(result.unique) + ' entries.', 'ok');
+            snack('Done: this browser\'s database now has ' + plural(result.unique, 'entry', 'entries') + '.');
             renderFiles();
         }
         renderFiles();

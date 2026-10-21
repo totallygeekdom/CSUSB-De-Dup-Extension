@@ -7,7 +7,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 |---|---|---|
 | UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.191`, shown in the settings pane as `v2.191` |
 | CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.44` |
-| Database Merge (optional) | `csv-database-merge-v2.js` | `@version 1.3`, see [section 17](#17-database-merge) |
+| Database Merge (optional) | `csv-database-merge-v2.js` | `@version 1.4`, see [section 17](#17-database-merge) |
 
 The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
 `Full-Documentation-v127.0.md`) are unchanged and target the old merge page.
@@ -523,7 +523,7 @@ Locally: `npm install` once, `npm run build`, `npm test`; load `dist/extension` 
 
 **Link to the CSV script.** Only two things: the **Merge Databases** button is added inside the Database section of the settings pane, which the CSV script creates (so the button only exists while the CSV script is active), and the current database is read straight from `localStorage.elm_csv_database`, so it can be merged without downloading it first. Everything else, reading `.xlsx` / `.ods` / `.csv` and writing the merged `.xlsx`, is the script's own copy of the CSV script's file code (keep the two in step when the file format changes). It is installed and updated like the others; in the Chrome extension it is a third switch in the popup (greyed while CSV Database is off), and the settings pane lists `Database merge · vX.Y` under the database script's line.
 
-**The page.** The button opens a new tab, built from the Element451 page with DOM calls (no inline scripts, so the site's content-security policy cannot block it). The Element451 tab has to stay open while the merge page is in use.
+**The page.** The button opens a new tab, built from the Element451 page with DOM calls (no inline scripts, so the site's content-security policy cannot block it). It is styled in Material 3 Expressive: a large title with a badge, a big rounded drop zone that morphs its corners on drag-over, sources as list rows with leading icons, tonal stat cards, conflicts as cards with chips (the kept copy has a check), springy motion, a Material dialog for the Replace confirmation and a snackbar for messages; it follows the system's light or dark setting. The Element451 tab has to stay open while the merge page is in use.
 - **Sources**: drop or choose any number of files; a table lists each source with its entry count, merged count and Scan Date range, and a **×** to remove a file. "This browser's database" is a source too, ticked by default; at least two sources are needed.
 - **Rules** (shown on the page): a pair is the same pair when both Spark IDs match, in either order (entries with no Spark IDs fall back to the two contacts' 3-letter names). If it appears more than once, **the most up to date copy wins**: the later Scan Date (a pair's Scan Date moves to the merge day when it is merged, and a dated entry beats an undated one). On the same date a merged copy beats an unmerged one, and after that the source higher in the list stays. The winner keeps its own fields, filling a blank Bolt score from the other copy.
 - **Breakdown** after **Merge**: unique pairs, duplicates combined, merged pairs, conflicts; a per-source table (entries, new pairs, replaced an older copy, already had a better copy); and a conflicts table (the same pair in a different department or merged state in two sources, with which copy was kept; first 200 shown).

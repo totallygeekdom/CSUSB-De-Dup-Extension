@@ -5,8 +5,8 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.185`, shown in the settings pane as `v2.185` (the console logs it as `v2-build-185`) |
-| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.37` |
+| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.186`, shown in the settings pane as `v2.186` |
+| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.38` |
 
 The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
 `Full-Documentation-v127.0.md`) are unchanged and target the old merge page.
@@ -184,7 +184,7 @@ Off: the script stops on those pairs and leaves them on screen, showing the popu
 
 Download / Upload & Replace / Clear Database (added by the CSV script, [section 11](#11-csv-database-v2)).
 
-The pane's header lists the versions in use, which matters when the scripts update themselves in the Chrome extension: `Main script · v2.185` (the UI script), `Database script · v2.37` (added under it by the CSV script, when installed) and `Extension · v1.0.0` (only when running through the extension, which hands the page its version as `window.__elm451Extension` when it registers the scripts). All three use the same `vX.Y` style; the console still logs the main script as `v2-build-185`.
+The pane's header lists the versions in use, which matters when the scripts update themselves in the Chrome extension: `Main script · v2.186` (the UI script), `Database script · v2.38` (added under it by the CSV script, when installed) and `Extension · v1.0.0` (only when running through the extension, which hands the page its version as `window.__elm451Extension` when it registers the scripts). All three use the same `vX.Y` style; the console still logs the main script as `v2-build-185`.
 
 ### 4.9 Hidden setting
 
@@ -425,7 +425,7 @@ Header `DB: N` pill, the Database section of the settings pane, the **Show Datab
 - `[elm2] Skipping to next pair: <reason>`, `[elm2] Auto-merging pair`, `[elm2] Auto-merge not done: <reason>`
 - `[elm2] page jump: direct …` or `… clicking First / Next …`
 - `[elm2] script click on button: "…"` for script-generated clicks, and a warning with a stack trace if one is blocked by the click guard.
-- `CSV Database (new layout) vX.Y loaded`
+- `Element451 UI Perfection (new layout) vX.Y loaded` and `CSV Database (new layout) vX.Y loaded` (the same version numbers as the settings pane)
 
 ---
 

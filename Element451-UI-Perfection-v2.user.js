@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.188
+// @version      2.189
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -28,7 +28,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.188'; // keep in sync with @version
+    const VERSION = '2.189'; // keep in sync with @version
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -1385,14 +1385,6 @@
         const hit = words.filter(w => histWordHits(idx, w)).length;
         return hit >= (words.length >= 3 ? words.length - 1 : words.length);
     }
-    // The first value that contains one of the words, shown in the status line.
-    function histSnippet(rec, words) {
-        const idx = histIndex(rec);
-        const w = words.find(x => histWordHits(idx, x));
-        if (!w) return '';
-        const v = idx.values.find(val => (/^[a-z]+$/.test(w) ? val.split(/[^a-z0-9]+/).some(t => t.startsWith(w)) : val.includes(w)));
-        return v ? (v.length > 60 ? v.slice(0, 60) + '…' : v) : '';
-    }
     function histClearHits() { document.querySelectorAll('.elm2-search-hit').forEach(r => r.classList.remove('elm2-search-hit')); }
     async function histGoTo(page, rowIndex) {
         const pag = document.querySelector('mat-paginator');
@@ -1406,43 +1398,41 @@
         const row = document.querySelectorAll('.bolt-table-rows-wrap bolt-row.cdk-row')[rowIndex];
         if (row) { row.classList.add('elm2-search-hit'); row.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
     }
-    // The scan state of the current search. It is resumable: "Next match" carries on from the record
-    // after the last hit, so a search pauses at each match instead of running to the last page.
+    // The scan state of the current search. The first match is jumped to straight away; the scan then carries
+    // on through the remaining pages in the background, so "Match 1 of 1" can grow to "Match 1 of 3". Matches found
+    // so far are kept (h.matches; h.cursor is the one on screen) for Previous / Next match.
     let hs = null;
-    // Matches found so far are kept (h.matches, h.cursor is the one on screen) so Previous match can go back.
     function histButtons(h, ui) {
         ui.prev.disabled = !(h && h.cursor > 0);
-        ui.next.disabled = !(h && h.matches.length && (h.cursor < h.matches.length - 1 || !h.end));
+        ui.next.disabled = !(h && h.cursor < h.matches.length - 1);
+    }
+    function histStatus(h, ui) {
+        if (h.matches.length) ui.status.textContent = 'Match ' + (h.cursor + 1) + ' of ' + h.matches.length;
     }
     function histShowMatch(h, ui) {
         const m = h.matches[h.cursor];
-        ui.status.textContent = 'Match ' + (h.cursor + 1) + (h.end ? ' of ' + h.matches.length : '') + ': page ' + m.page + ', row ' + (m.row + 1) + (m.snippet ? ' · ' + m.snippet : '');
+        histStatus(h, ui);
+        histButtons(h, ui);
         histGoTo(m.page, m.row);
     }
     function histNext(ui) {
         const h = hs;
-        if (!h || h.busy) return;
-        if (h.cursor < h.matches.length - 1) { h.cursor++; histShowMatch(h, ui); histButtons(h, ui); }
-        else histAdvance(ui);
+        if (h && h.cursor < h.matches.length - 1) { h.cursor++; histShowMatch(h, ui); }
     }
     function histPrev(ui) {
         const h = hs;
-        if (!h || h.busy || h.cursor < 1) return;
-        h.cursor--; histShowMatch(h, ui); histButtons(h, ui);
+        if (h && h.cursor > 0) { h.cursor--; histShowMatch(h, ui); }
     }
-    async function histAdvance(ui) {
+    async function histScan(ui) {
         const h = hs;
-        if (!h || h.busy) return;
+        if (!h) return;
         const run = h.run;
-        const say = (t) => { ui.status.textContent = t; };
-        h.busy = true;
-        ui.next.disabled = true; ui.prev.disabled = true;
         try {
             while (run === histRun) {
                 if (!h.rows || h.i >= h.rows.length) {
                     if (h.end || h.page >= h.pages) { h.end = true; break; }
                     h.page++;
-                    say('Searching page ' + h.page + (h.pagesKnown ? ' of ' + h.pages : '') + '…  ' + h.found + ' found');
+                    if (!h.matches.length) ui.status.textContent = 'Searching page ' + h.page + (h.pagesKnown ? ' of ' + h.pages : '') + '…';
                     const { rows } = await histFetchPage(h.limit, histOffset(histMode, h.page, h.limit));
                     if (run !== histRun) return;
                     const key = rows.length ? JSON.stringify(rows[0]) : '';
@@ -1455,23 +1445,18 @@
                     const rec = h.rows[h.i++];
                     h.scanned++;
                     if (!histMatches(rec, h.words)) continue;
-                    h.found++;
-                    h.matches.push({ page: h.page, row: h.i - 1, snippet: histSnippet(rec, h.words) });
-                    h.cursor = h.matches.length - 1;
-                    histShowMatch(h, ui);
-                    return;
+                    h.matches.push({ page: h.page, row: h.i - 1 });
+                    if (h.matches.length === 1) { h.cursor = 0; histShowMatch(h, ui); } // the first match: go to it
+                    else { histStatus(h, ui); histButtons(h, ui); }                  // later ones just grow the count
                 }
-                if (h.rows.length && h.i >= h.rows.length && h.page >= h.pages) h.end = true;
+                if (h.rows.length && h.page >= h.pages) h.end = true;
                 else await sleep(HIST_DELAY_MS);
             }
-            if (run === histRun) say(h.found ? 'No more matches (' + h.found + ' found, ' + h.scanned + ' records scanned).' : 'No match in ' + h.scanned + ' records (' + h.page + ' pages).');
+            if (run === histRun && !h.matches.length) ui.status.textContent = 'No matches';
         } catch (e) {
             console.log('[elm2] history search failed:', e);
             h.end = true;
-            if (run === histRun) say('Search failed on page ' + h.page + ': ' + e.message);
-        } finally {
-            h.busy = false;
-            if (run === histRun) histButtons(h, ui);
+            if (run === histRun) ui.status.textContent = 'Search failed: ' + e.message;
         }
     }
     async function histSearch(query, ui) {
@@ -1490,9 +1475,9 @@
             return;
         }
         if (run !== histRun) return;
-        hs = { run, words, limit, page: 0, rows: null, i: 0, scanned: 0, found: 0, matches: [], cursor: -1, prevKey: null, end: false, busy: false,
+        hs = { run, words, limit, page: 0, rows: null, i: 0, scanned: 0, found: 0, matches: [], cursor: -1, prevKey: null, end: false,
                pages: st ? Math.min(HIST_MAX_PAGES, st.pages) : HIST_MAX_PAGES, pagesKnown: !!st };
-        histAdvance(ui);
+        histScan(ui);
     }
     function histClear(ui, input) {
         histRun++; hs = null;

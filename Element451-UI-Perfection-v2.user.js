@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.189
+// @version      2.190
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -28,7 +28,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.189'; // keep in sync with @version
+    const VERSION = '2.190'; // keep in sync with @version
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -1406,8 +1406,12 @@
         ui.prev.disabled = !(h && h.cursor > 0);
         ui.next.disabled = !(h && h.cursor < h.matches.length - 1);
     }
+    // The four states: still searching with or without matches ("Searching page 5 of 104…", plus " Match 1 of 1"),
+    // finished with matches ("Match 1 of 3"), and finished with none ("No matches found in 104 pages").
     function histStatus(h, ui) {
-        if (h.matches.length) ui.status.textContent = 'Match ' + (h.cursor + 1) + ' of ' + h.matches.length;
+        const match = h.matches.length ? 'Match ' + (h.cursor + 1) + ' of ' + h.matches.length : '';
+        if (!h.end) ui.status.textContent = 'Searching page ' + h.page + (h.pagesKnown ? ' of ' + h.pages : '') + '…' + (match ? ' ' + match : '');
+        else ui.status.textContent = match || 'No matches found in ' + h.pagesDone + ' page' + (h.pagesDone === 1 ? '' : 's');
     }
     function histShowMatch(h, ui) {
         const m = h.matches[h.cursor];
@@ -1432,12 +1436,12 @@
                 if (!h.rows || h.i >= h.rows.length) {
                     if (h.end || h.page >= h.pages) { h.end = true; break; }
                     h.page++;
-                    if (!h.matches.length) ui.status.textContent = 'Searching page ' + h.page + (h.pagesKnown ? ' of ' + h.pages : '') + '…';
+                    histStatus(h, ui);
                     const { rows } = await histFetchPage(h.limit, histOffset(histMode, h.page, h.limit));
                     if (run !== histRun) return;
                     const key = rows.length ? JSON.stringify(rows[0]) : '';
                     if (!rows.length || key === h.prevKey) { h.end = true; break; } // empty or a repeat: past the last page
-                    h.prevKey = key; h.rows = rows; h.i = 0;
+                    h.prevKey = key; h.rows = rows; h.i = 0; h.pagesDone = h.page;
                     if (h.page === 1) console.log('[elm2] history record sample (strings shortened):', JSON.stringify(rows[0], (k, v) => typeof v === 'string' && v.length > 40 ? v.slice(0, 40) + '…' : v));
                     if (rows.length < h.limit) h.pages = h.page; // a short page is the last
                 }
@@ -1452,7 +1456,7 @@
                 if (h.rows.length && h.page >= h.pages) h.end = true;
                 else await sleep(HIST_DELAY_MS);
             }
-            if (run === histRun && !h.matches.length) ui.status.textContent = 'No matches';
+            if (run === histRun) histStatus(h, ui);
         } catch (e) {
             console.log('[elm2] history search failed:', e);
             h.end = true;
@@ -1475,7 +1479,7 @@
             return;
         }
         if (run !== histRun) return;
-        hs = { run, words, limit, page: 0, rows: null, i: 0, scanned: 0, found: 0, matches: [], cursor: -1, prevKey: null, end: false,
+        hs = { run, words, limit, page: 0, rows: null, i: 0, scanned: 0, found: 0, matches: [], cursor: -1, pagesDone: 0, prevKey: null, end: false,
                pages: st ? Math.min(HIST_MAX_PAGES, st.pages) : HIST_MAX_PAGES, pagesKnown: !!st };
         histScan(ui);
     }

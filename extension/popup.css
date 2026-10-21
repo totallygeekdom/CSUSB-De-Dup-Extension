@@ -31,12 +31,8 @@ body { width: 360px; background: var(--surface); color: var(--on-surface); font:
 #app { position: relative; padding: 8px 16px 16px; min-height: 120px; }
 [hidden] { display: none !important; }
 
-.top { display: flex; align-items: center; justify-content: space-between; height: 56px; }
+.top { display: flex; align-items: center; height: 56px; }
 h1 { margin: 0; font: 500 22px/28px system-ui, 'Segoe UI', Roboto, sans-serif; letter-spacing: 0; }
-.icon-btn { width: 40px; height: 40px; display: grid; place-items: center; border: none; border-radius: 50%; background: transparent; color: var(--on-surface-variant); cursor: pointer; transition: background-color .2s var(--ease), transform .3s var(--spring); }
-.icon-btn:hover { background: color-mix(in srgb, var(--on-surface) 8%, transparent); }
-.icon-btn:active { transform: rotate(45deg) scale(.92); }
-.icon-btn svg { width: 24px; height: 24px; }
 
 /* buttons: full-round, springy press */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 24px; border: none; border-radius: 20px; font: 500 14px/20px system-ui, 'Segoe UI', Roboto, sans-serif; letter-spacing: .1px; cursor: pointer; transition: border-radius .25s var(--spring), box-shadow .2s var(--ease), background-color .2s var(--ease), transform .25s var(--spring); }
@@ -69,7 +65,7 @@ h1 { margin: 0; font: 500 22px/28px system-ui, 'Segoe UI', Roboto, sans-serif; l
 .kv { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; }
 .kv span:nth-child(odd) { color: var(--on-surface-variant); }
 .kv span:nth-child(even) { font-weight: 500; }
-.fine { margin: 8px 4px 0; font-size: 12px; line-height: 16px; letter-spacing: .4px; color: var(--on-surface-variant); }
+.fine { white-space: pre-line; margin: 8px 4px 0; font-size: 12px; line-height: 16px; letter-spacing: .4px; color: var(--on-surface-variant); }
 
 /* script rows with an expressive switch */
 .list { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 4px; }

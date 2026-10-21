@@ -33,11 +33,7 @@ const check = (ok, label) => { console.log((ok ? 'ok   ' : 'FAIL ') + label); if
     check(!(await page.locator('#off-card').isHidden()), 'popup shows the "Allow user scripts" card while the API is off');
     check((await page.locator('.name').allTextContents()).join('|') === 'UI Perfection|CSV Database', 'script names');
 
-    // settings view and back
-    await page.click('#gear');
-    check(await page.locator('#settings-view').isVisible(), 'gear opens the settings view');
-    await page.click('#back');
-    check(await page.locator('#main-view').isVisible(), 'back returns to the main view');
+    check((await page.locator('#foot').innerText()).includes('Extension v'), 'footer shows the extension version');
 
     // update chip: feed a fake newer release through storage and reopen
     await sw.evaluate(() => chrome.storage.local.set({ shellUpdate: { version: '9.9.9', url: 'https://example.com/x.zip' } }));

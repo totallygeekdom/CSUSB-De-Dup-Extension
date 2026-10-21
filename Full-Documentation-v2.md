@@ -5,8 +5,8 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.183`, shown in the settings pane and console as `v2-build-183` |
-| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.35` |
+| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.184`, shown in the settings pane and console as `v2-build-184` |
+| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.36` |
 
 The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
 `Full-Documentation-v127.0.md`) are unchanged and target the old merge page.
@@ -183,6 +183,8 @@ Off: the script stops on those pairs and leaves them on screen, showing the popu
 ### 4.8 Database
 
 Download / Upload & Replace / Clear Database (added by the CSV script, [section 11](#11-csv-database-v2)).
+
+The pane's header lists both builds, which matters when the scripts update themselves in the Chrome extension: `Main script · v2-build-NNN` (the UI script) and, when the CSV script is installed, `Database script · vX.Y` (added under it by the CSV script).
 
 ### 4.9 Hidden setting
 
@@ -464,7 +466,7 @@ Header `DB: N` pill, the Database section of the settings pane, the **Show Datab
 - **Automation rework**: slider None → High → Medium → Low → All (an earlier build had an Applicant stop, removed because applicants can have any score), **Use picks from**, **When done** with the cancel countdown (dialog with draining stepped ring), **Merge countdown** setting, Auto-Skip covering blocked / out-of-range / twins pairs, no popups for skipped pairs, scan mode.
 - **CSV Database v2**: keyed on Spark IDs (the URL no longer changes), names stored as 3-letter prefixes, two-contact columns, header-based import, list matching via the list API's `identities[]`, record-before-skip handshake, right-aligned badges, Show Database UI toggle, shared toast stack.
 - **Website restyles**: orange Material 3 palette sampled from Element's header, Material 3 tabs, compact Advanced Filters panel, list pager (Page box + Go), hover preview on the comparison buttons, gear icon as an SVG.
-- **History search** (2.183): search every page of the History list through the history API (see section 10).
+- **History search** (2.184): search every page of the History list through the history API (see section 10).
 - **Fixes along the way**: stall on identical consecutive names / disabled Next button, twins warning signal count, cut-off date text in filters, clipped filters panel, selected-chip colour specificity.
 
 ## 16. Chrome extension
@@ -480,9 +482,9 @@ The two scripts can also run as an unpacked Chrome extension (Chrome / Edge, Man
 **Auto-update.** When Chrome starts, and once right after the extension is installed or reloaded (no timers, no polling):
 - both scripts are fetched from `https://raw.githubusercontent.com/totallygeekdom/csusb-de-dup-extension/main/` and re-registered only if the file changed (compared by `@version` and content); a copy bundled in the zip is used first and whenever GitHub is unreachable;
 - the latest GitHub Release is checked (`api.github.com/.../releases/latest`); if its tag is newer than the installed extension version, the toolbar icon gets an `↑` badge and the popup shows an **Update available · vX.Y.Z** chip in place of the counters.
-Chrome cannot update an unpacked extension by itself, so the chip downloads the release zip and a sheet lists the steps: unzip over the extension folder, open `chrome://extensions`, click reload. The chip can be dismissed (it returns for a newer version), and while it shows the database / merge counts are in the gear's settings view.
+Chrome cannot update an unpacked extension by itself, so the chip downloads the release zip and a sheet lists the steps: unzip over the extension folder, open `chrome://extensions`, click reload. The chip can be dismissed (it returns for a newer version), and while it shows the database / merge counts move to the footer line.
 
-**Popup.** Title and gear; a stats row (database entries, merges, read from the active Element451 tab's `localStorage`) that the update chip replaces; one row per script with an expressive switch and its version (CSV Database is greyed while UI Perfection is off); a **Reload tab** prompt after a change; a settings view with the counts and versions.
+**Popup.** Just the title (there is no settings cog); a stats row (database entries, merges, read from the active Element451 tab's `localStorage`) that the update chip replaces; one row per script with an expressive switch and its version (CSV Database is greyed while UI Perfection is off); a **Reload tab** prompt after a change; and a footer with the extension version (plus the counts while the chip is showing).
 
 **Both installed.** Each script starts with a guard (`window.__elm451UiPerfectionLoaded`, `window.__elm451CsvDatabaseLoaded`) so a copy in Tampermonkey and the extension never run twice on a page.
 

@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Element451 Dedup Tools</title>
+<link rel="stylesheet" href="popup.css">
+</head>
+<body>
+<main id="app" aria-live="polite">
+  <header class="top">
+    <h1>Element451 Tools</h1>
+    <button id="gear" class="icon-btn" aria-label="Settings" title="Settings">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.14 12.94c.04-.3.06-.61.06-.94s-.02-.64-.07-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.61-.22l-2.39.96a7 7 0 0 0-1.62-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54a7.3 7.3 0 0 0-1.62.94l-2.39-.96a.5.5 0 0 0-.61.22L2.66 8.84a.5.5 0 0 0 .12.64l2.03 1.58c-.05.3-.07.63-.07.94s.02.64.07.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.12.22.37.29.61.22l2.39-.96c.5.38 1.04.7 1.62.94l.36 2.54c.05.24.26.42.5.42h3.84c.24 0 .45-.18.5-.42l.36-2.54a7.3 7.3 0 0 0 1.62-.94l2.39.96c.22.09.49 0 .61-.22l1.92-3.32a.5.5 0 0 0-.12-.64zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2"/></svg>
+    </button>
+  </header>
+
+  <!-- main view -->
+  <section id="main-view">
+    <div id="stats-slot"></div>
+    <div id="off-card" class="card warn" hidden>
+      <div class="card-title">One setting to turn on</div>
+      <p>Chrome needs <b>Allow user scripts</b> switched on for this extension before it can run the scripts. It takes a few seconds, once.</p>
+      <button id="open-ext" class="btn filled">Open the extension page</button>
+    </div>
+    <ul id="scripts" class="list"></ul>
+    <div id="reload-row" class="reload" hidden>
+      <span>Reload the page to apply.</span>
+      <button id="reload" class="btn tonal small">Reload tab</button>
+    </div>
+  </section>
+
+  <!-- settings view -->
+  <section id="settings-view" hidden>
+    <button id="back" class="btn text"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20z"/></svg> Back</button>
+    <div class="card">
+      <div class="card-title">On this page</div>
+      <div id="counts" class="kv"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Versions</div>
+      <div id="versions" class="kv"></div>
+    </div>
+    <p class="fine">Scripts and the extension are checked on GitHub when Chrome starts.</p>
+  </section>
+
+  <!-- update sheet -->
+  <div id="sheet" class="sheet" hidden>
+    <div class="sheet-body">
+      <div class="card-title">Update the extension</div>
+      <ol>
+        <li>The zip is downloading. Unzip it over your extension folder.</li>
+        <li>Open <b>chrome://extensions</b>.</li>
+        <li>Click the reload arrow on this extension.</li>
+      </ol>
+      <div class="row">
+        <button id="sheet-ext" class="btn filled">Open chrome://extensions</button>
+        <button id="sheet-close" class="btn text">Close</button>
+      </div>
+    </div>
+  </div>
+</main>
+<script src="popup.js"></script>
+</body>
+</html>

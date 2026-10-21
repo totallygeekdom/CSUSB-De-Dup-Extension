@@ -5,8 +5,8 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.182`, shown in the settings pane and console as `v2-build-182` |
-| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.34` |
+| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.183`, shown in the settings pane and console as `v2-build-183` |
+| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.35` |
 
 The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
 `Full-Documentation-v127.0.md`) are unchanged and target the old merge page.
@@ -32,6 +32,7 @@ The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
 13. [Known limitations and unverified guesses](#13-known-limitations-and-unverified-guesses)
 14. [Troubleshooting](#14-troubleshooting)
 15. [Change history (summary)](#15-change-history-summary)
+16. [Chrome extension](#16-chrome-extension)
 
 ---
 
@@ -463,5 +464,33 @@ Header `DB: N` pill, the Database section of the settings pane, the **Show Datab
 - **Automation rework**: slider None → High → Medium → Low → All (an earlier build had an Applicant stop, removed because applicants can have any score), **Use picks from**, **When done** with the cancel countdown (dialog with draining stepped ring), **Merge countdown** setting, Auto-Skip covering blocked / out-of-range / twins pairs, no popups for skipped pairs, scan mode.
 - **CSV Database v2**: keyed on Spark IDs (the URL no longer changes), names stored as 3-letter prefixes, two-contact columns, header-based import, list matching via the list API's `identities[]`, record-before-skip handshake, right-aligned badges, Show Database UI toggle, shared toast stack.
 - **Website restyles**: orange Material 3 palette sampled from Element's header, Material 3 tabs, compact Advanced Filters panel, list pager (Page box + Go), hover preview on the comparison buttons, gear icon as an SVG.
-- **History search** (2.182): search every page of the History list through the history API (see section 10).
+- **History search** (2.183): search every page of the History list through the history API (see section 10).
 - **Fixes along the way**: stall on identical consecutive names / disabled Next button, twins warning signal count, cut-off date text in filters, clipped filters panel, selected-chip colour specificity.
+
+## 16. Chrome extension
+
+The two scripts can also run as an unpacked Chrome extension (Chrome / Edge, Manifest V3). Firefox keeps using Tampermonkey with the same `@updateURL` links.
+
+**What it is.** A thin wrapper in `extension/`: a service worker (`background.js`), a Material 3 Expressive popup (`popup.html/.css/.js`), icons and a manifest. The two scripts are not copied by hand: `scripts/build-extension.js` takes them from the repo root, so the userscripts stay the single source of truth.
+
+**How the scripts run.** The service worker registers them with the `chrome.userScripts` API (`world: 'MAIN'`, `runAt: document_idle`, match `https://*.element451.io/*`), the same mechanism Tampermonkey uses, so they run in the page's own JS world exactly as before (they wrap the page's `fetch` / `XMLHttpRequest` and read Angular internals). Settings, the database and the merge counter stay in the page's `localStorage`, so the in-page settings pane works unchanged.
+
+**One setting to turn on.** Chrome gates that API: Chrome 138+ needs **Allow user scripts** on the extension's details page (`chrome://extensions` → Details); Chrome 120-137 needs Developer mode. Tampermonkey needs the same switch. Until it is on, the popup shows a card with a button that opens the extension page.
+
+**Auto-update.** When Chrome starts, and once right after the extension is installed or reloaded (no timers, no polling):
+- both scripts are fetched from `https://raw.githubusercontent.com/totallygeekdom/csusb-de-dup-extension/main/` and re-registered only if the file changed (compared by `@version` and content); a copy bundled in the zip is used first and whenever GitHub is unreachable;
+- the latest GitHub Release is checked (`api.github.com/.../releases/latest`); if its tag is newer than the installed extension version, the toolbar icon gets an `↑` badge and the popup shows an **Update available · vX.Y.Z** chip in place of the counters.
+Chrome cannot update an unpacked extension by itself, so the chip downloads the release zip and a sheet lists the steps: unzip over the extension folder, open `chrome://extensions`, click reload. The chip can be dismissed (it returns for a newer version), and while it shows the database / merge counts are in the gear's settings view.
+
+**Popup.** Title and gear; a stats row (database entries, merges, read from the active Element451 tab's `localStorage`) that the update chip replaces; one row per script with an expressive switch and its version (CSV Database is greyed while UI Perfection is off); a **Reload tab** prompt after a change; a settings view with the counts and versions.
+
+**Both installed.** Each script starts with a guard (`window.__elm451UiPerfectionLoaded`, `window.__elm451CsvDatabaseLoaded`) so a copy in Tampermonkey and the extension never run twice on a page.
+
+**Build and release.** `.github/workflows/extension.yml`:
+- every push and pull request: `node scripts/build-extension.js` (syntax-checks the scripts, writes `dist/extension/` and `dist/elm451-dedup-tools-v<version>.zip`), then `npm test` (`scripts/smoke-test.js`: loads the unpacked extension in Chromium, checks the popup, the update chip, then switches the API on and checks both scripts register in the MAIN world and run on an `element451.io` page, and that a toggle stops one), and the zip is kept as a workflow artifact;
+- a tag `vX.Y.Z`: the same, with the version taken from the tag, then `gh release create` publishes the zip as a GitHub Release.
+Locally: `npm install` once, `npm run build`, `npm test`; load `dist/extension` with **Load unpacked**. `npm run icons` re-renders the icons.
+
+**Install.** Download the zip from Releases, unzip it, open `chrome://extensions`, turn on Developer mode, **Load unpacked** and pick the folder, then open the extension's **Details** and turn on **Allow user scripts**. Reload your Element451 tab.
+
+**Limits / unverified.** The end-to-end test switches the API on through `chrome.developerPrivate` (what the toggle does), not by clicking it; the GitHub fetches (scripts and releases) were not exercised in CI; the first release has to be tagged by hand.

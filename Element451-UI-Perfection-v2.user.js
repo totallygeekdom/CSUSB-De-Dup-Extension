@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.187
+// @version      2.188
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -28,7 +28,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.187'; // keep in sync with @version
+    const VERSION = '2.188'; // keep in sync with @version
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -1724,6 +1724,19 @@
         if (text.includes('high')) return 'high';
         return null;
     }
+    // Bolt's score chip reads "Error" when its AI analysis failed (tooltip: "AI analysis merge guidance references an
+    // unknown user id."). The pair then has no Bolt picks to lean on, so the script stops on it: no resolution, no merge,
+    // no skip, even with Auto-Skip on. It is left on screen for a person.
+    const scoreIsError = () => getScoreChips().some(c => !chipLevel(c) && /error/i.test(c.textContent));
+    let errorStopShownFor = '';
+    function stopOnBoltError() {
+        resolutionAttempted = true;
+        const key = getPairKey();
+        if (errorStopShownFor === key) return;
+        errorStopShownFor = key;
+        console.log('[elm2] Stopped: Bolt analysis error, left for you');
+        if (toastsEnabled()) showMergeNotice('Stop: Bolt error', true);
+    }
     function getScoreChipLevel() {
         const chips = getScoreChips();
         for (const chip of chips) { const lvl = chipLevel(chip); if (lvl) return lvl; }
@@ -2881,6 +2894,7 @@
     function mergeReadiness(key) {
         if (getPairKey() !== key) return { ok: false, reason: 'the pair changed' };
         if (getAllBlockers().length > 0) return { ok: false, reason: 'the pair is blocked' };
+        if (scoreIsError()) return { ok: false, reason: "Bolt's analysis errored" };
         // A conflicting row with no selected side (Bolt left it blank and a rule applied but could not
         // decide) means a human has to look: the pair is not merged.
         const unresolved = getDiffRows().filter(r => r.isConflict && !r.nativeSide && !r.otherSelected);
@@ -3102,6 +3116,7 @@
             engagementOpenedFor = '';
             conflictWarningShown = false;
             appealWarningShown = false;
+            errorStopShownFor = '';
             previewPicks(null);
             cancelAutoMerge();
             delete document.body.dataset.csvDept;
@@ -3130,6 +3145,10 @@
         // made no picks on this pair).
         const bolt = getDiffRows().filter(r => r.element.dataset.elm2AiSide).length;
         if (bolt === 0 && Date.now() - pairFirstSeenAt < 3000) return;
+        // Bolt's score chip decides two things: whether the analysis errored (stop on the pair) and, at the Low /
+        // Medium levels, whether it is in range. It can render a moment after the field rows, so wait for it.
+        if (!getScoreChips().length && Date.now() - pairFirstSeenAt < 3000) return;
+        if (scoreIsError()) { stopOnBoltError(); return; }
         // At the Low / Medium Auto-Apply levels the decision depends on Bolt's score, which can
         // render a moment after the field rows: wait for it (up to 3s) before deciding.
         const lvl = CFG.RANGE_LEVEL;

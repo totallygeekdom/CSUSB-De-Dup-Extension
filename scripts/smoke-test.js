@@ -54,6 +54,7 @@ const check = (ok, label) => { console.log((ok ? 'ok   ' : 'FAIL ') + label); if
     await ext.goto('chrome://extensions');
     await ext.evaluate((extId) => chrome.developerPrivate.updateExtensionConfiguration({ extensionId: extId, userScriptsAccess: true }), id);
     const syncVia = (msg) => page.evaluate((m) => new Promise(r => chrome.runtime.sendMessage(m, r)), msg);
+    await sw.evaluate(() => chrome.storage.local.remove('cache')); // whatever the install-time GitHub check stored (online runs)
     check((await syncVia({ type: 'sync' })).ok === true, 'userScripts API available once allowed, scripts registered');
     const registered = await sw.evaluate(async () => (await chrome.userScripts.getScripts()).map(s => s.id + ':' + s.world).sort().join(','));
     check(registered === 'csv:MAIN,ui:MAIN', 'both scripts registered in the MAIN world (' + registered + ')');
@@ -64,6 +65,23 @@ const check = (ok, label) => { console.log((ok ? 'ok   ' : 'FAIL ') + label); if
     await site.waitForFunction(() => window.__elm451UiPerfectionLoaded && window.__elm451CsvDatabaseLoaded, null, { timeout: 15000 }).catch(() => {});
     const on = await flags();
     check(on.ui && on.csv, 'both scripts ran on an element451.io page');
+    // newest wins: an older copy in the cache (what GitHub's main branch may hold) must not replace the bundled
+    // one, a newer one must
+    await sw.evaluate(() => chrome.storage.local.set({ cache: { ui: { code: '// @version 1.0\nwindow.__old = 1;', version: '1.0' } } }));
+    await syncVia({ type: 'sync' });
+    await site.reload();
+    await site.waitForFunction(() => window.__elm451UiPerfectionLoaded, null, { timeout: 15000 }).catch(() => {});
+    check(await site.evaluate(() => !window.__old && !!window.__elm451UiPerfectionLoaded), 'an older cached script does not replace the bundled one');
+    await sw.evaluate(() => chrome.storage.local.set({ cache: { ui: { code: '// @version 999.0\nwindow.__newer = 1;', version: '999.0' } } }));
+    await syncVia({ type: 'sync' });
+    await site.reload();
+    await site.waitForFunction(() => window.__newer, null, { timeout: 15000 }).catch(() => {});
+    check(await site.evaluate(() => !!window.__newer && !window.__elm451UiPerfectionLoaded), 'a newer cached script replaces the bundled one');
+    await sw.evaluate(() => chrome.storage.local.remove('cache'));
+    await syncVia({ type: 'sync' });
+    await site.reload();
+    await site.waitForFunction(() => window.__elm451UiPerfectionLoaded && window.__elm451CsvDatabaseLoaded, null, { timeout: 15000 }).catch(() => {});
+
     // the in-page settings pane lists main script, database script and extension versions
     await site.click('#elm-settings-btn');
     await site.waitForFunction(() => document.querySelectorAll('#elm-settings-pane .settings-build').length >= 3, null, { timeout: 15000 }).catch(() => {});

@@ -33,11 +33,14 @@ async function userScriptsAvailable() {
   try { await chrome.userScripts.getScripts(); return true; } catch (e) { return false; }
 }
 
-// The code that runs: the copy fetched from GitHub if there is one, otherwise the one bundled in the zip.
+// The code that runs: whichever has the higher @version, the copy fetched from GitHub or the one bundled in
+// the zip (so a newer zip is never held back by an older cached copy, nor an older GitHub copy replace a newer
+// bundled one, e.g. while GitHub's main branch is behind the zip).
 async function codeFor(script, cache) {
-  if (cache[script.id] && cache[script.id].code) return cache[script.id];
   const code = await (await fetch(chrome.runtime.getURL('scripts/' + script.file))).text();
-  return { code, version: versionOf(code), bundled: true };
+  const bundled = { code, version: versionOf(code), bundled: true };
+  const cached = cache[script.id];
+  return cached && cached.code && !newer(bundled.version, cached.version) ? cached : bundled;
 }
 
 async function syncScripts() {

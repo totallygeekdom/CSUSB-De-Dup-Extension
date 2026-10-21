@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.44
+// @version      2.46
 // @description  Tracks duplicate entries in a database stored in browser localStorage (exports an .xlsx spreadsheet) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -35,7 +35,7 @@
     if (window.__elm451CsvDatabaseLoaded) return;
     window.__elm451CsvDatabaseLoaded = true;
 
-    const VERSION = '2.44'; // keep in sync with @version
+    const VERSION = '2.46'; // keep in sync with @version
     const STORAGE_KEY = 'elm_csv_database';
     const SHOW_API_STATUS_TOAST = true;
     const UI_KEY = 'elm_show_db_ui';
@@ -98,6 +98,15 @@
         .settings-action-btn:focus-visible { outline: 2px solid var(--md-primary, #ef6c00); outline-offset: 2px; }
         .settings-action-btn.danger { background: transparent; border: 1px solid #73777f; color: #b3261e; }
         .settings-action-btn.danger:hover { background: rgba(179, 38, 30, .08); box-shadow: none; }
+        /* the Database section's buttons as M3 Expressive list rows: separate containers 2px apart, large outer corners */
+        #elm-settings-db-section { display: flex; flex-direction: column; gap: 2px; }
+        #elm-settings-db-section .settings-action-btn { justify-content: flex-start; height: 56px; margin: 0; padding: 0 16px; border: none; border-radius: 6px; background: var(--md-item-container, #fffbf8); color: var(--md-on-surface, #1a1c20); box-shadow: none; }
+        #elm-settings-db-section .settings-action-btn:first-of-type { border-radius: 20px 20px 6px 6px; }
+        #elm-settings-db-section .settings-action-btn:last-of-type { border-radius: 6px 6px 20px 20px; }
+        #elm-settings-db-section .settings-action-btn:hover { background: color-mix(in srgb, var(--md-primary, #ef6c00) 8%, var(--md-item-container, #fffbf8)); box-shadow: none; }
+        #elm-settings-db-section .settings-action-btn svg { color: var(--md-primary-text, #b34e00); }
+        #elm-settings-db-section .settings-action-btn.danger { color: var(--md-error, #b3261e); }
+        #elm-settings-db-section .settings-action-btn.danger svg { color: inherit; }
         #elm-db-upload-input { display: none; }
         /* "Show Database UI" off: hide the header counter and the list-view chips only */
         body.csv-db-ui-off #elm-db-size-badge, body.csv-db-ui-off .csv-dept-badge { display: none !important; }
@@ -1112,7 +1121,10 @@
         const row = document.createElement('div');
         row.className = 'setting-row';
         row.innerHTML = '<label>Show Database UI</label><label class="elm-toggle-switch"><input type="checkbox" id="elm-show-db-ui"><span class="elm-toggle-slider"></span></label>';
-        anchor.insertAdjacentElement('afterend', row);
+        // its own list container when the pane uses them (M3 Expressive list), else right after the Highlight Rows row
+        const item = anchor.closest('.elm-item');
+        if (item) { const box = document.createElement('div'); box.className = 'elm-item'; box.appendChild(row); item.insertAdjacentElement('afterend', box); }
+        else anchor.insertAdjacentElement('afterend', row);
         const uiToggle = document.getElementById('elm-show-db-ui');
         uiToggle.checked = showDbUi();
         uiToggle.addEventListener('change', () => {

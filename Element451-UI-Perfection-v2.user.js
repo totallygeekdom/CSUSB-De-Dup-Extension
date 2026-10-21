@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.191
+// @version      2.192
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -28,7 +28,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.191'; // keep in sync with @version
+    const VERSION = '2.192'; // keep in sync with @version
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -618,6 +618,15 @@
         #elm-settings-close:focus-visible { outline: 2px solid var(--md-primary); }
         #elm-settings-pane .settings-body { padding: 0 24px 24px; }
         #elm-settings-pane .settings-section-title { font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: var(--md-primary-text); text-transform: none; margin: 24px 0 4px; }
+        /* M3 Expressive list: each setting is its own container, 2px apart; the first and last of a group get the large outer corners */
+        #elm-settings-pane .elm-list { display: flex; flex-direction: column; gap: 2px; }
+        #elm-settings-pane .elm-item { background: var(--md-item-container, #fffbf8); padding: 4px 16px 6px; border-radius: 6px; }
+        #elm-settings-pane .elm-item:first-child { border-radius: 20px 20px 6px 6px; }
+        #elm-settings-pane .elm-item:last-child { border-radius: 6px 6px 20px 20px; }
+        #elm-settings-pane .elm-item:only-child { border-radius: 20px; }
+        #elm-settings-pane .elm-item .setting-row { padding: 4px 0; }
+        #elm-settings-pane .elm-item .elm-level-desc { margin: 0 0 4px; min-height: 0; }
+        #elm-settings-pane .elm-item .elm-level-desc:empty { display: none; }
         #elm-settings-pane .setting-row { display: flex; justify-content: space-between; align-items: center; min-height: 56px; padding: 8px 0; border: none; gap: 16px; }
         #elm-settings-pane .setting-row label { font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--md-on-surface); }
         /* outlined select */
@@ -3406,6 +3415,8 @@
             </div>
             <div class="settings-body">
                 <div class="settings-section-title">Automation</div>
+                <div class="elm-list">
+                <div class="elm-item">
                 <div class="setting-row elm-slider-head"><label>Pairs in range</label><span id="elm-apply-level-label" class="elm-level-label"></span></div>
                 <div class="elm-slider">
                     <div class="m3s" id="elm-m3s">
@@ -3418,18 +3429,24 @@
                     <div class="m3s-labels"><span style="--i:0">None</span><span style="--i:1">High</span><span style="--i:2">Medium</span><span style="--i:3">Low</span><span style="--i:4">All</span></div>
                 </div>
                 <div id="elm-apply-level-desc" class="elm-level-desc"></div>
+                </div>
+                <div class="elm-item">
                 <div class="setting-row elm-seg-head"><label>Use picks from</label></div>
                 <div class="elm-seg" id="elm-use-picks" role="radiogroup" aria-label="Use picks from">
                     <button type="button" role="radio" data-v="bolt">Bolt's</button>
                     <button type="button" role="radio" data-v="ours">Ours</button>
                 </div>
                 <div id="elm-use-picks-desc" class="elm-level-desc"></div>
+                </div>
+                <div class="elm-item">
                 <div class="setting-row elm-seg-head"><label>When done</label></div>
                 <div class="elm-seg" id="elm-when-done" role="radiogroup" aria-label="When done">
                     <button type="button" role="radio" data-v="wait">Wait for me</button>
                     <button type="button" role="radio" data-v="merge">Merge</button>
                 </div>
                 <div id="elm-when-done-desc" class="elm-level-desc"></div>
+                </div>
+                <div class="elm-item">
                 <div class="setting-row" id="elm-countdown-row">
                     <label for="elm-merge-countdown">Merge countdown</label>
                     <select id="elm-merge-countdown">
@@ -3438,15 +3455,29 @@
                         <option value="10">10 seconds</option><option value="15">15 seconds</option>
                     </select>
                 </div>
+                </div>
+                <div class="elm-item">
                 <div class="setting-row"><label>Auto-Skip</label>${toggleHtml('elm-auto-skip-blocked')}</div>
                 <div class="elm-level-desc elm-skip-desc">Skips blocked, out-of-range and possible-twins pairs with no popup. Off: stops on them instead.</div>
+                </div>
+                <div class="elm-item">
                 <div class="setting-row"><label>Next after merge</label>${toggleHtml('elm-next-after-merge')}</div>
                 <div class="elm-level-desc elm-next-desc">After a merge (yours or an auto-merge), presses "Next duplicate" on the "Merge completed" card, and hides Element\'s own "Skip merge completion screen" switches (which would remove that card).</div>
+                </div>
+                </div>
                 <div class="settings-section-title">Display</div>
+                <div class="elm-list">
+                <div class="elm-item">
                 <div class="setting-row"><label>Highlight Rows</label>${toggleHtml('elm-highlight-rows')}</div>
+                </div>
+                <div class="elm-item">
                 <div class="setting-row"><label>Toasts</label>${toggleHtml('elm-outcome-toasts')}</div>
                 <div class="elm-level-desc elm-toast-desc">Short "Merge: 2/3" and "Skip: Appeal" toasts. Always on while Auto-Skip or auto-merge is on; always off when no pairs are in range (slider on None).</div>
+                </div>
+                </div>
                 <div class="settings-section-title">Department</div>
+                <div class="elm-list">
+                <div class="elm-item">
                 <div class="setting-row">
                     <label>Allowed Department</label>
                     <select id="elm-allowed-department">
@@ -3455,6 +3486,8 @@
                         <option value="Grad/IA">Grad/IA</option>
                         <option value="None">None</option>
                     </select>
+                </div>
+                </div>
                 </div>
             </div>
         `;

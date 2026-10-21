@@ -19,7 +19,7 @@ chip). Two v2 scripts target it, plus an optional third that merges databases:
 |---|---|---|
 | UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.191` (shown in the settings pane) |
 | CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.44` |
-| Database Merge (optional, pairs with CSV Database) | `csv-database-merge-v2.js` | `@version 1.4` |
+| Database Merge (optional, pairs with CSV Database) | `csv-database-merge-v2.js` | `@version 1.5` |
 
 **Full documentation: [`Full-Documentation-v2.md`](Full-Documentation-v2.md)** (architecture, every setting,
 the resolution rules, auto-merge, every website restyle, the database format, limitations).

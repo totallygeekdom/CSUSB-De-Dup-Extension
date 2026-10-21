@@ -64,6 +64,11 @@ const check = (ok, label) => { console.log((ok ? 'ok   ' : 'FAIL ') + label); if
     await site.waitForFunction(() => window.__elm451UiPerfectionLoaded && window.__elm451CsvDatabaseLoaded, null, { timeout: 15000 }).catch(() => {});
     const on = await flags();
     check(on.ui && on.csv, 'both scripts ran on an element451.io page');
+    // the in-page settings pane lists main script, database script and extension versions
+    await site.click('#elm-settings-btn');
+    await site.waitForFunction(() => document.querySelectorAll('#elm-settings-pane .settings-build').length >= 3, null, { timeout: 15000 }).catch(() => {});
+    const lines = await site.$$eval('#elm-settings-pane .settings-build', els => els.map(e => e.textContent));
+    check(lines.length === 3 && /^Main script · v\d+\.\d+$/.test(lines[0]) && /^Database script · v\d+\.\d+$/.test(lines[1]) && /^Extension · v\d+\.\d+\.\d+$/.test(lines[2]), 'settings pane lists the three versions (' + lines.join(' | ') + ')');
     await syncVia({ type: 'toggle', id: 'csv', enabled: false });
     await site.reload();
     await site.waitForFunction(() => window.__elm451UiPerfectionLoaded, null, { timeout: 15000 }).catch(() => {});

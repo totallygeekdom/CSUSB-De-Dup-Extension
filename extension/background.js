@@ -47,7 +47,9 @@ async function syncScripts() {
     try { await chrome.userScripts.unregister({ ids: [script.id] }); } catch (e) { /* not registered yet */ }
     if (enabled[script.id] === false) continue;
     const { code } = await codeFor(script, cache);
-    await chrome.userScripts.register([{ id: script.id, matches: MATCHES, js: [{ code }], runAt: 'document_idle', world: 'MAIN' }]);
+    // the first snippet tells the page which extension version is running (the scripts show it in their settings pane)
+    const ver = JSON.stringify(chrome.runtime.getManifest().version);
+    await chrome.userScripts.register([{ id: script.id, matches: MATCHES, js: [{ code: 'window.__elm451Extension = ' + ver + ';' }, { code }], runAt: 'document_idle', world: 'MAIN' }]);
   }
   return true;
 }

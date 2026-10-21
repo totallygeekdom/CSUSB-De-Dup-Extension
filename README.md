@@ -19,7 +19,7 @@ chip). Two v2 scripts target it, plus an optional third that merges databases:
 |---|---|---|
 | UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.191` (shown in the settings pane) |
 | CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.44` |
-| Database Merge (optional, pairs with CSV Database) | `csv-database-merge-v2.js` | `@version 1.1` |
+| Database Merge (optional, pairs with CSV Database) | `csv-database-merge-v2.js` | `@version 1.2` |
 
 **Full documentation: [`Full-Documentation-v2.md`](Full-Documentation-v2.md)** (architecture, every setting,
 the resolution rules, auto-merge, every website restyle, the database format, limitations).
@@ -65,7 +65,7 @@ the resolution rules, auto-merge, every website restyle, the database format, li
   appears while the CSV Database script is active), opens a new tab where you add as many exported databases as you like
   (`.xlsx`, `.ods`, `.csv`, or this browser's stored one without downloading it first), merge them, read a breakdown
   (unique pairs, duplicates combined, what each file contributed, conflicts and who won), then download the merged
-  `.xlsx` or replace this browser's database with it. A merged pair beats an unmerged one, then the later Scan Date wins.
+  `.xlsx` or replace this browser's database with it. When a pair is in more than one source, the most up to date copy (the later Scan Date) wins.
 
 ### Limitations (details in the full documentation)
 

@@ -7,7 +7,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 |---|---|---|
 | UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.191`, shown in the settings pane as `v2.191` |
 | CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.44` |
-| Database Merge (optional) | `csv-database-merge-v2.js` | `@version 1.1`, see [section 17](#17-database-merge) |
+| Database Merge (optional) | `csv-database-merge-v2.js` | `@version 1.2`, see [section 17](#17-database-merge) |
 
 The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
 `Full-Documentation-v127.0.md`) are unchanged and target the old merge page.
@@ -525,7 +525,7 @@ Locally: `npm install` once, `npm run build`, `npm test`; load `dist/extension` 
 
 **The page.** The button opens a new tab, built from the Element451 page with DOM calls (no inline scripts, so the site's content-security policy cannot block it). The Element451 tab has to stay open while the merge page is in use.
 - **Sources**: drop or choose any number of files; a table lists each source with its entry count, merged count and Scan Date range, and a **×** to remove a file. "This browser's database" is a source too, ticked by default; at least two sources are needed.
-- **Rules** (shown on the page): a pair is the same pair when both Spark IDs match, in either order (entries with no Spark IDs fall back to the two contacts' 3-letter names). If it appears more than once, a merged pair beats an unmerged one (a merge is final), then the later Scan Date wins (a dated entry beats an undated one), and on a tie the source higher in the list stays. The winner keeps its own fields, filling a blank Bolt score from the other copy.
+- **Rules** (shown on the page): a pair is the same pair when both Spark IDs match, in either order (entries with no Spark IDs fall back to the two contacts' 3-letter names). If it appears more than once, **the most up to date copy wins**: the later Scan Date (a pair's Scan Date moves to the merge day when it is merged, and a dated entry beats an undated one). On the same date a merged copy beats an unmerged one, and after that the source higher in the list stays. The winner keeps its own fields, filling a blank Bolt score from the other copy.
 - **Breakdown** after **Merge**: unique pairs, duplicates combined, merged pairs, conflicts; a per-source table (entries, new pairs, replaced an older copy, already had a better copy); and a conflicts table (the same pair in a different department or merged state in two sources, with which copy was kept; first 200 shown).
 - **Result**: **Download merged database (.xlsx)** (same format as the CSV script's export) and **Replace my database with this** (asks first, then writes `elm_csv_database`; the header counter follows within a second). Nothing in the browser changes until Replace is pressed.
 

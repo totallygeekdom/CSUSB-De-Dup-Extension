@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.190
+// @version      2.191
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -28,7 +28,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.190'; // keep in sync with @version
+    const VERSION = '2.191'; // keep in sync with @version
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -1365,16 +1365,28 @@
     // instead. One word matches anywhere ("Last" or "First" finds First Last); two words must both
     // match ("Last First" finds First Last); with three or more words one may be missing
     // ("First Middle Last" finds First Last).
+    // Who did the merge must not match: fields that name the reviewer are skipped (by key name), as is any value
+    // equal to a reviewer name shown in the table's "who" column (collected from the page as it is browsed).
+    // (Not a plain "user" key: in Element451's API the contacts themselves are "users".)
+    const HIST_SKIP_KEYS = /^(actor|who|reviewer|performer|initiator|author|operator|creator)(_?(id|name|email))?$|(^|_)(by|merged_?by|created_?by|performed_?by|updated_?by|reviewed_?by)$|^(ai_analysis|feedback)$/i;
+    const histReviewers = new Set();
+    function noteHistReviewers() {
+        document.querySelectorAll('.bolt-table-rows-wrap .cdk-column-who .user-name').forEach(el => {
+            const n = el.textContent.trim().toLowerCase();
+            if (n) histReviewers.add(n);
+        });
+    }
     function histIndex(rec) {
         const values = [], tokens = [];
         (function walk(o) {
             if (o === null || o === undefined) return;
             if (typeof o === 'string' || typeof o === 'number') {
                 const v = String(o).toLowerCase();
+                if (histReviewers.has(v.trim())) return; // the reviewer's name
                 values.push(v);
                 v.split(/[^a-z0-9]+/).forEach(t => { if (t) tokens.push(t); });
             } else if (typeof o === 'object') {
-                Object.keys(o).forEach(k => { if (k !== 'ai_analysis' && k !== 'feedback') walk(o[k]); });
+                Object.keys(o).forEach(k => { if (!HIST_SKIP_KEYS.test(k)) walk(o[k]); });
             }
         })(rec);
         return { values, tokens };
@@ -1467,6 +1479,7 @@
         const words = query.toLowerCase().split(/\s+/).filter(Boolean);
         const run = ++histRun;
         histClearHits();
+        noteHistReviewers();
         hs = null;
         ui.next.disabled = true; ui.prev.disabled = true;
         if (!words.length) { ui.status.textContent = 'Type a name, email or Spark ID.'; return; }

@@ -13,12 +13,13 @@ The older scripts for the classic merge page are documented separately in [`READ
 
 Element451 replaced the classic merge page with a redesigned, AI-assisted **Deduplication** review
 queue (a queue table plus a side panel with a field-by-field diff form, Bolt AI picks and a score
-chip). Two v2 scripts target it:
+chip). Two v2 scripts target it, plus an optional third that merges databases:
 
 | Script | File | Current version |
 |---|---|---|
 | UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.191` (shown in the settings pane) |
-| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.41` |
+| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.44` |
+| Database Merge (optional, pairs with CSV Database) | `csv-database-merge-v2.js` | `@version 1.1` |
 
 **Full documentation: [`Full-Documentation-v2.md`](Full-Documentation-v2.md)** (architecture, every setting,
 the resolution rules, auto-merge, every website restyle, the database format, limitations).
@@ -60,6 +61,12 @@ the resolution rules, auto-merge, every website restyle, the database format, li
   and imports `.xlsx`, `.ods` or `.csv` (columns are read by header name so older files still load), and has a **Show Database UI** toggle (under
   Display). Before every auto-skip the main script asks it to record the pair first.
 
+- **Database Merge** (optional): a **Merge Databases** button in the settings pane, under the Database section (it only
+  appears while the CSV Database script is active), opens a new tab where you add as many exported databases as you like
+  (`.xlsx`, `.ods`, `.csv`, or this browser's stored one without downloading it first), merge them, read a breakdown
+  (unique pairs, duplicates combined, what each file contributed, conflicts and who won), then download the merged
+  `.xlsx` or replace this browser's database with it. A merged pair beats an unmerged one, then the later Scan Date wins.
+
 ### Limitations (details in the full documentation)
 
 - Developed against saved HTML, mock pages and live feedback; the score-chip text, the History search box placement and the First name / Last name row labels are inferred. The merge counter is hidden by default (`localStorage.elm_show_merge_counter = 'true'`).
@@ -76,7 +83,7 @@ the resolution rules, auto-merge, every website restyle, the database format, li
 
 ## Chrome extension (optional)
 
-The two v2 scripts can also run as an unpacked Chrome / Edge extension that updates them from GitHub every time Chrome starts, with a popup to switch each script on or off.
+The v2 scripts can also run as an unpacked Chrome / Edge extension that updates them from GitHub every time Chrome starts, with a popup to switch each script on or off.
 
 1. Download `elm451-dedup-tools-vX.Y.Z.zip` from [Releases](../../releases) and unzip it.
 2. Open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked** and pick the unzipped folder.
@@ -92,7 +99,8 @@ The scripts are fetched from this repo's `main` branch on Chrome start (and once
 **Tampermonkey (any browser, including Firefox):**
 1. Install the [Tampermonkey](https://www.tampermonkey.net/) browser extension.
 2. Create a userscript with the contents of `Element451-UI-Perfection-v2.user.js` and, optionally, a second one with
-   `csv-database-v2.js`. Install each once, and do not run them alongside the classic scripts. Open the gear pane to
+   `csv-database-v2.js`, and, if you want to merge databases, a third with `csv-database-merge-v2.js` (it needs the CSV
+   script to show its button). Install each once, and do not run them alongside the classic scripts. Open the gear pane to
    confirm which versions are running.
 3. Navigate to your Element451 duplicates page. The scripts activate automatically on `*.element451.io`.
 
@@ -110,6 +118,7 @@ The two scripts talk through the page, not through any shared code:
 | Confirmed merge | UI Perfection -> CSV Database | `elm2-pair-merged` event (`detail.a`, `.b`, `.choice`, `.lost`, `.names`) |
 | Blocked row text | UI Perfection -> CSV Database | `.diff-row.elm2-blocked-row` elements |
 | UI injection targets | UI Perfection -> CSV Database | `#elm-controls-wrapper` (counter), `#elm-settings-pane .settings-body` (Database section and version line) |
+| Merge Databases button, stored database | CSV Database -> Database Merge | the merge script adds its button inside `#elm-settings-db-section` (so it only shows while the CSV script is active) and reads `localStorage.elm_csv_database`; it has no other link to the CSV script |
 
 UI Perfection works without the CSV Database script. The CSV Database script needs UI Perfection for its signals.
 

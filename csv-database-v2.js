@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.39
+// @version      2.40
 // @description  Tracks duplicate entries in a database stored in browser localStorage (exports an .xlsx spreadsheet) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -35,7 +35,7 @@
     if (window.__elm451CsvDatabaseLoaded) return;
     window.__elm451CsvDatabaseLoaded = true;
 
-    const VERSION = '2.39'; // keep in sync with @version
+    const VERSION = '2.40'; // keep in sync with @version
     const STORAGE_KEY = 'elm_csv_database';
     const SHOW_API_STATUS_TOAST = true;
     const UI_KEY = 'elm_show_db_ui';
@@ -225,6 +225,8 @@
         try { localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); }
         catch (e) { console.error('CSV Database: Error saving database', e); }
     }
+    // Local date as YYYY-MM-DD (the Scan Date column)
+    function todayStr() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
     function recordEntry(dept) {
         if (!dept) return false;
         const sparks = getDomSparkIds();
@@ -244,7 +246,9 @@
         const choice = merged === 'Y' ? (old.choice || '') : '';
         // Bolt's score (high / medium / low) as read from the score chip by the main script; kept once seen
         const score = document.body.dataset.csvScore || (old && old.score) || '';
-        const newEntry = { firstName, lastName, firstName2, lastName2, dept, rowContents, sparkId1: sparks.a, sparkId2: sparks.b, merged, choice, score };
+        // Scan Date: the day the pair was scanned; it moves to the merge day when the pair is merged
+        const scanDate = (old && old.scanDate) || todayStr();
+        const newEntry = { firstName, lastName, firstName2, lastName2, dept, rowContents, sparkId1: sparks.a, sparkId2: sparks.b, merged, choice, score, scanDate };
         if (old && old.lostSpark) newEntry.lostSpark = old.lostSpark;
         if (old && old.lostFirst) newEntry.lostFirst = old.lostFirst;
         if (old && old.lostLast) newEntry.lostLast = old.lostLast;
@@ -252,7 +256,7 @@
             if (old.dept === dept && old.firstName === firstName && old.lastName === lastName
                 && old.firstName2 === firstName2 && old.lastName2 === lastName2 && old.rowContents === rowContents
                 && old.sparkId1 === sparks.a && old.sparkId2 === sparks.b
-                && (old.merged || '') === merged && (old.choice || '') === choice && (old.score || '') === score) return true;
+                && (old.merged || '') === merged && (old.choice || '') === choice && (old.score || '') === score && (old.scanDate || '') === scanDate) return true;
             db[existingIdx] = newEntry;
             saveDatabase(db);
             return true;
@@ -278,6 +282,7 @@
         const idx = db.findIndex(entry => sameSparkPair(entry, d.a || '', d.b || ''));
         if (idx === -1) { console.log('[csv] merged pair is not in the database:', d.a, d.b); return; }
         db[idx].merged = 'Y';
+        db[idx].scanDate = todayStr();
         if (d.choice) db[idx].choice = d.choice;
         if (d.lost) db[idx].lostSpark = d.lost; // the Spark ID merged away: struck through in the export
         // the first / last name that was not kept ('a' = Contact A = the Firstname / Lastname columns, 'b' = the "2" columns)
@@ -693,6 +698,7 @@
         { header: 'Spark ID 1', key: 'sparkId1', width: 3.8 },
         { header: 'Spark ID 2', key: 'sparkId2', width: 3.8 },
         { header: 'Dept.', key: 'dept', width: 2.8 },
+        { header: 'Scan Date', key: 'scanDate', width: 3 },
         { header: 'Merged', key: 'merged', width: 2.2 },
         { header: 'Script vs Bolt', key: 'choice', width: 9 },
         { header: 'Row Contents', key: 'rowContents', width: 15 }
@@ -747,7 +753,7 @@
             first2: col('firstname 2', -1), last2: col('lastname 2', -1),
             dept: col('dept.', 2), rows: col('row contents', 3),
             s1: col('spark id 1', -1), s2: col('spark id 2', -1),
-            merged: col('merged', -1), choice: col('script vs bolt', -1), score: col('bolt score', -1)
+            merged: col('merged', -1), choice: col('script vs bolt', -1), score: col('bolt score', -1), scanDate: col('scan date', -1)
         };
         const get = (cols, i) => (i >= 0 && i < cols.length ? String(cols[i] == null ? '' : cols[i]) : '');
         const entries = [];
@@ -764,7 +770,7 @@
                 firstName2: trunc3(get(cols, idx.first2)), lastName2: trunc3(get(cols, idx.last2)),
                 dept: get(cols, idx.dept), rowContents: get(cols, idx.rows),
                 sparkId1: get(cols, idx.s1), sparkId2: get(cols, idx.s2),
-                merged: m === 'Y' || m === 'N' ? m : '', choice: m === 'Y' ? get(cols, idx.choice) : '', score: get(cols, idx.score).trim().toLowerCase(),
+                merged: m === 'Y' || m === 'N' ? m : '', choice: m === 'Y' ? get(cols, idx.choice) : '', score: get(cols, idx.score).trim().toLowerCase(), scanDate: get(cols, idx.scanDate).trim(),
                 ...(lost ? { lostSpark: lost } : {}),
                 ...(lostFirst ? { lostFirst } : {}), ...(lostLast ? { lostLast } : {})
             });

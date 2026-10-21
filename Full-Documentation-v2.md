@@ -6,7 +6,8 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 | Script | File | Current version |
 |---|---|---|
 | UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.191`, shown in the settings pane as `v2.191` |
-| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.41` |
+| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.44` |
+| Database Merge (optional) | `csv-database-merge-v2.js` | `@version 1.1`, see [section 17](#17-database-merge) |
 
 The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
 `Full-Documentation-v127.0.md`) are unchanged and target the old merge page.
@@ -33,6 +34,7 @@ The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
 14. [Troubleshooting](#14-troubleshooting)
 15. [Change history (summary)](#15-change-history-summary)
 16. [Chrome extension](#16-chrome-extension)
+17. [Database Merge](#17-database-merge)
 
 ---
 
@@ -374,10 +376,10 @@ A badge is placed in `.cdk-column-flagged` (falling back to signals, then the ro
 
 ### 11.6 Import / export
 
-- **Download**: `elm_database_YYYY-MM-DD.xlsx` (an Excel workbook; also opens in LibreOffice and Google Sheets). Columns, in order: `Bolt Score, Firstname, Lastname, Firstname 2, Lastname 2, Spark ID 1, Spark ID 2, Dept., Scan Date, Merged, Script vs Bolt, Row Contents`. **Bolt Score** (High / Medium / Low) is the score chip on the merge screen, read by the main script (`body.dataset.csvScore`) and stored on the entry the first time it is seen; blank if the chip never showed. Column widths are preset (resize them in the spreadsheet), text never wraps (a value that already contains line breaks keeps them as lines in the cell), the header row is bold, shaded and **frozen**, and the **filter buttons are on Bolt Score, Dept. and Merged only** (one filter over the whole table, with the dropdown buttons hidden on every other column). The workbook is written by the script itself (a small stored-zip writer; no libraries). It was an `.ods` before 2.32: Excel had to repair that and ignored its frozen row, so the export is `.xlsx` now; the importer still reads `.ods`.
+- **Download**: `elm_database_YYYY-MM-DD.xlsx` (an Excel workbook; also opens in LibreOffice and Google Sheets). Columns, in order: `Bolt Score, Firstname, Lastname, Firstname 2, Lastname 2, Spark ID 1, Spark ID 2, Dept., Scan Date, Merged, Script vs Bolt, Row Contents`. **Bolt Score** (High / Medium / Low) is the score chip on the merge screen, read by the main script (`body.dataset.csvScore`) and stored on the entry the first time it is seen; blank if the chip never showed. Column widths are preset (resize them in the spreadsheet), text never wraps (a value that already contains line breaks keeps them as lines in the cell), the header row is bold, shaded and **frozen**, and the **filter / sort buttons are on Bolt Score, Dept., Scan Date and Merged** (one filter over the whole table, with the dropdown buttons hidden on every other column; each dropdown also has Excel's sort options). The workbook is written by the script itself (a small stored-zip writer; no libraries). It was an `.ods` before 2.32: Excel had to repair that and ignored its frozen row, so the export is `.xlsx` now; the importer still reads `.ods`.
 - **Struck-through Spark ID**: on a merged pair the Spark ID that was merged away is struck through (grey, line through) in its Spark ID cell. The kept ID is the side selected on the `Spark Id:` row of the merge screen at the Merge click ('left' = Contact A); if that row has no selected side nothing is struck. The strike is stored as `lostSpark` on the entry, and a re-imported `.xlsx` / `.ods` keeps it (read back from the cell style).
 - **Struck-through names**: on a merged pair the first and last name that was **not kept** are struck through too (the side not selected on the First name / Last name row at the Merge click; Contact A = the Firstname / Lastname columns, Contact B = the "2" columns). Nothing is struck when the two names are the same, differ only in case, or one is blank. Stored as `lostFirst` / `lostLast` ('a' or 'b') and read back from the cell font / style on import. (The row labels are matched as `first name` and `last name` / `surname`; if Element labels them differently nothing is struck.)
-- **Scan Date** (shown as `DD/MM/YYYY`, local date; stored internally as `YYYY-MM-DD` and written to the sheet as text; import accepts either form, or an Excel date serial if the cell was retyped as a date) is the day the pair was first scanned (recorded). It moves to the merge day when the pair's merge is confirmed. Re-recording an unchanged pair does not touch it; entries recorded before the column existed are blank until they are recorded again.
+- **Scan Date** is the day the pair was first scanned (recorded); it moves to the merge day when the pair's merge is confirmed. It is a real Excel date cell shown as `DD/MM/YYYY` (stored internally as `YYYY-MM-DD`), so it sorts chronologically and has Excel's date filters. Re-recording an unchanged pair does not touch it; entries recorded before the column existed are blank until they are recorded again. Import accepts a date cell, `DD/MM/YYYY` or `YYYY-MM-DD`.
 - **Merged** is `Y` once the Merge completed card confirms the merge, `N` for a recorded pair that was not merged (skipped, blocked or left for you), and blank for entries recorded before this column existed.
 - **Script vs Bolt** is only filled for a merged pair (Merged = Y); it is blank for every other row. It is the auto-merge brief in one line, e.g. `2/3 agree · script chose 1 over Bolt: Email, Address`, `Applicant · script chose 1 over Bolt: Address`, `3/3 agree`, or `Bolt's picks` when the script made no picks on a merged pair. (With *Use picks from = Bolt* the wording flips to `Bolt chose N over script`.) Field names only, no personal data.
 - How the data gets there: the main script keeps `body.dataset.csvChoice` up to date for the pair on screen; at the Merge Contacts click it remembers the pair's Spark IDs and the line, asks the database script to record the pair (`elm2-record-pair`), and when the Merge completed card appears sends `elm2-pair-merged` (`detail: { a, b, choice }`), which sets Merged = Y.
@@ -397,6 +399,7 @@ Header `DB: N` pill, the Database section of the settings pane, the **Show Datab
 | Channel | Direction | Mechanism |
 |---|---|---|
 | Department + Spark IDs | main → CSV | `document.body.dataset.csvDept`, `csvSpark1`, `csvSpark2` |
+| Merge Databases button, stored database | merge ← CSV | the merge script puts its button inside `#elm-settings-db-section` (so it exists only while the CSV script is active) and reads / writes `localStorage.elm_csv_database`; nothing else is shared |
 | Script vs Bolt line, Bolt score | main → CSV | `document.body.dataset.csvChoice`, `csvScore`; `elm2-pair-merged` event (`detail.a/.b/.choice/.lost/.names`) after a confirmed merge |
 | "Record before skipping" | main → CSV | `elm2-record-pair` event on `document`; the CSV script sets `event.detail.handled` / `.recorded` |
 | Blocked-row text | main → CSV | `.diff-row.elm2-blocked-row` elements |
@@ -479,13 +482,14 @@ Header `DB: N` pill, the Database section of the settings pane, the **Show Datab
 - **Search bar style**: Material 3 Expressive search bar for Element's header search and the History search.
 - **Database**: Bolt Score, Merged and Script vs Bolt columns, an `.xlsx` export (frozen header, widths, filters on Bolt Score / Dept. / Merged, struck-through Spark ID and names), `.xlsx` / `.ods` / `.csv` import (section 11).
 - **Engagement tiebreak**: dual personal emails are decided by email opens, then clicks, from the engagement panel (section 7).
+- **Database Merge**: a third, optional script that merges several exported databases on a page of its own (section 17).
 - **Chrome extension**: unpacked extension that runs both scripts and updates them from GitHub when Chrome starts, popup with switches, build + release workflow (section 16).
 - **Versions**: the settings pane lists Main script, Database script and Extension versions in one style.
 - **Fixes along the way**: stall on identical consecutive names / disabled Next button, twins warning signal count, cut-off date text in filters, clipped filters panel, selected-chip colour specificity.
 
 ## 16. Chrome extension
 
-The two scripts can also run as an unpacked Chrome extension (Chrome / Edge, Manifest V3). Firefox keeps using Tampermonkey with the same `@updateURL` links.
+The scripts (the two main ones and the optional Database Merge script) can also run as an unpacked Chrome extension (Chrome / Edge, Manifest V3). Firefox keeps using Tampermonkey with the same `@updateURL` links.
 
 **What it is.** A thin wrapper in `extension/`: a service worker (`background.js`), a Material 3 Expressive popup (`popup.html/.css/.js`), icons and a manifest. The two scripts are not copied by hand: `scripts/build-extension.js` takes them from the repo root, so the userscripts stay the single source of truth.
 
@@ -494,21 +498,35 @@ The two scripts can also run as an unpacked Chrome extension (Chrome / Edge, Man
 **One setting to turn on.** Chrome gates that API: Chrome 138+ needs **Allow user scripts** on the extension's details page (`chrome://extensions` → Details); Chrome 120-137 needs Developer mode. Tampermonkey needs the same switch. Until it is on, the popup shows a card with a button that opens the extension page.
 
 **Auto-update.** When Chrome starts, and once right after the extension is installed or reloaded (no timers, no polling):
-- both scripts are fetched from `https://raw.githubusercontent.com/totallygeekdom/csusb-de-dup-extension/main/` and re-registered only if the file changed (compared by `@version` and content); the copy that runs is whichever has the higher `@version`, the downloaded one or the one bundled in the zip, so a newer zip is never held back by an older cached copy and an older GitHub copy (e.g. while `main` is behind the zip) never replaces a newer bundled one; the bundled copy is also what runs when GitHub is unreachable;
+- the scripts are fetched from `https://raw.githubusercontent.com/totallygeekdom/csusb-de-dup-extension/main/` and re-registered only if the file changed (compared by `@version` and content); the copy that runs is whichever has the higher `@version`, the downloaded one or the one bundled in the zip, so a newer zip is never held back by an older cached copy and an older GitHub copy (e.g. while `main` is behind the zip) never replaces a newer bundled one; the bundled copy is also what runs when GitHub is unreachable;
 - the latest GitHub Release is checked (`api.github.com/.../releases/latest`); if its tag is newer than the installed extension version, the toolbar icon gets an `↑` badge and the popup shows an **Update available · vX.Y.Z** chip in place of the counters.
 Chrome cannot update an unpacked extension by itself, so the chip downloads the release zip and a sheet lists the steps: unzip over the extension folder, open `chrome://extensions`, click reload. The chip can be dismissed (it returns for a newer version), and while it shows the database / merge counts move to the footer line.
 
-**Popup.** Just the title (there is no settings cog); a stats row (database entries, merges, read from the active Element451 tab's `localStorage`) that the update chip replaces; one row per script with an expressive switch and its version (CSV Database is greyed while UI Perfection is off); a **Reload tab** prompt after a change; and a footer with the extension version (plus the counts while the chip is showing).
+**Popup.** Just the title (there is no settings cog); a stats row (database entries, merges, read from the active Element451 tab's `localStorage`) that the update chip replaces; one row per script (UI Perfection, CSV Database, Database Merge) with an expressive switch and its version (CSV Database is greyed while UI Perfection is off, Database Merge while CSV Database is off); a **Reload tab** prompt after a change; and a footer with the extension version (plus the counts while the chip is showing).
 
 **Extension storage** (`chrome.storage.local`, not the page's): `enabled` (per-script switches), `cache` (the scripts last downloaded from GitHub, with their versions), `shellUpdate` (a newer extension release, if any) and `dismissed` (the version whose update chip was dismissed).
 
-**Both installed.** Each script starts with a guard (`window.__elm451UiPerfectionLoaded`, `window.__elm451CsvDatabaseLoaded`) so a copy in Tampermonkey and the extension never run twice on a page.
+**Both installed.** Each script starts with a guard (`window.__elm451UiPerfectionLoaded`, `window.__elm451CsvDatabaseLoaded`, `window.__elm451DbMergeLoaded`) so a copy in Tampermonkey and the extension never run twice on a page.
 
 **Build and release.** `.github/workflows/extension.yml`:
-- every pull request and every push to `main`: `node scripts/build-extension.js` (syntax-checks the scripts, writes `dist/extension/` and `dist/elm451-dedup-tools-v<version>.zip`), then `npm test` (`scripts/smoke-test.js`: loads the unpacked extension in Chromium, checks the popup, the update chip, then switches the API on and checks both scripts register in the MAIN world and run on an `element451.io` page, and that a toggle stops one; also that an older cached script does not replace the bundled one and a newer one does), and the zip is kept as a workflow artifact;
+- every pull request and every push to `main`: `node scripts/build-extension.js` (syntax-checks the scripts, writes `dist/extension/` and `dist/elm451-dedup-tools-v<version>.zip`), then `npm test` (`scripts/smoke-test.js`: loads the unpacked extension in Chromium, checks the popup, the update chip, then switches the API on and checks all three scripts register in the MAIN world and run on an `element451.io` page, that the settings pane lists the four versions, and that a toggle stops one; also that an older cached script does not replace the bundled one and a newer one does), and the zip is kept as a workflow artifact;
 - a tag `vX.Y.Z`: the same, with the version taken from the tag, then `gh release create` publishes the zip as a GitHub Release.
 Locally: `npm install` once, `npm run build`, `npm test`; load `dist/extension` with **Load unpacked**. `npm run icons` re-renders the icons.
 
 **Install.** Download the zip from Releases, unzip it, open `chrome://extensions`, turn on Developer mode, **Load unpacked** and pick the folder, then open the extension's **Details** and turn on **Allow user scripts**. Reload your Element451 tab.
 
 **Limits / unverified.** The end-to-end test switches the API on through `chrome.developerPrivate` (what the toggle does), not by clicking it; the GitHub fetches (scripts and releases) were not exercised in CI; the first release has to be tagged by hand.
+
+## 17. Database Merge
+
+`csv-database-merge-v2.js` (optional) combines several databases, for example ones exported by different people or on different days, into one.
+
+**Link to the CSV script.** Only two things: the **Merge Databases** button is added inside the Database section of the settings pane, which the CSV script creates (so the button only exists while the CSV script is active), and the current database is read straight from `localStorage.elm_csv_database`, so it can be merged without downloading it first. Everything else, reading `.xlsx` / `.ods` / `.csv` and writing the merged `.xlsx`, is the script's own copy of the CSV script's file code (keep the two in step when the file format changes). It is installed and updated like the others; in the Chrome extension it is a third switch in the popup (greyed while CSV Database is off), and the settings pane lists `Database merge · vX.Y` under the database script's line.
+
+**The page.** The button opens a new tab, built from the Element451 page with DOM calls (no inline scripts, so the site's content-security policy cannot block it). The Element451 tab has to stay open while the merge page is in use.
+- **Sources**: drop or choose any number of files; a table lists each source with its entry count, merged count and Scan Date range, and a **×** to remove a file. "This browser's database" is a source too, ticked by default; at least two sources are needed.
+- **Rules** (shown on the page): a pair is the same pair when both Spark IDs match, in either order (entries with no Spark IDs fall back to the two contacts' 3-letter names). If it appears more than once, a merged pair beats an unmerged one (a merge is final), then the later Scan Date wins (a dated entry beats an undated one), and on a tie the source higher in the list stays. The winner keeps its own fields, filling a blank Bolt score from the other copy.
+- **Breakdown** after **Merge**: unique pairs, duplicates combined, merged pairs, conflicts; a per-source table (entries, new pairs, replaced an older copy, already had a better copy); and a conflicts table (the same pair in a different department or merged state in two sources, with which copy was kept; first 200 shown).
+- **Result**: **Download merged database (.xlsx)** (same format as the CSV script's export) and **Replace my database with this** (asks first, then writes `elm_csv_database`; the header counter follows within a second). Nothing in the browser changes until Replace is pressed.
+
+**Not verified live:** the new-tab page was tested in headless Chromium against mock databases; pop-up blockers can stop the new tab (the script says so).

@@ -29,9 +29,9 @@ const check = (ok, label) => { console.log((ok ? 'ok   ' : 'FAIL ') + label); if
     page.on('pageerror', e => errors.push(e.message));
     await page.goto('chrome-extension://' + id + '/popup.html');
     await page.waitForSelector('#scripts .row-item', { timeout: 10000 });
-    check((await page.locator('#scripts .row-item').count()) === 2, 'popup lists both scripts');
+    check((await page.locator('#scripts .row-item').count()) === 3, 'popup lists the three scripts');
     check(!(await page.locator('#off-card').isHidden()), 'popup shows the "Allow user scripts" card while the API is off');
-    check((await page.locator('.name').allTextContents()).join('|') === 'UI Perfection|CSV Database', 'script names');
+    check((await page.locator('.name').allTextContents()).join('|') === 'UI Perfection|CSV Database|Database Merge', 'script names');
 
     check((await page.locator('#foot').innerText()).includes('Extension v'), 'footer shows the extension version');
 
@@ -57,14 +57,14 @@ const check = (ok, label) => { console.log((ok ? 'ok   ' : 'FAIL ') + label); if
     await sw.evaluate(() => chrome.storage.local.remove('cache')); // whatever the install-time GitHub check stored (online runs)
     check((await syncVia({ type: 'sync' })).ok === true, 'userScripts API available once allowed, scripts registered');
     const registered = await sw.evaluate(async () => (await chrome.userScripts.getScripts()).map(s => s.id + ':' + s.world).sort().join(','));
-    check(registered === 'csv:MAIN,ui:MAIN', 'both scripts registered in the MAIN world (' + registered + ')');
+    check(registered === 'csv:MAIN,merge:MAIN,ui:MAIN', 'all three scripts registered in the MAIN world (' + registered + ')');
     const site = await context.newPage();
     await site.route('https://test.element451.io/**', r => r.fulfill({ contentType: 'text/html', body: '<html><body><div class="bolt-navigation-right"><elm-universal-search>s</elm-universal-search></div></body></html>' }));
-    const flags = () => site.evaluate(() => ({ ui: !!window.__elm451UiPerfectionLoaded, csv: !!window.__elm451CsvDatabaseLoaded }));
+    const flags = () => site.evaluate(() => ({ ui: !!window.__elm451UiPerfectionLoaded, csv: !!window.__elm451CsvDatabaseLoaded, merge: !!window.__elm451DbMergeLoaded }));
     await site.goto('https://test.element451.io/review');
-    await site.waitForFunction(() => window.__elm451UiPerfectionLoaded && window.__elm451CsvDatabaseLoaded, null, { timeout: 15000 }).catch(() => {});
+    await site.waitForFunction(() => window.__elm451UiPerfectionLoaded && window.__elm451CsvDatabaseLoaded && window.__elm451DbMergeLoaded, null, { timeout: 15000 }).catch(() => {});
     const on = await flags();
-    check(on.ui && on.csv, 'both scripts ran on an element451.io page');
+    check(on.ui && on.csv && on.merge, 'all three scripts ran on an element451.io page');
     // newest wins: an older copy in the cache (what GitHub's main branch may hold) must not replace the bundled
     // one, a newer one must
     await sw.evaluate(() => chrome.storage.local.set({ cache: { ui: { code: '// @version 1.0\nwindow.__old = 1;', version: '1.0' } } }));
@@ -80,13 +80,13 @@ const check = (ok, label) => { console.log((ok ? 'ok   ' : 'FAIL ') + label); if
     await sw.evaluate(() => chrome.storage.local.remove('cache'));
     await syncVia({ type: 'sync' });
     await site.reload();
-    await site.waitForFunction(() => window.__elm451UiPerfectionLoaded && window.__elm451CsvDatabaseLoaded, null, { timeout: 15000 }).catch(() => {});
+    await site.waitForFunction(() => window.__elm451UiPerfectionLoaded && window.__elm451CsvDatabaseLoaded && window.__elm451DbMergeLoaded, null, { timeout: 15000 }).catch(() => {});
 
     // the in-page settings pane lists main script, database script and extension versions
     await site.click('#elm-settings-btn');
-    await site.waitForFunction(() => document.querySelectorAll('#elm-settings-pane .settings-build').length >= 3, null, { timeout: 15000 }).catch(() => {});
+    await site.waitForFunction(() => document.querySelectorAll('#elm-settings-pane .settings-build').length >= 4, null, { timeout: 15000 }).catch(() => {});
     const lines = await site.$$eval('#elm-settings-pane .settings-build', els => els.map(e => e.textContent));
-    check(lines.length === 3 && /^Main script · v\d+\.\d+$/.test(lines[0]) && /^Database script · v\d+\.\d+$/.test(lines[1]) && /^Extension · v\d+\.\d+\.\d+$/.test(lines[2]), 'settings pane lists the three versions (' + lines.join(' | ') + ')');
+    check(lines.length === 4 && /^Main script · v\d+\.\d+$/.test(lines[0]) && /^Database script · v\d+\.\d+$/.test(lines[1]) && /^Database merge · v\d+\.\d+$/.test(lines[2]) && /^Extension · v\d+\.\d+\.\d+$/.test(lines[3]), 'settings pane lists the four versions (' + lines.join(' | ') + ')');
     await syncVia({ type: 'toggle', id: 'csv', enabled: false });
     await site.reload();
     await site.waitForFunction(() => window.__elm451UiPerfectionLoaded, null, { timeout: 15000 }).catch(() => {});

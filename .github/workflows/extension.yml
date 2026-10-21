@@ -1,11 +1,11 @@
 name: Chrome extension
 
-# Every push and pull request: build the extension, smoke-test it in Chromium and keep the zip as a downloadable
+# Every pull request and every push to main: build the extension, smoke-test it in Chromium and keep the zip as a downloadable
 # artifact on the run (a test build, no release needed). A tag like v1.0.1: the same, then publish the zip as a
 # GitHub Release. The userscripts themselves are not bundled by hand: the build copies them from the repo root.
 on:
   push:
-    branches: ['**']
+    branches: [main]
     tags: ['v*']
   pull_request:
 

@@ -7,6 +7,7 @@ const ICON_DOWNLOAD = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="c
 const ICON_CLOSE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>';
 
 let state = null, counts = null, tab = null;
+const NEEDS = { csv: 'ui', merge: 'csv' }; // which script each one depends on
 
 async function loadCounts() {
   const [t] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -62,13 +63,14 @@ function renderScripts() {
   $('off-card').hidden = !off;
   state.scripts.forEach(s => {
     const li = document.createElement('li');
-    const needsUi = s.id === 'csv' && state.enabled.ui === false;
+    const dep = NEEDS[s.id];
+    const needsUi = !!dep && state.enabled[dep] === false; // a script whose partner script is switched off
     li.className = 'row-item' + (off || needsUi ? ' disabled-row' : '');
     const txt = document.createElement('div');
     txt.className = 'txt';
     txt.innerHTML = '<div class="name"></div><div class="ver"></div>';
     txt.querySelector('.name').textContent = s.name;
-    txt.querySelector('.ver').textContent = 'v' + (state.versions[s.id] || '?') + (needsUi ? ' · needs UI Perfection' : '');
+    txt.querySelector('.ver').textContent = 'v' + (state.versions[s.id] || '?') + (needsUi ? ' · needs ' + state.scripts.find(x => x.id === dep).name : '');
     const sw = document.createElement('label');
     sw.className = 'switch';
     sw.innerHTML = '<input type="checkbox" role="switch"><span class="track"></span><span class="thumb">' + ICON_CHECK + '</span>';

@@ -11,7 +11,8 @@ const RAW = 'https://raw.githubusercontent.com/' + REPO + '/' + BRANCH + '/';
 const MATCHES = ['https://*.element451.io/*'];
 const SCRIPTS = [
   { id: 'ui', name: 'UI Perfection', file: 'Element451-UI-Perfection-v2.user.js' },
-  { id: 'csv', name: 'CSV Database', file: 'csv-database-v2.js' }
+  { id: 'csv', name: 'CSV Database', file: 'csv-database-v2.js' },
+  { id: 'merge', name: 'Database Merge', file: 'csv-database-merge-v2.js' }
 ];
 
 const versionOf = (code) => ((code || '').match(/@version\s+([^\s]+)/) || [])[1] || '';
@@ -24,7 +25,7 @@ function newer(a, b) {
 
 async function getState() {
   const s = await chrome.storage.local.get(['enabled', 'cache', 'shellUpdate', 'dismissed']);
-  return { enabled: s.enabled || { ui: true, csv: true }, cache: s.cache || {}, shellUpdate: s.shellUpdate || null, dismissed: s.dismissed || '' };
+  return { enabled: s.enabled || { ui: true, csv: true, merge: true }, cache: s.cache || {}, shellUpdate: s.shellUpdate || null, dismissed: s.dismissed || '' };
 }
 
 // The userScripts API is gated: Chrome 138+ needs "Allow user scripts" on the extension's details page

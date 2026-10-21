@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.41
+// @version      2.44
 // @description  Tracks duplicate entries in a database stored in browser localStorage (exports an .xlsx spreadsheet) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -35,7 +35,7 @@
     if (window.__elm451CsvDatabaseLoaded) return;
     window.__elm451CsvDatabaseLoaded = true;
 
-    const VERSION = '2.41'; // keep in sync with @version
+    const VERSION = '2.44'; // keep in sync with @version
     const STORAGE_KEY = 'elm_csv_database';
     const SHOW_API_STATUS_TOAST = true;
     const UI_KEY = 'elm_show_db_ui';
@@ -683,11 +683,10 @@
     setInterval(checkListUrlChange, 500);
 
     // =========================================================
-    // EXPORT / IMPORT: an .ods spreadsheet (column widths, bold header, filter buttons on every
-    // column); .csv files from earlier versions still import.
+    // EXPORT / IMPORT: an .xlsx spreadsheet (column widths, frozen bold header, filter / sort buttons on Bolt Score, Dept.,
+    // Scan Date and Merged); .ods and .csv files from earlier versions still import.
     // =========================================================
-    // Columns in file order. Dept. and Merged are side by side (they are the two columns with filter buttons);
-    // Merged and Script vs Bolt sit between Spark ID 2 and Row Contents.
+    // Columns in file order. Merged and Script vs Bolt sit between Spark ID 2 and Row Contents.
     // width is in cm, as the spreadsheet stores it (the columns can be resized there).
     const DB_COLUMNS = [
         { header: 'Bolt Score', key: 'score', width: 2.6 },
@@ -720,10 +719,12 @@
     function dbRows(db) {
         const rows = db.map(e => {
             // Script vs Bolt is only exported for a merged pair
-            const r = DB_COLUMNS.map(c => String((c.key === 'choice' && e.merged !== 'Y') ? '' : c.key === 'score' ? capFirst(e.score) : c.key === 'scanDate' ? fmtDate(e.scanDate) : (e[c.key] || '')));
+            const r = DB_COLUMNS.map(c => String((c.key === 'choice' && e.merged !== 'Y') ? '' : c.key === 'score' ? capFirst(e.score) : c.key === 'scanDate' ? (e.scanDate || '') : (e[c.key] || '')));
             r.struck = new Set();
+            r.dates = new Set(); // columns written as real dates (Scan Date), so the spreadsheet can sort and filter them
             const lostCol = { firstName: 'a', firstName2: 'b', lastName: 'a', lastName2: 'b' };
             DB_COLUMNS.forEach((c, i) => {
+                if (c.key === 'scanDate' && /^\d{4}-\d{2}-\d{2}$/.test(r[i])) r.dates.add(i);
                 if ((c.key === 'sparkId1' || c.key === 'sparkId2') && e.lostSpark && r[i] === e.lostSpark) r.struck.add(i);
                 if (r[i] && e.merged === 'Y' && (c.key === 'firstName' || c.key === 'firstName2') && e.lostFirst === lostCol[c.key]) r.struck.add(i);
                 if (r[i] && e.merged === 'Y' && (c.key === 'lastName' || c.key === 'lastName2') && e.lostLast === lostCol[c.key]) r.struck.add(i);
@@ -864,18 +865,21 @@
     const xmlEsc = (t) => String(t).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     // ---- .xlsx writer (what the Download button produces: Excel reads it natively)
     const colLetter = (i) => String.fromCharCode(65 + i);
-    function xlsxCell(value, ref, style) {
+    // YYYY-MM-DD -> Excel's day number (days since 1899-12-30)
+    const excelSerial = (iso) => { const [y, m, d] = iso.split('-').map(Number); return Math.round((Date.UTC(y, m - 1, d) - Date.UTC(1899, 11, 30)) / 86400000); };
+    function xlsxCell(value, ref, style, isDate) {
         const attr = ' r="' + ref + '"' + (style ? ' s="' + style + '"' : '');
         if (value === '') return style ? '<c' + attr + '/>' : '';
+        if (isDate) return '<c' + attr + '><v>' + excelSerial(value) + '</v></c>';
         return '<c' + attr + ' t="inlineStr"><is><t xml:space="preserve">' + xmlEsc(value) + '</t></is></c>';
     }
     function buildXlsx(rows) {
         const nCols = DB_COLUMNS.length, nRows = rows.length;
         const cols = DB_COLUMNS.map((c, i) => '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + Math.round(c.width * 5.4 * 10) / 10 + '" customWidth="1"/>').join('');
         const sheetRows = rows.map((r, ri) => '<row r="' + (ri + 1) + '">' +
-            DB_COLUMNS.map((c, ci) => xlsxCell(r[ci] == null ? '' : String(r[ci]), colLetter(ci) + (ri + 1), ri === 0 ? 1 : (r.struck && r.struck.has(ci) ? 2 : 0))).join('') + '</row>').join('');
+            DB_COLUMNS.map((c, ci) => xlsxCell(r[ci] == null ? '' : String(r[ci]), colLetter(ci) + (ri + 1), ri === 0 ? 1 : (r.dates && r.dates.has(ci) ? 3 : r.struck && r.struck.has(ci) ? 2 : 0), !!(r.dates && r.dates.has(ci)))).join('') + '</row>').join('');
         // One filter over the whole table, with the buttons hidden on every column except Bolt Score, Dept. and Merged.
-        const filterKeys = ['score', 'dept', 'merged'];
+        const filterKeys = ['score', 'dept', 'scanDate', 'merged'];
         const filterRef = 'A1:' + colLetter(nCols - 1) + nRows;
         const hiddenButtons = DB_COLUMNS.map((c, i) => filterKeys.includes(c.key) ? '' : '<filterColumn colId="' + i + '" hiddenButton="1"/>').join('');
         const sheet = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
@@ -884,15 +888,17 @@
             '<sheetFormatPr defaultRowHeight="15"/><cols>' + cols + '</cols><sheetData>' + sheetRows + '</sheetData>' +
             '<autoFilter ref="' + filterRef + '">' + hiddenButtons + '</autoFilter></worksheet>';
         const styles = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+            '<numFmts count="1"><numFmt numFmtId="164" formatCode="dd/mm/yyyy"/></numFmts>' +
             '<fonts count="3"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font>' +
             '<font><strike/><sz val="11"/><color rgb="FF8A8A8A"/><name val="Calibri"/></font></fonts>' +
             '<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>' +
             '<fill><patternFill patternType="solid"><fgColor rgb="FFFDE3CC"/><bgColor indexed="64"/></patternFill></fill></fills>' +
             '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
             '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
-            '<cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+            '<cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
             '<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>' +
-            '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs>' +
+            '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>' +
+            '<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs>' +
             '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
         const wb = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
             '<sheets><sheet name="Database" sheetId="1" r:id="rId1"/></sheets>' +
@@ -922,11 +928,17 @@
         const txt = (el) => Array.from(el.getElementsByTagName('t')).map(t => t.textContent).join('');
         let shared = [];
         try { shared = Array.from(parse(await zipReadText(buf, 'xl/sharedStrings.xml')).getElementsByTagName('si')).map(txt); } catch (e) { /* none */ }
-        const struckXf = new Set();
+        const struckXf = new Set(), dateXf = new Set();
         try {
             const st = parse(await zipReadText(buf, 'xl/styles.xml'));
             const fonts = Array.from(st.getElementsByTagName('fonts')[0].getElementsByTagName('font')).map(f => { const k = f.getElementsByTagName('strike')[0]; return !!k && k.getAttribute('val') !== '0' && k.getAttribute('val') !== 'false'; });
-            Array.from(st.getElementsByTagName('cellXfs')[0].getElementsByTagName('xf')).forEach((xf, i) => { if (fonts[parseInt(xf.getAttribute('fontId'), 10) || 0]) struckXf.add(String(i)); });
+            const customDate = new Set();
+            Array.from(st.getElementsByTagName('numFmt')).forEach(n => { if (/[dmy]/i.test((n.getAttribute('formatCode') || '').replace(/"[^"]*"|\[[^\]]*\]/g, ''))) customDate.add(n.getAttribute('numFmtId')); });
+            Array.from(st.getElementsByTagName('cellXfs')[0].getElementsByTagName('xf')).forEach((xf, i) => {
+                if (fonts[parseInt(xf.getAttribute('fontId'), 10) || 0]) struckXf.add(String(i));
+                const nf = parseInt(xf.getAttribute('numFmtId'), 10);
+                if ((nf >= 14 && nf <= 22) || (nf >= 45 && nf <= 47) || customDate.has(String(nf))) dateXf.add(String(i));
+            });
         } catch (e) { /* no styles */ }
         const sheet = parse(await zipReadText(buf, 'xl/worksheets/sheet1.xml'));
         const colIndex = (ref) => { const m = /^([A-Z]+)/.exec(ref || ''); if (!m) return -1; let n = 0; for (const ch of m[1]) n = n * 26 + ch.charCodeAt(0) - 64; return n - 1; };
@@ -940,7 +952,11 @@
                 let v = '';
                 const t = c.getAttribute('t');
                 if (t === 'inlineStr') v = txt(c);
-                else { const ve = c.getElementsByTagName('v')[0]; v = ve ? ve.textContent : ''; if (t === 's') v = shared[parseInt(v, 10)] || ''; }
+                else {
+                    const ve = c.getElementsByTagName('v')[0]; v = ve ? ve.textContent : '';
+                    if (t === 's') v = shared[parseInt(v, 10)] || '';
+                    else if (v !== '' && dateXf.has(c.getAttribute('s')) && !isNaN(Number(v))) v = parseDate(String(Math.floor(Number(v)))); // a date cell: its day number -> YYYY-MM-DD
+                }
                 while (cells.length < i) cells.push('');
                 cells[i] = v;
                 if (v !== '' && struckXf.has(c.getAttribute('s'))) cells.struck.add(i);
@@ -1009,6 +1025,19 @@
         else controlsWrapper.appendChild(badge);
         updateDbSizeBadge();
     }
+    // Reads an .xlsx / .ods / .csv database file into entries (throws with a message a person can read)
+    async function parseDbFile(file) {
+        const lower = file.name.toLowerCase();
+        let rows;
+        if (lower.endsWith('.xlsx')) rows = await xlsxRows(await file.arrayBuffer());
+        else if (lower.endsWith('.ods')) rows = odsRows(await zipReadText(await file.arrayBuffer(), 'content.xml'));
+        else if (lower.endsWith('.csv')) rows = (await file.text()).trim().split('\n').map(l => parseCSVLine(l.replace(/\r$/, '')));
+        else throw new Error('Please select an .xlsx, .ods or .csv file.');
+        if (rows.length < 2) throw new Error('The file is empty or has no data rows.');
+        const entries = entriesFromRows(rows);
+        if (entries.length === 0) throw new Error('No valid entries found in the file.');
+        return entries;
+    }
     function injectDbSettingsSection() {
         if (document.getElementById('elm-settings-db-section')) return;
         const settingsBody = document.querySelector('#elm-settings-pane .settings-body');
@@ -1050,16 +1079,8 @@
         uploadInput.onchange = async (e) => {
             const file = e.target.files[0];
             if (!file) return;
-            const lower = file.name.toLowerCase();
             try {
-                let rows;
-                if (lower.endsWith('.xlsx')) rows = await xlsxRows(await file.arrayBuffer());
-                else if (lower.endsWith('.ods')) rows = odsRows(await zipReadText(await file.arrayBuffer(), 'content.xml'));
-                else if (lower.endsWith('.csv')) rows = (await file.text()).trim().split('\n').map(l => parseCSVLine(l.replace(/\r$/, '')));
-                else { alert('Please select an .xlsx, .ods or .csv file.'); uploadInput.value = ''; return; }
-                if (rows.length < 2) { alert('The file is empty or has no data rows.'); uploadInput.value = ''; return; }
-                const entries = entriesFromRows(rows);
-                if (entries.length === 0) { alert('No valid entries found in the file.'); uploadInput.value = ''; return; }
+                const entries = await parseDbFile(file);
                 if (!confirm(`Replace current database with ${entries.length} entries from "${file.name}"?`)) { uploadInput.value = ''; return; }
                 saveDatabase(entries);
                 updateDbSizeBadge();

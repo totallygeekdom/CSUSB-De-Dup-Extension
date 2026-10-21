@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.34
+// @version      2.35
 // @description  Tracks duplicate entries in a database stored in browser localStorage (exports an .xlsx spreadsheet) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -31,6 +31,9 @@
 //     restyling elm-chip in place).
 (function () {
     'use strict';
+    // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
+    if (window.__elm451CsvDatabaseLoaded) return;
+    window.__elm451CsvDatabaseLoaded = true;
 
     const STORAGE_KEY = 'elm_csv_database';
     const SHOW_API_STATUS_TOAST = true;
@@ -1080,5 +1083,5 @@
         updateDbSizeBadge();
     }, 1000);
 
-    console.log('%cCSV Database (new layout) v2.34 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
+    console.log('%cCSV Database (new layout) v2.35 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
 })();

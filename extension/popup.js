@@ -36,7 +36,7 @@ function renderStats() {
     const x = document.createElement('span');
     x.className = 'x'; x.title = 'Dismiss'; x.setAttribute('role', 'button'); x.setAttribute('aria-label', 'Dismiss update');
     x.innerHTML = ICON_CLOSE;
-    x.addEventListener('click', async (e) => { e.stopPropagation(); await send({ type: 'dismissUpdate', version: state.shellUpdate.version }); state.shellUpdate = null; renderStats(); });
+    x.addEventListener('click', async (e) => { e.stopPropagation(); await send({ type: 'dismissUpdate', version: state.shellUpdate.version }); state.shellUpdate = null; renderStats(); renderFoot(); });
     chip.appendChild(x);
     chip.addEventListener('click', () => { chrome.tabs.create({ url: state.shellUpdate.url }); $('sheet').hidden = false; });
     slot.appendChild(chip);
@@ -87,23 +87,18 @@ function renderScripts() {
   });
 }
 
-function renderSettings() {
-  $('counts').innerHTML = '';
-  const kv = (box, k, v) => { const a = document.createElement('span'), b = document.createElement('span'); a.textContent = k; b.textContent = v; box.append(a, b); };
-  if (counts) { kv($('counts'), 'Database entries', counts.db.toLocaleString()); kv($('counts'), 'Merges', counts.merges.toLocaleString()); }
-  else kv($('counts'), 'Counts', 'open an Element451 tab');
-  $('versions').innerHTML = '';
-  kv($('versions'), 'Extension', 'v' + state.shellVersion + (state.shellUpdate ? ' (v' + state.shellUpdate.version + ' available)' : ''));
-  state.scripts.forEach(s => kv($('versions'), s.name, 'v' + (state.versions[s.id] || '?')));
+// Footer: the extension's own version, plus the counts while the update chip is covering them.
+function renderFoot() {
+  let t = 'Extension v' + state.shellVersion + ' \u00b7 scripts update when Chrome starts';
+  if (state.shellUpdate && counts) t = 'DB ' + counts.db.toLocaleString() + ' \u00b7 Merges ' + counts.merges.toLocaleString() + '\n' + t;
+  $('foot').textContent = t;
 }
 
 async function init() {
   [state, counts] = await Promise.all([send({ type: 'status' }), loadCounts()]);
-  renderStats(); renderScripts(); renderSettings();
+  renderStats(); renderScripts(); renderFoot();
 }
 
-$('gear').addEventListener('click', () => { renderSettings(); $('main-view').hidden = true; $('settings-view').hidden = false; });
-$('back').addEventListener('click', () => { $('settings-view').hidden = true; $('main-view').hidden = false; });
 $('reload').addEventListener('click', () => { if (tab) chrome.tabs.reload(tab.id); window.close(); });
 const openExt = () => chrome.tabs.create({ url: 'chrome://extensions/?id=' + chrome.runtime.id });
 $('open-ext').addEventListener('click', openExt);

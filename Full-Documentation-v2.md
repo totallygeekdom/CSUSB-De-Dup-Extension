@@ -5,8 +5,8 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.184`, shown in the settings pane and console as `v2-build-184` |
-| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.36` |
+| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.185`, shown in the settings pane as `v2.185` (the console logs it as `v2-build-185`) |
+| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.37` |
 
 The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
 `Full-Documentation-v127.0.md`) are unchanged and target the old merge page.
@@ -46,7 +46,7 @@ The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
 3. Do not run a classic script and its v2 counterpart on the same page, and make sure each v2 script is
    installed **once**. A duplicate or disabled install was the cause of several "bugs" during development
    (doubled popups, missing features).
-4. To confirm what is running: open the gear (settings) — the header reads `New layout · v2-build-N`.
+4. To confirm what is running: open the gear (settings) — the header lists `Main script · vX.Y`, `Database script · vX.Y` (when the CSV script is installed) and, when running in the Chrome extension, `Extension · vX.Y.Z`.
    The CSV script logs `CSV Database (new layout) vX.Y loaded` in the page console, and Tampermonkey shows
    both `@version` values.
 
@@ -184,7 +184,7 @@ Off: the script stops on those pairs and leaves them on screen, showing the popu
 
 Download / Upload & Replace / Clear Database (added by the CSV script, [section 11](#11-csv-database-v2)).
 
-The pane's header lists both builds, which matters when the scripts update themselves in the Chrome extension: `Main script · v2-build-NNN` (the UI script) and, when the CSV script is installed, `Database script · vX.Y` (added under it by the CSV script).
+The pane's header lists the versions in use, which matters when the scripts update themselves in the Chrome extension: `Main script · v2.185` (the UI script), `Database script · v2.37` (added under it by the CSV script, when installed) and `Extension · v1.0.0` (only when running through the extension, which hands the page its version as `window.__elm451Extension` when it registers the scripts). All three use the same `vX.Y` style; the console still logs the main script as `v2-build-185`.
 
 ### 4.9 Hidden setting
 

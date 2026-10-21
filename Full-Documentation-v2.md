@@ -7,7 +7,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 |---|---|---|
 | UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.191`, shown in the settings pane as `v2.191` |
 | CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.44` |
-| Database Merge (optional) | `csv-database-merge-v2.js` | `@version 1.2`, see [section 17](#17-database-merge) |
+| Database Merge (optional) | `csv-database-merge-v2.js` | `@version 1.3`, see [section 17](#17-database-merge) |
 
 The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
 `Full-Documentation-v127.0.md`) are unchanged and target the old merge page.

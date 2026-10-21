@@ -12,8 +12,8 @@ chip). Two v2 scripts target it:
 
 | Script | File | Current version |
 |---|---|---|
-| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.182` (`v2-build-182`, shown in the settings pane) |
-| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.34` |
+| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.183` (`v2-build-183`, shown in the settings pane) |
+| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.35` |
 
 **Full documentation: [`Full-Documentation-v2.md`](Full-Documentation-v2.md)** (architecture, every setting,
 the resolution rules, auto-merge, every website restyle, the database format, limitations).
@@ -68,6 +68,17 @@ the resolution rules, auto-merge, every website restyle, the database format, li
 The classic scripts remain unchanged for as long as the old layout is reachable anywhere.
 
 ---
+
+## Chrome extension (optional)
+
+The two v2 scripts can also run as an unpacked Chrome / Edge extension that updates them from GitHub every time Chrome starts, with a popup to switch each script on or off.
+
+1. Download `elm451-dedup-tools-vX.Y.Z.zip` from [Releases](../../releases) and unzip it.
+2. Open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked** and pick the unzipped folder.
+3. Open the extension's **Details** and turn on **Allow user scripts** (Chrome needs this for any userscript extension, Tampermonkey included).
+4. Reload your Element451 tab.
+
+The scripts are fetched from this repo's `main` branch on Chrome start (and once right after you load the extension); the toolbar icon shows an arrow and the popup an **Update available** chip when a newer extension zip is released (the extension itself has to be updated by hand: unzip over the folder and reload it). Firefox users keep using Tampermonkey. Details, build and release workflow: [section 16 of the full documentation](Full-Documentation-v2.md#16-chrome-extension).
 
 ## Element451 - UI Perfection (v127)
 

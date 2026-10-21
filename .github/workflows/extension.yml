@@ -1,0 +1,61 @@
+name: Chrome extension
+
+# Every push and pull request: build the extension, smoke-test it in Chromium and keep the zip as a downloadable
+# artifact on the run (a test build, no release needed). A tag like v1.0.1: the same, then publish the zip as a
+# GitHub Release. The userscripts themselves are not bundled by hand: the build copies them from the repo root.
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # to create the release on a tag
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "EXT_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build
+        run: node scripts/build-extension.js
+
+      - name: Install test browser
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      - name: Smoke test
+        run: npm test
+
+      - name: Upload zip as an artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: elm451-dedup-tools
+          path: dist/*.zip
+          if-no-files-found: error
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          UI=$(grep -m1 '@version' Element451-UI-Perfection-v2.user.js | awk '{print $3}')
+          CSV=$(grep -m1 '@version' csv-database-v2.js | awk '{print $3}')
+          gh release create "$GITHUB_REF_NAME" dist/*.zip \
+            --title "Element451 Dedup Tools $GITHUB_REF_NAME" \
+            --notes "Chrome extension (unpacked). Bundled scripts: UI Perfection v$UI, CSV Database v$CSV. The scripts also update themselves from GitHub when Chrome starts; this zip is only needed to install or to update the extension itself. See the README for install steps."

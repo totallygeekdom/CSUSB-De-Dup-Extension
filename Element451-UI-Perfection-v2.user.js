@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.182
+// @version      2.183
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -25,7 +25,10 @@
 // before trusting this for unattended automation.
 (function () {
     'use strict';
-    const BUILD = 'v2-build-182'; // keep in sync with @version (2.182)
+    // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
+    if (window.__elm451UiPerfectionLoaded) return;
+    window.__elm451UiPerfectionLoaded = true;
+    const BUILD = 'v2-build-183'; // keep in sync with @version (2.183)
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)

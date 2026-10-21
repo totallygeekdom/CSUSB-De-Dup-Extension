@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.35
+// @version      2.36
 // @description  Tracks duplicate entries in a database stored in browser localStorage (exports an .xlsx spreadsheet) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -35,6 +35,7 @@
     if (window.__elm451CsvDatabaseLoaded) return;
     window.__elm451CsvDatabaseLoaded = true;
 
+    const VERSION = '2.36'; // keep in sync with @version
     const STORAGE_KEY = 'elm_csv_database';
     const SHOW_API_STATUS_TOAST = true;
     const UI_KEY = 'elm_show_db_ui';
@@ -1005,6 +1006,15 @@
             <button id="elm-settings-clear-btn" class="settings-action-btn danger"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg> Clear Database</button>
         `;
         settingsBody.appendChild(section);
+        // The settings pane header lists the main script's build; this adds the database script's under it.
+        const build = document.querySelector('#elm-settings-pane .settings-build');
+        if (build && !document.getElementById('elm-settings-db-build')) {
+            const line = document.createElement('div');
+            line.id = 'elm-settings-db-build';
+            line.className = 'settings-build';
+            line.textContent = 'Database script \u00b7 v' + VERSION;
+            build.insertAdjacentElement('afterend', line);
+        }
         document.getElementById('elm-settings-download-btn').onclick = () => {
             const db = getDatabase();
             if (db.length === 0) { alert('The database is empty — no entries have been recorded yet.'); return; }
@@ -1083,5 +1093,5 @@
         updateDbSizeBadge();
     }, 1000);
 
-    console.log('%cCSV Database (new layout) v2.35 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
+    console.log('%cCSV Database (new layout) v2.36 loaded — polls body[data-csv-dept]', 'color:#6a1b9a;font-weight:bold;');
 })();

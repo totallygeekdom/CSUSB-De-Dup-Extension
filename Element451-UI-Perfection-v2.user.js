@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.184
+// @version      2.185
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -28,7 +28,8 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const BUILD = 'v2-build-184'; // keep in sync with @version (2.184)
+    const VERSION = '2.185'; // keep in sync with @version
+    const BUILD = 'v2-build-' + VERSION.split('.')[1]; // the same number, as logged in the console
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -3379,7 +3380,7 @@
             <div class="settings-header">
                 <div>
                     <div class="settings-title">Settings</div>
-                    <div class="settings-build">Main script · ${BUILD}</div>
+                    <div class="settings-build">Main script · v${VERSION}</div>${window.__elm451Extension ? '<div class="settings-build" id="elm-settings-ext-build">Extension · v' + String(window.__elm451Extension).replace(/[^0-9.]/g, '') + '</div>' : ''}
                 </div>
                 <button id="elm-settings-close" aria-label="Close settings">&times;</button>
             </div>

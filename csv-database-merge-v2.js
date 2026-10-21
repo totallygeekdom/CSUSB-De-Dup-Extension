@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - Database Merge (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      1.1
+// @version      1.2
 // @description  Adds a "Merge Databases" page to the CSV Database script: combine several exported databases (and this browser's) into one, with a breakdown
 // @author       You
 // @match        https://*.element451.io/*
@@ -21,7 +21,7 @@
     'use strict';
     if (window.__elm451DbMergeLoaded) return;
     window.__elm451DbMergeLoaded = true;
-    const VERSION = '1.1'; // keep in sync with @version
+    const VERSION = '1.2'; // keep in sync with @version
 
     // =========================================================
     // STORED DATABASE AND FILE FORMATS
@@ -380,12 +380,14 @@
         return 'n:' + [name(e.firstName, e.lastName), name(e.firstName2, e.lastName2)].sort().join('~');
     }
     const isMerged = (e) => e.merged === 'Y';
-    // Does the incoming entry replace the one already kept? A merged pair beats an unmerged one (a merge is final), then
-    // the later Scan Date wins (an undated entry loses to a dated one), and on a tie the earlier source stays.
+    // Does the incoming entry replace the one already kept? The most up to date copy wins: the later Scan Date (a
+    // pair's Scan Date moves to the merge day when it is merged, so a merge is the newest thing that can happen to it; an
+    // undated entry loses to a dated one). On the same date a merged copy beats an unmerged one, and after that the
+    // earlier source stays.
     function replaces(incoming, kept) {
-        if (isMerged(incoming) !== isMerged(kept)) return isMerged(incoming);
         const a = incoming.scanDate || '', b = kept.scanDate || '';
-        return a !== b && a > b;
+        if (a !== b) return a > b;
+        return isMerged(incoming) && !isMerged(kept);
     }
     const label = (e) => [[e.firstName, e.lastName], [e.firstName2, e.lastName2]].map(p => p.filter(Boolean).join(' ')).filter(Boolean).join(' / ') || '(no names)';
     // sources: [{ name, entries }] in priority order. Returns { entries, stats: [per source], conflicts, unique, duplicates }.
@@ -493,7 +495,7 @@
         const fileList = h('div', { class: 'card' });
         const rulesNote = h('div', { class: 'card' },
             h('strong', null, 'How pairs are combined'),
-            h('p', { class: 'note', style: 'margin:6px 0 0' }, 'A pair is the same pair when both Spark IDs match. If it appears more than once: a merged pair beats an unmerged one (a merge is final), then the later Scan Date wins, and on a tie the file higher in the list stays. Nothing is changed in this browser until you press "Replace my database".'));
+            h('p', { class: 'note', style: 'margin:6px 0 0' }, 'A pair is the same pair when both Spark IDs match. If it appears more than once, the most up to date copy wins: the later Scan Date. On the same date a merged copy beats an unmerged one, and after that the file higher in the list stays. Nothing is changed in this browser until you press "Replace my database".'));
         const mergeBtn = h('button', { class: 'btn filled', type: 'button', onclick: runMerge }, 'Merge');
         const out = h('div');
 

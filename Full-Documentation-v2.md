@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.187`, shown in the settings pane as `v2.187` |
+| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.188`, shown in the settings pane as `v2.188` |
 | CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.39` |
 
 The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
@@ -186,7 +186,7 @@ Off: the script stops on those pairs and leaves them on screen, showing the popu
 
 Download / Upload & Replace / Clear Database (added by the CSV script, [section 11](#11-csv-database-v2)).
 
-The pane's header lists the versions in use, which matters when the scripts update themselves in the Chrome extension: `Main script · v2.187` (the UI script), `Database script · v2.39` (added under it by the CSV script, when installed) and `Extension · v1.0.0` (only when running through the extension, which hands the page its version as `window.__elm451Extension` when it registers the scripts). All three use the same `vX.Y` style; the console still logs the main script as `v2-build-185`.
+The pane's header lists the versions in use, which matters when the scripts update themselves in the Chrome extension: `Main script · v2.188` (the UI script), `Database script · v2.39` (added under it by the CSV script, when installed) and `Extension · v1.0.0` (only when running through the extension, which hands the page its version as `window.__elm451Extension` when it registers the scripts). All three use the same `vX.Y` style; the console still logs the main script as `v2-build-185`.
 
 ### 4.9 Hidden setting
 
@@ -239,6 +239,8 @@ A pair is blocked when any of these is true. Blocked pairs get red styling (the 
 The detected department is also published for the CSV script (`Forbidden` > `Appeal` > `Grad/IA` / `UnderGrad`).
 
 ---
+
+**Bolt analysis error (a stop, not a blocker).** When Bolt's score chip reads **Error** (its AI analysis failed; the tooltip says "AI analysis merge guidance references an unknown user id."), the pair has no Bolt picks to lean on. The script stops on it: no resolution, no auto-merge and no skip, **even with Auto-Skip on**, so a person looks at it. It shows a `Stop: Bolt error` toast (once per pair, subject to the Toasts switch) and logs `[elm2] Stopped: Bolt analysis error, left for you`. The pair is still recorded in the database like any viewed pair. The script waits up to 3 s for the chip to render before deciding, and the final pre-merge gate also refuses a pair whose chip turns to Error ("Bolt's analysis errored"). Blockers (forbidden, appeal, department, student ID) still come first.
 
 ## 7. Field resolution rules
 

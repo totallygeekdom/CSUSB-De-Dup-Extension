@@ -50,8 +50,11 @@ The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
    Tampermonkey shows both `@version` values too. (The scripts no longer print a "loaded" line in the console.)
 
 Both scripts have `@updateURL`/`@downloadURL` pointing at the `main` branch. Builds developed on a
-feature branch must be pasted manually. `@version` and the `BUILD` constant are kept in sync (build `N`
-= `@version 2.N`), so Tampermonkey's update check works once a build reaches `main`.
+feature branch must be pasted manually. Each script keeps its `@version` and a `VERSION` constant in sync (the
+settings pane shows the constant), so Tampermonkey's update check works once a build reaches `main`.
+
+Chrome users can instead install the scripts through the unpacked extension, which keeps them current from
+`main` by itself ([section 16](#16-chrome-extension)); Firefox stays on Tampermonkey.
 
 ---
 
@@ -264,7 +267,7 @@ Only rows where the two sides differ (conflicts) are considered. Rules run **in 
 
 **Addresses**: with an applicant side the applicant rule wins (unless the applicant's address is blank and the other has one). Otherwise address rows compare with the built-in `AddressComparer`: a duplicated-component address loses, and for the same address the more complete one wins. Ties are **not** picked (Bolt's pick stands; with none, the row needs review): the same address with equal completeness, different addresses, or both addresses having duplicated parts.
 
-Not ported: the classic "email open count" tiebreaker (its "User Activity" section does not exist in the new layout).
+The classic "email open count" tiebreaker is back, fed by the new layout's engagement panel instead of the old "User Activity" section (see the dual personal-email tiebreak above).
 
 ---
 
@@ -429,12 +432,13 @@ Header `DB: N` pill, the Database section of the settings pane, the **Show Datab
 
 ## 13. Known limitations and unverified guesses
 
-- **Merge-success detection** is inferred: a merge is counted when the pair on screen changes after Merge Contacts was clicked. There is no confirmed success indicator, so there is no auto-navigate-after-merge feature.
+- **Merge-success detection**: the "Merge completed" card (`bolt-card.merge-completion-state`) is the signal (it counts the merge, shows the `Merge: …` toast, sends the pair to the database as Merged = Y and presses Next duplicate). If Element's own "Skip merge completion screen" switch is on, that card never shows; the script then falls back to "the pair on screen changed after Merge Contacts was clicked", which cannot press Next duplicate for you.
 - **Score chip reading** assumes the chip text contains `high` / `medium` / `low`.
 - **Applicant detection** depends on the Workflows/Application rows being loaded; it re-checks about 0.6 s later, but a very slow load could mislabel a pair.
 - **Rows per page** cannot be changed from the script, and the original classic page-size box was dropped. The main script now runs with `@grant none` (build 100) so Angular's paginator component may become reachable; the page-jump console line shows which route is used.
 - **Name matching for list badges** is a weak fallback because only 3-letter prefixes are stored; Spark IDs are the real key, and the list API must carry them (it does, in `identities[]`).
-- **Email rule**: when both emails are personal and no tiebreaker separates them, no pick is made (as in the classic script).
+- **Email rule**: when both emails are personal, the engagement numbers (email opens, then clicks) decide; if those tie and no name or birth year in the addresses separates them either, no pick is made and, unless Bolt picked, the pair is left for manual review.
+- **Unverified on the live site** (built from pasted HTML, mock pages and screenshots): the History page search box placement and which fields the history records carry; the First name / Last name row labels used to strike through discarded names in the export; whether Excel opens the `.xlsx` without a repair; the engagement panel toggle (`elm-duplicate-engagement-panel button.engagement-toggle`); how the kart layers with Element's dimming; and the extension's GitHub fetches until the first release exists.
 - The classic **scroll-to-bottom** requirement and **Auto-Click FAB** do not map onto this layout and were not ported.
 - Element's DOM may change; selectors are listed in `getDiffRows`, the CSS blocks, and the pager/filters code.
 
@@ -444,7 +448,10 @@ Header `DB: N` pill, the Database section of the settings pane, the **Show Datab
 
 | Symptom | Likely cause / fix |
 |---|---|
-| A feature seems missing or a popup shows twice | Duplicate or disabled Tampermonkey install; check the gear's build number and each script's version |
+| A feature seems missing or a popup shows twice | Duplicate or disabled Tampermonkey install; check the version lines in the gear pane and each script's version. In Chrome with both Tampermonkey and the extension, each script has a guard so only one copy runs |
+| Extension popup says "One setting to turn on" | Open the extension's Details and turn on **Allow user scripts** (Developer mode on Chrome 120-137); then reload the Element451 tab |
+| Extension installed but a script does not run | Check its switch in the popup (CSV Database needs UI Perfection on); reload the tab after changing a switch |
+| No "Update available" chip | It appears only after a newer GitHub Release exists and Chrome has been restarted (or the extension reloaded) |
 | Database buttons / badges still blue or old | The CSV script on your side is an older copy; check it shows the latest `@version` |
 | Nothing is auto-applied | Slider on None, pair out of range, or **Use picks from = Bolt's** (nothing to apply) |
 | Everything gets skipped | Slider None or Allowed Department None with Auto-Skip on = scan mode |
@@ -464,7 +471,13 @@ Header `DB: N` pill, the Database section of the settings pane, the **Show Datab
 - **Automation rework**: slider None → High → Medium → Low → All (an earlier build had an Applicant stop, removed because applicants can have any score), **Use picks from**, **When done** with the cancel countdown (dialog with draining stepped ring), **Merge countdown** setting, Auto-Skip covering blocked / out-of-range / twins pairs, no popups for skipped pairs, scan mode.
 - **CSV Database v2**: keyed on Spark IDs (the URL no longer changes), names stored as 3-letter prefixes, two-contact columns, header-based import, list matching via the list API's `identities[]`, record-before-skip handshake, right-aligned badges, Show Database UI toggle, shared toast stack.
 - **Website restyles**: orange Material 3 palette sampled from Element's header, Material 3 tabs, compact Advanced Filters panel, list pager (Page box + Go), hover preview on the comparison buttons, gear icon as an SVG.
-- **History search** (2.184): search every page of the History list through the history API (see section 10).
+- **Auto-merge polish**: Toasts switch, short auto-merge brief, countdown timing (exact N seconds, 4 s race lights), wavy ring, panel-scoped overlay, Next after merge, the coyote go-kart.
+- **History search**: search every page of the History list through the history API, with Previous / Next match (see section 10).
+- **Search bar style**: Material 3 Expressive search bar for Element's header search and the History search.
+- **Database**: Bolt Score, Merged and Script vs Bolt columns, an `.xlsx` export (frozen header, widths, filters on Bolt Score / Dept. / Merged, struck-through Spark ID and names), `.xlsx` / `.ods` / `.csv` import (section 11).
+- **Engagement tiebreak**: dual personal emails are decided by email opens, then clicks, from the engagement panel (section 7).
+- **Chrome extension**: unpacked extension that runs both scripts and updates them from GitHub when Chrome starts, popup with switches, build + release workflow (section 16).
+- **Versions**: the settings pane lists Main script, Database script and Extension versions in one style.
 - **Fixes along the way**: stall on identical consecutive names / disabled Next button, twins warning signal count, cut-off date text in filters, clipped filters panel, selected-chip colour specificity.
 
 ## 16. Chrome extension
@@ -483,6 +496,8 @@ The two scripts can also run as an unpacked Chrome extension (Chrome / Edge, Man
 Chrome cannot update an unpacked extension by itself, so the chip downloads the release zip and a sheet lists the steps: unzip over the extension folder, open `chrome://extensions`, click reload. The chip can be dismissed (it returns for a newer version), and while it shows the database / merge counts move to the footer line.
 
 **Popup.** Just the title (there is no settings cog); a stats row (database entries, merges, read from the active Element451 tab's `localStorage`) that the update chip replaces; one row per script with an expressive switch and its version (CSV Database is greyed while UI Perfection is off); a **Reload tab** prompt after a change; and a footer with the extension version (plus the counts while the chip is showing).
+
+**Extension storage** (`chrome.storage.local`, not the page's): `enabled` (per-script switches), `cache` (the scripts last downloaded from GitHub, with their versions), `shellUpdate` (a newer extension release, if any) and `dismissed` (the version whose update chip was dismissed).
 
 **Both installed.** Each script starts with a guard (`window.__elm451UiPerfectionLoaded`, `window.__elm451CsvDatabaseLoaded`) so a copy in Tampermonkey and the extension never run twice on a page.
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - Database Merge (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      1.2
+// @version      1.3
 // @description  Adds a "Merge Databases" page to the CSV Database script: combine several exported databases (and this browser's) into one, with a breakdown
 // @author       You
 // @match        https://*.element451.io/*
@@ -21,7 +21,7 @@
     'use strict';
     if (window.__elm451DbMergeLoaded) return;
     window.__elm451DbMergeLoaded = true;
-    const VERSION = '1.2'; // keep in sync with @version
+    const VERSION = '1.3'; // keep in sync with @version
 
     // =========================================================
     // STORED DATABASE AND FILE FORMATS
@@ -494,8 +494,13 @@
             h('button', { class: 'btn filled', type: 'button', onclick: () => fileInput.click() }, 'Choose files'));
         const fileList = h('div', { class: 'card' });
         const rulesNote = h('div', { class: 'card' },
-            h('strong', null, 'How pairs are combined'),
-            h('p', { class: 'note', style: 'margin:6px 0 0' }, 'A pair is the same pair when both Spark IDs match. If it appears more than once, the most up to date copy wins: the later Scan Date. On the same date a merged copy beats an unmerged one, and after that the file higher in the list stays. Nothing is changed in this browser until you press "Replace my database".'));
+            h('strong', null, 'What happens when the same pair is in more than one file'),
+            h('p', { class: 'note', style: 'margin:6px 0 4px' }, 'Two entries are the same pair when they have the same two Spark IDs. When that pair is in several files, only one copy is kept:'),
+            h('ol', { class: 'note', style: 'margin:0 0 6px;padding-left:20px' },
+                h('li', null, 'The newest copy wins (the one with the later Scan Date).'),
+                h('li', null, 'If the dates are the same, the merged copy wins.'),
+                h('li', null, 'If it is still a tie, the copy from the file higher in the list wins.')),
+            h('p', { class: 'note', style: 'margin:0' }, 'Pairs that appear in only one file are all kept. Nothing in this browser changes until you press "Replace my database".'));
         const mergeBtn = h('button', { class: 'btn filled', type: 'button', onclick: runMerge }, 'Merge');
         const out = h('div');
 

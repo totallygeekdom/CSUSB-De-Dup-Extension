@@ -1,311 +1,144 @@
 # CSUSB De-Dup Extension
 
-Two Tampermonkey userscripts that streamline the Element451 duplicate-contact merge workflow at CSUSB. **UI Perfection** handles the merge page (auto-resolution, lockdowns, navigation), while **CSV Database** tracks blocked entries and annotates the list page.
+Userscripts that streamline the Element451 duplicate-contact merge workflow at CSUSB, for Element451's redesigned
+**Deduplication** review queue. **UI Perfection** handles the merge screen (auto-resolution, lockdowns, auto-merge,
+navigation, restyles) and **CSV Database** records blocked and skipped pairs, annotates the list page and exports a
+spreadsheet. Run them with Tampermonkey (any browser) or, in Chrome, as an unpacked extension that keeps them up to date.
+
+The older scripts for the classic merge page are documented separately in [`README-v1.md`](README-v1.md).
 
 ---
 
-## New "Deduplication" Layout (v2 scripts)
+## The scripts
 
-Element451 replaced the classic merge page with a redesigned, AI-assisted
-**Deduplication** review-queue UI: a sortable queue table
-(`elm-review-queue-table`) plus a side panel (`elm-review-duplicates-sidebar`)
-containing a field-by-field diff form (`elm-duplicate-field-diff-form`)
-instead of the old full-page `elm-merge-row` list and floating merge button.
+Element451 replaced the classic merge page with a redesigned, AI-assisted **Deduplication** review
+queue (a queue table plus a side panel with a field-by-field diff form, Bolt AI picks and a score
+chip). Two v2 scripts target it, plus an optional third that merges databases:
 
-`Element451-UI-Perfection-v2.user.js` and `csv-database-v2.js` are ports of
-the two classic scripts targeting that new layout. They reuse the same
-`localStorage` settings keys and the same lockdown/resolution rules
-(department classification, forbidden names, address comparison, email
-preference, csusb.major/school, Encoura/College Board ID, etc.), adapted to
-the new DOM structure.
-
-**Known limitations — these were ported from a single static, PII-redacted
-HTML snapshot with no way to click through the live app, so verify before
-relying on them for unattended automation:**
-- The merge-success indicator, the "Ignored" chip, and the review page's URL
-  scheme were not visible in the snapshot and are best-effort guesses.
-- The "email open count" tiebreaker (sourced from a "User Activity" section
-  in the classic UI) was dropped — no equivalent section was found.
-- The classic script's custom list-page pagination (jump to page N) was not
-  ported — the new queue table uses a stock Angular Material paginator that
-  can't be safely driven the same way from outside Angular.
-- The list-page department badge is now an appended pill rather than a
-  restyled existing chip, since the real cell content was redacted in the
-  reference snapshot.
-
-**Corrected after live testing:**
-- Auto-skip never clicks "Dismiss" on a blocked entry. In this UI, Dismiss
-  opens a "Not a duplicate?" feedback dialog and, once confirmed, permanently
-  tells Bolt the pair is not a match — removing it from the queue and
-  training the matcher on that verdict. A department/forbidden/appeal/
-  ignored block says nothing about whether a pair is actually a duplicate,
-  so skipping only ever moves to the next entry, leaving the blocked pair
-  untouched for a human to review.
-- The script never auto-clicks "Merge Contacts" — that's a deliberate,
-  permanent action with no undo, and this UI needs only one click to commit
-  it (unlike the classic merge page, where the FAB's auto-clicked first
-  press only *revealed* conflicts; the second, merge-committing click always
-  required a human, even with Auto-Click FAB on). "Auto-Resolve Fields"
-  only fills in the field-level selections; reviewing them and clicking
-  Merge is always manual. "Auto-Navigate After Merge" was removed for now —
-  it has nothing reliable to trigger off since there's no confirmed
-  merge-success signal yet (see above).
-
-The classic scripts remain unchanged for as long as the old layout is still
-reachable anywhere.
-
----
-
-## Element451 - UI Perfection (v127)
-
-### Configuration
-
-All settings are accessible through the **gear icon** in the navbar (no reload needed). They persist in `localStorage`.
-
-| Setting | Default | Description |
+| Script | File | Current version |
 |---|---|---|
-| **Auto-Click FAB** | `true` | Automatically clicks the FAB after page loads and Spark IDs are detected. Blocked for forbidden entries, wrong departments, student ID mismatches, and ignored students. |
-| **Auto-Navigate After Merge** | `true` | Navigates to the next duplicate 1 second after a successful merge. |
-| **Auto-Skip Blocked** | `true` | Automatically skips blocked entries by clicking "Next" after the CSV database records them. |
-| **Require Scroll to Bottom** | `true` | Requires scrolling to the bottom of all merge fields before the merge button activates. |
-| **Show Merge Counter** | `true` | Displays the merge counter pill in the navbar. |
-| **Allowed Department** | `UnderGrad` | Department filter. Options: `All` (no filtering), `UnderGrad`, `Grad`, `IA`, `None` (block everything). |
-| **Conflict Row Threshold** | `2` | Number of identity conflicts before a twin/different-person warning. `0` to disable. |
-| **Header Offset** | `64` | Pixels from top when scrolling to conflict rows. |
+| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.210` (shown in the settings pane) |
+| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.51` |
+| Database Merge (optional, pairs with CSV Database) | `csv-database-merge-v2.js` | `@version 1.7` |
+
+**Full documentation: [`Full-Documentation-v2.md`](Full-Documentation-v2.md)** (architecture, every setting,
+the resolution rules, auto-merge, every website restyle, the database format, limitations).
+
+### What they do
+
+- **Automation per pair**, controlled by four settings in the gear pane:
+  - **Pairs in range** slider, by Bolt score: None, High, Medium, Low, All (each position adds to the one before; an applicant side does not put a pair in range).
+  - **Use picks from**: Bolt's or Ours (Ours includes the applicant rule).
+  - **When done**: Wait for me, or Merge after a cancel countdown (a centred dialog with a stepped ring,
+    a short brief (names, Bolt score, how often the script agrees with Bolt, what it chose over Bolt) and a Cancel button; length set by **Merge countdown**, 2-15 s, or a 4 s "race lights" start signal). This setting
+    resets every browser session. A final safety check runs before Merge Contacts is clicked.
+  - **Auto-Skip**: skips blocked, out-of-range and possible-twins pairs with no popup (Next duplicate
+    only, never Dismiss); off = stop on them and show the appeal / possible-twins popups.
+  - **Next after merge**: after a merge, presses "Next duplicate" on the "Merge completed" card (default on).
+  - Slider **None** (or Allowed Department **None**) with Auto-Skip on is a **scan**: every pair is
+    recorded in the database and skipped.
+- **Stops on a Bolt error**: when the score chip reads **Error** (Bolt's analysis failed) the script does nothing to the pair, not even skip it, and shows a `Stop: Bolt error` toast.
+- **Blockers**: forbidden names, an `appeal` keyword, wrong department, student-ID mismatch (ignored pairs are already filtered out of the v2 queue).
+- **Field rules**: applicant side first, then personal email (two personal addresses: more email opens, then clicks, then a name / birth-year tiebreak), csusb.major /
+  csusb.school (one side), date-of-birth validity, first generation, later intended term, name case and address
+  comparison. Rows Bolt leaves unselected and no rule covers (Milestones, Sources, ...) are filled: side with data,
+  then the more recent profile (Created date), then the selected email's side, then an arbitrary stable side. A rule that
+  applies but cannot decide (dual personal email, address tie, csusb.major / school on both sides) with no Bolt pick
+  means the pair needs manual review: it is never auto-merged and never skipped.
+- **Review-page visuals**: Bolt-vs-ours pick colours (green agree, blue Bolt, orange ours), applicant band,
+  comparison bar with *Use Bolt AI picks* / *Use our picks* and a blue **hover preview** of what each would
+  select, High / Medium / Low score-chip colours, a pinned queue nav.
+- **Website restyles (Material 3, orange palette sampled from Element's header)**: gear icon and settings pane,
+  Review Queue / History tabs, a compact Advanced Filters panel, a Page box with Go on the list paginator,
+  a **merged-profile search** on the History page (pages through the history API for a name, email or Spark ID),
+  the expanded header search (and the History search) restyled as a Material 3 Expressive search bar,
+  and one shared toast stack (bottom-left) for both scripts.
+- **CSV Database v2**: records blocked / skipped pairs keyed on the two contacts' **Spark IDs** (the review
+  URL no longer changes per pair), stores names as 3-letter prefixes (`Jon...`), shows right-aligned department
+  badges on the list page (matched through the list API's `identities[]`, falling back to names), exports an
+  **`.xlsx` spreadsheet** (columns `Bolt Score, Firstname, Lastname, Firstname 2, Lastname 2, Spark ID 1, Spark ID 2, Dept., Scan Date, Merged, Script vs Bolt, Row Contents`;
+  preset column widths, frozen header row, filter buttons on Bolt Score, Dept. and Merged, the merged-away Spark ID and names struck through; Merged = Y/N, Script vs Bolt = what the script chose over Bolt)
+  and imports `.xlsx` (columns are read by header name), and has a **Show Database UI** toggle (under
+  Display). Before every auto-skip the main script asks it to record the pair first.
+
+- **Database Merge** (optional): a **Merge Databases** button in the settings pane, under the Database section (it only
+  appears while the CSV Database script is active), opens a new tab where you add as many exported databases as you like
+  (`.xlsx` files, or this browser's stored one without downloading it first), merge them, read a breakdown
+  (unique pairs, duplicates combined, what each file contributed, conflicts and who won), then download the merged
+  `.xlsx` or replace this browser's database with it. When a pair is in more than one source, the most up to date copy (the later Scan Date) wins.
+
+### Limitations (details in the full documentation)
+
+- Developed against saved HTML, mock pages and live feedback; the score-chip text, the History search box placement and the First name / Last name row labels are inferred. The merge counter is hidden by default (`localStorage.elm_show_merge_counter = 'true'`).
+- **Rows per page** cannot be changed from the script. The **Page / Go** box works (it sets the paginator
+  directly if it can, otherwise it clicks First / Next).
+- When both emails are personal, email opens then clicks (from the engagement panel, which the script opens itself) decide; if those tie and nothing in the addresses separates them either, no pick is made and the pair is left for manual review.
+- The classic scroll-to-bottom requirement and Auto-Click FAB were not ported. (The email-open-count tiebreaker is back, fed by the engagement panel.)
+- Dismiss is never clicked by a script (it permanently tells Bolt a pair is not a duplicate); skipping only uses
+  Next duplicate.
 
 ---
 
-### Contacts List Page
-
-**Custom Pagination:** Injects a page number input and page size (limit) input into the paginator. GO button or Enter navigates to the specified page. Updates URL `offset` and `limit` parameters. Works independently for top and bottom paginators.
-
 ---
 
-### Contacts Merge Page
+## Chrome extension (optional)
 
-#### Entry Lockdowns
+The v2 scripts can also run as an unpacked Chrome / Edge extension that updates them from GitHub every time Chrome starts, with a popup to switch each script on or off.
 
-Lockdowns are checked in priority order. When triggered, the FAB turns red with a null symbol and clicking it shows an alert explaining the block.
+1. Download `elm451-dedup-tools-vX.Y.Z.zip` from [Releases](../../releases) and unzip it.
+2. Open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked** and pick the unzipped folder.
+3. Open the extension's **Details** and turn on **Allow user scripts** (Chrome needs this for any userscript extension, Tampermonkey included).
+4. Reload your Element451 tab.
 
-**1. Forbidden Entry Lockdown** (highest priority)
-Blocks entries where First Name or Last Name contains "test" (either side), or the full name exactly matches one of the hardcoded forbidden names in the script source. The triggering row is highlighted red.
-
-**2. Department Lockdown**
-Blocks entries belonging to a department other than the configured `Allowed Department`. Detection scans **all** rows containing Workflows, Application, Program, type:, status:, or Outreach_ and collects department flags before classifying. This ensures the result is consistent regardless of row order.
-
-| Pattern | Classification |
-|---|---|
-| `IA_`, `_IA_`, or `_IA ` | IA (highest priority) |
-| `GRAD_` or `grad student` | Grad |
-| `Outreach_` without `UGRD` | Non-Undergrad (ambiguous — blocked for all specific departments) |
-| None of the above | UnderGrad (default) |
-
-**Priority: IA > Grad > Non-Undergrad > UnderGrad.** A student with both Grad and IA markers is always classified as IA, because students can be both graduate and international. The entire page is scanned before a classification is made — early rows do not short-circuit detection.
-
-- **All**: no filtering, everything allowed.
-- **None**: blocks everything regardless of classification.
-- **UnderGrad / Grad / IA**: blocks anything that doesn't match.
-- **Non-Undergrad**: always blocked for UnderGrad, Grad, and IA. Kept as orange "Unresolved" on the list page since it can't be confidently classified.
-
-The row that matches the detected department is highlighted red (e.g., if classified as IA, the row containing the IA marker is highlighted).
-
-**3. Student ID Mismatch Lockdown**
-Blocks entries where the left and right sides have different School Id values — these are two different students and cannot be merged. The School ID row is highlighted with a deep red border and shadow. This is a complete block with no override.
-
-**4. Ignored Student Detection**
-Detects students with the "Ignored" chip. Auto-click and auto-skip treat ignored students as blocked entries.
-
-#### Conflict / Possible Twins Warning
-
-Before auto-click proceeds, compares First Name, Last Name, Date of Birth (valid years only), and Address between left and right sides. If the conflict count meets or exceeds the threshold (default 2), an alert lists which fields conflict. The user must acknowledge before auto-click continues.
-
-#### Auto-Click FAB
-
-Waits for Spark IDs to appear (confirming page content has loaded), then clicks the FAB. Blocked if any lockdown or ignored student is detected. Retries at 1s, 2s, and 3.5s intervals. Includes console logging for debugging.
-
-#### Auto-Skip Blocked Entries
-
-After auto-click is blocked, waits for the CSV Database script to record the entry (polls `localStorage` every 500ms, up to 10 seconds), then clicks "Next". If the database script is not installed, skips after 1.5 seconds.
-
-**Race condition protection:** Each poll iteration re-checks whether the entry is still actually blocked. If new merge rows loaded that changed the department detection (e.g., grad rows appearing after Spark IDs), the skip is aborted and auto-click is retried. This prevents grad entries from being incorrectly skipped when the allowed department is Grad.
-
-#### Auto-Resolution of Conflict Rows
-
-Triggered when the FAB is clicked. Only applies to rows with the `has-error` class. Resolution follows a priority system (highest to lowest):
-
-**1. Cal State Apply Application side**
-If one side has "Cal State Apply Application" and the other doesn't, all conflicts follow that side (yellow highlight overlay applied). If both have it, the most recent date wins.
-
-**2. Application type entries**
-Counts Application Start, Application Submit, Application Complete, and Admit entries. Side with more wins; if tied, most recent date wins.
-
-**3. Milestone Type Matching**
-When both sides have the same milestone type (e.g., "type: Prospect"), selects left. Only applies when no applicant context is found.
-
-**4. Email preference**
-Prefers personal email domains over institutional: gmail.com, yahoo.com, icloud.com, hotmail.com, aol.com, me.com, outlook.com, live.com, msn.com, protonmail.com, proton.me.
-
-**5. Dual personal email tiebreaking** (when both sides have personal domains)
-Multi-tier system tried in order until one side wins:
-1. Email open count from the User Activity section
-2. First name appearing in the email address
-3. Last name appearing in the email address
-4. Birth year appearing in the email address (checks 4-digit, 3-digit, and 2-digit forms)
-5. Manual review if still tied
-
-**6. csusb.major preference**
-Side with `csusb.major.*` wins. If both have it, follows email selection. If no email selected, manual review.
-
-**7. Encoura ID**
-If both sides have "Encoura Id:", selects left.
-
-**8. College Board ID**
-If both sides have "College Board Id:", selects left.
-
-**9. csusb.school preference**
-For Student Type rows with `csusb.school.*`. If only one side has it, that side wins. If both, follows email selection.
-
-**10. Date of Birth**
-Rejects invalid birth years (starting with '0' or before 1900). Picks the valid side.
-
-**11. First Generation Student**
-Always prefers "Yes" over "No".
-
-**12. Intended Term**
-Prefers the later term code. Parses from format like "Spring 2027 (2274)" — higher 4-digit code = later term.
-
-**13. Name case preference**
-When names differ only in case, prefers Title Case over ALL CAPS or all lowercase.
-
-**14. Legacy / default patterns**
-Spark Id, Record Created, Custom type, Web type, ACUx, and Outreach_UGRD_ all default to left side. Skipped if an applicant side is detected.
-
-#### Address Resolution
-
-Uses a built-in `AddressComparer` module:
-- Parses US addresses into structured components (number, prefix, street, type, suffix, city, state, zip, unit)
-- Normalizes street types (Street -> St, Avenue -> Ave) and directions (North -> N)
-- Strips country variations (United States, USA, US)
-- Detects duplicate components via fuzzy matching (Levenshtein distance at 80% similarity threshold)
-- Calculates completeness scores (points for each component, heavy penalty for duplicates)
-- **Only auto-selects when addresses are the same.** Different addresses result in a tie and follow email selection or require manual review.
-- When addresses are the same, picks the more complete one (e.g., includes apt number, country info).
-
-#### Smart Links (appear after FAB click)
-
-- **Email links:** Turned into links to mailmeteor.com email verification.
-- **Address links:** "Home, [address]" turned into Google Maps links with prettified Title Case display.
-- **Phone formatting:** Reformatted as (xxx)-xxx-xxxx or +cc (xxx)-xxx-xxxx for international.
-
-#### FAB States and Navigation
-
-| State | FAB Appearance | Click Behavior |
-|---|---|---|
-| **Blocked** (forbidden/dept/ID mismatch) | Red with null symbol | Shows alert explaining the block |
-| **First click** (conflicts not visible) | Default | Triggers native conflict detection, runs auto-resolution, scrolls to first unresolved row |
-| **Unresolved conflicts** | Default | Scrolls to the next unresolved red row |
-| **Review required** (not scrolled to bottom) | Grey with down arrow | Shows scroll reminder alert |
-| **Ready to merge** (all resolved + scrolled) | Green, expanded with "Merge" text | Passes click through to trigger actual merge |
-
-#### Merge Success Detection
-
-After the green FAB is clicked, watches for `elm-empty-state` containing "Duplicate user is now merged with master". On detection: increments the merge counter and auto-navigates to the next duplicate (1-second delay).
-
-#### URL Change Detection with Smart Reload
-
-Monitors SPA navigation. Maintains a session-scoped Set of up to 10 recently-seen duplicate IDs. Revisiting a previously-seen ID forces a full page reload for clean state. New duplicates reset all per-page flags and re-run logic.
-
-#### UI Elements
-
-- **Merge Counter:** Pill badge in the navbar showing "Merges: N" with a reset button. Stored in `localStorage`. Animates on increment.
-- **High Contrast Toggle:** Checkbox in the navbar toggling colored borders on conflict rows (red/green) and the yellow applicant highlight.
-- **Settings Gear:** Opens a Material-design-inspired settings panel with Display, Automation, and Department sections.
-- **Ghost Tooltip Suppression:** Makes CDK overlay tooltips non-interactive to prevent them from blocking clicks.
-- **Toast Suppression:** Removes "resolve" snackbar toasts every 100ms to prevent them from covering the UI.
-
----
-
-## Element451 - CSV Database (v8)
-
-A companion script that tracks blocked entries in a local database and annotates the duplicates list page with department badges.
-
-### How It Works
-
-1. Polls `document.body.dataset.csvDept` every 1 second (set by UI Perfection).
-2. When a department value appears, extracts first name, last name, department, blocked row content, and unique ID.
-3. Stores entries in `localStorage` as JSON. Deduplicates by unique ID; updates existing entries if any field changed.
-
-### Database Format
-
-JSON array in `localStorage` key `elm_csv_database`. Each entry:
-
-```json
-{ "firstName": "...", "lastName": "...", "dept": "...", "rowContents": "...", "uniqueId": "..." }
-```
-
-Possible `dept` values: `Grad`, `IA`, `UnderGrad`, `Non-Undergrad`, `Forbidden`, `Ignored`.
-
-### List Page Department Badges
-
-On the duplicates list page, rewrites the default orange "Unresolved" chip on each row to show the department with color-coding:
-
-| Department | Label | Background | Text Color |
-|---|---|---|---|
-| Grad | Graduate | Blue (#e3f2fd) | Blue (#1565c0) |
-| IA | International | Yellow (#fff9c4) | Amber (#f57f17) |
-| UnderGrad | UnderGrad | Purple (#f3e5f5) | Purple (#6a1b9a) |
-| Forbidden | Forbidden | Pink (#fce4ec) | Pink (#c2185b) |
-| Ignored | Ignored | Grey (#f5f5f5) | Grey (#616161) |
-| Non-Undergrad | *(kept as default "Unresolved")* | *(unchanged)* | *(unchanged)* |
-
-**Staleness protection:** Tracks which page the API data was captured for. When navigating between pages, stale data is invalidated and annotations are cleared before re-applying. Each annotation is stamped with an API generation counter to force re-evaluation when fresh data arrives. Row unique IDs are stamped as `data-csv-uid` attributes to survive Angular re-ordering.
-
-**API interception:** Hooks into both `XMLHttpRequest` and `fetch` to capture the duplicates list endpoint response and extract unique IDs for each row.
-
-### Settings (in the UI Perfection settings pane)
-
-Three action buttons in a "Database" section:
-
-- **Download Database:** Exports as CSV (`elm_csv_database_YYYY-MM-DD.csv`). Columns: Firstname, Lastname, Dept., Row Contents, Unique ID.
-- **Upload & Replace Database:** Imports a CSV file, validates structure, replaces the entire database after confirmation.
-- **Clear Database:** Deletes all entries after confirmation and reloads the page.
-
-### UI Elements
-
-- **DB Badge:** Pill badge in the navbar showing "DB: N" (entry count). Updates every 1 second.
-
----
-
-## Inter-Script Communication
-
-| Channel | Direction | Mechanism |
-|---|---|---|
-| Department signal | UI Perfection -> CSV Database | `document.body.dataset.csvDept` attribute on `<body>` |
-| Blocked row content | UI Perfection -> CSV Database | `.blocked-row` / `.blocked-row-critical` CSS classes on `elm-merge-row` elements |
-| UI injection targets | UI Perfection -> CSV Database | `#elm-controls-wrapper` (badge), `#elm-settings-pane .settings-body` (settings section) |
-| Recording confirmation | CSV Database -> UI Perfection | `localStorage.getItem('elm_csv_database')` checked by auto-skip before navigating away |
-
-The CSV Database script depends on UI Perfection for DOM structure and signals. UI Perfection degrades gracefully if the CSV Database script is not installed (auto-skip proceeds after 1.5s instead of waiting for database confirmation).
+The scripts are fetched from this repo's `main` branch on Chrome start (and once right after you load the extension); the toolbar icon shows an arrow and the popup an **Update available** chip when a newer extension zip is released (the extension itself has to be updated by hand: unzip over the folder and reload it). Firefox users keep using Tampermonkey. Details, build and release workflow: [section 16 of the full documentation](Full-Documentation-v2.md#16-chrome-extension).
 
 ---
 
 ## Installation
 
-1. Install [Tampermonkey](https://www.tampermonkey.net/) browser extension.
-2. Create a new userscript and paste the contents of `Element451-UI-Perfection.user.js`.
-3. (Optional) Create a second userscript and paste the contents of `csv-database.js` for entry tracking and list page annotations.
-4. Navigate to your Element451 duplicates page. The scripts activate automatically on `*.element451.io`.
+**Tampermonkey (any browser, including Firefox):**
+1. Install the [Tampermonkey](https://www.tampermonkey.net/) browser extension.
+2. Create a userscript with the contents of `Element451-UI-Perfection-v2.user.js` and, optionally, a second one with
+   `csv-database-v2.js`, and, if you want to merge databases, a third with `csv-database-merge-v2.js` (it needs the CSV
+   script to show its button). Install each once, and do not run them alongside the classic scripts. Open the gear pane to
+   confirm which versions are running.
+3. Navigate to your Element451 duplicates page. The scripts activate automatically on `*.element451.io`.
 
-## localStorage Keys
+**Chrome:** see [Chrome extension](#chrome-extension-optional) above. Do not install the same script in both
+Tampermonkey and the extension; if you do, each script's guard keeps only one copy running.
 
-| Key | Used By | Purpose |
+## Inter-script communication
+
+The two scripts talk through the page, not through any shared code:
+
+| Channel | Direction | Mechanism |
 |---|---|---|
-| `elm_require_scroll_to_bottom` | UI Perfection | Scroll-to-review setting |
-| `elm_auto_click_fab` | UI Perfection | Auto-click FAB setting |
-| `elm_auto_navigate_after_merge` | UI Perfection | Auto-navigate setting |
-| `elm_show_merge_counter` | UI Perfection | Show/hide merge counter |
-| `elm_auto_skip_blocked` | UI Perfection | Auto-skip blocked entries setting |
-| `elm_allowed_department` | UI Perfection | Department filter setting |
-| `elm_high_contrast` | UI Perfection | High contrast toggle state |
+| Department, Spark IDs, script-vs-Bolt line, Bolt score | UI Perfection -> CSV Database | `document.body.dataset.csvDept`, `csvSpark1`, `csvSpark2`, `csvChoice`, `csvScore` |
+| Record before skipping | UI Perfection -> CSV Database | `elm2-record-pair` event on `document` (the CSV script sets `detail.handled` / `.recorded`) |
+| Confirmed merge | UI Perfection -> CSV Database | `elm2-pair-merged` event (`detail.a`, `.b`, `.choice`, `.lost`, `.names`) |
+| Blocked row text | UI Perfection -> CSV Database | `.diff-row.elm2-blocked-row` elements |
+| UI injection targets | UI Perfection -> CSV Database | `#elm-controls-wrapper` (counter), `#elm-settings-pane .settings-body` (Database section and version line) |
+| Merge Databases button, stored database | CSV Database -> Database Merge | the merge script adds its button inside `#elm-settings-db-section` (so it only shows while the CSV script is active) and reads `localStorage.elm_csv_database`; it has no other link to the CSV script |
+
+UI Perfection works without the CSV Database script. The CSV Database script needs UI Perfection for its signals.
+
+## localStorage keys
+
+| Key | Used by | Purpose |
+|---|---|---|
+| `elm_range_level2` | UI Perfection | Pairs-in-range slider (0 None ... 4 All) |
+| `elm_use_picks` | UI Perfection | Use picks from (`ours` / `bolt`) |
+| `elm_when_done` (sessionStorage) | UI Perfection | When done (`wait` / `merge`), reset each browser session |
+| `elm_merge_countdown` | UI Perfection | Cancel-countdown seconds (2-15) or `race` |
+| `elm_auto_skip_blocked` | UI Perfection | Auto-Skip |
+| `elm_next_after_merge` | UI Perfection | Next after merge (default on) |
+| `elm_outcome_toasts` | UI Perfection | Toasts switch |
+| `elm_highlight_rows` | UI Perfection | Highlight Rows |
+| `elm_allowed_department` | UI Perfection | Allowed Department |
+| `elm_show_merge_counter` | UI Perfection | Hidden: show the merge counter |
 | `elm_merge_count` | UI Perfection | Merge counter value |
-| `elm_csv_database` | CSV Database | JSON array of recorded entries |
+| `elm2_bolt_picks` | UI Perfection | Bolt's original pick per conflicting row, hashed (no names or emails), so a revisited pair still shows what Bolt picked |
+| `elm_csv_database` | CSV Database | Recorded pairs (JSON array, Spark-ID keyed) |
+| `elm_show_db_ui` | CSV Database | Show Database UI |
+
+The Chrome extension keeps its own switches and cached scripts in `chrome.storage.local` (see the full documentation).

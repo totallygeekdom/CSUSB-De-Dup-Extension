@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Element451 Dedup Tools</title>
+<link rel="stylesheet" href="popup.css">
+</head>
+<body>
+<main id="app" aria-live="polite">
+  <header class="top">
+    <h1>Element451 Tools</h1>
+  </header>
+
+  <!-- main view -->
+  <section id="main-view">
+    <div id="stats-slot"></div>
+    <div id="off-card" class="card warn" hidden>
+      <div class="card-title">One setting to turn on</div>
+      <p>Chrome needs <b>Allow user scripts</b> switched on for this extension before it can run the scripts. It takes a few seconds, once.</p>
+      <button id="open-ext" class="btn filled">Open the extension page</button>
+    </div>
+    <ul id="scripts" class="list"></ul>
+    <div id="reload-row" class="reload" hidden>
+      <span>Reload the page to apply.</span>
+      <button id="reload" class="btn tonal small">Reload tab</button>
+    </div>
+  </section>
+
+  <p id="foot" class="fine"></p>
+
+  <!-- update sheet -->
+  <div id="sheet" class="sheet" hidden>
+    <div class="sheet-body">
+      <div class="card-title">Update the extension</div>
+      <ol>
+        <li>The zip is downloading. Unzip it over your extension folder.</li>
+        <li>Open <b>chrome://extensions</b>.</li>
+        <li>Click the reload arrow on this extension.</li>
+      </ol>
+      <div class="row">
+        <button id="sheet-ext" class="btn filled">Open chrome://extensions</button>
+        <button id="sheet-close" class="btn text">Close</button>
+      </div>
+    </div>
+  </div>
+</main>
+<script src="popup.js"></script>
+</body>
+</html>

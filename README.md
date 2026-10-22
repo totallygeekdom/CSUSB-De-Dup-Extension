@@ -17,7 +17,7 @@ chip). Two v2 scripts target it, plus an optional third that merges databases:
 
 | Script | File | Current version |
 |---|---|---|
-| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.213` (shown in the settings pane) |
+| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.214` (shown in the settings pane) |
 | Database (New Deduplication Layout) | `database-v2.js` | `@version 2.55` |
 | Database Merge (optional, pairs with Database) | `database-merge-v2.js` | `@version 1.8` |
 

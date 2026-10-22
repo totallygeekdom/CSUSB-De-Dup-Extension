@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.194`, shown in the settings pane as `v2.194` |
+| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.195`, shown in the settings pane as `v2.195` |
 | CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.47` |
 | Database Merge (optional) | `csv-database-merge-v2.js` | `@version 1.5`, see [section 17](#17-database-merge) |
 
@@ -188,7 +188,7 @@ Off: the script stops on those pairs and leaves them on screen, showing the popu
 
 Download / Upload & Replace / Clear Database (added by the CSV script, [section 11](#11-csv-database-v2)).
 
-The pane's **Info** section (last, in a single list container) lists the versions in use, which matters when the scripts update themselves in the Chrome extension: `Main script · v2.194` (the UI script), `Database script · v2.47` (added under it by the CSV script, when installed) and `Extension · v1.0.0` (only when running through the extension, which hands the page its version as `window.__elm451Extension` when it registers the scripts). All three use the same `vX.Y` style; the console still logs the main script as `v2-build-185`.
+The pane's **Info** section (last, in a single list container) lists the versions in use, which matters when the scripts update themselves in the Chrome extension: `Main script · v2.195` (the UI script), `Database script · v2.47` (added under it by the CSV script, when installed) and `Extension · v1.0.0` (only when running through the extension, which hands the page its version as `window.__elm451Extension` when it registers the scripts). All three use the same `vX.Y` style; the console still logs the main script as `v2-build-185`.
 
 ### 4.9 Hidden setting
 
@@ -326,7 +326,7 @@ All of these are CSS/DOM additions made by the main script. Colours use a Materi
 
 ### 10.3 Settings pane
 
-A right-hand Material 3 panel (warm neutral surface, 28px rounded left edge) laid out as an **M3 Expressive list**: each setting (and each Database button) is its own light container, 2px apart, the first and last of a group having large 20px outer corners and the rest 6px (`.elm-list` / `.elm-item`; the CSV script puts "Show Database UI" in its own item and styles its Database buttons as list rows): a discrete Material 3 **slider** (track split by a handle, stop dots, value bubble while dragging, labels under it), two **segmented buttons** (Use picks from, When done), a select for the countdown and department, and Material 3 switches. Descriptions under each control reserve their height so the controls below do not jump. A build line shows `New layout · v2-build-N`.
+A right-hand Material 3 panel (warm neutral surface, 28px rounded left edge) with a header of a tonal circular close button at the top left (a 40px circle 8px in from each edge, concentric with the 28px corner) next to the title, laid out as an **M3 Expressive list**: each setting (and each Database button) is its own light container, 2px apart, the first and last of a group having large 20px outer corners and the rest 6px (`.elm-list` / `.elm-item`; the CSV script puts "Show Database UI" in its own item and styles its Database buttons as list rows): a discrete Material 3 **slider** (track split by a handle, stop dots, value bubble while dragging, labels under it), two **segmented buttons** (Use picks from, When done), a select for the countdown and department, and Material 3 switches. Descriptions under each control reserve their height so the controls below do not jump. A build line shows `New layout · v2-build-N`.
 
 ### 10.4 List page
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.197
+// @version      2.198
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -28,7 +28,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.197'; // keep in sync with @version
+    const VERSION = '2.198'; // keep in sync with @version
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -608,10 +608,10 @@
         /* modal side sheet */
         #elm-settings-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, .32); z-index: 9998; }
         #elm-settings-overlay.open { display: block; }
-        #elm-settings-pane { position: fixed; top: 0; right: -400px; width: 360px; max-width: 100vw; height: 100%; box-sizing: border-box; background: var(--md-surface-container-low); color: var(--md-on-surface); border-radius: 28px 0 0 28px; box-shadow: var(--md-elev-3); z-index: 9999; transition: right .3s var(--md-ease); overflow-y: auto; font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+        #elm-settings-pane { position: fixed; top: 0; right: -400px; width: 360px; max-width: 100vw; height: 100%; box-sizing: border-box; background: var(--md-surface-container-low); color: var(--md-on-surface); border-radius: 32px 0 0 32px; box-shadow: var(--md-elev-3); z-index: 9999; transition: right .3s var(--md-ease); overflow-y: auto; font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; }
         #elm-settings-pane.open { right: 0; }
-        /* Header: the close button is a tonal circle at the top left, concentric with the panel's 28px corner: a 28px circle (radius 14) sits 14px from both edges, so the gap to the curve is 28 - 14 = 14px all the way round */
-        #elm-settings-pane .settings-header { display: flex; align-items: center; gap: 14px; padding: 14px 16px 6px 14px; }
+        /* Header: the close button is a tonal circle at the top left, concentric with the panel's 32px corner: a 28px circle (radius 14) sits 18px from both edges, so the gap to the curve is 32 - 14 = 18px all the way round */
+        #elm-settings-pane .settings-header { display: flex; align-items: center; gap: 14px; padding: 18px 16px 8px 18px; }
         #elm-settings-pane .settings-title { font-size: 22px; line-height: 28px; font-weight: 400; }
         #elm-settings-pane .elm-item .settings-build { font-size: 13px; line-height: 18px; letter-spacing: .25px; color: var(--md-on-surface-variant); padding: 6px 0; } /* same as the description text */
         #elm-settings-pane .settings-build { font-size: 12px; line-height: 16px; letter-spacing: .5px; color: var(--md-on-surface-variant); }

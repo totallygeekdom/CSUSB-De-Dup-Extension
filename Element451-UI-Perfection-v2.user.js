@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.204
+// @version      2.205
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -28,7 +28,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.204'; // keep in sync with @version
+    const VERSION = '2.205'; // keep in sync with @version
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -643,28 +643,32 @@
         /* Material 3 style switches for the settings pane (same look as the restyled
                "Hide matching items" toggle): 40x24 pill, small thumb off, filled track
                with a white check thumb on. */
-        .elm-toggle-switch { position: relative; width: 40px; height: 24px; flex-shrink: 0; }
+        /* M3 switch: 52x32 track with a 2px outline, a 16px handle (24px with a check when on, 28px while pressed) */
+        .elm-toggle-switch { position: relative; width: 52px; height: 32px; flex-shrink: 0; }
         .elm-toggle-switch input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; z-index: 1; }
         .elm-toggle-slider {
             position: absolute; inset: 0; box-sizing: border-box;
-            border: 2px solid #73777f; border-radius: 12px; background: #e6e1db;
+            border: 2px solid #73777f; border-radius: 16px; background: #e6e1db;
             transition: background-color 0.2s, border-color 0.2s;
         }
         .elm-toggle-slider::before {
-            content: ""; position: absolute; top: 50%; left: 4px;
-            width: 12px; height: 12px; margin-top: -6px; border-radius: 50%; background: #73777f;
-            transition: left 0.2s, width 0.2s, height 0.2s, margin-top 0.2s, background-color 0.2s;
+            content: ""; position: absolute; top: 50%; left: 6px;
+            width: 16px; height: 16px; margin-top: -8px; border-radius: 50%; background: #73777f;
+            transition: left 0.25s var(--md-ease), width 0.2s var(--md-ease), height 0.2s var(--md-ease), margin-top 0.2s var(--md-ease), background-color 0.2s;
         }
+        .elm-toggle-switch input:active + .elm-toggle-slider::before { left: 2px; width: 28px; height: 28px; margin-top: -14px; }
         .elm-toggle-switch input:checked + .elm-toggle-slider {
             background: var(--md-primary); border-color: var(--md-primary);
         }
         .elm-toggle-switch input:checked + .elm-toggle-slider::before {
-            left: 17px; width: 18px; height: 18px; margin-top: -9px; background: #fff;
+            left: 22px; width: 24px; height: 24px; margin-top: -12px; background: #fff;
         }
+        .elm-toggle-switch input:checked:active + .elm-toggle-slider::before { left: 18px; width: 28px; height: 28px; margin-top: -14px; }
         .elm-toggle-switch input:checked + .elm-toggle-slider::after {
-            content: ""; position: absolute; left: 24px; top: 4px; width: 4px; height: 8px;
-            border: solid var(--md-primary); border-width: 0 2px 2px 0; transform: rotate(45deg);
+            content: ""; position: absolute; left: 34px; top: 50%; width: 5px; height: 10px;
+            border: solid var(--md-primary); border-width: 0 2px 2px 0; transform: translate(-50%, -62%) rotate(45deg);
         }
+        .elm-toggle-switch input:disabled { cursor: default; }
         /* M3 discrete slider (Auto-Apply level): 16px rounded track split by a 4px pill handle
                with a 6px gap either side, stop dots on the track, a value bubble while
                focused/pressed. The real <input type=range> sits on top, invisible, so

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.211
+// @version      2.212
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.211'; // keep in sync with @version
+    const VERSION = '2.212'; // keep in sync with @version
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -107,7 +107,7 @@
                button element instead of a shared row) --- */
         /* --- AI-vs-script pick comparison bar + per-row disagreement badges --- */
         /* Shared toast stack (also used by csv-database-v2.js): bottom-left, stacks upward. */
-        #elm2-toast-stack { position: fixed; left: 16px; bottom: 16px; z-index: 10000; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+        #elm2-toast-stack { position: fixed; left: 16px; bottom: 16px; z-index: 10002; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
         .elm2-toast { display: flex; align-items: center; gap: 12px; box-sizing: border-box; min-height: 48px; max-width: 340px; padding: 8px 16px 8px 12px; border-radius: 4px; background: #2f3236; color: #f1f3f7; font: 400 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .25px; box-shadow: var(--md-elev-3); opacity: 0; transform: translateY(8px); transition: opacity .25s var(--md-ease), transform .25s var(--md-ease); }
         .elm2-toast.visible { opacity: 1; transform: none; }
         .elm2-toast.elm2-notice, .elm2-toast.elm2-result { padding-left: 16px; }
@@ -2697,7 +2697,7 @@
     // ---- Race lights: a pixel-art kart waits in the shaded strip between the panel and the screen edge
     // (16px in from the edge), boosts at 3 and drives under the panel from 1. The lane is exactly that strip, so the
     // kart is clipped at the panel's edge (which looks like going under it), sits above the page dimming and
-    // below the toasts (z-index 9990 < 10000).
+    // below the toasts (z-index 9990 < 10002).
     // The driver is the CSUSB coyote in side profile, upright in a go-kart, drawn as pixel art. Proportions follow
     // the Super Mario Kart sprite sheet it was modelled on (about a 30 px canvas, 7 px wheels at the bottom corners,
     // a thin pan between them, a head half the sprite's height, a 1 px dark outline); every pixel is original.

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.195
+// @version      2.196
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -28,7 +28,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.195'; // keep in sync with @version
+    const VERSION = '2.196'; // keep in sync with @version
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -610,13 +610,13 @@
         #elm-settings-overlay.open { display: block; }
         #elm-settings-pane { position: fixed; top: 0; right: -400px; width: 360px; max-width: 100vw; height: 100%; box-sizing: border-box; background: var(--md-surface-container-low); color: var(--md-on-surface); border-radius: 28px 0 0 28px; box-shadow: var(--md-elev-3); z-index: 9999; transition: right .3s var(--md-ease); overflow-y: auto; font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; }
         #elm-settings-pane.open { right: 0; }
-        /* Header: the close button is a tonal circle at the top left, concentric with the panel's 28px corner (centre 28px in from both edges: a 40px circle sits 8px from each edge) */
-        #elm-settings-pane .settings-header { display: flex; align-items: center; gap: 16px; padding: 8px 16px 4px 8px; min-height: 56px; }
+        /* Header: the close button is a tonal circle at the top left, concentric with the panel's 28px corner: a 32px circle (radius 16) sits 12px from both edges, so the gap to the curve is 28 - 16 = 12px all the way round */
+        #elm-settings-pane .settings-header { display: flex; align-items: center; gap: 16px; padding: 12px 16px 6px 12px; }
         #elm-settings-pane .settings-title { font-size: 22px; line-height: 28px; font-weight: 400; }
         #elm-settings-pane .elm-item .settings-build { font-size: 13px; line-height: 18px; letter-spacing: .25px; color: var(--md-on-surface-variant); padding: 6px 0; } /* same as the description text */
         #elm-settings-pane .settings-build { font-size: 12px; line-height: 16px; letter-spacing: .5px; color: var(--md-on-surface-variant); }
-        #elm-settings-close { width: 40px; height: 40px; flex: none; padding: 0; display: flex; align-items: center; justify-content: center; background: var(--md-surface-container-high); border: none; border-radius: 50%; color: var(--md-on-surface); cursor: pointer; transition: background-color .2s var(--md-ease); }
-        #elm-settings-close svg { width: 22px; height: 22px; fill: currentColor; }
+        #elm-settings-close { width: 32px; height: 32px; flex: none; padding: 0; display: flex; align-items: center; justify-content: center; background: var(--md-surface-container-high); border: none; border-radius: 50%; color: var(--md-on-surface); cursor: pointer; transition: background-color .2s var(--md-ease); }
+        #elm-settings-close svg { width: 18px; height: 18px; fill: currentColor; }
         #elm-settings-close:hover { background: var(--md-surface-container-highest); }
         #elm-settings-close:focus-visible { outline: 2px solid var(--md-primary); }
         #elm-settings-pane .settings-body { padding: 0 24px 24px; }

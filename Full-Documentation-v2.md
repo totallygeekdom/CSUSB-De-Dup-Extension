@@ -6,7 +6,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 | Script | File | Current version |
 |---|---|---|
 | Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.218`, shown in the settings pane as `v2.210` |
-| Element451 - Database v2 | `database-v2.js` | `@version 2.57` |
+| Element451 - Database v2 | `database-v2.js` | `@version 2.58` |
 | Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.9`, see [section 17](#17-database-merge) |
 
 The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
@@ -188,7 +188,7 @@ Off: the script stops on those pairs and leaves them on screen, showing the popu
 
 Download / Upload & Replace / Clear Database (added by the Database script, [section 11](#11-database-v2)).
 
-The pane's **Info** section (last, in a single list container) lists the versions in use, which matters when the scripts update themselves in the Chrome extension: `Main script · v2.218` (the UI script), `Database script · v2.57` (added under it by the Database script, when installed) and `Extension · v1.0.0` (only when running through the extension, which hands the page its version as `window.__elm451Extension` when it registers the scripts). All three use the same `vX.Y` style; the console still logs the main script as `v2-build-185`.
+The pane's **Info** section (last, in a single list container) lists the versions in use, which matters when the scripts update themselves in the Chrome extension: `Main script · v2.218` (the UI script), `Database script · v2.58` (added under it by the Database script, when installed) and `Extension · v1.0.0` (only when running through the extension, which hands the page its version as `window.__elm451Extension` when it registers the scripts). All three use the same `vX.Y` style; the console still logs the main script as `v2-build-185`.
 
 ### 4.9 Hidden setting
 
@@ -339,7 +339,7 @@ A right-hand Material 3 panel (warm neutral surface, 40px rounded left edge) wit
 
 ### 10.5 Toasts
 
-Both scripts append toasts to one shared stack, **bottom-left**, newest at the bottom, up to 4, each fading in/out: the Database script's `API: data captured successfully` (not shown while the merge panel is open: the list refreshes in the background after a merge) / `unavailable, using database fallback`, and the main script's notices (Auto-merge cancelled/stopped, Going to page N…). The same message arriving again refreshes the existing toast.
+Both scripts append toasts to one shared stack, **bottom-left**, newest at the bottom, up to 4, each fading in/out: the Database script's `API: data captured successfully` (never shown while the merge panel is open, and one already showing is removed when the panel opens: the list refreshes in the background after a merge. "Open" means the diff form is on the page, or the review sidebar is on screen) / `unavailable, using database fallback`, and the main script's notices (Auto-merge cancelled/stopped, Going to page N…). The same message arriving again refreshes the existing toast.
 
 ---
 

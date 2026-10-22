@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - Database v2
 // @namespace    http://tampermonkey.net/
-// @version      2.57
+// @version      2.58
 // @description  Tracks duplicate entries in a database stored in browser localStorage (exports an .xlsx spreadsheet) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -15,7 +15,7 @@
     if (window.__elm451CsvDatabaseLoaded) return;
     window.__elm451CsvDatabaseLoaded = true;
 
-    const VERSION = '2.57'; // keep in sync with @version
+    const VERSION = '2.58'; // keep in sync with @version
     const STORAGE_KEY = 'elm_csv_database';
     const UI_KEY = 'elm_show_db_ui';
     function showDbUi() { try { return localStorage.getItem(UI_KEY) !== 'false'; } catch (e) { return true; } }
@@ -103,6 +103,15 @@
     // =========================================================
     function isReviewDetailPage() {
         return !!document.querySelector('elm-duplicate-field-diff-form');
+    }
+    // Is the merge panel (the review sidebar) open? The diff form can be missing for a moment while the panel
+    // loads or moves on to the next pair, so the sidebar itself counts too, as long as it is on screen.
+    function mergePanelOpen() {
+        if (isReviewDetailPage()) return true;
+        const sb = document.querySelector('elm-review-duplicates-sidebar');
+        if (!sb) return false;
+        const r = sb.getBoundingClientRect();
+        return r.width > 0 && r.height > 0 && r.right > 0 && r.left < window.innerWidth;
     }
     function getQueueTable() {
         return document.querySelector('elm-review-queue-table');
@@ -292,6 +301,7 @@
         return st;
     }
     function showApiToast(message, type) {
+        if (mergePanelOpen()) return; // these toasts are for the queue, never over the merge panel
         const st = toastStack();
         // the same message again just refreshes the existing toast instead of stacking a copy
         let el = Array.from(st.children).find(c => c.dataset.key === 'csv:' + message);
@@ -389,7 +399,7 @@
         // The list URL no longer changes per page, so a page change can't be detected from it any
         // more. Each capture of fresh list data is the signal instead: toast every time.
         lastAnnotationSource = 'api';
-        if (!isReviewDetailPage()) showApiToast('API: data captured successfully', 'success');
+        if (!mergePanelOpen()) showApiToast('API: data captured successfully', 'success');
         annotateQueueTable();
         setTimeout(annotateQueueTable, 100);
         setTimeout(annotateQueueTable, 500);
@@ -600,7 +610,7 @@
 
         if (lastAnnotationSource !== 'api') {
             lastAnnotationSource = 'api';
-            if (!isReviewDetailPage()) showApiToast('API: data captured successfully', 'success');
+            if (!mergePanelOpen()) showApiToast('API: data captured successfully', 'success');
         }
         const usedApiIndices = new Set();
         const usedDbIndices = new Set();
@@ -666,6 +676,11 @@
     }
     setInterval(() => { attemptFirstPageFetch(); annotateQueueTable(); startListObserver(); }, 2000);
     setInterval(checkListUrlChange, 500);
+    // a toast that was already showing when the merge panel opened goes away with it
+    setInterval(() => {
+        if (!mergePanelOpen()) return;
+        document.querySelectorAll('#elm2-toast-stack .csv-toast').forEach(t => t.remove());
+    }, 300);
 
     // =========================================================
     // EXPORT / IMPORT: an .xlsx spreadsheet (column widths, frozen bold header, filter / sort buttons on Bolt Score, Dept.,

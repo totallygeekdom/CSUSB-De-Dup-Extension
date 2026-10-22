@@ -1,13 +1,13 @@
 // ==UserScript==
-// @name         Element451 - CSV Database (New Deduplication Layout)
+// @name         Element451 - Database v2
 // @namespace    http://tampermonkey.net/
-// @version      2.51
+// @version      2.58
 // @description  Tracks duplicate entries in a database stored in browser localStorage (exports an .xlsx spreadsheet) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
 // @grant        none
-// @updateURL    https://raw.githubusercontent.com/totallygeekdom/csusb-de-dup-extension/main/csv-database-v2.js
-// @downloadURL  https://raw.githubusercontent.com/totallygeekdom/csusb-de-dup-extension/main/csv-database-v2.js
+// @updateURL    https://raw.githubusercontent.com/totallygeekdom/csusb-de-dup-extension/main/database-v2.js
+// @downloadURL  https://raw.githubusercontent.com/totallygeekdom/csusb-de-dup-extension/main/database-v2.js
 // ==/UserScript==
 (function () {
     'use strict';
@@ -15,7 +15,7 @@
     if (window.__elm451CsvDatabaseLoaded) return;
     window.__elm451CsvDatabaseLoaded = true;
 
-    const VERSION = '2.51'; // keep in sync with @version
+    const VERSION = '2.58'; // keep in sync with @version
     const STORAGE_KEY = 'elm_csv_database';
     const UI_KEY = 'elm_show_db_ui';
     function showDbUi() { try { return localStorage.getItem(UI_KEY) !== 'false'; } catch (e) { return true; } }
@@ -62,8 +62,13 @@
         @keyframes csvPulse { 0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.6; } 50% { transform: translate(-50%, -50%) scale(1.5); opacity: 0.2; } }
 
         /* tonal assist-chip style pill, matches the merge counter */
-        #elm-db-size-badge { display: flex; align-items: center; height: 32px; box-sizing: border-box; padding: 0 12px; background: #e6e1db; border: none; border-radius: 8px; white-space: nowrap; cursor: default; }
-        #elm-db-size-label { font: 500 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .1px; color: #1a1c20; padding: 0; }
+        #elm-db-size-badge { order: 1; display: flex; align-items: center; gap: 8px; height: 36px; box-sizing: border-box; padding: 0 16px 0 4px; background: var(--md-primary-container, #fde3cc); border: none; border-radius: 18px; white-space: nowrap; cursor: default; }
+        /* with the merge counter showing, the two form one pair: big outer corners, small inner ones */
+        #elm-controls-wrapper:has(#elm-counter-wrapper) #elm-db-size-badge { border-radius: 18px 4px 4px 18px; }
+        #elm-db-size-icon { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--md-primary, #ef6c00); color: #fff; }
+        #elm-db-size-icon svg { width: 16px; height: 16px; }
+        #elm-db-size-label b { font-weight: 700; font-size: 15px; font-variant-numeric: tabular-nums; }
+        #elm-db-size-label { font: 500 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .1px; color: var(--md-on-primary-container, #5a2800); padding: 0; }
         /* Material 3 buttons: Download/Upload are tonal, Clear is an outlined error button */
         .settings-action-btn {
             display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; height: 40px; margin: 8px 0; padding: 0 24px; box-sizing: border-box;
@@ -98,6 +103,15 @@
     // =========================================================
     function isReviewDetailPage() {
         return !!document.querySelector('elm-duplicate-field-diff-form');
+    }
+    // Is the merge panel (the review sidebar) open? The diff form can be missing for a moment while the panel
+    // loads or moves on to the next pair, so the sidebar itself counts too, as long as it is on screen.
+    function mergePanelOpen() {
+        if (isReviewDetailPage()) return true;
+        const sb = document.querySelector('elm-review-duplicates-sidebar');
+        if (!sb) return false;
+        const r = sb.getBoundingClientRect();
+        return r.width > 0 && r.height > 0 && r.right > 0 && r.left < window.innerWidth;
     }
     function getQueueTable() {
         return document.querySelector('elm-review-queue-table');
@@ -203,13 +217,13 @@
             if (changed) localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
             return db;
         } catch (e) {
-            console.error('CSV Database: Error reading database', e);
+            console.error('Database: Error reading database', e);
             return [];
         }
     }
     function saveDatabase(db) {
         try { localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); }
-        catch (e) { console.error('CSV Database: Error saving database', e); }
+        catch (e) { console.error('Database: Error saving database', e); }
     }
     // Local date as YYYY-MM-DD, how Scan Date is stored (it sorts and compares correctly); the spreadsheet shows DD/MM/YYYY
     function todayStr() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
@@ -287,6 +301,7 @@
         return st;
     }
     function showApiToast(message, type) {
+        if (mergePanelOpen()) return; // these toasts are for the queue, never over the merge panel
         const st = toastStack();
         // the same message again just refreshes the existing toast instead of stacking a copy
         let el = Array.from(st.children).find(c => c.dataset.key === 'csv:' + message);
@@ -383,10 +398,8 @@
         clearStaleAnnotations();
         // The list URL no longer changes per page, so a page change can't be detected from it any
         // more. Each capture of fresh list data is the signal instead: toast every time.
-        if (!isReviewDetailPage()) {
-            lastAnnotationSource = 'api';
-            showApiToast('API: data captured successfully', 'success');
-        }
+        lastAnnotationSource = 'api';
+        if (!mergePanelOpen()) showApiToast('API: data captured successfully', 'success');
         annotateQueueTable();
         setTimeout(annotateQueueTable, 100);
         setTimeout(annotateQueueTable, 500);
@@ -597,7 +610,7 @@
 
         if (lastAnnotationSource !== 'api') {
             lastAnnotationSource = 'api';
-            showApiToast('API: data captured successfully', 'success');
+            if (!mergePanelOpen()) showApiToast('API: data captured successfully', 'success');
         }
         const usedApiIndices = new Set();
         const usedDbIndices = new Set();
@@ -663,6 +676,11 @@
     }
     setInterval(() => { attemptFirstPageFetch(); annotateQueueTable(); startListObserver(); }, 2000);
     setInterval(checkListUrlChange, 500);
+    // a toast that was already showing when the merge panel opened goes away with it
+    setInterval(() => {
+        if (!mergePanelOpen()) return;
+        document.querySelectorAll('#elm2-toast-stack .csv-toast').forEach(t => t.remove());
+    }, 300);
 
     // =========================================================
     // EXPORT / IMPORT: an .xlsx spreadsheet (column widths, frozen bold header, filter / sort buttons on Bolt Score, Dept.,
@@ -926,11 +944,18 @@
     // DATABASE UI (badge in header, section in settings pane — same
     // injection targets as the classic script, provided by UI-Perfection-v2)
     // =========================================================
+    // "Database 128" with the number in bold
+    function setDbLabel(label, n) {
+        const b = document.createElement('b');
+        b.textContent = String(n);
+        label.textContent = 'Database ';
+        label.appendChild(b);
+    }
     function updateDbSizeBadge() {
         const label = document.getElementById('elm-db-size-label');
         if (!label) return;
         const count = getDatabase().length;
-        label.textContent = `DB: ${count}`;
+        setDbLabel(label, count);
         const badge = document.getElementById('elm-db-size-badge');
         if (badge) badge.title = `Database: ${count} entries recorded`;
     }
@@ -943,7 +968,11 @@
         badge.title = 'Database entries recorded';
         const label = document.createElement('span');
         label.id = 'elm-db-size-label';
-        label.textContent = 'DB: 0';
+        setDbLabel(label, 0);
+        const icon = document.createElement('span');
+        icon.id = 'elm-db-size-icon';
+        icon.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 3C7.58 3 4 4.79 4 7v10c0 2.21 3.58 4 8 4s8-1.79 8-4V7c0-2.21-3.58-4-8-4m0 2c3.87 0 6 1.5 6 2s-2.13 2-6 2-6-1.5-6-2 2.13-2 6-2m6 12c0 .5-2.13 2-6 2s-6-1.5-6-2v-2.23c1.61.78 3.72 1.23 6 1.23s4.39-.45 6-1.23zm0-4.55c-1.3.95-3.58 1.55-6 1.55s-4.7-.6-6-1.55V9.64c1.47.83 3.61 1.36 6 1.36s4.53-.53 6-1.36z"/></svg>';
+        badge.appendChild(icon);
         badge.appendChild(label);
         const settingsBtn = document.getElementById('elm-settings-btn');
         if (settingsBtn && settingsBtn.nextSibling) controlsWrapper.insertBefore(badge, settingsBtn.nextSibling);

@@ -31,7 +31,7 @@ const check = (ok, label) => { console.log((ok ? 'ok   ' : 'FAIL ') + label); if
     await page.waitForSelector('#scripts .row-item', { timeout: 10000 });
     check((await page.locator('#scripts .row-item').count()) === 3, 'popup lists the three scripts');
     check(!(await page.locator('#off-card').isHidden()), 'popup shows the "Allow user scripts" card while the API is off');
-    check((await page.locator('.name').allTextContents()).join('|') === 'UI Perfection|CSV Database|Database Merge', 'script names');
+    check((await page.locator('.name').allTextContents()).join('|') === 'UI Perfection|Database|Database Merge', 'script names');
 
     check((await page.locator('#foot').innerText()).includes('Extension v'), 'footer shows the extension version');
 
@@ -40,7 +40,7 @@ const check = (ok, label) => { console.log((ok ? 'ok   ' : 'FAIL ') + label); if
     await page.reload();
     await page.waitForSelector('.chip', { timeout: 10000 });
     check((await page.locator('.chip').innerText()).includes('9.9.9'), 'update chip shows the new version');
-    check((await page.locator('.stats').count()) === 0, 'the chip replaces the counters');
+    check((await page.locator('.stats, .stat').count()) === 0, 'the popup has no counter row');
     await page.click('.chip .x');
     await page.waitForSelector('.chip', { state: 'detached', timeout: 5000 });
     check(true, 'dismissing the chip removes it');
@@ -91,7 +91,7 @@ const check = (ok, label) => { console.log((ok ? 'ok   ' : 'FAIL ') + label); if
     await site.reload();
     await site.waitForFunction(() => window.__elm451UiPerfectionLoaded, null, { timeout: 15000 }).catch(() => {});
     const off = await flags();
-    check(off.ui && !off.csv, 'turning CSV Database off stops only that script');
+    check(off.ui && !off.csv, 'turning Database off stops only that script');
     await syncVia({ type: 'toggle', id: 'csv', enabled: true });
 
     check(errors.length === 0, 'no page errors' + (errors.length ? ': ' + errors.join('; ') : ''));

@@ -11,8 +11,8 @@ const RAW = 'https://raw.githubusercontent.com/' + REPO + '/' + BRANCH + '/';
 const MATCHES = ['https://*.element451.io/*'];
 const SCRIPTS = [
   { id: 'ui', name: 'UI Perfection', file: 'Element451-UI-Perfection-v2.user.js' },
-  { id: 'csv', name: 'CSV Database', file: 'csv-database-v2.js' },
-  { id: 'merge', name: 'Database Merge', file: 'csv-database-merge-v2.js' }
+  { id: 'csv', name: 'Database', file: 'database-v2.js' },
+  { id: 'merge', name: 'Database Merge', file: 'database-merge-v2.js' }
 ];
 
 const versionOf = (code) => ((code || '').match(/@version\s+([^\s]+)/) || [])[1] || '';

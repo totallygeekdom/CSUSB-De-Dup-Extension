@@ -1,32 +1,32 @@
 // ==UserScript==
-// @name         Element451 - Database Merge (New Deduplication Layout)
+// @name         Element451 - Database Merge v2
 // @namespace    http://tampermonkey.net/
-// @version      1.7
-// @description  Adds a "Merge Databases" page to the CSV Database script: combine several exported databases (and this browser's) into one, with a breakdown
+// @version      1.9
+// @description  Adds a "Merge Databases" page to the Database script: combine several exported databases (and this browser's) into one, with a breakdown
 // @author       You
 // @match        https://*.element451.io/*
 // @grant        none
-// @updateURL    https://raw.githubusercontent.com/totallygeekdom/csusb-de-dup-extension/main/csv-database-merge-v2.js
-// @downloadURL  https://raw.githubusercontent.com/totallygeekdom/csusb-de-dup-extension/main/csv-database-merge-v2.js
+// @updateURL    https://raw.githubusercontent.com/totallygeekdom/csusb-de-dup-extension/main/database-merge-v2.js
+// @downloadURL  https://raw.githubusercontent.com/totallygeekdom/csusb-de-dup-extension/main/database-merge-v2.js
 // ==/UserScript==
 //
-// Pairs with csv-database-v2.js in only two ways: the "Merge Databases" button is added to the Database section that
-// script puts in the settings pane (so the button only exists while the CSV script is active), and the current
+// Pairs with database-v2.js in only two ways: the "Merge Databases" button is added to the Database section that
+// script puts in the settings pane (so the button only exists while the Database script is active), and the current
 // database is read straight from localStorage (`elm_csv_database`), so it can be merged without downloading it first.
 // Everything else (reading .xlsx files, writing the merged .xlsx) is this script's own code, which is why
-// the file-format block below is a copy of the CSV script's. The button opens a new tab; the tab is built from this page
+// the file-format block below is a copy of the Database script's. The button opens a new tab; the tab is built from this page
 // with DOM calls (no inline scripts), so it works whatever the site's content-security policy says, and it needs this
 // Element451 tab to stay open while you use it.
 (function () {
     'use strict';
     if (window.__elm451DbMergeLoaded) return;
     window.__elm451DbMergeLoaded = true;
-    const VERSION = '1.7'; // keep in sync with @version
+    const VERSION = '1.9'; // keep in sync with @version
 
     // =========================================================
     // STORED DATABASE AND FILE FORMATS
     // =========================================================
-    const STORAGE_KEY = 'elm_csv_database'; // the CSV Database script's key
+    const STORAGE_KEY = 'elm_csv_database'; // the Database script's key
     const ELLIPSIS = '...';
     function trunc3(t) {
         t = (t || '').trim();
@@ -34,7 +34,7 @@
         return t.length > 3 ? t.slice(0, 3) + ELLIPSIS : t;
     }
     // =========================================================
-    // FILE FORMAT (a copy of the CSV script's .xlsx writer and reader). The written .xlsx has
+    // FILE FORMAT (a copy of the Database script's .xlsx writer and reader). The written .xlsx has
     // preset column widths, a frozen header row and filter / sort buttons on Bolt Score, Dept., Scan Date and Merged.
     // =========================================================
     // Columns in file order. Merged and Script vs Bolt sit between Spark ID 2 and Row Contents.
@@ -304,7 +304,7 @@
     }
     const api = {
         read: () => { try { const d = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); return Array.isArray(d) ? d : []; } catch (e) { return []; } },
-        write: (entries) => localStorage.setItem(STORAGE_KEY, JSON.stringify(entries)), // the CSV script re-reads it, and its header counter follows within a second
+        write: (entries) => localStorage.setItem(STORAGE_KEY, JSON.stringify(entries)), // the Database script re-reads it, and its header counter follows within a second
         parseFile: parseDbFile,
         exportBlob: (entries) => buildXlsx(dbRows(entries)),
         fileName: () => `elm_database_${new Date().toISOString().slice(0, 10)}.xlsx`

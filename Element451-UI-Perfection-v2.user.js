@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.200
+// @version      2.201
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -28,7 +28,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.200'; // keep in sync with @version
+    const VERSION = '2.201'; // keep in sync with @version
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -368,7 +368,7 @@
         .elm2-hsearch.open .elm2-hs-field { background: var(--md-search-fill) !important; }
         .elm2-hsearch .elm2-hs-field .elm2-hs-toggle { margin: 0; }
         .elm2-hsearch .elm2-hs-wrap { display: flex; align-items: center; width: 0; overflow: hidden; opacity: 0; transition: width .3s cubic-bezier(.2, 0, 0, 1), opacity .2s linear; }
-        .elm2-hsearch.open .elm2-hs-wrap { width: 300px; opacity: 1; transition: width .3s cubic-bezier(.2, 0, 0, 1), opacity .2s linear .08s; }
+        .elm2-hsearch.open .elm2-hs-wrap { width: 182px; /* just wide enough for the hint text */ opacity: 1; transition: width .3s cubic-bezier(.2, 0, 0, 1), opacity .2s linear .08s; }
         .elm2-hsearch .elm2-hs-wrap input { flex: 1 1 auto; min-width: 0; }
         .elm2-hsearch .elm2-hs-actions { display: flex; gap: 8px; box-sizing: border-box; max-width: 0; padding-left: 0; overflow: hidden; opacity: 0; visibility: hidden; transition: max-width .3s cubic-bezier(.2, 0, 0, 1), padding-left .3s cubic-bezier(.2, 0, 0, 1), opacity .15s linear, visibility 0s .3s; }
         .elm2-hsearch.open .elm2-hs-actions { max-width: 340px; padding-left: 12px; opacity: 1; visibility: visible; transition: max-width .3s cubic-bezier(.2, 0, 0, 1), padding-left .3s cubic-bezier(.2, 0, 0, 1), opacity .2s linear .12s, visibility 0s; }

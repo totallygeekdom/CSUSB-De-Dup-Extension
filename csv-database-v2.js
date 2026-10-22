@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.46
+// @version      2.47
 // @description  Tracks duplicate entries in a database stored in browser localStorage (exports an .xlsx spreadsheet) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -35,7 +35,7 @@
     if (window.__elm451CsvDatabaseLoaded) return;
     window.__elm451CsvDatabaseLoaded = true;
 
-    const VERSION = '2.46'; // keep in sync with @version
+    const VERSION = '2.47'; // keep in sync with @version
     const STORAGE_KEY = 'elm_csv_database';
     const SHOW_API_STATUS_TOAST = true;
     const UI_KEY = 'elm_show_db_ui';
@@ -1060,8 +1060,10 @@
             <input type="file" id="elm-db-upload-input" accept=".xlsx,.ods,.csv">
             <button id="elm-settings-clear-btn" class="settings-action-btn danger"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg> Clear Database</button>
         `;
-        settingsBody.appendChild(section);
-        // The settings pane header lists the main script's build; this adds the database script's under it.
+        // above the Info section when there is one (it stays last), else at the end
+        const infoSection = document.getElementById('elm-settings-info');
+        if (infoSection) infoSection.insertAdjacentElement('beforebegin', section); else settingsBody.appendChild(section);
+        // The Info section lists the versions in use; this adds the database script's line under the main script's.
         const build = document.querySelector('#elm-settings-pane .settings-build');
         if (build && !document.getElementById('elm-settings-db-build')) {
             const line = document.createElement('div');

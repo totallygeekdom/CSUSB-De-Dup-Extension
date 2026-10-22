@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.193
+// @version      2.194
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -28,7 +28,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.193'; // keep in sync with @version
+    const VERSION = '2.194'; // keep in sync with @version
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -612,7 +612,7 @@
         #elm-settings-pane.open { right: 0; }
         #elm-settings-pane .settings-header { padding: 24px 16px 16px 24px; display: flex; justify-content: space-between; align-items: flex-start; }
         #elm-settings-pane .settings-title { font-size: 22px; line-height: 28px; font-weight: 400; }
-        #elm-settings-pane .elm-item .settings-build { font-size: 14px; line-height: 24px; letter-spacing: .25px; padding: 6px 0; }
+        #elm-settings-pane .elm-item .settings-build { font-size: 13px; line-height: 18px; letter-spacing: .25px; color: var(--md-on-surface-variant); padding: 6px 0; } /* same as the description text */
         #elm-settings-pane .settings-build { font-size: 12px; line-height: 16px; letter-spacing: .5px; color: var(--md-on-surface-variant); }
         #elm-settings-close { width: 40px; height: 40px; padding: 0; display: flex; align-items: center; justify-content: center; background: transparent; border: none; border-radius: 50%; color: var(--md-on-surface-variant); font-size: 24px; line-height: 1; cursor: pointer; transition: background-color .2s var(--md-ease); }
         #elm-settings-close:hover { background-color: rgba(29, 27, 32, .08); }

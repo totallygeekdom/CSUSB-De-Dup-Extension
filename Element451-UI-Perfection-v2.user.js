@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.201
+// @version      2.202
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -28,7 +28,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.201'; // keep in sync with @version
+    const VERSION = '2.202'; // keep in sync with @version
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -630,7 +630,8 @@
         #elm-settings-pane .elm-item:only-child { border-radius: 20px; }
         #elm-settings-pane .elm-item .setting-row { padding: 4px 0; }
         #elm-settings-pane .elm-item .elm-level-desc { margin: 0 0 4px; min-height: 0; }
-        #elm-settings-pane .elm-item .elm-level-desc:empty { display: none; }
+        #elm-settings-pane .elm-item .elm-level-desc:empty:not(.elm-desc-2) { display: none; }
+        #elm-settings-pane .elm-item .elm-level-desc.elm-desc-2 { min-height: 36px; } /* two lines kept for the text that changes with the option, so nothing below it jumps */
         #elm-settings-pane .setting-row { display: flex; justify-content: space-between; align-items: center; min-height: 56px; padding: 8px 0; border: none; gap: 16px; }
         #elm-settings-pane .setting-row label { font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--md-on-surface); }
         /* outlined select */
@@ -3429,7 +3430,7 @@
                     </div>
                     <div class="m3s-labels"><span style="--i:0">None</span><span style="--i:1">High</span><span style="--i:2">Medium</span><span style="--i:3">Low</span><span style="--i:4">All</span></div>
                 </div>
-                <div id="elm-apply-level-desc" class="elm-level-desc"></div>
+                <div id="elm-apply-level-desc" class="elm-level-desc elm-desc-2"></div>
                 </div>
                 <div class="elm-item">
                 <div class="setting-row elm-seg-head"><label>Use picks from</label></div>
@@ -3437,7 +3438,7 @@
                     <button type="button" role="radio" data-v="bolt">Bolt's</button>
                     <button type="button" role="radio" data-v="ours">Ours</button>
                 </div>
-                <div id="elm-use-picks-desc" class="elm-level-desc"></div>
+                <div id="elm-use-picks-desc" class="elm-level-desc elm-desc-2"></div>
                 </div>
                 <div class="elm-item">
                 <div class="setting-row elm-seg-head"><label>When done</label></div>
@@ -3445,7 +3446,7 @@
                     <button type="button" role="radio" data-v="wait">Wait for me</button>
                     <button type="button" role="radio" data-v="merge">Merge</button>
                 </div>
-                <div id="elm-when-done-desc" class="elm-level-desc"></div>
+                <div id="elm-when-done-desc" class="elm-level-desc elm-desc-2"></div>
                 </div>
                 <div class="elm-item">
                 <div class="setting-row" id="elm-countdown-row">
@@ -3505,7 +3506,7 @@
         const levelLabel = document.getElementById('elm-apply-level-label');
         const levelNames = ['None', 'High', 'Medium', 'Low', 'All'];
         const levelDescs = [
-            'No pairs in range. Auto-Skip on skips every pair (a scan); off leaves them for you.',
+            'No pairs in range. With Auto-Skip on, every pair is skipped (a scan).',
             'Pairs with a High Bolt score.',
             'Pairs with a High or Medium Bolt score.',
             'Pairs with a High, Medium or Low Bolt score.',
@@ -3554,10 +3555,10 @@
             });
         }
         setupSegmented('elm-use-picks', () => CFG.USE_PICKS, v => localStorage.setItem('elm_use_picks', v),
-            v => v === 'ours' ? 'Our rules are applied on pairs in range, including the applicant rule.' : "Bolt's picks are kept on pairs in range. Ours only fills rows Bolt left unselected.",
+            v => v === 'ours' ? 'Our rules are applied on pairs in range, including the applicant rule.' : "Bolt's picks are kept; ours only fills rows Bolt left blank.",
             reapplyForLevel);
         setupSegmented('elm-when-done', () => CFG.WHEN_DONE, v => { try { sessionStorage.setItem('elm_when_done', v); } catch (e) { /* ignore */ } },
-            v => v === 'merge' ? 'Merges decided pairs after a countdown with a Cancel button. Resets to "Wait for me" each browser session.' : 'You review the picks and click Merge Contacts yourself.',
+            v => v === 'merge' ? 'Merges decided pairs after a cancellable countdown. Resets each session.' : 'You review the picks and click Merge Contacts yourself.',
             () => { if (CFG.WHEN_DONE !== 'merge') cancelAutoMerge('Auto-merge cancelled'); });
         const countdownSelect = document.getElementById('elm-merge-countdown');
         const countdownRow = document.getElementById('elm-countdown-row');

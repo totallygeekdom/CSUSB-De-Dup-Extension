@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         Element451 - CSV Database (New Deduplication Layout)
+// @name         Element451 - Database (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.53
+// @version      2.54
 // @description  Tracks duplicate entries in a database stored in browser localStorage (exports an .xlsx spreadsheet) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -15,7 +15,7 @@
     if (window.__elm451CsvDatabaseLoaded) return;
     window.__elm451CsvDatabaseLoaded = true;
 
-    const VERSION = '2.53'; // keep in sync with @version
+    const VERSION = '2.54'; // keep in sync with @version
     const STORAGE_KEY = 'elm_csv_database';
     const UI_KEY = 'elm_show_db_ui';
     function showDbUi() { try { return localStorage.getItem(UI_KEY) !== 'false'; } catch (e) { return true; } }
@@ -203,13 +203,13 @@
             if (changed) localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
             return db;
         } catch (e) {
-            console.error('CSV Database: Error reading database', e);
+            console.error('Database: Error reading database', e);
             return [];
         }
     }
     function saveDatabase(db) {
         try { localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); }
-        catch (e) { console.error('CSV Database: Error saving database', e); }
+        catch (e) { console.error('Database: Error saving database', e); }
     }
     // Local date as YYYY-MM-DD, how Scan Date is stored (it sorts and compares correctly); the spreadsheet shows DD/MM/YYYY
     function todayStr() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }

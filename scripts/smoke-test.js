@@ -40,7 +40,7 @@ const check = (ok, label) => { console.log((ok ? 'ok   ' : 'FAIL ') + label); if
     await page.reload();
     await page.waitForSelector('.chip', { timeout: 10000 });
     check((await page.locator('.chip').innerText()).includes('9.9.9'), 'update chip shows the new version');
-    check((await page.locator('.stats').count()) === 0, 'the chip replaces the counters');
+    check((await page.locator('.stats, .stat').count()) === 0, 'the popup has no counter row');
     await page.click('.chip .x');
     await page.waitForSelector('.chip', { state: 'detached', timeout: 5000 });
     check(true, 'dismissing the chip removes it');

@@ -11,7 +11,7 @@
     "default_icon": { "16": "icons/icon16.png", "32": "icons/icon32.png" }
   },
   "background": { "service_worker": "background.js" },
-  "permissions": ["storage", "userScripts", "scripting"],
+  "permissions": ["storage", "userScripts"],
   "host_permissions": [
     "https://*.element451.io/*",
     "https://raw.githubusercontent.com/totallygeekdom/csusb-de-dup-extension/*",

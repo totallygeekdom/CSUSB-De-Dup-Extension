@@ -509,12 +509,12 @@ Chrome cannot update an unpacked extension by itself, so the chip downloads the 
 
 **Build and release.** `.github/workflows/extension.yml`:
 - every pull request and every push to `main`: `node scripts/build-extension.js` (syntax-checks the scripts, writes `dist/extension/` and `dist/elm451-dedup-tools-v<version>.zip`), then `npm test` (`scripts/smoke-test.js`: loads the unpacked extension in Chromium, checks the popup, the update chip, then switches the API on and checks all three scripts register in the MAIN world and run on an `element451.io` page, that the settings pane lists the four versions, and that a toggle stops one; also that an older cached script does not replace the bundled one and a newer one does), and the zip is kept as a workflow artifact;
-- a tag `vX.Y.Z`: the same, with the version taken from the tag, then `gh release create` publishes the zip as a GitHub Release.
+- a **release** is published when the extension's version has no GitHub Release yet: on a push to `main`, the version in `extension/manifest.json` decides (`1.0.0` becomes the tag and release `v1.0.0`, created by `gh release create` on the pushed commit); on a pushed tag `vX.Y.Z` the version is taken from the tag. If that release already exists nothing happens. So **releasing = bump the version in `extension/manifest.json` and merge to `main`**; a merge that only changes the userscripts needs no release, since they update themselves from `main`.
 Locally: `npm install` once, `npm run build`, `npm test`; load `dist/extension` with **Load unpacked**. `npm run icons` re-renders the icons.
 
 **Install.** Download the zip from Releases, unzip it, open `chrome://extensions`, turn on Developer mode, **Load unpacked** and pick the folder, then open the extension's **Details** and turn on **Allow user scripts**. Reload your Element451 tab.
 
-**Limits / unverified.** The end-to-end test switches the API on through `chrome.developerPrivate` (what the toggle does), not by clicking it; the GitHub fetches (scripts and releases) were not exercised in CI; the first release has to be tagged by hand.
+**Limits / unverified.** The end-to-end test switches the API on through `chrome.developerPrivate` (what the toggle does), not by clicking it; the GitHub fetches (scripts and releases) were not exercised in CI; the release step runs only on `main` / tags, so it is verified by the first release.
 
 ## 17. Database Merge
 

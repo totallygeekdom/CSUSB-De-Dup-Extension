@@ -5,9 +5,9 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.206`, shown in the settings pane as `v2.206` |
-| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.47` |
-| Database Merge (optional) | `csv-database-merge-v2.js` | `@version 1.5`, see [section 17](#17-database-merge) |
+| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.207`, shown in the settings pane as `v2.207` |
+| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.48` |
+| Database Merge (optional) | `csv-database-merge-v2.js` | `@version 1.6`, see [section 17](#17-database-merge) |
 
 The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
 `Full-Documentation-v127.0.md`) are unchanged and target the old merge page.
@@ -188,7 +188,7 @@ Off: the script stops on those pairs and leaves them on screen, showing the popu
 
 Download / Upload & Replace / Clear Database (added by the CSV script, [section 11](#11-csv-database-v2)).
 
-The pane's **Info** section (last, in a single list container) lists the versions in use, which matters when the scripts update themselves in the Chrome extension: `Main script · v2.206` (the UI script), `Database script · v2.47` (added under it by the CSV script, when installed) and `Extension · v1.0.0` (only when running through the extension, which hands the page its version as `window.__elm451Extension` when it registers the scripts). All three use the same `vX.Y` style; the console still logs the main script as `v2-build-185`.
+The pane's **Info** section (last, in a single list container) lists the versions in use, which matters when the scripts update themselves in the Chrome extension: `Main script · v2.207` (the UI script), `Database script · v2.48` (added under it by the CSV script, when installed) and `Extension · v1.0.0` (only when running through the extension, which hands the page its version as `window.__elm451Extension` when it registers the scripts). All three use the same `vX.Y` style; the console still logs the main script as `v2-build-185`.
 
 ### 4.9 Hidden setting
 
@@ -372,7 +372,7 @@ The script wraps `XMLHttpRequest` and `fetch` to capture the list API response (
 
 ### 11.5 List-page badges
 
-A badge is placed in `.cdk-column-flagged` (falling back to signals, then the row). For each row the script first matches a database entry by **both Spark IDs** found in the row's API record (a contact can be in several pairs, so one shared ID is not enough), then falls back to matching the row text by names: **both contacts' 3-letter prefixes** must appear in the row. Rows already showing an `Ignored` chip get no badge. Badges are right-aligned so they line up down the column, and respect **Show Database UI**.
+A badge is placed in `.cdk-column-flagged` (falling back to signals, then the row). For each row the script first matches a database entry by **both Spark IDs** found in the row's API record (a contact can be in several pairs, so one shared ID is not enough), then falls back to matching the row text by names: **both contacts' 3-letter prefixes** must appear in the row. Badges are right-aligned so they line up down the column, and respect **Show Database UI**.
 
 ### 11.6 Import / export
 

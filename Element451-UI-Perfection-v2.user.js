@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.210
+// @version      2.211
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.210'; // keep in sync with @version
+    const VERSION = '2.211'; // keep in sync with @version
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -350,9 +350,18 @@
         @keyframes elm2HsFade { from { opacity: 0; } to { opacity: 1; } }
         .elm2-hsearch:not(.open) .elm2-hs-field:focus-within { box-shadow: none !important; }
         /* in the header row, just left of the pager (same spot as the review queue's search icon) */
-        .elm2-hsearch.inline { display: inline-flex; flex: 0 0 auto; flex-wrap: nowrap; width: auto; margin: 0 8px 0 auto; vertical-align: middle; }
-        .elm2-hsearch.inline .elm2-hs-status { order: -1; flex: 0 0 auto; max-width: 420px; margin: 0 4px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
+        .elm2-hsearch.inline { display: inline-flex; flex: 0 1 auto; flex-wrap: wrap; justify-content: flex-end; row-gap: 4px; width: auto; min-width: 0; margin: 0 8px 0 auto; vertical-align: middle; }
+        .elm2-hsearch.inline .elm2-hs-status { order: -1; flex: 0 1 auto; min-width: 0; max-width: 420px; margin: 0 4px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
         .elm2-hsearch.inline .elm2-hs-status:empty { display: none; }
+        /* On a narrow window the top bar wraps instead of squishing: the pager drops under the header row,
+           Element's own labels stay on one line, and the status text is what gives way (it truncates). */
+        .bolt-table-top-bar:has(.elm2-hsearch) { flex-wrap: wrap; row-gap: 4px; }
+        .bolt-table-top-bar:has(.elm2-hsearch) > bolt-table-header { flex: 1 1 auto; min-width: 0; }
+        .bolt-table-top-bar:has(.elm2-hsearch) .bolt-table-header-wrapper { display: flex; align-items: center; width: 100%; }
+        .bolt-table-top-bar:has(.elm2-hsearch) .bolt-table-header-wrapper > div:first-child { flex: none; white-space: nowrap; margin-right: 12px; }
+        .bolt-table-top-bar:has(.elm2-hsearch) .bolt-table-header-wrapper > div:last-child { display: flex; flex: 1 1 0; justify-content: flex-end; min-width: 0; }
+        .bolt-table-top-bar:has(.elm2-hsearch) .bolt-table-header-pagination { flex: none; margin-left: auto; white-space: nowrap; }
+        .bolt-table-top-bar:has(.elm2-hsearch) .mat-mdc-paginator-range-actions { flex-wrap: nowrap; white-space: nowrap; }
         .elm2-hsearch .elm2-hs-prev, .elm2-hsearch .elm2-hs-next { white-space: nowrap; height: 48px; padding: 0 20px; border: none; border-radius: 24px; background: var(--md-primary-container); color: var(--md-on-primary-container); font: 500 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; cursor: pointer; transition: box-shadow .2s var(--md-ease); }
         .elm2-hsearch .elm2-hs-prev:hover:not(:disabled), .elm2-hsearch .elm2-hs-next:hover:not(:disabled) { box-shadow: var(--md-elev-1); }
         .elm2-hsearch .elm2-hs-prev:disabled, .elm2-hsearch .elm2-hs-next:disabled { opacity: .45; cursor: default; }

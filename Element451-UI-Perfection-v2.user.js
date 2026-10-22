@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.217
+// @version      2.218
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.217'; // keep in sync with @version
+    const VERSION = '2.218'; // keep in sync with @version
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -580,10 +580,14 @@
                redesigned) --- */
         #elm-controls-wrapper { display: flex; align-items: center; gap: 12px; margin-right: 16px; position: relative; }
         /* tonal assist-chip style pill (merge counter; the DB badge in database-v2 matches) */
-        #elm-counter-wrapper { display: flex; align-items: center; gap: 4px; height: 32px; box-sizing: border-box; padding: 0 4px 0 12px; background: var(--md-surface-container-highest); border: none; border-radius: 8px; }
-        #elm-merge-counter { font: 500 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .1px; color: var(--md-on-surface); padding: 0; white-space: nowrap; }
-        #elm-reset-btn { width: 24px; height: 24px; padding: 0; display: flex; align-items: center; justify-content: center; background: transparent; border: none; border-radius: 50%; color: var(--md-on-surface-variant); cursor: pointer; font-size: 16px; line-height: 1; transition: background-color .2s var(--md-ease), color .2s var(--md-ease); }
-        #elm-reset-btn:hover { color: var(--md-error); background-color: rgba(179, 38, 30, .08); }
+        #elm-counter-wrapper { order: 2; display: flex; align-items: center; gap: 4px; height: 36px; box-sizing: border-box; padding: 0 8px 0 16px; background: var(--md-primary-container); color: var(--md-on-primary-container); border: none; border-radius: 18px; }
+        /* next to the Database pill (see database-v2.js) the two form one pair: big outer corners, small inner ones, 2px apart */
+        #elm-controls-wrapper:has(#elm-db-size-badge) #elm-counter-wrapper { margin-left: -10px; border-radius: 4px 18px 18px 4px; }
+        #elm-merge-counter b { font-weight: 700; font-size: 15px; font-variant-numeric: tabular-nums; }
+        #elm-controls-wrapper #elm-settings-btn { order: 3; }
+        #elm-merge-counter { font: 500 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .1px; color: inherit; padding: 0; white-space: nowrap; }
+        #elm-reset-btn { width: 24px; height: 24px; padding: 0; display: flex; align-items: center; justify-content: center; background: transparent; border: none; border-radius: 50%; color: inherit; cursor: pointer; font-size: 16px; line-height: 1; transition: background-color .2s var(--md-ease), color .2s var(--md-ease); }
+        #elm-reset-btn:hover { background-color: color-mix(in srgb, var(--md-on-primary-container) 12%, transparent); }
         /* standard icon button (40px, state layer) */
         #elm-settings-btn { width: 40px; height: 40px; padding: 0; display: flex; align-items: center; justify-content: center; background: transparent; border: none; border-radius: 50%; color: #fff; cursor: pointer; font-size: 22px; line-height: 1; transition: background-color .2s var(--md-ease); }
         #elm-settings-btn:hover { background-color: rgba(255, 255, 255, .12); }
@@ -3347,12 +3351,19 @@
     // (targets .bolt-navigation-right / elm-universal-search — confirmed
     // still present in the redesigned navbar)
     // =========================================================
+    // "Merges 12" with the number in bold
+    function setMergeCounterText(el, n) {
+        const b = document.createElement('b');
+        b.textContent = String(n);
+        el.textContent = 'Merges ';
+        el.appendChild(b);
+    }
     function incrementMergeCount() {
         const count = parseInt(localStorage.getItem('elm_merge_count') || '0', 10) + 1;
         localStorage.setItem('elm_merge_count', String(count));
         const counterEl = document.getElementById('elm-merge-counter');
         if (counterEl) {
-            counterEl.textContent = `Merges: ${count}`;
+            setMergeCounterText(counterEl, count);
             counterEl.style.transform = 'scale(1.15)';
             setTimeout(() => { counterEl.style.transform = 'scale(1)'; }, 150);
         }
@@ -3377,7 +3388,7 @@
             counterWrapper.id = 'elm-counter-wrapper';
             const counterEl = document.createElement('span');
             counterEl.id = 'elm-merge-counter';
-            counterEl.textContent = `Merges: ${localStorage.getItem('elm_merge_count') || '0'}`;
+            setMergeCounterText(counterEl, localStorage.getItem('elm_merge_count') || '0');
             counterEl.style.transition = 'transform 0.15s ease-out';
             const resetBtn = document.createElement('button');
             resetBtn.id = 'elm-reset-btn';
@@ -3388,7 +3399,7 @@
                 e.stopPropagation();
                 if (confirm('Reset merge counter to 0?')) {
                     localStorage.setItem('elm_merge_count', '0');
-                    counterEl.textContent = 'Merges: 0';
+                    setMergeCounterText(counterEl, 0);
                 }
             };
             counterWrapper.appendChild(counterEl);

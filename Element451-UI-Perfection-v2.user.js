@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.206
+// @version      2.207
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -28,7 +28,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.206'; // keep in sync with @version
+    const VERSION = '2.207'; // keep in sync with @version
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -708,10 +708,10 @@
         #elm-settings-pane .elm-seg button[aria-checked="true"]::before { content: ''; width: 10px; height: 5px; margin: -3px 8px 0 0; border-left: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(-45deg); }
         #elm-settings-pane .elm-level-desc { min-height: 36px; /* two lines reserved so the controls below do not jump */ font-size: 13px; line-height: 18px; letter-spacing: .25px; color: var(--md-on-surface-variant); margin: 0 0 8px; }
         .elm-toggle-switch input:focus-visible + .elm-toggle-slider { outline: 2px solid var(--md-primary); outline-offset: 2px; }
-        .elm-toggle-switch input:disabled { cursor: default; }
     `;
-    if (typeof GM_addStyle === 'function') GM_addStyle(css);
-    else { const styleEl = document.createElement('style'); styleEl.textContent = css; document.head.appendChild(styleEl); }
+    const styleEl = document.createElement('style');
+    styleEl.textContent = css;
+    document.head.appendChild(styleEl);
 
     // =========================================================
     // ADDRESS COMPARER (pure text logic — unchanged from the classic script)
@@ -1073,10 +1073,6 @@
                 result.reason = 'Different addresses - no pick';
             }
             return result;
-        },
-        pickBetterAddress(leftAddr, rightAddr) {
-            const comparison = this.compareAddresses(leftAddr, rightAddr);
-            return comparison.winner;
         }
     };
 
@@ -1791,7 +1787,6 @@
     // the pair is actually a duplicate, so automation must never click this.
     // Skipping a blocked entry must only ever move to the next pair via
     // clickNextDuplicate() below, leaving the pair untouched in the queue.
-    function clickSaveForLater() { const b = getSidebarActionButton('Save for later'); if (b) b.click(); return !!b; }
     // Skips to the next pair, but first has the CSV database script (if installed) record this
     // one, retrying for up to 3s until it confirms, so a fast skip never loses an entry.
     let skipInFlightKey = '';
@@ -1830,11 +1825,6 @@
     }
     function clickNextDuplicate() {
         const b = document.querySelector('.review-queue-nav [aria-label="Next duplicate"]:not([disabled])');
-        if (b) { b.click(); return true; }
-        return false;
-    }
-    function clickPrevDuplicate() {
-        const b = document.querySelector('[aria-label="Previous duplicate"]:not([disabled])');
         if (b) { b.click(); return true; }
         return false;
     }
@@ -1881,7 +1871,6 @@
     let currentQueuePositionKey = '';   // "current/total" — used to detect navigation to a new pair
     let pairFirstSeenAt = 0;            // when the current pair was first seen
     let resolutionAttempted = false;    // resolution ran for the current pair
-    let mergeClickPending = false;      // waiting on the two-phase verification delay
     let conflictWarningShown = false;
     let appealWarningShown = false;
     let awaitingMergeResult = false;
@@ -2419,9 +2408,6 @@
     // review) simply have no elm2ScriptSide and are left out of the count —
     // there's nothing to switch on those.
     // =========================================================
-    function getPickComparisonRows() {
-        return getDiffRows().filter(r => r.element.dataset.elm2AiSide && r.element.dataset.elm2ScriptSide);
-    }
     function clearPickClasses(root) {
         root.querySelectorAll('.elm2-agree-pick, .elm2-pick-bolt, .elm2-pick-ours').forEach(el => el.classList.remove('elm2-agree-pick', 'elm2-pick-bolt', 'elm2-pick-ours'));
     }
@@ -2650,7 +2636,6 @@
     // Dismiss is never clicked (see the click guard above).
     // =========================================================
     let mergeTimer = null;
-    let mergeBarTimer = null;
     let mergedPairKey = '';
     // The "Merge: 2/3" toast is worked out at the merge click (the rows are gone afterwards) but only shown
     // once Element's "Merge completed" card is seen, so it never announces a merge that did not happen.

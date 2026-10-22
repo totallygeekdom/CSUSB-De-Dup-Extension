@@ -6,8 +6,8 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 | Script | File | Current version |
 |---|---|---|
 | UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.213`, shown in the settings pane as `v2.210` |
-| Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.54` |
-| Database Merge (optional) | `csv-database-merge-v2.js` | `@version 1.7`, see [section 17](#17-database-merge) |
+| Database (New Deduplication Layout) | `database-v2.js` | `@version 2.55` |
+| Database Merge (optional) | `database-merge-v2.js` | `@version 1.8`, see [section 17](#17-database-merge) |
 
 The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
 `Full-Documentation-v127.0.md`) are unchanged and target the old merge page.
@@ -28,7 +28,7 @@ The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
 8. [Warnings and popups](#8-warnings-and-popups)
 9. [Auto-merge and the cancel countdown](#9-auto-merge-and-the-cancel-countdown)
 10. [Visual changes to the Element451 website](#10-visual-changes-to-the-element451-website)
-11. [Database v2](#11-csv-database-v2)
+11. [Database v2](#11-database-v2)
 12. [Inter-script contract, storage keys and console output](#12-inter-script-contract-storage-keys-and-console-output)
 13. [Known limitations and unverified guesses](#13-known-limitations-and-unverified-guesses)
 14. [Troubleshooting](#14-troubleshooting)
@@ -42,7 +42,7 @@ The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
 
 1. Install the Tampermonkey extension.
 2. Create one userscript with the contents of `Element451-UI-Perfection-v2.user.js` and, optionally, a
-   second with `csv-database-v2.js`. Both match `https://*.element451.io/*` and run with
+   second with `database-v2.js`. Both match `https://*.element451.io/*` and run with
    `@grant none`, which means they run in the page's own JavaScript context (this is what lets
    the script look at Angular's internals and lets the two scripts talk to each other).
 3. Do not run a classic script and its v2 counterpart on the same page, and make sure each v2 script is
@@ -186,9 +186,9 @@ Off: the script stops on those pairs and leaves them on screen, showing the popu
 
 ### 4.8 Database
 
-Download / Upload & Replace / Clear Database (added by the Database script, [section 11](#11-csv-database-v2)).
+Download / Upload & Replace / Clear Database (added by the Database script, [section 11](#11-database-v2)).
 
-The pane's **Info** section (last, in a single list container) lists the versions in use, which matters when the scripts update themselves in the Chrome extension: `Main script · v2.213` (the UI script), `Database script · v2.54` (added under it by the Database script, when installed) and `Extension · v1.0.0` (only when running through the extension, which hands the page its version as `window.__elm451Extension` when it registers the scripts). All three use the same `vX.Y` style; the console still logs the main script as `v2-build-185`.
+The pane's **Info** section (last, in a single list container) lists the versions in use, which matters when the scripts update themselves in the Chrome extension: `Main script · v2.213` (the UI script), `Database script · v2.55` (added under it by the Database script, when installed) and `Extension · v1.0.0` (only when running through the extension, which hands the page its version as `window.__elm451Extension` when it registers the scripts). All three use the same `vX.Y` style; the console still logs the main script as `v2-build-185`.
 
 ### 4.9 Hidden setting
 
@@ -518,7 +518,7 @@ Locally: `npm install` once, `npm run build`, `npm test`; load `dist/extension` 
 
 ## 17. Database Merge
 
-`csv-database-merge-v2.js` (optional) combines several databases, for example ones exported by different people or on different days, into one.
+`database-merge-v2.js` (optional) combines several databases, for example ones exported by different people or on different days, into one.
 
 **Link to the Database script.** Only two things: the **Merge Databases** button is added inside the Database section of the settings pane, which the Database script creates (so the button only exists while the Database script is active), and the current database is read straight from `localStorage.elm_csv_database`, so it can be merged without downloading it first. Everything else, reading `.xlsx` and writing the merged `.xlsx`, is the script's own copy of the Database script's file code (keep the two in step when the file format changes). It is installed and updated like the others; in the Chrome extension it is a third switch in the popup (greyed while Database is off), and the settings pane lists `Database merge · vX.Y` under the database script's line.
 

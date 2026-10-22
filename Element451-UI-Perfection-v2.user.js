@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.214
+// @version      2.215
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.214'; // keep in sync with @version
+    const VERSION = '2.215'; // keep in sync with @version
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -352,7 +352,7 @@
         .elm2-hsearch:not(.open) .elm2-hs-field:focus-within { box-shadow: none !important; }
         /* in the header row, just left of the pager (same spot as the review queue's search icon) */
         .elm2-hsearch.inline { display: inline-flex; flex: 0 1 auto; flex-wrap: wrap; justify-content: flex-end; row-gap: 4px; width: auto; min-width: 0; margin: 0 8px 0 auto; vertical-align: middle; }
-        .elm2-hsearch.inline .elm2-hs-status { order: -1; flex: 0 1 auto; min-width: 0; max-width: 420px; margin: 0 4px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
+        .elm2-hsearch.inline .elm2-hs-status { order: -1; flex: 0 1 auto; min-width: 0; max-width: 420px; margin: 0 16px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
         .elm2-hsearch.inline .elm2-hs-status:empty { display: none; }
         /* On a narrow window the top bar wraps instead of squishing: the pager drops under the header row,
            Element's own labels stay on one line, and the status text is what gives way (it truncates). */

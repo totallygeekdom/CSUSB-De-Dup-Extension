@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - Database Merge (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      1.6
+// @version      1.7
 // @description  Adds a "Merge Databases" page to the CSV Database script: combine several exported databases (and this browser's) into one, with a breakdown
 // @author       You
 // @match        https://*.element451.io/*
@@ -13,7 +13,7 @@
 // Pairs with csv-database-v2.js in only two ways: the "Merge Databases" button is added to the Database section that
 // script puts in the settings pane (so the button only exists while the CSV script is active), and the current
 // database is read straight from localStorage (`elm_csv_database`), so it can be merged without downloading it first.
-// Everything else (reading .xlsx / .ods / .csv files, writing the merged .xlsx) is this script's own code, which is why
+// Everything else (reading .xlsx files, writing the merged .xlsx) is this script's own code, which is why
 // the file-format block below is a copy of the CSV script's. The button opens a new tab; the tab is built from this page
 // with DOM calls (no inline scripts), so it works whatever the site's content-security policy says, and it needs this
 // Element451 tab to stay open while you use it.
@@ -21,7 +21,7 @@
     'use strict';
     if (window.__elm451DbMergeLoaded) return;
     window.__elm451DbMergeLoaded = true;
-    const VERSION = '1.6'; // keep in sync with @version
+    const VERSION = '1.7'; // keep in sync with @version
 
     // =========================================================
     // STORED DATABASE AND FILE FORMATS
@@ -34,7 +34,7 @@
         return t.length > 3 ? t.slice(0, 3) + ELLIPSIS : t;
     }
     // =========================================================
-    // FILE FORMATS (a copy of the CSV script's: an .xlsx writer and reader, .ods and .csv readers). The written .xlsx has
+    // FILE FORMAT (a copy of the CSV script's .xlsx writer and reader). The written .xlsx has
     // preset column widths, a frozen header row and filter / sort buttons on Bolt Score, Dept., Scan Date and Merged.
     // =========================================================
     // Columns in file order. Merged and Script vs Bolt sit between Spark ID 2 and Row Contents.
@@ -83,37 +83,15 @@
         });
         return [DB_COLUMNS.map(c => c.header), ...rows];
     }
-    function parseCSVLine(line) {
-        const result = [];
-        let current = '';
-        let inQuotes = false;
-        for (let i = 0; i < line.length; i++) {
-            const ch = line[i];
-            if (inQuotes) {
-                if (ch === '"') {
-                    if (i + 1 < line.length && line[i + 1] === '"') { current += '"'; i++; }
-                    else { inQuotes = false; }
-                } else { current += ch; }
-            } else {
-                if (ch === '"') inQuotes = true;
-                else if (ch === ',') { result.push(current); current = ''; }
-                else current += ch;
-            }
-        }
-        result.push(current);
-        return result;
-    }
-    // Rows (first = header) -> database entries. Columns are found by header name, so files exported by any
-    // earlier version (different column order, no Merged / Script vs Bolt, or the old 5-column "Unique ID"
-    // format with no Spark IDs) still import.
+    // Rows (first = header) -> database entries. Columns are found by header name.
     function entriesFromRows(rows) {
         if (rows.length < 2) return [];
         const header = rows[0].map(h => String(h).trim().toLowerCase());
         const col = (name, fallback) => { const i = header.indexOf(name); return i !== -1 ? i : fallback; };
         const idx = {
-            first: col('firstname', 0), last: col('lastname', 1),
+            first: col('firstname', -1), last: col('lastname', -1),
             first2: col('firstname 2', -1), last2: col('lastname 2', -1),
-            dept: col('dept.', 2), rows: col('row contents', 3),
+            dept: col('dept.', -1), rows: col('row contents', -1),
             s1: col('spark id 1', -1), s2: col('spark id 2', -1),
             merged: col('merged', -1), choice: col('script vs bolt', -1), score: col('bolt score', -1), scanDate: col('scan date', -1)
         };
@@ -140,7 +118,7 @@
         return entries;
     }
 
-    // ---- minimal ZIP (stored, no compression) writer and reader: an .ods is a zip of XML files
+    // ---- minimal ZIP (stored, no compression) writer and reader: an .xlsx is a zip of XML files
     const CRC_TABLE = (() => {
         const t = new Uint32Array(256);
         for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; }
@@ -208,10 +186,6 @@
     }
 
     // ---- the spreadsheet itself
-    const NS = {
-        office: 'urn:oasis:names:tc:opendocument:xmlns:office:1.0', table: 'urn:oasis:names:tc:opendocument:xmlns:table:1.0',
-        text: 'urn:oasis:names:tc:opendocument:xmlns:text:1.0'
-    };
     const xmlEsc = (t) => String(t).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     // ---- .xlsx writer (what the Download button produces: Excel reads it natively)
     const colLetter = (i) => String.fromCharCode(65 + i);
@@ -316,45 +290,13 @@
         });
         return rows;
     }
-    function odsRows(xml) {
-        const doc = new DOMParser().parseFromString(xml, 'application/xml');
-        if (doc.getElementsByTagName('parsererror').length) throw new Error('the spreadsheet could not be read');
-        const sheet = doc.getElementsByTagNameNS(NS.table, 'table')[0];
-        if (!sheet) throw new Error('no sheet found');
-        // cell styles with a strike-through (the merged-away Spark ID), by style name
-        const STYLE_NS = 'urn:oasis:names:tc:opendocument:xmlns:style:1.0';
-        const struckStyles = new Set();
-        Array.from(doc.getElementsByTagNameNS(STYLE_NS, 'style')).forEach(st => {
-            Array.from(st.getElementsByTagNameNS(STYLE_NS, 'text-properties')).forEach(tp => {
-                const v = tp.getAttributeNS(STYLE_NS, 'text-line-through-style');
-                if (v && v !== 'none') struckStyles.add(st.getAttributeNS(STYLE_NS, 'name'));
-            });
-        });
-        const rows = [];
-        Array.from(sheet.getElementsByTagNameNS(NS.table, 'table-row')).forEach(tr => {
-            const cells = [];
-            cells.struck = new Set();
-            Array.from(tr.children).forEach(td => {
-                if (td.localName !== 'table-cell' && td.localName !== 'covered-table-cell') return;
-                if (struckStyles.has(td.getAttributeNS(NS.table, 'style-name'))) cells.struck.add(cells.length);
-                const text = Array.from(td.getElementsByTagNameNS(NS.text, 'p')).map(p => p.textContent).join('\n');
-                const rep = Math.min(parseInt(td.getAttributeNS(NS.table, 'number-columns-repeated'), 10) || 1, text ? 50 : 1);
-                for (let k = 0; k < rep; k++) cells.push(text);
-            });
-            while (cells.length && cells[cells.length - 1] === '') cells.pop();
-            if (cells.length) rows.push(cells);
-        });
-        return rows;
-    }
 
-    // Reads an .xlsx / .ods / .csv database file into entries (throws with a message a person can read)
+    // Reads an .xlsx database file into entries (throws with a message a person can read)
     async function parseDbFile(file) {
         const lower = file.name.toLowerCase();
         let rows;
         if (lower.endsWith('.xlsx')) rows = await xlsxRows(await file.arrayBuffer());
-        else if (lower.endsWith('.ods')) rows = odsRows(await zipReadText(await file.arrayBuffer(), 'content.xml'));
-        else if (lower.endsWith('.csv')) rows = (await file.text()).trim().split('\n').map(l => parseCSVLine(l.replace(/\r$/, '')));
-        else throw new Error('Please select an .xlsx, .ods or .csv file.');
+        else throw new Error('Please select an .xlsx file.');
         if (rows.length < 2) throw new Error('The file is empty or has no data rows.');
         const entries = entriesFromRows(rows);
         if (entries.length === 0) throw new Error('No valid entries found in the file.');
@@ -543,11 +485,11 @@
         const main = h('main');
         body.appendChild(main);
 
-        const fileInput = h('input', { type: 'file', multiple: true, accept: '.xlsx,.ods,.csv', style: 'display:none' });
+        const fileInput = h('input', { type: 'file', multiple: true, accept: '.xlsx', style: 'display:none' });
         const dropZone = h('div', { class: 'drop' },
             h('div', { class: 'ico' }, icon('upload')),
             h('strong', null, 'Drop database files here'),
-            h('span', { class: 'note', style: 'color:inherit;opacity:.8' }, '.xlsx, .ods or .csv, as many as you like'),
+            h('span', { class: 'note', style: 'color:inherit;opacity:.8' }, '.xlsx files, as many as you like'),
             h('button', { class: 'btn filled', type: 'button', style: 'margin-top:12px', onclick: () => fileInput.click() }, 'Choose files'));
         const sourceList = h('div', { class: 'list' });
         const sourceNote = h('p', { class: 'note', style: 'margin:10px 4px 0' });

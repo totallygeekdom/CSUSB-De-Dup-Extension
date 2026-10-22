@@ -18,8 +18,8 @@ chip). Two v2 scripts target it, plus an optional third that merges databases:
 | Script | File | Current version |
 |---|---|---|
 | UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.209` (shown in the settings pane) |
-| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.49` |
-| Database Merge (optional, pairs with CSV Database) | `csv-database-merge-v2.js` | `@version 1.6` |
+| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.50` |
+| Database Merge (optional, pairs with CSV Database) | `csv-database-merge-v2.js` | `@version 1.7` |
 
 **Full documentation: [`Full-Documentation-v2.md`](Full-Documentation-v2.md)** (architecture, every setting,
 the resolution rules, auto-merge, every website restyle, the database format, limitations).
@@ -58,12 +58,12 @@ the resolution rules, auto-merge, every website restyle, the database format, li
   badges on the list page (matched through the list API's `identities[]`, falling back to names), exports an
   **`.xlsx` spreadsheet** (columns `Bolt Score, Firstname, Lastname, Firstname 2, Lastname 2, Spark ID 1, Spark ID 2, Dept., Scan Date, Merged, Script vs Bolt, Row Contents`;
   preset column widths, frozen header row, filter buttons on Bolt Score, Dept. and Merged, the merged-away Spark ID and names struck through; Merged = Y/N, Script vs Bolt = what the script chose over Bolt)
-  and imports `.xlsx`, `.ods` or `.csv` (columns are read by header name so older files still load), and has a **Show Database UI** toggle (under
+  and imports `.xlsx` (columns are read by header name), and has a **Show Database UI** toggle (under
   Display). Before every auto-skip the main script asks it to record the pair first.
 
 - **Database Merge** (optional): a **Merge Databases** button in the settings pane, under the Database section (it only
   appears while the CSV Database script is active), opens a new tab where you add as many exported databases as you like
-  (`.xlsx`, `.ods`, `.csv`, or this browser's stored one without downloading it first), merge them, read a breakdown
+  (`.xlsx` files, or this browser's stored one without downloading it first), merge them, read a breakdown
   (unique pairs, duplicates combined, what each file contributed, conflicts and who won), then download the merged
   `.xlsx` or replace this browser's database with it. When a pair is in more than one source, the most up to date copy (the later Scan Date) wins.
 

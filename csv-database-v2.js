@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.49
+// @version      2.50
 // @description  Tracks duplicate entries in a database stored in browser localStorage (exports an .xlsx spreadsheet) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -20,7 +20,7 @@
     if (window.__elm451CsvDatabaseLoaded) return;
     window.__elm451CsvDatabaseLoaded = true;
 
-    const VERSION = '2.49'; // keep in sync with @version
+    const VERSION = '2.50'; // keep in sync with @version
     const STORAGE_KEY = 'elm_csv_database';
     const UI_KEY = 'elm_show_db_ui';
     function showDbUi() { try { return localStorage.getItem(UI_KEY) !== 'false'; } catch (e) { return true; } }
@@ -671,7 +671,7 @@
 
     // =========================================================
     // EXPORT / IMPORT: an .xlsx spreadsheet (column widths, frozen bold header, filter / sort buttons on Bolt Score, Dept.,
-    // Scan Date and Merged); .ods and .csv files from earlier versions still import.
+    // Scan Date and Merged).
     // =========================================================
     // Columns in file order. Merged and Script vs Bolt sit between Spark ID 2 and Row Contents.
     // width is in cm, as the spreadsheet stores it (the columns can be resized there).
@@ -719,37 +719,15 @@
         });
         return [DB_COLUMNS.map(c => c.header), ...rows];
     }
-    function parseCSVLine(line) {
-        const result = [];
-        let current = '';
-        let inQuotes = false;
-        for (let i = 0; i < line.length; i++) {
-            const ch = line[i];
-            if (inQuotes) {
-                if (ch === '"') {
-                    if (i + 1 < line.length && line[i + 1] === '"') { current += '"'; i++; }
-                    else { inQuotes = false; }
-                } else { current += ch; }
-            } else {
-                if (ch === '"') inQuotes = true;
-                else if (ch === ',') { result.push(current); current = ''; }
-                else current += ch;
-            }
-        }
-        result.push(current);
-        return result;
-    }
-    // Rows (first = header) -> database entries. Columns are found by header name, so files exported by any
-    // earlier version (different column order, no Merged / Script vs Bolt, or the old 5-column "Unique ID"
-    // format with no Spark IDs) still import.
+    // Rows (first = header) -> database entries. Columns are found by header name.
     function entriesFromRows(rows) {
         if (rows.length < 2) return [];
         const header = rows[0].map(h => String(h).trim().toLowerCase());
         const col = (name, fallback) => { const i = header.indexOf(name); return i !== -1 ? i : fallback; };
         const idx = {
-            first: col('firstname', 0), last: col('lastname', 1),
+            first: col('firstname', -1), last: col('lastname', -1),
             first2: col('firstname 2', -1), last2: col('lastname 2', -1),
-            dept: col('dept.', 2), rows: col('row contents', 3),
+            dept: col('dept.', -1), rows: col('row contents', -1),
             s1: col('spark id 1', -1), s2: col('spark id 2', -1),
             merged: col('merged', -1), choice: col('script vs bolt', -1), score: col('bolt score', -1), scanDate: col('scan date', -1)
         };
@@ -776,7 +754,7 @@
         return entries;
     }
 
-    // ---- minimal ZIP (stored, no compression) writer and reader: an .ods is a zip of XML files
+    // ---- minimal ZIP (stored, no compression) writer and reader: an .xlsx is a zip of XML files
     const CRC_TABLE = (() => {
         const t = new Uint32Array(256);
         for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; }
@@ -844,10 +822,6 @@
     }
 
     // ---- the spreadsheet itself
-    const NS = {
-        office: 'urn:oasis:names:tc:opendocument:xmlns:office:1.0', table: 'urn:oasis:names:tc:opendocument:xmlns:table:1.0',
-        text: 'urn:oasis:names:tc:opendocument:xmlns:text:1.0'
-    };
     const xmlEsc = (t) => String(t).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     // ---- .xlsx writer (what the Download button produces: Excel reads it natively)
     const colLetter = (i) => String.fromCharCode(65 + i);
@@ -952,36 +926,6 @@
         });
         return rows;
     }
-    function odsRows(xml) {
-        const doc = new DOMParser().parseFromString(xml, 'application/xml');
-        if (doc.getElementsByTagName('parsererror').length) throw new Error('the spreadsheet could not be read');
-        const sheet = doc.getElementsByTagNameNS(NS.table, 'table')[0];
-        if (!sheet) throw new Error('no sheet found');
-        // cell styles with a strike-through (the merged-away Spark ID), by style name
-        const STYLE_NS = 'urn:oasis:names:tc:opendocument:xmlns:style:1.0';
-        const struckStyles = new Set();
-        Array.from(doc.getElementsByTagNameNS(STYLE_NS, 'style')).forEach(st => {
-            Array.from(st.getElementsByTagNameNS(STYLE_NS, 'text-properties')).forEach(tp => {
-                const v = tp.getAttributeNS(STYLE_NS, 'text-line-through-style');
-                if (v && v !== 'none') struckStyles.add(st.getAttributeNS(STYLE_NS, 'name'));
-            });
-        });
-        const rows = [];
-        Array.from(sheet.getElementsByTagNameNS(NS.table, 'table-row')).forEach(tr => {
-            const cells = [];
-            cells.struck = new Set();
-            Array.from(tr.children).forEach(td => {
-                if (td.localName !== 'table-cell' && td.localName !== 'covered-table-cell') return;
-                if (struckStyles.has(td.getAttributeNS(NS.table, 'style-name'))) cells.struck.add(cells.length);
-                const text = Array.from(td.getElementsByTagNameNS(NS.text, 'p')).map(p => p.textContent).join('\n');
-                const rep = Math.min(parseInt(td.getAttributeNS(NS.table, 'number-columns-repeated'), 10) || 1, text ? 50 : 1);
-                for (let k = 0; k < rep; k++) cells.push(text);
-            });
-            while (cells.length && cells[cells.length - 1] === '') cells.pop();
-            if (cells.length) rows.push(cells);
-        });
-        return rows;
-    }
 
     // =========================================================
     // DATABASE UI (badge in header, section in settings pane — same
@@ -1011,14 +955,12 @@
         else controlsWrapper.appendChild(badge);
         updateDbSizeBadge();
     }
-    // Reads an .xlsx / .ods / .csv database file into entries (throws with a message a person can read)
+    // Reads an .xlsx database file into entries (throws with a message a person can read)
     async function parseDbFile(file) {
         const lower = file.name.toLowerCase();
         let rows;
         if (lower.endsWith('.xlsx')) rows = await xlsxRows(await file.arrayBuffer());
-        else if (lower.endsWith('.ods')) rows = odsRows(await zipReadText(await file.arrayBuffer(), 'content.xml'));
-        else if (lower.endsWith('.csv')) rows = (await file.text()).trim().split('\n').map(l => parseCSVLine(l.replace(/\r$/, '')));
-        else throw new Error('Please select an .xlsx, .ods or .csv file.');
+        else throw new Error('Please select an .xlsx file.');
         if (rows.length < 2) throw new Error('The file is empty or has no data rows.');
         const entries = entriesFromRows(rows);
         if (entries.length === 0) throw new Error('No valid entries found in the file.');
@@ -1034,7 +976,7 @@
             <div class="settings-section-title">Database</div>
             <button id="elm-settings-download-btn" class="settings-action-btn"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/></svg> Download Database</button>
             <button id="elm-settings-upload-btn" class="settings-action-btn"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M5 20h14v-2H5v2zm0-10h4v6h6v-6h4l-7-7-7 7z"/></svg> Upload &amp; Replace Database</button>
-            <input type="file" id="elm-db-upload-input" accept=".xlsx,.ods,.csv">
+            <input type="file" id="elm-db-upload-input" accept=".xlsx">
             <button id="elm-settings-clear-btn" class="settings-action-btn danger"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg> Clear Database</button>
         `;
         // above the Info section when there is one (it stays last), else at the end

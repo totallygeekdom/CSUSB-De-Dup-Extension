@@ -58,4 +58,4 @@ jobs:
           CSV=$(grep -m1 '@version' csv-database-v2.js | awk '{print $3}')
           gh release create "$GITHUB_REF_NAME" dist/*.zip \
             --title "Element451 Dedup Tools $GITHUB_REF_NAME" \
-            --notes "Chrome extension (unpacked). Bundled scripts: UI Perfection v$UI, CSV Database v$CSV. The scripts also update themselves from GitHub when Chrome starts; this zip is only needed to install or to update the extension itself. See the README for install steps."
+            --notes "Chrome extension (unpacked). Bundled scripts: UI Perfection v$UI, Database v$CSV. The scripts also update themselves from GitHub when Chrome starts; this zip is only needed to install or to update the extension itself. See the README for install steps."

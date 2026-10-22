@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.212
+// @version      2.213
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.212'; // keep in sync with @version
+    const VERSION = '2.213'; // keep in sync with @version
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -366,7 +366,8 @@
         .elm2-hsearch .elm2-hs-prev:hover:not(:disabled), .elm2-hsearch .elm2-hs-next:hover:not(:disabled) { box-shadow: var(--md-elev-1); }
         .elm2-hsearch .elm2-hs-prev:disabled, .elm2-hsearch .elm2-hs-next:disabled { opacity: .45; cursor: default; }
         .elm2-hsearch .elm2-hs-status { flex-basis: 100%; color: var(--md-on-surface); font-size: 16px; line-height: 24px; }
-        bolt-row.elm2-search-hit { outline: 3px solid var(--md-primary); outline-offset: -3px; background: color-mix(in srgb, var(--md-primary) 12%, transparent) !important; }
+        /* the match highlight: one rounded box drawn over the row, fixed to the page (see histPlaceHit) */
+        .elm2-hit-box { position: fixed; box-sizing: border-box; z-index: 100; pointer-events: none; border: 3px solid var(--md-primary); border-radius: 16px; background: color-mix(in srgb, var(--md-primary) 10%, transparent); animation: elm2HsFade .2s linear; }
         #elm2-pick-compare-bar {
             display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
             padding: 12px 16px; margin: 0 0 12px;
@@ -1392,7 +1393,41 @@
         const hit = words.filter(w => histWordHits(idx, w)).length;
         return hit >= (words.length >= 3 ? words.length - 1 : words.length);
     }
-    function histClearHits() { document.querySelectorAll('.elm2-search-hit').forEach(r => r.classList.remove('elm2-search-hit')); }
+    // The highlight is a box drawn over the row rather than an outline on it: the row element itself does
+    // not match what is visible (the text starts at its very edge and the actions column sits past it), so an
+    // outline never lines up. The box is fixed to the page (nothing can clip it), is sized from the row's
+    // contents with some air around them, has rounded corners, and follows the row while the page scrolls.
+    let hitRow = null;
+    function histPlaceHit() {
+        const row = hitRow;
+        let box = document.querySelector('.elm2-hit-box');
+        if (!row || !row.isConnected) { if (box) box.remove(); return; }
+        if (!box) { box = document.createElement('div'); box.className = 'elm2-hit-box'; document.body.appendChild(box); }
+        const r = row.getBoundingClientRect();
+        let left = r.left, right = r.right;
+        row.querySelectorAll('*').forEach(el => {
+            const c = el.getBoundingClientRect();
+            if (!c.width || !c.height) return;
+            left = Math.min(left, c.left); right = Math.max(right, c.right);
+        });
+        left = Math.max(left - 12, 4); right = Math.min(right + 12, window.innerWidth - 4);
+        box.style.left = left + 'px'; box.style.width = Math.max(0, right - left) + 'px';
+        box.style.top = (r.top + 2) + 'px'; box.style.height = Math.max(0, r.height - 4) + 'px';
+    }
+    function histMarkHit(row) {
+        hitRow = row;
+        row.classList.add('elm2-search-hit');
+        histPlaceHit();
+    }
+    let hitFrame = 0;
+    const histFollowHit = () => { if (hitRow && !hitFrame) hitFrame = requestAnimationFrame(() => { hitFrame = 0; histPlaceHit(); }); };
+    window.addEventListener('scroll', histFollowHit, true);
+    window.addEventListener('resize', histFollowHit);
+    function histClearHits() {
+        hitRow = null;
+        document.querySelectorAll('.elm2-search-hit').forEach(r => r.classList.remove('elm2-search-hit'));
+        document.querySelectorAll('.elm2-hit-box').forEach(b => b.remove());
+    }
     async function histGoTo(page, rowIndex) {
         const pag = document.querySelector('mat-paginator');
         histClearHits();
@@ -1403,7 +1438,7 @@
             await sleep(500);
         }
         const row = document.querySelectorAll('.bolt-table-rows-wrap bolt-row.cdk-row')[rowIndex];
-        if (row) { row.classList.add('elm2-search-hit'); row.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+        if (row) { histMarkHit(row); row.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
     }
     // The scan state of the current search. The first match is jumped to straight away; the scan then carries
     // on through the remaining pages in the background, so "Match 1 of 1" can grow to "Match 1 of 3". Matches found
@@ -1767,7 +1802,7 @@
     // the pair is actually a duplicate, so automation must never click this.
     // Skipping a blocked entry must only ever move to the next pair via
     // clickNextDuplicate() below, leaving the pair untouched in the queue.
-    // Skips to the next pair, but first has the CSV database script (if installed) record this
+    // Skips to the next pair, but first has the Database script (if installed) record this
     // one, retrying for up to 3s until it confirms, so a fast skip never loses an entry.
     let skipInFlightKey = '';
     // Every skip is announced with a short label ("Skip: Appeal") when outcome toasts are on.

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.48
+// @version      2.49
 // @description  Tracks duplicate entries in a database stored in browser localStorage (exports an .xlsx spreadsheet) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -10,34 +10,18 @@
 // @downloadURL  https://raw.githubusercontent.com/totallygeekdom/csusb-de-dup-extension/main/csv-database-v2.js
 // ==/UserScript==
 //
-// PORTING NOTES (read before tuning this file live):
-// Companion to Element451-UI-Perfection-v2.user.js. Ported from the same
-// single static, PII-redacted HTML snapshot of the new "Deduplication"
-// review-queue UI, so anything touching content that was redacted in that
-// snapshot — the actual master/duplicate/signals/flagged cell contents on
-// the queue table, and whether an "Ignored" chip still exists — is a
-// best-effort guess. Verify against the live site.
-//
-// What changed vs. the classic script:
-//   - List page rows: <elm-row> -> <bolt-row class="cdk-row"> inside
-//     <elm-review-queue-table>, with columns keyed by class
-//     cdk-column-select/score/master/duplicate/signals/flagged/actions
-//     instead of a single chip per row.
-//   - Detail/review page: <elm-merge-row> -> <elm-duplicate-field-diff-form>
-//     .diff-row, opened in a sidebar rather than a full page.
-//   - Because we don't know if the flagged/signals cell already renders its
-//     own chip, this script APPENDS a small badge rather than rewriting an
-//     assumed existing element (safer than the classic script's approach of
-//     restyling elm-chip in place).
+// Companion to Element451-UI-Perfection-v2.user.js. Records each pair the main script sees (and every one it blocks or
+// skips) in localStorage, keyed on the two contacts' Spark IDs, marks them on the review-queue list with a badge, and
+// exports / imports the database as a spreadsheet. The badge is appended to the list row's flagged cell rather than
+// rewriting Element's own markup. Full documentation: Full-Documentation-v2.md.
 (function () {
     'use strict';
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451CsvDatabaseLoaded) return;
     window.__elm451CsvDatabaseLoaded = true;
 
-    const VERSION = '2.48'; // keep in sync with @version
+    const VERSION = '2.49'; // keep in sync with @version
     const STORAGE_KEY = 'elm_csv_database';
-    const SHOW_API_STATUS_TOAST = true;
     const UI_KEY = 'elm_show_db_ui';
     function showDbUi() { try { return localStorage.getItem(UI_KEY) !== 'false'; } catch (e) { return true; } }
     function applyDbUiSetting() { if (document.body) document.body.classList.toggle('csv-db-ui-off', !showDbUi()); }
@@ -308,7 +292,6 @@
         return st;
     }
     function showApiToast(message, type) {
-        if (!SHOW_API_STATUS_TOAST) return;
         const st = toastStack();
         // the same message again just refreshes the existing toast instead of stacking a copy
         let el = Array.from(st.children).find(c => c.dataset.key === 'csv:' + message);

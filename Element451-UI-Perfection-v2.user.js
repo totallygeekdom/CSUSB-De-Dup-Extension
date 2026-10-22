@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.208
+// @version      2.209
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -10,25 +10,17 @@
 // @downloadURL  https://raw.githubusercontent.com/totallygeekdom/csusb-de-dup-extension/main/Element451-UI-Perfection-v2.user.js
 // ==/UserScript==
 //
-// PORTING NOTES (read before tuning this file live):
-// Element451 replaced the old merge page (<elm-merge-row>, mat-button-toggle, a
-// floating "FAB" merge button) with a new AI-assisted "Deduplication" workflow:
-// a review-queue table (<elm-review-queue-table>, bolt-table/cdk-table) plus a
-// stackable sidebar (<elm-review-duplicates-sidebar>) containing a field-by-field
-// diff form (<elm-duplicate-field-diff-form>, .diff-row/.diff-value-button).
-//
-// This file was ported from ONE static, PII-redacted HTML snapshot of that new
-// UI — there was no way to click through it, so anything involving a state not
-// visible in that snapshot (error/unresolved styling, the actual merge-success
-// toast, list-page cell contents) is a best-effort guess
-// and is called out inline. Test against the real site and adjust selectors
-// before trusting this for unattended automation.
+// Automates the merge screen of Element451's redesigned "Deduplication" review queue: a review-queue table plus a
+// stackable sidebar (<elm-review-duplicates-sidebar>) holding a field-by-field diff form
+// (<elm-duplicate-field-diff-form>, .diff-row / .diff-value-button). It resolves each pair by rules and Bolt's picks,
+// can merge after a cancel countdown, and restyles the site. Built from saved HTML, mock pages and live feedback, so a
+// selector can need adjusting if Element changes its markup. Full documentation: Full-Documentation-v2.md.
 (function () {
     'use strict';
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.208'; // keep in sync with @version
+    const VERSION = '2.209'; // keep in sync with @version
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -39,13 +31,6 @@
         return val === 'true';
     }
     const CONFLICT_ROW_THRESHOLD = 2;
-    // NOTE: no REQUIRE_SCROLL_TO_BOTTOM or AUTO_NAVIGATE_AFTER_MERGE here.
-    // The classic script's scroll-gating doesn't map onto the sidebar layout,
-    // and auto-navigate can't be done safely until there's a real
-    // merge-success signal to detect (see checkForMergeResult below) — both
-    // need live investigation before they're worth exposing as settings.
-    // Slider position, 0..4: None, High, Medium, Low, All (each adds to the one before), stored under
-    // 'elm_range_level2'; All until it has been set.
     function rangeLevel() {
         const v = parseInt(localStorage.getItem('elm_range_level2'), 10);
         return isNaN(v) ? 4 : Math.max(0, Math.min(4, v));

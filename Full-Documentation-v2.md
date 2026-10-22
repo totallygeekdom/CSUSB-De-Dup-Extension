@@ -6,8 +6,8 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 | Script | File | Current version |
 |---|---|---|
 | Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.218`, shown in the settings pane as `v2.210` |
-| Database (New Deduplication Layout) | `database-v2.js` | `@version 2.56` |
-| Database Merge (optional) | `database-merge-v2.js` | `@version 1.8`, see [section 17](#17-database-merge) |
+| Element451 - Database v2 | `database-v2.js` | `@version 2.57` |
+| Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.9`, see [section 17](#17-database-merge) |
 
 The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
 `Full-Documentation-v127.0.md`) are unchanged and target the old merge page.
@@ -188,7 +188,7 @@ Off: the script stops on those pairs and leaves them on screen, showing the popu
 
 Download / Upload & Replace / Clear Database (added by the Database script, [section 11](#11-database-v2)).
 
-The pane's **Info** section (last, in a single list container) lists the versions in use, which matters when the scripts update themselves in the Chrome extension: `Main script · v2.218` (the UI script), `Database script · v2.56` (added under it by the Database script, when installed) and `Extension · v1.0.0` (only when running through the extension, which hands the page its version as `window.__elm451Extension` when it registers the scripts). All three use the same `vX.Y` style; the console still logs the main script as `v2-build-185`.
+The pane's **Info** section (last, in a single list container) lists the versions in use, which matters when the scripts update themselves in the Chrome extension: `Main script · v2.218` (the UI script), `Database script · v2.57` (added under it by the Database script, when installed) and `Extension · v1.0.0` (only when running through the extension, which hands the page its version as `window.__elm451Extension` when it registers the scripts). All three use the same `vX.Y` style; the console still logs the main script as `v2-build-185`.
 
 ### 4.9 Hidden setting
 

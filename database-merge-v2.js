@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         Element451 - Database Merge (New Deduplication Layout)
+// @name         Element451 - Database Merge v2
 // @namespace    http://tampermonkey.net/
-// @version      1.8
+// @version      1.9
 // @description  Adds a "Merge Databases" page to the Database script: combine several exported databases (and this browser's) into one, with a breakdown
 // @author       You
 // @match        https://*.element451.io/*
@@ -21,7 +21,7 @@
     'use strict';
     if (window.__elm451DbMergeLoaded) return;
     window.__elm451DbMergeLoaded = true;
-    const VERSION = '1.8'; // keep in sync with @version
+    const VERSION = '1.9'; // keep in sync with @version
 
     // =========================================================
     // STORED DATABASE AND FILE FORMATS

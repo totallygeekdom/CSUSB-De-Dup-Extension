@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         Element451 - Database (New Deduplication Layout)
+// @name         Element451 - Database v2
 // @namespace    http://tampermonkey.net/
-// @version      2.56
+// @version      2.57
 // @description  Tracks duplicate entries in a database stored in browser localStorage (exports an .xlsx spreadsheet) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -15,7 +15,7 @@
     if (window.__elm451CsvDatabaseLoaded) return;
     window.__elm451CsvDatabaseLoaded = true;
 
-    const VERSION = '2.56'; // keep in sync with @version
+    const VERSION = '2.57'; // keep in sync with @version
     const STORAGE_KEY = 'elm_csv_database';
     const UI_KEY = 'elm_show_db_ui';
     function showDbUi() { try { return localStorage.getItem(UI_KEY) !== 'false'; } catch (e) { return true; } }

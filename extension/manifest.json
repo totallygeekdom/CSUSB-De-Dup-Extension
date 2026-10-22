@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "Element451 Dedup Tools",
+  "version": "1.0.0",
+  "description": "Runs the Element451 UI Perfection and CSV Database userscripts for the Deduplication review queue, and keeps them up to date from GitHub.",
+  "minimum_chrome_version": "120",
+  "icons": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
+  "action": {
+    "default_title": "Element451 Dedup Tools",
+    "default_popup": "popup.html",
+    "default_icon": { "16": "icons/icon16.png", "32": "icons/icon32.png" }
+  },
+  "background": { "service_worker": "background.js" },
+  "permissions": ["storage", "userScripts", "scripting"],
+  "host_permissions": [
+    "https://*.element451.io/*",
+    "https://raw.githubusercontent.com/totallygeekdom/csusb-de-dup-extension/*",
+    "https://api.github.com/repos/totallygeekdom/csusb-de-dup-extension/*"
+  ]
+}

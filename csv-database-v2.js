@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.50
+// @version      2.51
 // @description  Tracks duplicate entries in a database stored in browser localStorage (exports an .xlsx spreadsheet) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -9,18 +9,13 @@
 // @updateURL    https://raw.githubusercontent.com/totallygeekdom/csusb-de-dup-extension/main/csv-database-v2.js
 // @downloadURL  https://raw.githubusercontent.com/totallygeekdom/csusb-de-dup-extension/main/csv-database-v2.js
 // ==/UserScript==
-//
-// Companion to Element451-UI-Perfection-v2.user.js. Records each pair the main script sees (and every one it blocks or
-// skips) in localStorage, keyed on the two contacts' Spark IDs, marks them on the review-queue list with a badge, and
-// exports / imports the database as a spreadsheet. The badge is appended to the list row's flagged cell rather than
-// rewriting Element's own markup. Full documentation: Full-Documentation-v2.md.
 (function () {
     'use strict';
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451CsvDatabaseLoaded) return;
     window.__elm451CsvDatabaseLoaded = true;
 
-    const VERSION = '2.50'; // keep in sync with @version
+    const VERSION = '2.51'; // keep in sync with @version
     const STORAGE_KEY = 'elm_csv_database';
     const UI_KEY = 'elm_show_db_ui';
     function showDbUi() { try { return localStorage.getItem(UI_KEY) !== 'false'; } catch (e) { return true; } }

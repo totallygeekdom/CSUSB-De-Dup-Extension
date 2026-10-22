@@ -32,6 +32,19 @@ function renderUpdate() {
   slot.appendChild(chip);
 }
 
+const needsOff = (s) => !!NEEDS[s.id] && state.enabled[NEEDS[s.id]] === false;
+const verText = (s) => 'v' + (state.versions[s.id] || '?') + (needsOff(s) ? ' \u00b7 needs ' + state.scripts.find(x => x.id === NEEDS[s.id]).name : '');
+
+// Updates the rows in place, so a switch keeps its element and animates instead of being rebuilt
+function refreshRows() {
+  state.scripts.forEach(s => {
+    const li = document.querySelector('#scripts li[data-id="' + s.id + '"]');
+    if (!li) return;
+    li.classList.toggle('disabled-row', !state.userScriptsOk || needsOff(s));
+    li.querySelector('.ver').textContent = verText(s);
+  });
+}
+
 function renderScripts() {
   const ul = $('scripts');
   ul.textContent = '';
@@ -39,14 +52,13 @@ function renderScripts() {
   $('off-card').hidden = !off;
   state.scripts.forEach(s => {
     const li = document.createElement('li');
-    const dep = NEEDS[s.id];
-    const needsUi = !!dep && state.enabled[dep] === false; // a script whose partner script is switched off
-    li.className = 'row-item' + (off || needsUi ? ' disabled-row' : '');
+    li.dataset.id = s.id;
+    li.className = 'row-item' + (off || needsOff(s) ? ' disabled-row' : '');
     const txt = document.createElement('div');
     txt.className = 'txt';
     txt.innerHTML = '<div class="name"></div><div class="ver"></div>';
     txt.querySelector('.name').textContent = s.name;
-    txt.querySelector('.ver').textContent = 'v' + (state.versions[s.id] || '?') + (needsUi ? ' · needs ' + state.scripts.find(x => x.id === dep).name : '');
+    txt.querySelector('.ver').textContent = verText(s);
     const sw = document.createElement('label');
     sw.className = 'switch';
     sw.innerHTML = '<input type="checkbox" role="switch"><span class="track"></span><span class="thumb">' + ICON_CHECK + '</span>';
@@ -57,7 +69,7 @@ function renderScripts() {
     input.addEventListener('change', async () => {
       state.enabled[s.id] = input.checked;
       await send({ type: 'toggle', id: s.id, enabled: input.checked });
-      renderScripts();
+      refreshRows();
       if (tab && ELEMENT_TAB.test(tab.url || '')) $('reload-row').hidden = false;
     });
     li.append(txt, sw);

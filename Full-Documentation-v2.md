@@ -6,7 +6,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 | Script | File | Current version |
 |---|---|---|
 | UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.212`, shown in the settings pane as `v2.210` |
-| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.52` |
+| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.53` |
 | Database Merge (optional) | `csv-database-merge-v2.js` | `@version 1.7`, see [section 17](#17-database-merge) |
 
 The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
@@ -188,7 +188,7 @@ Off: the script stops on those pairs and leaves them on screen, showing the popu
 
 Download / Upload & Replace / Clear Database (added by the CSV script, [section 11](#11-csv-database-v2)).
 
-The pane's **Info** section (last, in a single list container) lists the versions in use, which matters when the scripts update themselves in the Chrome extension: `Main script · v2.212` (the UI script), `Database script · v2.52` (added under it by the CSV script, when installed) and `Extension · v1.0.0` (only when running through the extension, which hands the page its version as `window.__elm451Extension` when it registers the scripts). All three use the same `vX.Y` style; the console still logs the main script as `v2-build-185`.
+The pane's **Info** section (last, in a single list container) lists the versions in use, which matters when the scripts update themselves in the Chrome extension: `Main script · v2.212` (the UI script), `Database script · v2.53` (added under it by the CSV script, when installed) and `Extension · v1.0.0` (only when running through the extension, which hands the page its version as `window.__elm451Extension` when it registers the scripts). All three use the same `vX.Y` style; the console still logs the main script as `v2-build-185`.
 
 ### 4.9 Hidden setting
 
@@ -339,7 +339,7 @@ A right-hand Material 3 panel (warm neutral surface, 40px rounded left edge) wit
 
 ### 10.5 Toasts
 
-Both scripts append toasts to one shared stack, **bottom-left**, newest at the bottom, up to 4, each fading in/out: the CSV script's `API: data captured successfully` (not shown while the merge panel is open, nor for 6 seconds after it closes, since the list refreshes in the background after a merge) / `unavailable, using database fallback`, and the main script's notices (Auto-merge cancelled/stopped, Going to page N…). The same message arriving again refreshes the existing toast.
+Both scripts append toasts to one shared stack, **bottom-left**, newest at the bottom, up to 4, each fading in/out: the CSV script's `API: data captured successfully` (not shown while the merge panel is open: the list refreshes in the background after a merge) / `unavailable, using database fallback`, and the main script's notices (Auto-merge cancelled/stopped, Going to page N…). The same message arriving again refreshes the existing toast.
 
 ---
 

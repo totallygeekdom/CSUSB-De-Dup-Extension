@@ -18,8 +18,8 @@ chip). Two v2 scripts target it, plus an optional third that merges databases:
 | Script | File | Current version |
 |---|---|---|
 | UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.213` (shown in the settings pane) |
-| Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.54` |
-| Database Merge (optional, pairs with Database) | `csv-database-merge-v2.js` | `@version 1.7` |
+| Database (New Deduplication Layout) | `database-v2.js` | `@version 2.55` |
+| Database Merge (optional, pairs with Database) | `database-merge-v2.js` | `@version 1.8` |
 
 **Full documentation: [`Full-Documentation-v2.md`](Full-Documentation-v2.md)** (architecture, every setting,
 the resolution rules, auto-merge, every website restyle, the database format, limitations).
@@ -99,7 +99,7 @@ The scripts are fetched from this repo's `main` branch on Chrome start (and once
 **Tampermonkey (any browser, including Firefox):**
 1. Install the [Tampermonkey](https://www.tampermonkey.net/) browser extension.
 2. Create a userscript with the contents of `Element451-UI-Perfection-v2.user.js` and, optionally, a second one with
-   `csv-database-v2.js`, and, if you want to merge databases, a third with `csv-database-merge-v2.js` (it needs the CSV
+   `database-v2.js`, and, if you want to merge databases, a third with `database-merge-v2.js` (it needs the Database
    script to show its button). Install each once, and do not run them alongside the classic scripts. Open the gear pane to
    confirm which versions are running.
 3. Navigate to your Element451 duplicates page. The scripts activate automatically on `*.element451.io`.

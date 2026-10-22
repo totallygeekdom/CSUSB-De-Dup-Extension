@@ -106,7 +106,7 @@
                pixel-overlay approach — much simpler now that each side is its own
                button element instead of a shared row) --- */
         /* --- AI-vs-script pick comparison bar + per-row disagreement badges --- */
-        /* Shared toast stack (also used by csv-database-v2.js): bottom-left, stacks upward. */
+        /* Shared toast stack (also used by database-v2.js): bottom-left, stacks upward. */
         #elm2-toast-stack { position: fixed; left: 16px; bottom: 16px; z-index: 10002; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
         .elm2-toast { display: flex; align-items: center; gap: 12px; box-sizing: border-box; min-height: 48px; max-width: 340px; padding: 8px 16px 8px 12px; border-radius: 4px; background: #2f3236; color: #f1f3f7; font: 400 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .25px; box-shadow: var(--md-elev-3); opacity: 0; transform: translateY(8px); transition: opacity .25s var(--md-ease), transform .25s var(--md-ease); }
         .elm2-toast.visible { opacity: 1; transform: none; }
@@ -578,7 +578,7 @@
                top navbar — .bolt-navigation-right / elm-universal-search — was not
                redesigned) --- */
         #elm-controls-wrapper { display: flex; align-items: center; gap: 12px; margin-right: 16px; position: relative; }
-        /* tonal assist-chip style pill (merge counter; the DB badge in csv-database-v2 matches) */
+        /* tonal assist-chip style pill (merge counter; the DB badge in database-v2 matches) */
         #elm-counter-wrapper { display: flex; align-items: center; gap: 4px; height: 32px; box-sizing: border-box; padding: 0 4px 0 12px; background: var(--md-surface-container-highest); border: none; border-radius: 8px; }
         #elm-merge-counter { font: 500 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .1px; color: var(--md-on-surface); padding: 0; white-space: nowrap; }
         #elm-reset-btn { width: 24px; height: 24px; padding: 0; display: flex; align-items: center; justify-content: center; background: transparent; border: none; border-radius: 50%; color: var(--md-on-surface-variant); cursor: pointer; font-size: 16px; line-height: 1; transition: background-color .2s var(--md-ease), color .2s var(--md-ease); }
@@ -1999,7 +1999,7 @@
             getContactCards().forEach(c => c.classList.add('elm2-blocked-card'));
         }
     }
-    // Signals the current entry's department/block status to csv-database-v2.js
+    // Signals the current entry's department/block status to database-v2.js
     // via document.body.dataset, same contract as the classic script.
     function updateCsvSignal(blockers) {
         const sparks = getSparkIds();
@@ -2662,7 +2662,7 @@
     const toastsForcedOn = () => !toastsForcedOff() && (CFG.AUTO_SKIP_BLOCKED || autoMergeOn());
     const toastsEnabled = () => !toastsForcedOff() && (toastsForcedOn() || getBoolSetting('elm_outcome_toasts', true));
     // Notices ("Auto-merge cancelled", "Rows per page ...") use the shared toast stack that
-    // csv-database-v2.js also uses for its API toast: bottom-left, newest at the bottom.
+    // database-v2.js also uses for its API toast: bottom-left, newest at the bottom.
     function toastStack() {
         let st = document.getElementById('elm2-toast-stack');
         if (!st) { st = document.createElement('div'); st.id = 'elm2-toast-stack'; document.body.appendChild(st); }

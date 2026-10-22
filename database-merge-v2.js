@@ -1,16 +1,16 @@
 // ==UserScript==
 // @name         Element451 - Database Merge (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      1.7
+// @version      1.8
 // @description  Adds a "Merge Databases" page to the Database script: combine several exported databases (and this browser's) into one, with a breakdown
 // @author       You
 // @match        https://*.element451.io/*
 // @grant        none
-// @updateURL    https://raw.githubusercontent.com/totallygeekdom/csusb-de-dup-extension/main/csv-database-merge-v2.js
-// @downloadURL  https://raw.githubusercontent.com/totallygeekdom/csusb-de-dup-extension/main/csv-database-merge-v2.js
+// @updateURL    https://raw.githubusercontent.com/totallygeekdom/csusb-de-dup-extension/main/database-merge-v2.js
+// @downloadURL  https://raw.githubusercontent.com/totallygeekdom/csusb-de-dup-extension/main/database-merge-v2.js
 // ==/UserScript==
 //
-// Pairs with csv-database-v2.js in only two ways: the "Merge Databases" button is added to the Database section that
+// Pairs with database-v2.js in only two ways: the "Merge Databases" button is added to the Database section that
 // script puts in the settings pane (so the button only exists while the Database script is active), and the current
 // database is read straight from localStorage (`elm_csv_database`), so it can be merged without downloading it first.
 // Everything else (reading .xlsx files, writing the merged .xlsx) is this script's own code, which is why
@@ -21,7 +21,7 @@
     'use strict';
     if (window.__elm451DbMergeLoaded) return;
     window.__elm451DbMergeLoaded = true;
-    const VERSION = '1.7'; // keep in sync with @version
+    const VERSION = '1.8'; // keep in sync with @version
 
     // =========================================================
     // STORED DATABASE AND FILE FORMATS

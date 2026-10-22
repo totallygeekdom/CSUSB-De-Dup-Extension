@@ -11,7 +11,7 @@ const ROOT = path.join(__dirname, '..');
 const SRC = path.join(ROOT, 'extension');
 const OUT = path.join(ROOT, 'dist');
 const UNPACKED = path.join(OUT, 'extension');
-const SCRIPTS = ['Element451-UI-Perfection-v2.user.js', 'csv-database-v2.js', 'csv-database-merge-v2.js'];
+const SCRIPTS = ['Element451-UI-Perfection-v2.user.js', 'database-v2.js', 'database-merge-v2.js'];
 
 function copyDir(from, to) {
   fs.mkdirSync(to, { recursive: true });

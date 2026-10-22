@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.216
+// @version      2.217
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.216'; // keep in sync with @version
+    const VERSION = '2.217'; // keep in sync with @version
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -3381,7 +3381,8 @@
             counterEl.style.transition = 'transform 0.15s ease-out';
             const resetBtn = document.createElement('button');
             resetBtn.id = 'elm-reset-btn';
-            resetBtn.innerHTML = '↺';
+            resetBtn.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.73 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4z"/></svg>';
+            resetBtn.setAttribute('aria-label', 'Reset merge counter');
             resetBtn.title = 'Reset merge counter';
             resetBtn.onclick = (e) => {
                 e.stopPropagation();

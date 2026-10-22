@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.207`, shown in the settings pane as `v2.207` |
+| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.208`, shown in the settings pane as `v2.208` |
 | CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.48` |
 | Database Merge (optional) | `csv-database-merge-v2.js` | `@version 1.6`, see [section 17](#17-database-merge) |
 
@@ -145,7 +145,7 @@ What "in range" means:
 - Out of range: with **Auto-Skip on** the pair is skipped (no popup); with Auto-Skip off it is left for you untouched.
 - **None with Auto-Skip on skips every pair** (see [scan mode](#53-scan-mode)).
 
-Storage: `elm_range_level2` (0-4). Earlier builds had an *Applicant* stop and used `elm_range_level` (0-5); that value is mapped once (Applicant becomes High), and the oldest `elm_auto_apply_level` and `elm_auto_click_fab` are honoured as fallbacks.
+Storage: `elm_range_level2` (0-4); All until it has been set.
 
 ### 4.2 Use picks from
 
@@ -188,7 +188,7 @@ Off: the script stops on those pairs and leaves them on screen, showing the popu
 
 Download / Upload & Replace / Clear Database (added by the CSV script, [section 11](#11-csv-database-v2)).
 
-The pane's **Info** section (last, in a single list container) lists the versions in use, which matters when the scripts update themselves in the Chrome extension: `Main script · v2.207` (the UI script), `Database script · v2.48` (added under it by the CSV script, when installed) and `Extension · v1.0.0` (only when running through the extension, which hands the page its version as `window.__elm451Extension` when it registers the scripts). All three use the same `vX.Y` style; the console still logs the main script as `v2-build-185`.
+The pane's **Info** section (last, in a single list container) lists the versions in use, which matters when the scripts update themselves in the Chrome extension: `Main script · v2.208` (the UI script), `Database script · v2.48` (added under it by the CSV script, when installed) and `Extension · v1.0.0` (only when running through the extension, which hands the page its version as `window.__elm451Extension` when it registers the scripts). All three use the same `vX.Y` style; the console still logs the main script as `v2-build-185`.
 
 ### 4.9 Hidden setting
 
@@ -422,7 +422,6 @@ Header `DB: N` pill, the Database section of the settings pane, the **Show Datab
 | `elm_allowed_department` | main | Allowed Department |
 | `elm_show_merge_counter` | main | Hidden: show the merge counter |
 | `elm_merge_count` | main | Merge counter value |
-| `elm_range_level`, `elm_auto_apply_level`, `elm_auto_click_fab` | main | Legacy slider values, read once to initialise `elm_range_level2` |
 | `elm_csv_database` | CSV | Recorded pairs (JSON array) |
 | `elm_show_db_ui` | CSV | Show Database UI |
 | `elm2_bolt_picks` | main | Bolt's original pick per conflicting row (hashed ids, `l`/`r` + timestamp, capped at 2,500 entries). Element451 saves the selection on a pair, so on a second visit the screen shows the last selection rather than Bolt's pick; this keeps Bolt's real pick for the colours and *Use Bolt AI picks* |

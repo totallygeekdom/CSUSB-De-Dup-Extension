@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.207
+// @version      2.208
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -28,7 +28,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.207'; // keep in sync with @version
+    const VERSION = '2.208'; // keep in sync with @version
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -44,19 +44,11 @@
     // and auto-navigate can't be done safely until there's a real
     // merge-success signal to detect (see checkForMergeResult below) — both
     // need live investigation before they're worth exposing as settings.
-    // Slider position, 0..4: None, High, Medium, Low, All (each adds to the one before).
-    // Stored under 'elm_range_level2'. Earlier builds stored a six-position slider that also had an
-    // "Applicant" stop under 'elm_range_level' (0 none, 1 applicant, 2 high, 3 medium, 4 low, 5 all);
-    // that is mapped once (Applicant -> High). The oldest slider ('elm_auto_apply_level': 0 none,
-    // 1 applicant, 2 low, 3 medium, 4 all) is mapped the same way.
+    // Slider position, 0..4: None, High, Medium, Low, All (each adds to the one before), stored under
+    // 'elm_range_level2'; All until it has been set.
     function rangeLevel() {
-        const v2 = parseInt(localStorage.getItem('elm_range_level2'), 10);
-        if (!isNaN(v2)) return Math.max(0, Math.min(4, v2));
-        const v1 = parseInt(localStorage.getItem('elm_range_level'), 10);
-        if (!isNaN(v1)) return [0, 1, 1, 2, 3, 4][Math.max(0, Math.min(5, v1))];
-        const old = parseInt(localStorage.getItem('elm_auto_apply_level'), 10);
-        if (!isNaN(old)) return [0, 1, 3, 2, 4][Math.max(0, Math.min(4, old))];
-        return getBoolSetting('elm_auto_click_fab', true) ? 4 : 0;
+        const v = parseInt(localStorage.getItem('elm_range_level2'), 10);
+        return isNaN(v) ? 4 : Math.max(0, Math.min(4, v));
     }
     const CFG = Object.defineProperties({}, {
         // Slider = which pairs are in range, by Bolt score (0 None, 1 High, 2 + Medium, 3 + Low, 4 All).

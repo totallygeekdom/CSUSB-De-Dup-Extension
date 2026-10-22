@@ -5,9 +5,9 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.210`, shown in the settings pane as `v2.210` |
-| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.51` |
-| Database Merge (optional) | `csv-database-merge-v2.js` | `@version 1.7`, see [section 17](#17-database-merge) |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.218`, shown in the settings pane as `v2.210` |
+| Element451 - Database v2 | `database-v2.js` | `@version 2.58` |
+| Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.9`, see [section 17](#17-database-merge) |
 
 The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
 `Full-Documentation-v127.0.md`) are unchanged and target the old merge page.
@@ -28,7 +28,7 @@ The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
 8. [Warnings and popups](#8-warnings-and-popups)
 9. [Auto-merge and the cancel countdown](#9-auto-merge-and-the-cancel-countdown)
 10. [Visual changes to the Element451 website](#10-visual-changes-to-the-element451-website)
-11. [CSV Database v2](#11-csv-database-v2)
+11. [Database v2](#11-database-v2)
 12. [Inter-script contract, storage keys and console output](#12-inter-script-contract-storage-keys-and-console-output)
 13. [Known limitations and unverified guesses](#13-known-limitations-and-unverified-guesses)
 14. [Troubleshooting](#14-troubleshooting)
@@ -42,13 +42,13 @@ The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
 
 1. Install the Tampermonkey extension.
 2. Create one userscript with the contents of `Element451-UI-Perfection-v2.user.js` and, optionally, a
-   second with `csv-database-v2.js`. Both match `https://*.element451.io/*` and run with
+   second with `database-v2.js`. Both match `https://*.element451.io/*` and run with
    `@grant none`, which means they run in the page's own JavaScript context (this is what lets
    the script look at Angular's internals and lets the two scripts talk to each other).
 3. Do not run a classic script and its v2 counterpart on the same page, and make sure each v2 script is
    installed **once**. A duplicate or disabled install was the cause of several "bugs" during development
    (doubled popups, missing features).
-4. To confirm what is running: open the gear (settings) — the Info section at the bottom lists `Main script · vX.Y`, `Database script · vX.Y` (when the CSV script is installed) and, when running in the Chrome extension, `Extension · vX.Y.Z`.
+4. To confirm what is running: open the gear (settings) — the Info section at the bottom lists `Main script · vX.Y`, `Database script · vX.Y` (when the Database script is installed) and, when running in the Chrome extension, `Extension · vX.Y.Z`.
    Tampermonkey shows both `@version` values too. (The scripts no longer print a "loaded" line in the console.)
 
 Both scripts have `@updateURL`/`@downloadURL` pointing at the `main` branch. Builds developed on a
@@ -92,7 +92,7 @@ Consequences that shaped the scripts:
 2. `resetStaleRows()` — clear any per-row state left over from the previous pair (Element can reuse DOM nodes).
 3. `snapshotNativeSelections()` — record Bolt's default pick for every row (read from the arrow buttons) *before* anything can click a row.
 4. Detect a **new pair** by `getPairKey()`: the two contact names plus the queue position (`name|name#current`). The position is part of the key because consecutive pairs can have identical names; with names alone the script thought it was still on the same pair and stalled.
-5. Compute blockers → apply lockdown styling → publish the signal for the CSV script → either skip/stop (blocked) or continue to resolution (see [section 5](#5-the-per-pair-workflow)).
+5. Compute blockers → apply lockdown styling → publish the signal for the Database script → either skip/stop (blocked) or continue to resolution (see [section 5](#5-the-per-pair-workflow)).
 
 ### 3.2 The diff-row adapter
 
@@ -173,12 +173,12 @@ Skips pairs the script will not handle, with **no popup**, by clicking **Next du
 - pairs outside the slider range,
 - possible-twins pairs.
 
-Off: the script stops on those pairs and leaves them on screen, showing the popups that apply ([section 8](#8-warnings-and-popups)). A twins pair is never auto-merged either way. Before every skip the CSV script is asked to record the pair first ([11.3](#113-recording)). Storage: `elm_auto_skip_blocked` (default on).
+Off: the script stops on those pairs and leaves them on screen, showing the popups that apply ([section 8](#8-warnings-and-popups)). A twins pair is never auto-merged either way. Before every skip the Database script is asked to record the pair first ([11.3](#113-recording)). Storage: `elm_auto_skip_blocked` (default on).
 
 ### 4.6 Display
 
 - **Highlight Rows** (`elm_highlight_rows`, default on): the pick colours on rows and the applicant band.
-- **Show Database UI** (added by the CSV script, `elm_show_db_ui`, default on): shows/hides the header `DB:` counter and the list-view department chips. Recording and the Download / Upload / Clear buttons are unaffected.
+- **Show Database UI** (added by the Database script, `elm_show_db_ui`, default on): shows/hides the header `DB:` counter and the list-view department chips. Recording and the Download / Upload / Clear buttons are unaffected.
 
 ### 4.7 Department
 
@@ -186,13 +186,13 @@ Off: the script stops on those pairs and leaves them on screen, showing the popu
 
 ### 4.8 Database
 
-Download / Upload & Replace / Clear Database (added by the CSV script, [section 11](#11-csv-database-v2)).
+Download / Upload & Replace / Clear Database (added by the Database script, [section 11](#11-database-v2)).
 
-The pane's **Info** section (last, in a single list container) lists the versions in use, which matters when the scripts update themselves in the Chrome extension: `Main script · v2.210` (the UI script), `Database script · v2.51` (added under it by the CSV script, when installed) and `Extension · v1.0.0` (only when running through the extension, which hands the page its version as `window.__elm451Extension` when it registers the scripts). All three use the same `vX.Y` style; the console still logs the main script as `v2-build-185`.
+The pane's **Info** section (last, in a single list container) lists the versions in use, which matters when the scripts update themselves in the Chrome extension: `Main script · v2.218` (the UI script), `Database script · v2.58` (added under it by the Database script, when installed) and `Extension · v1.0.0` (only when running through the extension, which hands the page its version as `window.__elm451Extension` when it registers the scripts). All three use the same `vX.Y` style; the console still logs the main script as `v2-build-185`.
 
 ### 4.9 Hidden setting
 
-`elm_show_merge_counter` (default false, no longer a visible toggle) shows a `Merges: N` pill with a reset button in the header. To use it, set `localStorage.elm_show_merge_counter = 'true'`. It counts a merge when the pair on screen changes after Merge Contacts was clicked (see limitations).
+`elm_show_merge_counter` (default false, no longer a visible toggle) shows a `Merges N` pill (tonal orange, number in bold) with a circular-arrow reset button in the header, just left of the gear. To use it, set `localStorage.elm_show_merge_counter = 'true'`. It counts a merge when the pair on screen changes after Merge Contacts was clicked (see limitations).
 
 ---
 
@@ -238,7 +238,7 @@ A pair is blocked when any of these is true. Blocked pairs get red styling (the 
 
 **Department detection.** A row counts as Grad/IA when it is a Workflows / Application / Program / `type:` / `status:` row whose text contains `GRAD_` or "grad student" or an `IA_` / `_IA_` / `_IA ` marker **and** `status: Finished`. Otherwise the pair is **UnderGrad**. For a blocked UnderGrad pair the *first diff row* is highlighted red, as the classic script highlighted its first row; it is only a marker, because UnderGrad is "no Grad/IA row found".
 
-The detected department is also published for the CSV script (`Forbidden` > `Appeal` > `Grad/IA` / `UnderGrad`).
+The detected department is also published for the Database script (`Forbidden` > `Appeal` > `Grad/IA` / `UnderGrad`).
 
 ---
 
@@ -322,28 +322,28 @@ All of these are CSS/DOM additions made by the main script. Colours use a Materi
 
 ### 10.2 Header controls
 
-- A 40px round **gear** button (an inline SVG, outlined Material "settings", so macOS does not draw an emoji) opens the settings pane. If the CSV script is installed, a tonal `DB: N` pill sits next to it. The hidden merge counter lives here too.
+- A 40px round **gear** button (an inline SVG, outlined Material "settings", so macOS does not draw an emoji) opens the settings pane. If the Database script is installed, a tonal `Database N` pill sits just left of it (then the hidden Merges counter, when shown: order is Database, Merges, gear).
 
 ### 10.3 Settings pane
 
-A right-hand Material 3 panel (warm neutral surface, 40px rounded left edge) with a header of a tonal circular close button at the top left (a 32px circle 24px in from each edge, its left edge lined up with the containers below and concentric with the panel's 40px corner) next to the title, laid out as an **M3 Expressive list**: each setting (and each Database button) is its own light container, 2px apart, the first and last of a group having large 20px outer corners and the rest 6px (`.elm-list` / `.elm-item`; the CSV script puts "Show Database UI" in its own item and styles its Database buttons as list rows): a discrete Material 3 **slider** (track split by a handle, stop dots, value bubble while dragging, labels under it), two **segmented buttons** (Use picks from, When done), a select for the countdown and department, and Material 3 switches. Descriptions under each control reserve their height so the controls below do not jump. A build line shows `New layout · v2-build-N`.
+A right-hand Material 3 panel (warm neutral surface, 40px rounded left edge) with a header of a tonal circular close button at the top left (a 32px circle 24px in from each edge, its left edge lined up with the containers below and concentric with the panel's 40px corner) next to the title, laid out as an **M3 Expressive list**: each setting (and each Database button) is its own light container, 2px apart, the first and last of a group having large 20px outer corners and the rest 6px (`.elm-list` / `.elm-item`; the Database script puts "Show Database UI" in its own item and styles its Database buttons as list rows): a discrete Material 3 **slider** (track split by a handle, stop dots, value bubble while dragging, labels under it), two **segmented buttons** (Use picks from, When done), a select for the countdown and department, and Material 3 switches. Descriptions under each control reserve their height so the controls below do not jump. A build line shows `New layout · v2-build-N`.
 
 ### 10.4 List page
 
-- **Department badges** (CSV script): a small right-aligned pill in the row's flagged cell (see [11.5](#115-list-page-badges)).
+- **Department badges** (Database script): a small right-aligned pill in the row's flagged cell (see [11.5](#115-list-page-badges)).
 - **Pager**: next to the paginator's range label (top and bottom paginators) a **Page [n] of N  Go** box. Enter or Go jumps to the page (0 or a negative number goes to page 1, a number past the end goes to the last page): it sets the paginator component directly if it can be found; otherwise it clicks First/Next page repeatedly, waiting for each page to load ("Going to page N…" toast). Element's "Rows per page: 50" is left as is, because a custom page size could not be set from outside (the page size is not read from the URL and the paginator component was not reachable from a sandboxed script; with `@grant none` build 100 this should be re-checked).
-- **History search** (History tab, in the table header's own actions slot, `.bolt-table-header-wrapper` second div, which is where the review queue keeps its search icon; if that slot isn't found it goes before the pager, then above the table): a Material 3 Expressive search field that starts as just a search icon and slides open when clicked (hint "Search merged profiles"; Escape, the icon, or clicking away from an empty box closes it; with text in the box it stays open) with **Previous match** and **Next match** buttons (Enter starts the search, as on the review queue; the status text ("Match 1 of 3") sits to the left of the search box; matches already found are remembered, so Previous goes back without re-scanning). The page loads 50 merges at a time from `.../v2/users/relationships/duplicates/history?limit=50&offset=N`; the script remembers the page's own last request to that URL (URL and headers, including the auth token) and replays it for page 1, 2, 3… scanning each record (word-based partial matching over every value of the record, never the field names: each typed word must be the start of a word in the record, so "lov" finds Lovelace but "ovel" does not; a word with an @, digit or punctuation, such as an email, ID or date, is matched inside the whole value. Any order: one word matches anywhere, so "First" or "Last" finds First Last; two words must both match, so "Last First" finds First Last; with three or more words one may be missing, so "First Middle Last" finds First Last; free-text `ai_analysis`/`feedback` fields are skipped, and so is **who did the merge**: fields keyed like `actor`, `reviewer`, `performer`, `creator`, `author`, `*_by` (`merged_by`, `performed_by`...) are ignored, as is any value equal to a reviewer name shown in the table's "who" column on the pages you have browsed; a plain `user` key is not skipped because in Element451's API the contacts are the "users"). The first match is jumped to straight away (the pager goes to its page and the row is outlined) and the scan carries on through the remaining pages in the background, so the count grows as more are found. The status line has four states: still searching with no match yet (`Searching page 5 of 104…`), still searching with matches (`Searching page 5 of 104… Match 1 of 1`), finished with matches (`Match 1 of 3`) and finished with none (`No matches found in 104 pages`). **Previous match** / **Next match** step through the matches found so far (grey at either end). The **×** inside the field cancels the search and clears the box and the highlight. Before paging it asks for offsets 0 and 1 and compares them to learn whether `offset` counts pages from 0, pages from 1 or records. If no request has been captured yet (the page loaded before the script), go to another page of the list once. The CSV script ignores history responses. Opening animation: the pill hugs its content while the input area slides open (width + fade, 300 ms, the M3 deceleration curve) to a width just big enough for the hint text (182px input area, about 240px for the whole pill) and Previous/Next match fade in after it, so nothing pops in; closing reverses it.
+- **History search** (History tab, in the table header's own actions slot, `.bolt-table-header-wrapper` second div, which is where the review queue keeps its search icon; if that slot isn't found it goes before the pager, then above the table): a Material 3 Expressive search field that starts as just a search icon and slides open when clicked (hint "Search merged profiles"; Escape, the icon, or clicking away from an empty box closes it; with text in the box it stays open) with **Previous match** and **Next match** buttons (Enter starts the search, as on the review queue; the status text ("Match 1 of 3") sits to the left of the search box; matches already found are remembered, so Previous goes back without re-scanning). The page loads 50 merges at a time from `.../v2/users/relationships/duplicates/history?limit=50&offset=N`; the script remembers the page's own last request to that URL (URL and headers, including the auth token) and replays it for page 1, 2, 3… scanning each record (word-based partial matching over every value of the record, never the field names: each typed word must be the start of a word in the record, so "lov" finds Lovelace but "ovel" does not; a word with an @, digit or punctuation, such as an email, ID or date, is matched inside the whole value. Any order: one word matches anywhere, so "First" or "Last" finds First Last; two words must both match, so "Last First" finds First Last; with three or more words one may be missing, so "First Middle Last" finds First Last; free-text `ai_analysis`/`feedback` fields are skipped, and so is **who did the merge**: fields keyed like `actor`, `reviewer`, `performer`, `creator`, `author`, `*_by` (`merged_by`, `performed_by`...) are ignored, as is any value equal to a reviewer name shown in the table's "who" column on the pages you have browsed; a plain `user` key is not skipped because in Element451's API the contacts are the "users"). The first match is jumped to straight away (the pager goes to its page and the row gets a rounded orange box with a light tint, drawn a little outside the row's contents and following it as you scroll) and the scan carries on through the remaining pages in the background, so the count grows as more are found. The status line has four states: still searching with no match yet (`Searching page 5 of 104…`), still searching with matches (`Searching page 5 of 104… Match 1 of 1`), finished with matches (`Match 1 of 3`) and finished with none (`No matches found in 104 pages`). **Previous match** / **Next match** step through the matches found so far (grey at either end). The **×** inside the field cancels the search and clears the box and the highlight. Before paging it asks for offsets 0 and 1 and compares them to learn whether `offset` counts pages from 0, pages from 1 or records. If no request has been captured yet (the page loaded before the script), go to another page of the list once. The Database script ignores history responses. Opening animation: the pill hugs its content while the input area slides open (width + fade, 300 ms, the M3 deceleration curve) to a width just big enough for the hint text (182px input area, about 240px for the whole pill) and Previous/Next match fade in after it, so nothing pops in; closing reverses it. **Narrow windows:** the header row wraps instead of squishing: Element's labels (*N Records*, the pager) stay on one line, the pager drops under the header row when the two don't fit, and in the search bar the status text moves onto its own line above the box before anything is clipped.
 - **Search bar style**: Element's expanded header search (`bolt-expandable-search`, review queue and History) and the History search share one Material 3 Expressive look: a 56 px full-round bar (the header row is kept 56 px tall even while the search is closed, so nothing moves when it opens) filled `#F5F5F5` (`--md-search-fill`), no outline, the search icon at the leading edge, 16 px text. Only the expanded state of Element's own search is restyled; it already slides open by itself.
 - **Tabs**: the *Review Queue / History* tab bar is restyled as Material 3 primary tabs (48px, label-medium, 3px rounded-top indicator as wide as the label, divider line, hover/press state layers).
 - **Advanced Filters** panel (opened from the list): restyled compactly — a 640px panel (the overlay, its container and the filters host are all set to the same width), a header with a text *Clear All* and a filled *Apply Filters* (disabled grey until a filter changes), tonal white cards on a tinted page, one-line section headers (title + description), labels beside their controls, Material 3 filter chips (outlined; selected = orange tonal with a check mark, the check hidden when unselected), and compact 168px From/To date boxes. Rules are given extra specificity so Element's own chip colours cannot win.
 
 ### 10.5 Toasts
 
-Both scripts append toasts to one shared stack, **bottom-left**, newest at the bottom, up to 4, each fading in/out: the CSV script's `API: data captured successfully` / `unavailable, using database fallback`, and the main script's notices (Auto-merge cancelled/stopped, Going to page N…). The same message arriving again refreshes the existing toast.
+Both scripts append toasts to one shared stack, **bottom-left**, newest at the bottom, up to 4, each fading in/out: the Database script's `API: data captured successfully` (never shown while the merge panel is open, and one already showing is removed when the panel opens: the list refreshes in the background after a merge. "Open" means the diff form is on the page, or the review sidebar is on screen) / `unavailable, using database fallback`, and the main script's notices (Auto-merge cancelled/stopped, Going to page N…). The same message arriving again refreshes the existing toast.
 
 ---
 
-## 11. CSV Database v2
+## 11. Database v2
 
 ### 11.1 Purpose
 
@@ -364,7 +364,7 @@ Stored in `localStorage.elm_csv_database` as a JSON array. Each entry:
 
 ### 11.3 Recording
 
-Every second the script reads `body.dataset.csvDept` and the Spark IDs published by the main script and records the pair if the page's Spark IDs match the published ones (stale-signal guard). In addition, **before every auto-skip** the main script dispatches an `elm2-record-pair` event and waits (up to 3 s, retrying every 0.25 s) until the CSV script confirms the pair is recorded, so a fast skip cannot lose an entry; if the CSV script is not installed the skip proceeds immediately.
+Every second the script reads `body.dataset.csvDept` and the Spark IDs published by the main script and records the pair if the page's Spark IDs match the published ones (stale-signal guard). In addition, **before every auto-skip** the main script dispatches an `elm2-record-pair` event and waits (up to 3 s, retrying every 0.25 s) until the Database script confirms the pair is recorded, so a fast skip cannot lose an entry; if the Database script is not installed the skip proceeds immediately.
 
 ### 11.4 API interception
 
@@ -388,7 +388,7 @@ A badge is placed in `.cdk-column-flagged` (falling back to signals, then the ro
 
 ### 11.7 UI
 
-Header `DB: N` pill, the Database section of the settings pane, the **Show Database UI** toggle (under Display), the API toast and the badges, all in the same orange Material 3 style.
+Header `Database N` pill (tonal orange, with a database icon in an orange circle; it sits first, left of the Merges pill, and the two join as one pair with big outer and small inner corners when both show), the Database section of the settings pane, the **Show Database UI** toggle (under Display), the API toast and the badges, all in the same orange Material 3 style.
 
 ---
 
@@ -398,14 +398,14 @@ Header `DB: N` pill, the Database section of the settings pane, the **Show Datab
 
 | Channel | Direction | Mechanism |
 |---|---|---|
-| Department + Spark IDs | main → CSV | `document.body.dataset.csvDept`, `csvSpark1`, `csvSpark2` |
-| Merge Databases button, stored database | merge ← CSV | the merge script puts its button inside `#elm-settings-db-section` (so it exists only while the CSV script is active) and reads / writes `localStorage.elm_csv_database`; nothing else is shared |
-| Script vs Bolt line, Bolt score | main → CSV | `document.body.dataset.csvChoice`, `csvScore`; `elm2-pair-merged` event (`detail.a/.b/.choice/.lost/.names`) after a confirmed merge |
-| "Record before skipping" | main → CSV | `elm2-record-pair` event on `document`; the CSV script sets `event.detail.handled` / `.recorded` |
-| Blocked-row text | main → CSV | `.diff-row.elm2-blocked-row` elements |
-| UI injection targets | main → CSV | `#elm-controls-wrapper` (badge), `#elm-settings-pane .settings-body` (Database section), `#elm-highlight-rows` row (Show Database UI toggle) |
+| Department + Spark IDs | main → Database | `document.body.dataset.csvDept`, `csvSpark1`, `csvSpark2` |
+| Merge Databases button, stored database | merge ← CSV | the merge script puts its button inside `#elm-settings-db-section` (so it exists only while the Database script is active) and reads / writes `localStorage.elm_csv_database`; nothing else is shared |
+| Script vs Bolt line, Bolt score | main → Database | `document.body.dataset.csvChoice`, `csvScore`; `elm2-pair-merged` event (`detail.a/.b/.choice/.lost/.names`) after a confirmed merge |
+| "Record before skipping" | main → Database | `elm2-record-pair` event on `document`; the Database script sets `event.detail.handled` / `.recorded` |
+| Blocked-row text | main → Database | `.diff-row.elm2-blocked-row` elements |
+| UI injection targets | main → Database | `#elm-controls-wrapper` (badge), `#elm-settings-pane .settings-body` (Database section), `#elm-highlight-rows` row (Show Database UI toggle) |
 | Shared toast stack | both | `#elm2-toast-stack` (created by whichever script needs it first) |
-| Design tokens | main → CSV | CSS variables on `:root` (`--md-primary`, `--md-primary-container`, …, `--elm2-header-color`) |
+| Design tokens | main → Database | CSS variables on `:root` (`--md-primary`, `--md-primary-container`, …, `--elm2-header-color`) |
 
 ### 12.2 `localStorage` / `sessionStorage` keys
 
@@ -422,11 +422,11 @@ Header `DB: N` pill, the Database section of the settings pane, the **Show Datab
 | `elm_allowed_department` | main | Allowed Department |
 | `elm_show_merge_counter` | main | Hidden: show the merge counter |
 | `elm_merge_count` | main | Merge counter value |
-| `elm_csv_database` | CSV | Recorded pairs (JSON array) |
-| `elm_show_db_ui` | CSV | Show Database UI |
+| `elm_csv_database` | Database | Recorded pairs (JSON array) |
+| `elm_show_db_ui` | Database | Show Database UI |
 | `elm2_bolt_picks` | main | Bolt's original pick per conflicting row (hashed ids, `l`/`r` + timestamp, capped at 2,500 entries). Element451 saves the selection on a pair, so on a second visit the screen shows the last selection rather than Bolt's pick; this keeps Bolt's real pick for the colours and *Use Bolt AI picks* |
 
-### 12.3 Console output (page console, F12 → filter `elm2` or `CSV Database`)
+### 12.3 Console output (page console, F12 → filter `elm2` or `Database`)
 
 - `[elm2] Blocked: …`, `[elm2] Not blocked — allowed dept: …`, `[elm2] Resolution done — …`, `[elm2] Suggestions by rule: {…}`
 - `[elm2] Skipping to next pair: <reason>`, `[elm2] Auto-merging pair`, `[elm2] Auto-merge not done: <reason>`
@@ -455,16 +455,16 @@ Header `DB: N` pill, the Database section of the settings pane, the **Show Datab
 |---|---|
 | A feature seems missing or a popup shows twice | Duplicate or disabled Tampermonkey install; check the version lines in the gear pane and each script's version. In Chrome with both Tampermonkey and the extension, each script has a guard so only one copy runs |
 | Extension popup says "One setting to turn on" | Open the extension's Details and turn on **Allow user scripts** (Developer mode on Chrome 120-137); then reload the Element451 tab |
-| Extension installed but a script does not run | Check its switch in the popup (CSV Database needs UI Perfection on); reload the tab after changing a switch |
+| Extension installed but a script does not run | Check its switch in the popup (Database needs UI Perfection on); reload the tab after changing a switch |
 | No "Update available" chip | It appears only after a newer GitHub Release exists and Chrome has been restarted (or the extension reloaded) |
-| Database buttons / badges still blue or old | The CSV script on your side is an older copy; check it shows the latest `@version` |
+| Database buttons / badges still blue or old | The Database script on your side is an older copy; check it shows the latest `@version` |
 | Nothing is auto-applied | Slider on None, pair out of range, or **Use picks from = Bolt's** (nothing to apply) |
 | Everything gets skipped | Slider None or Allowed Department None with Auto-Skip on = scan mode |
 | Auto-merge never runs | When done is Wait for me (it resets every session), slider on None, pair flagged as twins, or the final gate failed (see the toast / `[elm2] Auto-merge not done`) |
 | Skips lose database entries | Make sure both scripts are the latest builds (the record-before-skip handshake) |
 | Scan stalls after a few pairs | Fixed in build 81 (queue position in the pair key, retrying Next); update the main script |
 | A selected filter chip is blue | Element's own style won; send the chip's HTML so the selector can be added |
-| API toast inconsistent | Fixed in CSV v2.18+ (toast on every fresh capture) |
+| API toast inconsistent | Fixed in Database script v2.18+ (toast on every fresh capture) |
 
 ---
 
@@ -474,7 +474,7 @@ Header `DB: N` pill, the Database section of the settings pane, the **Show Datab
 - **Safety**: auto-skip never clicks Dismiss; Dismiss/Confirm click guard; Merge Contacts is never clicked unless auto-merge is enabled.
 - **Colours and AI**: Bolt-pick recording, green/blue/orange pick colours, applicant yellow band, comparison bar with *Use Bolt AI picks / Use our picks*, score-chip colours, pinned queue nav, Material 3 restyle of the gear, settings pane, toggles and slider.
 - **Automation rework**: slider None → High → Medium → Low → All (an earlier build had an Applicant stop, removed because applicants can have any score), **Use picks from**, **When done** with the cancel countdown (dialog with draining stepped ring), **Merge countdown** setting, Auto-Skip covering blocked / out-of-range / twins pairs, no popups for skipped pairs, scan mode.
-- **CSV Database v2**: keyed on Spark IDs (the URL no longer changes), names stored as 3-letter prefixes, two-contact columns, header-based import, list matching via the list API's `identities[]`, record-before-skip handshake, right-aligned badges, Show Database UI toggle, shared toast stack.
+- **Database v2**: keyed on Spark IDs (the URL no longer changes), names stored as 3-letter prefixes, two-contact columns, header-based import, list matching via the list API's `identities[]`, record-before-skip handshake, right-aligned badges, Show Database UI toggle, shared toast stack.
 - **Website restyles**: orange Material 3 palette sampled from Element's header, Material 3 tabs, compact Advanced Filters panel, list pager (Page box + Go), hover preview on the comparison buttons, gear icon as an SVG.
 - **Auto-merge polish**: Toasts switch, short auto-merge brief, countdown timing (exact N seconds, 4 s race lights), wavy ring, panel-scoped overlay, Next after merge, the coyote go-kart.
 - **History search**: search every page of the History list through the history API, with Previous / Next match (see section 10).
@@ -498,10 +498,10 @@ The scripts (the two main ones and the optional Database Merge script) can also 
 
 **Auto-update.** When Chrome starts, and once right after the extension is installed or reloaded (no timers, no polling):
 - the scripts are fetched from `https://raw.githubusercontent.com/totallygeekdom/csusb-de-dup-extension/main/` and re-registered only if the file changed (compared by `@version` and content); the copy that runs is whichever has the higher `@version`, the downloaded one or the one bundled in the zip, so a newer zip is never held back by an older cached copy and an older GitHub copy (e.g. while `main` is behind the zip) never replaces a newer bundled one; the bundled copy is also what runs when GitHub is unreachable;
-- the latest GitHub Release is checked (`api.github.com/.../releases/latest`); if its tag is newer than the installed extension version, the toolbar icon gets an `↑` badge and the popup shows an **Update available · vX.Y.Z** chip in place of the counters.
-Chrome cannot update an unpacked extension by itself, so the chip downloads the release zip and a sheet lists the steps: unzip over the extension folder, open `chrome://extensions`, click reload. The chip can be dismissed (it returns for a newer version), and while it shows the database / merge counts move to the footer line.
+- the latest GitHub Release is checked (`api.github.com/.../releases/latest`); if its tag is newer than the installed extension version, the toolbar icon gets an `↑` badge and the popup shows an **Update available · vX.Y.Z** chip above the script list.
+Chrome cannot update an unpacked extension by itself, so the chip downloads the release zip and a sheet lists the steps: unzip over the extension folder, open `chrome://extensions`, click reload. The chip can be dismissed (it returns for a newer version).
 
-**Popup.** Just the title (there is no settings cog); a stats row (database entries, merges, read from the active Element451 tab's `localStorage`) that the update chip replaces; one row per script (UI Perfection, CSV Database, Database Merge) with an expressive switch and its version (CSV Database is greyed while UI Perfection is off, Database Merge while CSV Database is off); a **Reload tab** prompt after a change; and a footer with the extension version (plus the counts while the chip is showing).
+**Popup.** Just the title (no settings cog and no counters; the database and merge counts are in the Element page's own header); the **Update available** chip, only while a newer extension release exists; one row per script (UI Perfection, Database, Database Merge) with an expressive switch and its version (Database is greyed while UI Perfection is off, Database Merge while Database is off); a **Reload tab** prompt after a change; and a footer with the extension version. The extension asks only for the `storage` and `userScripts` permissions plus access to `*.element451.io`, the script source on GitHub and the releases API. It follows the system's light or dark setting; the dark theme uses clearly separated surfaces (near-black background, lighter warm-grey containers, bright orange accents and near-white text).
 
 **Extension storage** (`chrome.storage.local`, not the page's): `enabled` (per-script switches), `cache` (the scripts last downloaded from GitHub, with their versions), `shellUpdate` (a newer extension release, if any) and `dismissed` (the version whose update chip was dismissed).
 
@@ -509,23 +509,23 @@ Chrome cannot update an unpacked extension by itself, so the chip downloads the 
 
 **Build and release.** `.github/workflows/extension.yml`:
 - every pull request and every push to `main`: `node scripts/build-extension.js` (syntax-checks the scripts, writes `dist/extension/` and `dist/elm451-dedup-tools-v<version>.zip`), then `npm test` (`scripts/smoke-test.js`: loads the unpacked extension in Chromium, checks the popup, the update chip, then switches the API on and checks all three scripts register in the MAIN world and run on an `element451.io` page, that the settings pane lists the four versions, and that a toggle stops one; also that an older cached script does not replace the bundled one and a newer one does), and the zip is kept as a workflow artifact;
-- a tag `vX.Y.Z`: the same, with the version taken from the tag, then `gh release create` publishes the zip as a GitHub Release.
+- a **release** is published when the extension's version has no GitHub Release yet: on a push to `main`, the version in `extension/manifest.json` decides (`1.0.0` becomes the tag and release `v1.0.0`, created by `gh release create` on the pushed commit); on a pushed tag `vX.Y.Z` the version is taken from the tag. If that release already exists nothing happens. So **releasing = bump the version in `extension/manifest.json` and merge to `main`**; a merge that only changes the userscripts needs no release, since they update themselves from `main`.
 Locally: `npm install` once, `npm run build`, `npm test`; load `dist/extension` with **Load unpacked**. `npm run icons` re-renders the icons.
 
 **Install.** Download the zip from Releases, unzip it, open `chrome://extensions`, turn on Developer mode, **Load unpacked** and pick the folder, then open the extension's **Details** and turn on **Allow user scripts**. Reload your Element451 tab.
 
-**Limits / unverified.** The end-to-end test switches the API on through `chrome.developerPrivate` (what the toggle does), not by clicking it; the GitHub fetches (scripts and releases) were not exercised in CI; the first release has to be tagged by hand.
+**Limits / unverified.** The end-to-end test switches the API on through `chrome.developerPrivate` (what the toggle does), not by clicking it; the GitHub fetches (scripts and releases) were not exercised in CI; the release step runs only on `main` / tags, so it is verified by the first release.
 
 ## 17. Database Merge
 
-`csv-database-merge-v2.js` (optional) combines several databases, for example ones exported by different people or on different days, into one.
+`database-merge-v2.js` (optional) combines several databases, for example ones exported by different people or on different days, into one.
 
-**Link to the CSV script.** Only two things: the **Merge Databases** button is added inside the Database section of the settings pane, which the CSV script creates (so the button only exists while the CSV script is active), and the current database is read straight from `localStorage.elm_csv_database`, so it can be merged without downloading it first. Everything else, reading `.xlsx` and writing the merged `.xlsx`, is the script's own copy of the CSV script's file code (keep the two in step when the file format changes). It is installed and updated like the others; in the Chrome extension it is a third switch in the popup (greyed while CSV Database is off), and the settings pane lists `Database merge · vX.Y` under the database script's line.
+**Link to the Database script.** Only two things: the **Merge Databases** button is added inside the Database section of the settings pane, which the Database script creates (so the button only exists while the Database script is active), and the current database is read straight from `localStorage.elm_csv_database`, so it can be merged without downloading it first. Everything else, reading `.xlsx` and writing the merged `.xlsx`, is the script's own copy of the Database script's file code (keep the two in step when the file format changes). It is installed and updated like the others; in the Chrome extension it is a third switch in the popup (greyed while Database is off), and the settings pane lists `Database merge · vX.Y` under the database script's line.
 
 **The page.** The button opens a new tab, built from the Element451 page with DOM calls (no inline scripts, so the site's content-security policy cannot block it). It is a calm Material 3 page in the orange of the settings pane: a small title with a badge, a dashed drop zone, sources as list rows with leading icons, tonal stat cards, per-source chips, conflicts as cards with chips (the kept copy has a check), a Material dialog for the Replace confirmation and a snackbar for messages, with little motion; it follows the system's light or dark setting. The Element451 tab has to stay open while the merge page is in use.
 - **Sources**: drop or choose any number of `.xlsx` files; a table lists each source with its entry count, merged count and Scan Date range, and a **×** to remove a file. "This browser's database" is a source too, ticked by default; at least two sources are needed.
 - **Rules** (shown on the page): a pair is the same pair when both Spark IDs match, in either order (entries with no Spark IDs fall back to the two contacts' 3-letter names). If it appears more than once, **the most up to date copy wins**: the later Scan Date (a pair's Scan Date moves to the merge day when it is merged, and a dated entry beats an undated one). On the same date a merged copy beats an unmerged one, and after that the source higher in the list stays. The winner keeps its own fields, filling a blank Bolt score from the other copy.
 - **Breakdown** after **Merge**: unique pairs, duplicates combined, merged pairs, conflicts; a per-source table (entries, new pairs, replaced an older copy, already had a better copy); and a conflicts table (the same pair in a different department or merged state in two sources, with which copy was kept; first 200 shown).
-- **Result**: **Download merged database (.xlsx)** (same format as the CSV script's export) and **Replace my database with this** (asks first, then writes `elm_csv_database`; the header counter follows within a second). Nothing in the browser changes until Replace is pressed.
+- **Result**: **Download merged database (.xlsx)** (same format as the Database script's export) and **Replace my database with this** (asks first, then writes `elm_csv_database`; the header counter follows within a second). Nothing in the browser changes until Replace is pressed.
 
 **Not verified live:** the new-tab page was tested in headless Chromium against mock databases; pop-up blockers can stop the new tab (the script says so).

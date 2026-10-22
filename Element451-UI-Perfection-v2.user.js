@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         Element451 - UI Perfection (New Deduplication Layout)
+// @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.210
+// @version      2.218
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.210'; // keep in sync with @version
+    const VERSION = '2.218'; // keep in sync with @version
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -106,8 +106,8 @@
                pixel-overlay approach — much simpler now that each side is its own
                button element instead of a shared row) --- */
         /* --- AI-vs-script pick comparison bar + per-row disagreement badges --- */
-        /* Shared toast stack (also used by csv-database-v2.js): bottom-left, stacks upward. */
-        #elm2-toast-stack { position: fixed; left: 16px; bottom: 16px; z-index: 10000; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+        /* Shared toast stack (also used by database-v2.js): bottom-left, stacks upward. */
+        #elm2-toast-stack { position: fixed; left: 16px; bottom: 16px; z-index: 10002; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
         .elm2-toast { display: flex; align-items: center; gap: 12px; box-sizing: border-box; min-height: 48px; max-width: 340px; padding: 8px 16px 8px 12px; border-radius: 4px; background: #2f3236; color: #f1f3f7; font: 400 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .25px; box-shadow: var(--md-elev-3); opacity: 0; transform: translateY(8px); transition: opacity .25s var(--md-ease), transform .25s var(--md-ease); }
         .elm2-toast.visible { opacity: 1; transform: none; }
         .elm2-toast.elm2-notice, .elm2-toast.elm2-result { padding-left: 16px; }
@@ -343,21 +343,32 @@
         .elm2-hsearch .elm2-hs-wrap { display: flex; align-items: center; width: 0; overflow: hidden; opacity: 0; transition: width .3s cubic-bezier(.2, 0, 0, 1), opacity .2s linear; }
         .elm2-hsearch.open .elm2-hs-wrap { width: 182px; /* just wide enough for the hint text */ opacity: 1; transition: width .3s cubic-bezier(.2, 0, 0, 1), opacity .2s linear .08s; }
         .elm2-hsearch .elm2-hs-wrap input { flex: 1 1 auto; min-width: 0; }
-        .elm2-hsearch .elm2-hs-actions { display: flex; gap: 8px; box-sizing: border-box; max-width: 0; padding-left: 0; overflow: hidden; opacity: 0; visibility: hidden; transition: max-width .3s cubic-bezier(.2, 0, 0, 1), padding-left .3s cubic-bezier(.2, 0, 0, 1), opacity .15s linear, visibility 0s .3s; }
-        .elm2-hsearch.open .elm2-hs-actions { max-width: 340px; padding-left: 12px; opacity: 1; visibility: visible; transition: max-width .3s cubic-bezier(.2, 0, 0, 1), padding-left .3s cubic-bezier(.2, 0, 0, 1), opacity .2s linear .12s, visibility 0s; }
+        /* the padding (cancelled by the negative margin) gives the buttons' hover shadow room inside the clipping box */
+        .elm2-hsearch .elm2-hs-actions { display: flex; gap: 8px; box-sizing: border-box; max-width: 0; padding: 6px 8px 10px 0; margin: -6px -8px -10px 0; overflow: hidden; opacity: 0; visibility: hidden; transition: max-width .3s cubic-bezier(.2, 0, 0, 1), padding-left .3s cubic-bezier(.2, 0, 0, 1), opacity .15s linear, visibility 0s .3s; }
+        .elm2-hsearch.open .elm2-hs-actions { max-width: 356px; padding-left: 12px; opacity: 1; visibility: visible; transition: max-width .3s cubic-bezier(.2, 0, 0, 1), padding-left .3s cubic-bezier(.2, 0, 0, 1), opacity .2s linear .12s, visibility 0s; }
         .elm2-hsearch:not(.open) .elm2-hs-status { display: none; }
         .elm2-hsearch .elm2-hs-status:not(:empty) { animation: elm2HsFade .2s linear; }
         @keyframes elm2HsFade { from { opacity: 0; } to { opacity: 1; } }
         .elm2-hsearch:not(.open) .elm2-hs-field:focus-within { box-shadow: none !important; }
         /* in the header row, just left of the pager (same spot as the review queue's search icon) */
-        .elm2-hsearch.inline { display: inline-flex; flex: 0 0 auto; flex-wrap: nowrap; width: auto; margin: 0 8px 0 auto; vertical-align: middle; }
-        .elm2-hsearch.inline .elm2-hs-status { order: -1; flex: 0 0 auto; max-width: 420px; margin: 0 4px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
+        .elm2-hsearch.inline { display: inline-flex; flex: 0 1 auto; flex-wrap: wrap; justify-content: flex-end; row-gap: 4px; width: auto; min-width: 0; margin: 0 8px 0 auto; vertical-align: middle; }
+        .elm2-hsearch.inline .elm2-hs-status { order: -1; flex: 0 1 auto; min-width: 0; max-width: 420px; margin: 0 16px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
         .elm2-hsearch.inline .elm2-hs-status:empty { display: none; }
+        /* On a narrow window the top bar wraps instead of squishing: the pager drops under the header row,
+           Element's own labels stay on one line, and the status text is what gives way (it truncates). */
+        .bolt-table-top-bar:has(.elm2-hsearch) { flex-wrap: wrap; row-gap: 4px; }
+        .bolt-table-top-bar:has(.elm2-hsearch) > bolt-table-header { flex: 1 1 auto; min-width: 0; }
+        .bolt-table-top-bar:has(.elm2-hsearch) .bolt-table-header-wrapper { display: flex; align-items: center; width: 100%; }
+        .bolt-table-top-bar:has(.elm2-hsearch) .bolt-table-header-wrapper > div:first-child { flex: none; white-space: nowrap; margin-right: 12px; }
+        .bolt-table-top-bar:has(.elm2-hsearch) .bolt-table-header-wrapper > div:last-child { display: flex; flex: 1 1 0; justify-content: flex-end; min-width: 0; }
+        .bolt-table-top-bar:has(.elm2-hsearch) .bolt-table-header-pagination { flex: none; margin-left: auto; white-space: nowrap; }
+        .bolt-table-top-bar:has(.elm2-hsearch) .mat-mdc-paginator-range-actions { flex-wrap: nowrap; white-space: nowrap; }
         .elm2-hsearch .elm2-hs-prev, .elm2-hsearch .elm2-hs-next { white-space: nowrap; height: 48px; padding: 0 20px; border: none; border-radius: 24px; background: var(--md-primary-container); color: var(--md-on-primary-container); font: 500 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; cursor: pointer; transition: box-shadow .2s var(--md-ease); }
         .elm2-hsearch .elm2-hs-prev:hover:not(:disabled), .elm2-hsearch .elm2-hs-next:hover:not(:disabled) { box-shadow: var(--md-elev-1); }
         .elm2-hsearch .elm2-hs-prev:disabled, .elm2-hsearch .elm2-hs-next:disabled { opacity: .45; cursor: default; }
         .elm2-hsearch .elm2-hs-status { flex-basis: 100%; color: var(--md-on-surface); font-size: 16px; line-height: 24px; }
-        bolt-row.elm2-search-hit { outline: 3px solid var(--md-primary); outline-offset: -3px; background: color-mix(in srgb, var(--md-primary) 12%, transparent) !important; }
+        /* the match highlight: one rounded box drawn over the row, fixed to the page (see histPlaceHit) */
+        .elm2-hit-box { position: fixed; box-sizing: border-box; z-index: 100; pointer-events: none; border: 3px solid var(--md-primary); border-radius: 16px; background: color-mix(in srgb, var(--md-primary) 10%, transparent); animation: elm2HsFade .2s linear; }
         #elm2-pick-compare-bar {
             display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
             padding: 12px 16px; margin: 0 0 12px;
@@ -568,11 +579,15 @@
                top navbar — .bolt-navigation-right / elm-universal-search — was not
                redesigned) --- */
         #elm-controls-wrapper { display: flex; align-items: center; gap: 12px; margin-right: 16px; position: relative; }
-        /* tonal assist-chip style pill (merge counter; the DB badge in csv-database-v2 matches) */
-        #elm-counter-wrapper { display: flex; align-items: center; gap: 4px; height: 32px; box-sizing: border-box; padding: 0 4px 0 12px; background: var(--md-surface-container-highest); border: none; border-radius: 8px; }
-        #elm-merge-counter { font: 500 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .1px; color: var(--md-on-surface); padding: 0; white-space: nowrap; }
-        #elm-reset-btn { width: 24px; height: 24px; padding: 0; display: flex; align-items: center; justify-content: center; background: transparent; border: none; border-radius: 50%; color: var(--md-on-surface-variant); cursor: pointer; font-size: 16px; line-height: 1; transition: background-color .2s var(--md-ease), color .2s var(--md-ease); }
-        #elm-reset-btn:hover { color: var(--md-error); background-color: rgba(179, 38, 30, .08); }
+        /* tonal assist-chip style pill (merge counter; the DB badge in database-v2 matches) */
+        #elm-counter-wrapper { order: 2; display: flex; align-items: center; gap: 4px; height: 36px; box-sizing: border-box; padding: 0 8px 0 16px; background: var(--md-primary-container); color: var(--md-on-primary-container); border: none; border-radius: 18px; }
+        /* next to the Database pill (see database-v2.js) the two form one pair: big outer corners, small inner ones, 2px apart */
+        #elm-controls-wrapper:has(#elm-db-size-badge) #elm-counter-wrapper { margin-left: -10px; border-radius: 4px 18px 18px 4px; }
+        #elm-merge-counter b { font-weight: 700; font-size: 15px; font-variant-numeric: tabular-nums; }
+        #elm-controls-wrapper #elm-settings-btn { order: 3; }
+        #elm-merge-counter { font: 500 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .1px; color: inherit; padding: 0; white-space: nowrap; }
+        #elm-reset-btn { width: 24px; height: 24px; padding: 0; display: flex; align-items: center; justify-content: center; background: transparent; border: none; border-radius: 50%; color: inherit; cursor: pointer; font-size: 16px; line-height: 1; transition: background-color .2s var(--md-ease), color .2s var(--md-ease); }
+        #elm-reset-btn:hover { background-color: color-mix(in srgb, var(--md-on-primary-container) 12%, transparent); }
         /* standard icon button (40px, state layer) */
         #elm-settings-btn { width: 40px; height: 40px; padding: 0; display: flex; align-items: center; justify-content: center; background: transparent; border: none; border-radius: 50%; color: #fff; cursor: pointer; font-size: 22px; line-height: 1; transition: background-color .2s var(--md-ease); }
         #elm-settings-btn:hover { background-color: rgba(255, 255, 255, .12); }
@@ -1383,7 +1398,41 @@
         const hit = words.filter(w => histWordHits(idx, w)).length;
         return hit >= (words.length >= 3 ? words.length - 1 : words.length);
     }
-    function histClearHits() { document.querySelectorAll('.elm2-search-hit').forEach(r => r.classList.remove('elm2-search-hit')); }
+    // The highlight is a box drawn over the row rather than an outline on it: the row element itself does
+    // not match what is visible (the text starts at its very edge and the actions column sits past it), so an
+    // outline never lines up. The box is fixed to the page (nothing can clip it), is sized from the row's
+    // contents with some air around them, has rounded corners, and follows the row while the page scrolls.
+    let hitRow = null;
+    function histPlaceHit() {
+        const row = hitRow;
+        let box = document.querySelector('.elm2-hit-box');
+        if (!row || !row.isConnected) { if (box) box.remove(); return; }
+        if (!box) { box = document.createElement('div'); box.className = 'elm2-hit-box'; document.body.appendChild(box); }
+        const r = row.getBoundingClientRect();
+        let left = r.left, right = r.right;
+        row.querySelectorAll('*').forEach(el => {
+            const c = el.getBoundingClientRect();
+            if (!c.width || !c.height) return;
+            left = Math.min(left, c.left); right = Math.max(right, c.right);
+        });
+        left = Math.max(left - 12, 4); right = Math.min(right + 12, window.innerWidth - 4);
+        box.style.left = left + 'px'; box.style.width = Math.max(0, right - left) + 'px';
+        box.style.top = (r.top + 2) + 'px'; box.style.height = Math.max(0, r.height - 4) + 'px';
+    }
+    function histMarkHit(row) {
+        hitRow = row;
+        row.classList.add('elm2-search-hit');
+        histPlaceHit();
+    }
+    let hitFrame = 0;
+    const histFollowHit = () => { if (hitRow && !hitFrame) hitFrame = requestAnimationFrame(() => { hitFrame = 0; histPlaceHit(); }); };
+    window.addEventListener('scroll', histFollowHit, true);
+    window.addEventListener('resize', histFollowHit);
+    function histClearHits() {
+        hitRow = null;
+        document.querySelectorAll('.elm2-search-hit').forEach(r => r.classList.remove('elm2-search-hit'));
+        document.querySelectorAll('.elm2-hit-box').forEach(b => b.remove());
+    }
     async function histGoTo(page, rowIndex) {
         const pag = document.querySelector('mat-paginator');
         histClearHits();
@@ -1394,7 +1443,7 @@
             await sleep(500);
         }
         const row = document.querySelectorAll('.bolt-table-rows-wrap bolt-row.cdk-row')[rowIndex];
-        if (row) { row.classList.add('elm2-search-hit'); row.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+        if (row) { histMarkHit(row); row.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
     }
     // The scan state of the current search. The first match is jumped to straight away; the scan then carries
     // on through the remaining pages in the background, so "Match 1 of 1" can grow to "Match 1 of 3". Matches found
@@ -1758,7 +1807,7 @@
     // the pair is actually a duplicate, so automation must never click this.
     // Skipping a blocked entry must only ever move to the next pair via
     // clickNextDuplicate() below, leaving the pair untouched in the queue.
-    // Skips to the next pair, but first has the CSV database script (if installed) record this
+    // Skips to the next pair, but first has the Database script (if installed) record this
     // one, retrying for up to 3s until it confirms, so a fast skip never loses an entry.
     let skipInFlightKey = '';
     // Every skip is announced with a short label ("Skip: Appeal") when outcome toasts are on.
@@ -1955,7 +2004,7 @@
             getContactCards().forEach(c => c.classList.add('elm2-blocked-card'));
         }
     }
-    // Signals the current entry's department/block status to csv-database-v2.js
+    // Signals the current entry's department/block status to database-v2.js
     // via document.body.dataset, same contract as the classic script.
     function updateCsvSignal(blockers) {
         const sparks = getSparkIds();
@@ -2618,7 +2667,7 @@
     const toastsForcedOn = () => !toastsForcedOff() && (CFG.AUTO_SKIP_BLOCKED || autoMergeOn());
     const toastsEnabled = () => !toastsForcedOff() && (toastsForcedOn() || getBoolSetting('elm_outcome_toasts', true));
     // Notices ("Auto-merge cancelled", "Rows per page ...") use the shared toast stack that
-    // csv-database-v2.js also uses for its API toast: bottom-left, newest at the bottom.
+    // database-v2.js also uses for its API toast: bottom-left, newest at the bottom.
     function toastStack() {
         let st = document.getElementById('elm2-toast-stack');
         if (!st) { st = document.createElement('div'); st.id = 'elm2-toast-stack'; document.body.appendChild(st); }
@@ -2688,7 +2737,7 @@
     // ---- Race lights: a pixel-art kart waits in the shaded strip between the panel and the screen edge
     // (16px in from the edge), boosts at 3 and drives under the panel from 1. The lane is exactly that strip, so the
     // kart is clipped at the panel's edge (which looks like going under it), sits above the page dimming and
-    // below the toasts (z-index 9990 < 10000).
+    // below the toasts (z-index 9990 < 10002).
     // The driver is the CSUSB coyote in side profile, upright in a go-kart, drawn as pixel art. Proportions follow
     // the Super Mario Kart sprite sheet it was modelled on (about a 30 px canvas, 7 px wheels at the bottom corners,
     // a thin pan between them, a head half the sprite's height, a 1 px dark outline); every pixel is original.
@@ -3302,12 +3351,19 @@
     // (targets .bolt-navigation-right / elm-universal-search — confirmed
     // still present in the redesigned navbar)
     // =========================================================
+    // "Merges 12" with the number in bold
+    function setMergeCounterText(el, n) {
+        const b = document.createElement('b');
+        b.textContent = String(n);
+        el.textContent = 'Merges ';
+        el.appendChild(b);
+    }
     function incrementMergeCount() {
         const count = parseInt(localStorage.getItem('elm_merge_count') || '0', 10) + 1;
         localStorage.setItem('elm_merge_count', String(count));
         const counterEl = document.getElementById('elm-merge-counter');
         if (counterEl) {
-            counterEl.textContent = `Merges: ${count}`;
+            setMergeCounterText(counterEl, count);
             counterEl.style.transform = 'scale(1.15)';
             setTimeout(() => { counterEl.style.transform = 'scale(1)'; }, 150);
         }
@@ -3332,17 +3388,18 @@
             counterWrapper.id = 'elm-counter-wrapper';
             const counterEl = document.createElement('span');
             counterEl.id = 'elm-merge-counter';
-            counterEl.textContent = `Merges: ${localStorage.getItem('elm_merge_count') || '0'}`;
+            setMergeCounterText(counterEl, localStorage.getItem('elm_merge_count') || '0');
             counterEl.style.transition = 'transform 0.15s ease-out';
             const resetBtn = document.createElement('button');
             resetBtn.id = 'elm-reset-btn';
-            resetBtn.innerHTML = '↺';
+            resetBtn.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.73 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4z"/></svg>';
+            resetBtn.setAttribute('aria-label', 'Reset merge counter');
             resetBtn.title = 'Reset merge counter';
             resetBtn.onclick = (e) => {
                 e.stopPropagation();
                 if (confirm('Reset merge counter to 0?')) {
                     localStorage.setItem('elm_merge_count', '0');
-                    counterEl.textContent = 'Merges: 0';
+                    setMergeCounterText(counterEl, 0);
                 }
             };
             counterWrapper.appendChild(counterEl);

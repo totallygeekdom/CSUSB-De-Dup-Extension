@@ -2,7 +2,7 @@
 
 Userscripts that streamline the Element451 duplicate-contact merge workflow at CSUSB, for Element451's redesigned
 **Deduplication** review queue. **UI Perfection** handles the merge screen (auto-resolution, lockdowns, auto-merge,
-navigation, restyles) and **CSV Database** records blocked and skipped pairs, annotates the list page and exports a
+navigation, restyles) and **Database** records blocked and skipped pairs, annotates the list page and exports a
 spreadsheet. Run them with Tampermonkey (any browser) or, in Chrome, as an unpacked extension that keeps them up to date.
 
 The older scripts for the classic merge page are documented separately in [`README-v1.md`](README-v1.md).
@@ -17,9 +17,9 @@ chip). Two v2 scripts target it, plus an optional third that merges databases:
 
 | Script | File | Current version |
 |---|---|---|
-| UI Perfection (New Deduplication Layout) | `Element451-UI-Perfection-v2.user.js` | `@version 2.210` (shown in the settings pane) |
-| CSV Database (New Deduplication Layout) | `csv-database-v2.js` | `@version 2.51` |
-| Database Merge (optional, pairs with CSV Database) | `csv-database-merge-v2.js` | `@version 1.7` |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.218` (shown in the settings pane) |
+| Element451 - Database v2 | `database-v2.js` | `@version 2.58` |
+| Element451 - Database Merge v2 (optional, pairs with Database) | `database-merge-v2.js` | `@version 1.9` |
 
 **Full documentation: [`Full-Documentation-v2.md`](Full-Documentation-v2.md)** (architecture, every setting,
 the resolution rules, auto-merge, every website restyle, the database format, limitations).
@@ -53,7 +53,7 @@ the resolution rules, auto-merge, every website restyle, the database format, li
   a **merged-profile search** on the History page (pages through the history API for a name, email or Spark ID),
   the expanded header search (and the History search) restyled as a Material 3 Expressive search bar,
   and one shared toast stack (bottom-left) for both scripts.
-- **CSV Database v2**: records blocked / skipped pairs keyed on the two contacts' **Spark IDs** (the review
+- **Database v2**: records blocked / skipped pairs keyed on the two contacts' **Spark IDs** (the review
   URL no longer changes per pair), stores names as 3-letter prefixes (`Jon...`), shows right-aligned department
   badges on the list page (matched through the list API's `identities[]`, falling back to names), exports an
   **`.xlsx` spreadsheet** (columns `Bolt Score, Firstname, Lastname, Firstname 2, Lastname 2, Spark ID 1, Spark ID 2, Dept., Scan Date, Merged, Script vs Bolt, Row Contents`;
@@ -62,7 +62,7 @@ the resolution rules, auto-merge, every website restyle, the database format, li
   Display). Before every auto-skip the main script asks it to record the pair first.
 
 - **Database Merge** (optional): a **Merge Databases** button in the settings pane, under the Database section (it only
-  appears while the CSV Database script is active), opens a new tab where you add as many exported databases as you like
+  appears while the Database script is active), opens a new tab where you add as many exported databases as you like
   (`.xlsx` files, or this browser's stored one without downloading it first), merge them, read a breakdown
   (unique pairs, duplicates combined, what each file contributed, conflicts and who won), then download the merged
   `.xlsx` or replace this browser's database with it. When a pair is in more than one source, the most up to date copy (the later Scan Date) wins.
@@ -99,7 +99,7 @@ The scripts are fetched from this repo's `main` branch on Chrome start (and once
 **Tampermonkey (any browser, including Firefox):**
 1. Install the [Tampermonkey](https://www.tampermonkey.net/) browser extension.
 2. Create a userscript with the contents of `Element451-UI-Perfection-v2.user.js` and, optionally, a second one with
-   `csv-database-v2.js`, and, if you want to merge databases, a third with `csv-database-merge-v2.js` (it needs the CSV
+   `database-v2.js`, and, if you want to merge databases, a third with `database-merge-v2.js` (it needs the Database
    script to show its button). Install each once, and do not run them alongside the classic scripts. Open the gear pane to
    confirm which versions are running.
 3. Navigate to your Element451 duplicates page. The scripts activate automatically on `*.element451.io`.
@@ -113,14 +113,14 @@ The two scripts talk through the page, not through any shared code:
 
 | Channel | Direction | Mechanism |
 |---|---|---|
-| Department, Spark IDs, script-vs-Bolt line, Bolt score | UI Perfection -> CSV Database | `document.body.dataset.csvDept`, `csvSpark1`, `csvSpark2`, `csvChoice`, `csvScore` |
-| Record before skipping | UI Perfection -> CSV Database | `elm2-record-pair` event on `document` (the CSV script sets `detail.handled` / `.recorded`) |
-| Confirmed merge | UI Perfection -> CSV Database | `elm2-pair-merged` event (`detail.a`, `.b`, `.choice`, `.lost`, `.names`) |
-| Blocked row text | UI Perfection -> CSV Database | `.diff-row.elm2-blocked-row` elements |
-| UI injection targets | UI Perfection -> CSV Database | `#elm-controls-wrapper` (counter), `#elm-settings-pane .settings-body` (Database section and version line) |
-| Merge Databases button, stored database | CSV Database -> Database Merge | the merge script adds its button inside `#elm-settings-db-section` (so it only shows while the CSV script is active) and reads `localStorage.elm_csv_database`; it has no other link to the CSV script |
+| Department, Spark IDs, script-vs-Bolt line, Bolt score | UI Perfection -> Database | `document.body.dataset.csvDept`, `csvSpark1`, `csvSpark2`, `csvChoice`, `csvScore` |
+| Record before skipping | UI Perfection -> Database | `elm2-record-pair` event on `document` (the Database script sets `detail.handled` / `.recorded`) |
+| Confirmed merge | UI Perfection -> Database | `elm2-pair-merged` event (`detail.a`, `.b`, `.choice`, `.lost`, `.names`) |
+| Blocked row text | UI Perfection -> Database | `.diff-row.elm2-blocked-row` elements |
+| UI injection targets | UI Perfection -> Database | `#elm-controls-wrapper` (counter), `#elm-settings-pane .settings-body` (Database section and version line) |
+| Merge Databases button, stored database | Database -> Database Merge | the merge script adds its button inside `#elm-settings-db-section` (so it only shows while the Database script is active) and reads `localStorage.elm_csv_database`; it has no other link to the Database script |
 
-UI Perfection works without the CSV Database script. The CSV Database script needs UI Perfection for its signals.
+UI Perfection works without the Database script. The Database script needs UI Perfection for its signals.
 
 ## localStorage keys
 
@@ -138,7 +138,7 @@ UI Perfection works without the CSV Database script. The CSV Database script nee
 | `elm_show_merge_counter` | UI Perfection | Hidden: show the merge counter |
 | `elm_merge_count` | UI Perfection | Merge counter value |
 | `elm2_bolt_picks` | UI Perfection | Bolt's original pick per conflicting row, hashed (no names or emails), so a revisited pair still shows what Bolt picked |
-| `elm_csv_database` | CSV Database | Recorded pairs (JSON array, Spark-ID keyed) |
-| `elm_show_db_ui` | CSV Database | Show Database UI |
+| `elm_csv_database` | Database | Recorded pairs (JSON array, Spark-ID keyed) |
+| `elm_show_db_ui` | Database | Show Database UI |
 
 The Chrome extension keeps its own switches and cached scripts in `chrome.storage.local` (see the full documentation).

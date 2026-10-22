@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.209
+// @version      2.210
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -9,18 +9,12 @@
 // @updateURL    https://raw.githubusercontent.com/totallygeekdom/csusb-de-dup-extension/main/Element451-UI-Perfection-v2.user.js
 // @downloadURL  https://raw.githubusercontent.com/totallygeekdom/csusb-de-dup-extension/main/Element451-UI-Perfection-v2.user.js
 // ==/UserScript==
-//
-// Automates the merge screen of Element451's redesigned "Deduplication" review queue: a review-queue table plus a
-// stackable sidebar (<elm-review-duplicates-sidebar>) holding a field-by-field diff form
-// (<elm-duplicate-field-diff-form>, .diff-row / .diff-value-button). It resolves each pair by rules and Bolt's picks,
-// can merge after a cancel countdown, and restyles the site. Built from saved HTML, mock pages and live feedback, so a
-// selector can need adjusting if Element changes its markup. Full documentation: Full-Documentation-v2.md.
 (function () {
     'use strict';
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.209'; // keep in sync with @version
+    const VERSION = '2.210'; // keep in sync with @version
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)

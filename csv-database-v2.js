@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.47
+// @version      2.48
 // @description  Tracks duplicate entries in a database stored in browser localStorage (exports an .xlsx spreadsheet) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -35,7 +35,7 @@
     if (window.__elm451CsvDatabaseLoaded) return;
     window.__elm451CsvDatabaseLoaded = true;
 
-    const VERSION = '2.47'; // keep in sync with @version
+    const VERSION = '2.48'; // keep in sync with @version
     const STORAGE_KEY = 'elm_csv_database';
     const SHOW_API_STATUS_TOAST = true;
     const UI_KEY = 'elm_show_db_ui';
@@ -66,7 +66,6 @@
         .csv-dept-badge[data-dept="UnderGrad"]    { background: #f3e5f5; color: #6a1b9a; }
         .csv-dept-badge[data-dept="Forbidden"]    { background: #fce4ec; color: #c2185b; }
         .csv-dept-badge[data-dept="Appeal"]       { background: #fff8e1; color: #f57f17; }
-        .csv-dept-badge[data-dept="Ignored"]      { background: #f5f5f5; color: #616161; }
 
         /* Shared toast stack (same rules as in the main script; whichever loads first creates it) */
         #elm2-toast-stack { position: fixed; left: 16px; bottom: 16px; z-index: 10000; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
@@ -203,7 +202,6 @@
         if (rows.length > 0) {
             return Array.from(rows).map(r => r.textContent.trim().replace(/\s+/g, ' ')).join(' | ');
         }
-        if (dept === 'Ignored') return 'Student has Ignored chip';
         return 'No IA/Grad Keywords Found';
     }
 
@@ -555,9 +553,6 @@
     // content there, since that cell's real markup is unknown (redacted in
     // the reference snapshot).
     function applyBadge(row, dept) {
-        if (dept === 'Ignored') { const b = row.querySelector('.csv-dept-badge'); if (b) b.remove(); row.removeAttribute('data-csv-dept'); return; }
-        const chipIsIgnored = Array.from(row.querySelectorAll('.bolt-chip, elm-chip')).some(el => el.textContent.trim().toLowerCase() === 'ignored');
-        if (chipIsIgnored) { const b = row.querySelector('.csv-dept-badge'); if (b) b.remove(); row.removeAttribute('data-csv-dept'); return; }
         if (row.getAttribute('data-csv-dept') === dept) return;
         row.setAttribute('data-csv-dept', dept);
         let badge = row.querySelector('.csv-dept-badge');
@@ -715,7 +710,6 @@
     // away (lostSpark) when the pair was merged.
     // Scan Date in the spreadsheet is DD/MM/YYYY; stored as YYYY-MM-DD. Reading accepts both, and an Excel date
     // serial (what a cell becomes if it is retyped as a date).
-    function fmtDate(iso) { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || ''); return m ? m[3] + '/' + m[2] + '/' + m[1] : String(iso || ''); }
     function parseDate(text) {
         const t = String(text || '').trim();
         let m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(t);

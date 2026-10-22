@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - Database Merge (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      1.5
+// @version      1.6
 // @description  Adds a "Merge Databases" page to the CSV Database script: combine several exported databases (and this browser's) into one, with a breakdown
 // @author       You
 // @match        https://*.element451.io/*
@@ -21,7 +21,7 @@
     'use strict';
     if (window.__elm451DbMergeLoaded) return;
     window.__elm451DbMergeLoaded = true;
-    const VERSION = '1.5'; // keep in sync with @version
+    const VERSION = '1.6'; // keep in sync with @version
 
     // =========================================================
     // STORED DATABASE AND FILE FORMATS
@@ -57,7 +57,6 @@
     // away (lostSpark) when the pair was merged.
     // Scan Date in the spreadsheet is DD/MM/YYYY; stored as YYYY-MM-DD. Reading accepts both, and an Excel date
     // serial (what a cell becomes if it is retyped as a date).
-    function fmtDate(iso) { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || ''); return m ? m[3] + '/' + m[2] + '/' + m[1] : String(iso || ''); }
     function parseDate(text) {
         const t = String(text || '').trim();
         let m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(t);

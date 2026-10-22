@@ -1,0 +1,13 @@
+{
+  "name": "elm451-dedup-tools",
+  "private": true,
+  "description": "Build and test scripts for the Element451 Dedup Tools Chrome extension (the userscripts themselves need no build).",
+  "scripts": {
+    "build": "node scripts/build-extension.js",
+    "test": "node scripts/smoke-test.js",
+    "icons": "node scripts/make-icons.js"
+  },
+  "devDependencies": {
+    "playwright": "1.56.1"
+  }
+}

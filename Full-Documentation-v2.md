@@ -322,7 +322,7 @@ All of these are CSS/DOM additions made by the main script. Colours use a Materi
 
 ### 10.2 Header controls
 
-- A 40px round **gear** button (an inline SVG, outlined Material "settings", so macOS does not draw an emoji) opens the settings pane. If the Database script is installed, a tonal `DB: N` pill sits next to it. The hidden merge counter lives here too.
+- A 40px round **gear** button (an inline SVG, outlined Material "settings", so macOS does not draw an emoji) opens the settings pane. If the Database script is installed, a tonal `Database N` pill sits just left of it (then the hidden Merges counter, when shown: order is Database, Merges, gear).
 
 ### 10.3 Settings pane
 

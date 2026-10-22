@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.205
+// @version      2.206
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -28,7 +28,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.205'; // keep in sync with @version
+    const VERSION = '2.206'; // keep in sync with @version
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -352,8 +352,8 @@
         bolt-expandable-search:has(.input-wrapper:not([style*="width: 0px"])) bolt-form-field:not(#elm2x) { min-height: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important; background: transparent !important; box-shadow: none !important; outline: none !important; }
         bolt-expandable-search:has(.input-wrapper:not([style*="width: 0px"])) .bolt-form-field-infix { flex: 1 1 auto; min-width: 0; }
         bolt-expandable-search:has(.input-wrapper:not([style*="width: 0px"])) .bolt-form-field-suffix { order: -1; display: flex !important; align-items: center !important; align-self: center !important; margin: 0 4px 0 0 !important; padding: 0 !important; height: auto !important; }
-        bolt-expandable-search:has(.input-wrapper:not([style*="width: 0px"])) .bolt-form-field-suffix button { display: inline-flex !important; align-items: center !important; justify-content: center !important; margin: 0 !important; position: static !important; transform: none !important; line-height: 0 !important; }
-        bolt-expandable-search:has(.input-wrapper:not([style*="width: 0px"])) .bolt-form-field-suffix bolt-icon { display: flex !important; align-items: center; justify-content: center; margin: 0 !important; vertical-align: middle; }
+        bolt-expandable-search:has(.input-wrapper:not([style*="width: 0px"])) .bolt-form-field-suffix button { position: relative !important; display: block !important; margin: 0 !important; transform: none !important; overflow: visible !important; }
+        bolt-expandable-search:has(.input-wrapper:not([style*="width: 0px"])) .bolt-form-field-suffix button bolt-icon { position: absolute !important; top: 50% !important; left: 50% !important; transform: translate(-50%, -50%) !important; margin: 0 !important; display: block !important; width: 20px !important; height: 20px !important; } /* the icon is centred in its 40px button by position, whatever baseline or line-height Element gives it */
         bolt-expandable-search:has(.input-wrapper:not([style*="width: 0px"])) .bolt-form-field-suffix button { width: 40px !important; height: 40px !important; padding: 8px !important; color: var(--md-on-surface-variant) !important; }
         bolt-expandable-search:has(.input-wrapper:not([style*="width: 0px"])) .bolt-input-element:not(#elm2x),
         .elm2-hs-field input { width: 100%; height: 56px; padding: 0 !important; border: none !important; outline: none !important; background: transparent !important; box-shadow: none !important; color: var(--md-on-surface) !important; font: 400 16px/24px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif !important; letter-spacing: .5px; }

@@ -1,8 +1,8 @@
 name: Chrome extension
 
 # Every pull request and every push to main: build the extension, smoke-test it in Chromium and keep the zip as a downloadable
-# artifact on the run (a test build, no release needed). A tag like v1.0.1: the same, then publish the zip as a
-# GitHub Release. The userscripts themselves are not bundled by hand: the build copies them from the repo root.
+# artifact on the run (a test build, no release needed). On main or a tag like v1.0.1, if the extension's version has no
+# GitHub Release yet, the zip is published as one. The userscripts themselves are not bundled by hand: the build copies them from the repo root.
 on:
   push:
     branches: [main]
@@ -49,13 +49,22 @@ jobs:
           path: dist/*.zip
           if-no-files-found: error
 
+      # A release is made when the extension's own version has no release yet: either a pushed tag (vX.Y.Z), or a push
+      # to main whose extension/manifest.json version is new. So releasing = bump the version in manifest.json and merge.
+      # (A merge that only changes the userscripts needs no release: they update themselves from main.)
       - name: Publish release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then TAG="$GITHUB_REF_NAME"; else TAG="v$(node -p "require('./extension/manifest.json').version")"; fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; nothing to publish."
+            exit 0
+          fi
           UI=$(grep -m1 '@version' Element451-UI-Perfection-v2.user.js | awk '{print $3}')
-          CSV=$(grep -m1 '@version' database-v2.js | awk '{print $3}')
-          gh release create "$GITHUB_REF_NAME" dist/*.zip \
-            --title "Element451 Dedup Tools $GITHUB_REF_NAME" \
-            --notes "Chrome extension (unpacked). Bundled scripts: UI Perfection v$UI, Database v$CSV. The scripts also update themselves from GitHub when Chrome starts; this zip is only needed to install or to update the extension itself. See the README for install steps."
+          DB=$(grep -m1 '@version' database-v2.js | awk '{print $3}')
+          MERGE=$(grep -m1 '@version' database-merge-v2.js | awk '{print $3}')
+          gh release create "$TAG" dist/*.zip --target "$GITHUB_SHA" \
+            --title "Element451 Dedup Tools $TAG" \
+            --notes "Chrome extension (unpacked). Bundled scripts: UI Perfection v$UI, Database v$DB, Database Merge v$MERGE. The scripts also update themselves from GitHub when Chrome starts; this zip is only needed to install or to update the extension itself. See the README for install steps."

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - CSV Database (New Deduplication Layout)
 // @namespace    http://tampermonkey.net/
-// @version      2.51
+// @version      2.52
 // @description  Tracks duplicate entries in a database stored in browser localStorage (exports an .xlsx spreadsheet) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -15,7 +15,7 @@
     if (window.__elm451CsvDatabaseLoaded) return;
     window.__elm451CsvDatabaseLoaded = true;
 
-    const VERSION = '2.51'; // keep in sync with @version
+    const VERSION = '2.52'; // keep in sync with @version
     const STORAGE_KEY = 'elm_csv_database';
     const UI_KEY = 'elm_show_db_ui';
     function showDbUi() { try { return localStorage.getItem(UI_KEY) !== 'false'; } catch (e) { return true; } }
@@ -98,6 +98,13 @@
     // =========================================================
     function isReviewDetailPage() {
         return !!document.querySelector('elm-duplicate-field-diff-form');
+    }
+    // The list refreshes right after a merge, often just after the merge panel has closed, so the
+    // "API: data captured" toast also stays quiet for a few seconds after the panel was last open.
+    let lastMergePageSeen = 0;
+    function onMergePage() {
+        if (isReviewDetailPage()) { lastMergePageSeen = Date.now(); return true; }
+        return Date.now() - lastMergePageSeen < 6000;
     }
     function getQueueTable() {
         return document.querySelector('elm-review-queue-table');
@@ -383,10 +390,8 @@
         clearStaleAnnotations();
         // The list URL no longer changes per page, so a page change can't be detected from it any
         // more. Each capture of fresh list data is the signal instead: toast every time.
-        if (!isReviewDetailPage()) {
-            lastAnnotationSource = 'api';
-            showApiToast('API: data captured successfully', 'success');
-        }
+        lastAnnotationSource = 'api';
+        if (!onMergePage()) showApiToast('API: data captured successfully', 'success');
         annotateQueueTable();
         setTimeout(annotateQueueTable, 100);
         setTimeout(annotateQueueTable, 500);
@@ -597,7 +602,7 @@
 
         if (lastAnnotationSource !== 'api') {
             lastAnnotationSource = 'api';
-            showApiToast('API: data captured successfully', 'success');
+            if (!onMergePage()) showApiToast('API: data captured successfully', 'success');
         }
         const usedApiIndices = new Set();
         const usedDbIndices = new Set();
@@ -663,6 +668,7 @@
     }
     setInterval(() => { attemptFirstPageFetch(); annotateQueueTable(); startListObserver(); }, 2000);
     setInterval(checkListUrlChange, 500);
+    setInterval(onMergePage, 500); // keeps the "merge panel last open" time fresh
 
     // =========================================================
     // EXPORT / IMPORT: an .xlsx spreadsheet (column widths, frozen bold header, filter / sort buttons on Bolt Score, Dept.,

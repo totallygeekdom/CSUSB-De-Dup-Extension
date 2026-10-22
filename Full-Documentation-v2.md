@@ -5,8 +5,8 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.217`, shown in the settings pane as `v2.210` |
-| Database (New Deduplication Layout) | `database-v2.js` | `@version 2.55` |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.218`, shown in the settings pane as `v2.210` |
+| Database (New Deduplication Layout) | `database-v2.js` | `@version 2.56` |
 | Database Merge (optional) | `database-merge-v2.js` | `@version 1.8`, see [section 17](#17-database-merge) |
 
 The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
@@ -188,11 +188,11 @@ Off: the script stops on those pairs and leaves them on screen, showing the popu
 
 Download / Upload & Replace / Clear Database (added by the Database script, [section 11](#11-database-v2)).
 
-The pane's **Info** section (last, in a single list container) lists the versions in use, which matters when the scripts update themselves in the Chrome extension: `Main script · v2.217` (the UI script), `Database script · v2.55` (added under it by the Database script, when installed) and `Extension · v1.0.0` (only when running through the extension, which hands the page its version as `window.__elm451Extension` when it registers the scripts). All three use the same `vX.Y` style; the console still logs the main script as `v2-build-185`.
+The pane's **Info** section (last, in a single list container) lists the versions in use, which matters when the scripts update themselves in the Chrome extension: `Main script · v2.218` (the UI script), `Database script · v2.56` (added under it by the Database script, when installed) and `Extension · v1.0.0` (only when running through the extension, which hands the page its version as `window.__elm451Extension` when it registers the scripts). All three use the same `vX.Y` style; the console still logs the main script as `v2-build-185`.
 
 ### 4.9 Hidden setting
 
-`elm_show_merge_counter` (default false, no longer a visible toggle) shows a `Merges: N` pill with a reset button in the header. To use it, set `localStorage.elm_show_merge_counter = 'true'`. It counts a merge when the pair on screen changes after Merge Contacts was clicked (see limitations).
+`elm_show_merge_counter` (default false, no longer a visible toggle) shows a `Merges N` pill (tonal orange, number in bold) with a circular-arrow reset button in the header, just left of the gear. To use it, set `localStorage.elm_show_merge_counter = 'true'`. It counts a merge when the pair on screen changes after Merge Contacts was clicked (see limitations).
 
 ---
 
@@ -388,7 +388,7 @@ A badge is placed in `.cdk-column-flagged` (falling back to signals, then the ro
 
 ### 11.7 UI
 
-Header `DB: N` pill, the Database section of the settings pane, the **Show Database UI** toggle (under Display), the API toast and the badges, all in the same orange Material 3 style.
+Header `Database N` pill (tonal orange, with a database icon in an orange circle; it sits first, left of the Merges pill, and the two join as one pair with big outer and small inner corners when both show), the Database section of the settings pane, the **Show Database UI** toggle (under Display), the API toast and the badges, all in the same orange Material 3 style.
 
 ---
 

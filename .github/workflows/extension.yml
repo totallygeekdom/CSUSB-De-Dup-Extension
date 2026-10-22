@@ -55,7 +55,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           UI=$(grep -m1 '@version' Element451-UI-Perfection-v2.user.js | awk '{print $3}')
-          CSV=$(grep -m1 '@version' csv-database-v2.js | awk '{print $3}')
+          CSV=$(grep -m1 '@version' database-v2.js | awk '{print $3}')
           gh release create "$GITHUB_REF_NAME" dist/*.zip \
             --title "Element451 Dedup Tools $GITHUB_REF_NAME" \
             --notes "Chrome extension (unpacked). Bundled scripts: UI Perfection v$UI, Database v$CSV. The scripts also update themselves from GitHub when Chrome starts; this zip is only needed to install or to update the extension itself. See the README for install steps."

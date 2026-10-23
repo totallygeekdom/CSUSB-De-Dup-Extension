@@ -19,7 +19,7 @@ chip). Two v2 scripts target it, plus an optional third that merges databases:
 |---|---|---|
 | Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.218` (shown in the settings pane) |
 | Element451 - Database v2 | `database-v2.js` | `@version 2.58` |
-| Element451 - Database Merge v2 (optional, pairs with Database) | `database-merge-v2.js` | `@version 1.10` |
+| Element451 - Database Merge v2 (optional, pairs with Database) | `database-merge-v2.js` | `@version 1.11` |
 
 **Full documentation: [`Full-Documentation-v2.md`](Full-Documentation-v2.md)** (architecture, every setting,
 the resolution rules, auto-merge, every website restyle, the database format, limitations).
@@ -64,7 +64,7 @@ the resolution rules, auto-merge, every website restyle, the database format, li
 - **Database Merge** (optional): a **Merge Databases** button in the settings pane, under the Database section (it only
   appears while the Database script is active), opens a new tab where you add as many exported databases as you like
   (`.xlsx` files, or this browser's stored one without downloading it first), merge them, read a breakdown
-  (unique pairs, duplicates combined, what each file contributed, conflicts and who won), then download the merged
+  (how many entries became how many pairs, duplicates dropped, how many entries each file kept or lost, differences between files and which copy won), then download the merged
   `.xlsx` or replace this browser's database with it. When a pair is in more than one source, the most up to date copy (the later Scan Date) wins.
 
 ### Limitations (details in the full documentation)

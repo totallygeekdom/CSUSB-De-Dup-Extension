@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - Database Merge v2
 // @namespace    http://tampermonkey.net/
-// @version      1.10
+// @version      1.11
 // @description  Adds a "Merge Databases" page to the Database script: combine several exported databases (and this browser's) into one, with a breakdown
 // @author       You
 // @match        https://*.element451.io/*
@@ -21,7 +21,7 @@
     'use strict';
     if (window.__elm451DbMergeLoaded) return;
     window.__elm451DbMergeLoaded = true;
-    const VERSION = '1.10'; // keep in sync with @version
+    const VERSION = '1.11'; // keep in sync with @version
 
     // =========================================================
     // STORED DATABASE AND FILE FORMATS
@@ -336,12 +336,12 @@
         const kept = new Map(); // key -> { entry, from }
         const conflicts = [];
         let seen = 0;
-        const stats = sources.map(s => ({ name: s.name, count: s.entries.length, added: 0, replaced: 0, lost: 0 }));
+        const stats = sources.map(s => ({ name: s.name, count: s.entries.length, kept: 0 }));
         sources.forEach((src, si) => {
             src.entries.forEach(inc => {
                 seen++;
                 const key = keyOf(inc), cur = kept.get(key);
-                if (!cur) { kept.set(key, { entry: { ...inc }, from: si }); stats[si].added++; return; }
+                if (!cur) { kept.set(key, { entry: { ...inc }, from: si }); return; }
                 const win = replaces(inc, cur.entry);
                 if ((inc.merged || '') !== (cur.entry.merged || '') || (inc.dept || '') !== (cur.entry.dept || '')) {
                     conflicts.push({
@@ -356,13 +356,10 @@
                     const w = { ...inc };
                     if (!w.score && loser.score) w.score = loser.score; // keep what the other copy knew
                     kept.set(key, { entry: w, from: si });
-                    stats[si].replaced++;
-                    stats[cur.from].lost++;
-                } else {
-                    stats[si].lost++;
                 }
             });
         });
+        kept.forEach(v => stats[v.from].kept++);
         const entries = Array.from(kept.values()).map(v => v.entry);
         return { entries, stats, conflicts, unique: entries.length, duplicates: seen - entries.length };
     }
@@ -558,18 +555,21 @@
             result = mergeSources(sources);
             out.textContent = '';
             const merged = result.entries.filter(isMerged).length;
+            const total = result.stats.reduce((n, x) => n + x.count, 0);
+            const headline = plural(total, 'entry', 'entries') + ' from ' + plural(result.stats.length, 'source', 'sources') + ' became ' + plural(result.unique, 'pair', 'pairs') + '. ' +
+                (result.duplicates ? plural(result.duplicates, 'entry was', 'entries were') + ' a copy of a pair already in the list, so only the newest copy of each pair was kept.' : 'No pair appeared more than once.');
             out.append(
                 h('h2', null, 'Breakdown'),
+                h('p', { class: 'note', style: 'margin:0 4px 12px' }, headline),
                 h('div', { class: 'stats' },
-                    stat('s1', result.unique, 'unique pairs'), stat('s2', result.duplicates, 'duplicates combined'),
-                    stat('s3', merged, 'merged'), stat('s4' + (result.conflicts.length ? ' warn' : ''), result.conflicts.length, 'conflicts')),
+                    stat('s1', result.unique, 'pairs in the result'), stat('s2', result.duplicates, 'duplicates dropped'),
+                    stat('s3', merged, 'already merged'), stat('s4' + (result.conflicts.length ? ' warn' : ''), result.conflicts.length, 'differences to check')),
                 h('h2', null, 'By source'),
                 h('div', { class: 'list' }, result.stats.map(s => h('div', { class: 'item' },
                     h('div', { class: 'txt' }, h('div', { class: 'name' }, s.name), h('div', { class: 'note' }, plural(s.count, 'entry', 'entries'))),
                     h('div', { class: 'chips' },
-                        h('span', { class: 'chip kept' }, icon('check'), plural(s.added, 'new pair', 'new pairs')),
-                        h('span', { class: 'chip' }, icon('swap'), fmt(s.replaced) + ' replaced an older copy'),
-                        h('span', { class: 'chip' }, fmt(s.lost) + ' had a newer copy elsewhere'))))),
+                        h('span', { class: 'chip kept' }, icon('check'), fmt(s.kept) + ' kept'),
+                        h('span', { class: 'chip' }, s.count - s.kept ? fmt(s.count - s.kept) + ' dropped: a newer copy is elsewhere' : 'none dropped'))))),
                 conflictsBlock(),
                 h('div', { class: 'row', style: 'margin-top:28px' },
                     h('button', { class: 'btn filled', type: 'button', onclick: download }, icon('download'), 'Download merged database (.xlsx)'),

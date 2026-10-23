@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - Database Merge v2
 // @namespace    http://tampermonkey.net/
-// @version      1.9
+// @version      1.10
 // @description  Adds a "Merge Databases" page to the Database script: combine several exported databases (and this browser's) into one, with a breakdown
 // @author       You
 // @match        https://*.element451.io/*
@@ -21,7 +21,7 @@
     'use strict';
     if (window.__elm451DbMergeLoaded) return;
     window.__elm451DbMergeLoaded = true;
-    const VERSION = '1.9'; // keep in sync with @version
+    const VERSION = '1.10'; // keep in sync with @version
 
     // =========================================================
     // STORED DATABASE AND FILE FORMATS
@@ -375,9 +375,9 @@
                 --secondary-c:#efe6dc; --on-secondary-c:#2f2418; --tertiary-c:#e4ecd0; --on-tertiary-c:#222d0c; --error-c:#fbe3e0; --on-error-c:#5c1410;
                 --surface:#fffbf8; --low:#f8f2ec; --mid:#f1e9e1; --high:#e9dfd5; --on-surface:#1e1b17; --variant:#4f4538; --outline:#85766a;
                 --ease:cubic-bezier(.2,0,0,1); }
-        @media (prefers-color-scheme: dark) { :root { --primary:#ffb77c; --on-primary:#4a2300; --primary-text:#ffb77c; --primary-c:#5a3000; --on-primary-c:#ffdcc2;
-                --secondary-c:#40362c; --on-secondary-c:#f0e0d0; --tertiary-c:#363f20; --on-tertiary-c:#dde7c4; --error-c:#52201c; --on-error-c:#fcdcd8;
-                --surface:#17120d; --low:#1f1914; --mid:#251e18; --high:#2f2820; --on-surface:#ece0d8; --variant:#d3c3b8; --outline:#9c8d82; } }
+        @media (prefers-color-scheme: dark) { :root { --primary:#ffb77c; --on-primary:#3a1c00; --primary-text:#ffc596; --primary-c:#8a4b00; --on-primary-c:#ffe6d3;
+                --secondary-c:#4a3f35; --on-secondary-c:#f6e6d6; --tertiary-c:#44502a; --on-tertiary-c:#e8f1cf; --error-c:#6b1f19; --on-error-c:#ffdad5;
+                --surface:#110e0c; --low:#2a2420; --mid:#332b26; --high:#3b332d; --on-surface:#f6ebe4; --variant:#dccbc0; --outline:#a89a8f; } }
         * { box-sizing:border-box; }
         body { margin:0; background:var(--surface); color:var(--on-surface); font:400 15px/22px system-ui,'Segoe UI',Roboto,sans-serif; }
         main { max-width:860px; margin:0 auto; padding:28px 24px 80px; }

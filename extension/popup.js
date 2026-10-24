@@ -82,21 +82,6 @@ function renderScripts() {
   });
 }
 
-// The dedup page: the review queue's own address if one has been seen, else the school's address plus the usual path
-const DEDUP_DEFAULT_PATH = '/v2/data/duplicates/bolt/review-queue';
-function dedupTarget() {
-  const here = tab && ELEMENT_TAB.test(tab.url || '') ? new URL(tab.url).origin : null;
-  const site = state.site;
-  if (here && (!site || site.origin !== here)) return here + DEDUP_DEFAULT_PATH; // a tab on another Element site than the one on file
-  if (site) return site.dedupUrl || site.origin + DEDUP_DEFAULT_PATH;
-  return here ? here + DEDUP_DEFAULT_PATH : null;
-}
-function renderDedup() {
-  const url = dedupTarget();
-  $('open-dedup').disabled = !url;
-  $('dedup-hint').hidden = !!url;
-}
-
 // Footer: the extension's own version
 function renderFoot() {
   $('foot').textContent = 'Extension v' + state.shellVersion + ' \u00b7 scripts update when Chrome starts';
@@ -104,10 +89,9 @@ function renderFoot() {
 
 async function init() {
   [state] = await Promise.all([send({ type: 'status' }), loadTab()]);
-  renderUpdate(); renderScripts(); renderDedup(); renderFoot();
+  renderUpdate(); renderScripts(); renderFoot();
 }
 
-$('open-dedup').addEventListener('click', () => { const url = dedupTarget(); if (url) { chrome.tabs.create({ url }); window.close(); } });
 $('reload').addEventListener('click', () => { if (tab) chrome.tabs.reload(tab.id); window.close(); });
 const openExt = () => chrome.tabs.create({ url: 'chrome://extensions/?id=' + chrome.runtime.id });
 $('open-ext').addEventListener('click', openExt);

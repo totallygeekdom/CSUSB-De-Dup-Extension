@@ -455,7 +455,7 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 |---|---|
 | A feature seems missing or a popup shows twice | Duplicate or disabled Tampermonkey install; check the version lines in the gear pane and each script's version. In Chrome with both Tampermonkey and the extension, each script has a guard so only one copy runs |
 | Extension popup says "One setting to turn on" | Open the extension's Details and turn on **Allow user scripts** (Developer mode on Chrome 120-137); then reload the Element451 tab |
-| Extension installed but a script does not run | Check its switch in the popup (Database needs UI Perfection on); reload the tab after changing a switch |
+| Extension installed but a script does not run | Check its switch in the popup (Database needs UI Perfection on; Database Merge needs Database, and so UI Perfection too: a row whose script needs one that is switched off is greyed out and says "needs …"); reload the tab after changing a switch |
 | No "Update available" chip | It appears only after a newer GitHub Release exists and Chrome has been restarted (or the extension reloaded) |
 | Database buttons / badges still blue or old | The Database script on your side is an older copy; check it shows the latest `@version` |
 | Nothing is auto-applied | Slider on None, pair out of range, or **Use picks from = Bolt's** (nothing to apply) |

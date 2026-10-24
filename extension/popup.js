@@ -32,8 +32,13 @@ function renderUpdate() {
   slot.appendChild(chip);
 }
 
-const needsOff = (s) => !!NEEDS[s.id] && state.enabled[NEEDS[s.id]] === false;
-const verText = (s) => 'v' + (state.versions[s.id] || '?') + (needsOff(s) ? ' \u00b7 needs ' + state.scripts.find(x => x.id === NEEDS[s.id]).name : '');
+// The nearest script this one depends on (directly or through another) that is switched off, if any
+const offDependency = (s) => {
+  for (let d = NEEDS[s.id]; d; d = NEEDS[d]) if (state.enabled[d] === false) return state.scripts.find(x => x.id === d);
+  return null;
+};
+const needsOff = (s) => !!offDependency(s);
+const verText = (s) => 'v' + (state.versions[s.id] || '?') + (needsOff(s) ? ' \u00b7 needs ' + offDependency(s).name : '');
 
 // Updates the rows in place, so a switch keeps its element and animates instead of being rebuilt
 function refreshRows() {

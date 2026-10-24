@@ -24,8 +24,8 @@ function newer(a, b) {
 }
 
 async function getState() {
-  const s = await chrome.storage.local.get(['enabled', 'cache', 'shellUpdate', 'dismissed']);
-  return { enabled: s.enabled || { ui: true, csv: true, merge: true }, cache: s.cache || {}, shellUpdate: s.shellUpdate || null, dismissed: s.dismissed || '' };
+  const s = await chrome.storage.local.get(['enabled', 'cache', 'shellUpdate', 'dismissed', 'site']);
+  return { enabled: s.enabled || { ui: true, csv: true, merge: true }, cache: s.cache || {}, shellUpdate: s.shellUpdate || null, dismissed: s.dismissed || '', site: s.site || null };
 }
 
 // The userScripts API is gated: Chrome 138+ needs "Allow user scripts" on the extension's details page
@@ -103,6 +103,19 @@ async function runChecks() {
   await checkShellUpdate();
 }
 
+// The popup's "Open dedup page" button needs this school's Element451 address, which only the browser knows: note it
+// (and the review queue's address, once seen) whenever a tab on element451.io loads. The review queue is a single URL.
+const DEDUP_PATH = /\/bolt\/review-queue\/?$/;
+chrome.tabs.onUpdated.addListener(async (tabId, change, tab) => {
+  if (!change.url && change.status !== 'complete') return;
+  let u;
+  try { u = new URL(tab.url || ''); } catch (e) { return; }
+  if (u.protocol !== 'https:' || !/(^|\.)element451\.io$/.test(u.hostname)) return;
+  const { site } = await chrome.storage.local.get('site');
+  const next = { origin: u.origin, dedupUrl: DEDUP_PATH.test(u.pathname) ? u.origin + u.pathname : (site && site.origin === u.origin ? site.dedupUrl : undefined) };
+  if (!site || site.origin !== next.origin || site.dedupUrl !== next.dedupUrl) await chrome.storage.local.set({ site: next });
+});
+
 chrome.runtime.onInstalled.addListener(runChecks);   // install, reload, and extension updates
 chrome.runtime.onStartup.addListener(runChecks);     // every time Chrome starts
 
@@ -116,7 +129,7 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
       reply({
         userScriptsOk: await userScriptsAvailable(), enabled: st.enabled, versions,
         scripts: SCRIPTS.map(s => ({ id: s.id, name: s.name })),
-        shellVersion: chrome.runtime.getManifest().version,
+        shellVersion: chrome.runtime.getManifest().version, site: st.site,
         shellUpdate: st.shellUpdate && st.dismissed !== st.shellUpdate.version ? st.shellUpdate : null
       });
     } else if (msg.type === 'toggle') {

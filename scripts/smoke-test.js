@@ -65,6 +65,27 @@ const check = (ok, label) => { console.log((ok ? 'ok   ' : 'FAIL ') + label); if
     await site.waitForFunction(() => window.__elm451UiPerfectionLoaded && window.__elm451CsvDatabaseLoaded && window.__elm451DbMergeLoaded, null, { timeout: 15000 }).catch(() => {});
     const on = await flags();
     check(on.ui && on.csv && on.merge, 'all three scripts ran on an element451.io page');
+    // the popup's "Open dedup page" button: the background notes the school's address (and the review queue's) from the
+    // Element451 tabs it sees, and the button opens it
+    await new Promise(r => setTimeout(r, 500));
+    let noted = await sw.evaluate(async () => (await chrome.storage.local.get('site')).site);
+    check(noted && noted.origin === 'https://test.element451.io' && !noted.dedupUrl, 'the extension notes the Element451 address from a tab');
+    await site.goto('https://test.element451.io/v2/data/duplicates/bolt/review-queue');
+    await new Promise(r => setTimeout(r, 500));
+    noted = await sw.evaluate(async () => (await chrome.storage.local.get('site')).site);
+    check(noted && noted.dedupUrl === 'https://test.element451.io/v2/data/duplicates/bolt/review-queue', 'it also notes the review queue address');
+    const popup2 = await context.newPage(); // the popup closes itself after opening the tab, so it gets its own page
+    await popup2.goto('chrome-extension://' + id + '/popup.html');
+    await popup2.waitForSelector('#scripts .row-item');
+    check(!(await popup2.locator('#open-dedup').isDisabled()) && (await popup2.locator('#dedup-hint').isHidden()), 'the Open the dedup page button is enabled once the site is known');
+    // (the test site is not a real server, so what is checked is the tab the extension opens, not what loads in it)
+    const [opened] = await Promise.all([context.waitForEvent('page', { timeout: 10000 }), popup2.click('#open-dedup')]);
+    await new Promise(r => setTimeout(r, 500));
+    const tabUrls = await sw.evaluate(async () => (await chrome.tabs.query({})).map(t => t.url || t.pendingUrl || ''));
+    check(tabUrls.some(u => u.startsWith('https://test.element451.io/v2/data/duplicates/bolt/review-queue')), 'the button opens the dedup page in a new tab');
+    await opened.close().catch(() => {});
+    await sw.evaluate(() => chrome.storage.local.remove('site'));
+    await site.goto('https://test.element451.io/review');
     // newest wins: an older copy in the cache (what GitHub's main branch may hold) must not replace the bundled
     // one, a newer one must
     await sw.evaluate(() => chrome.storage.local.set({ cache: { ui: { code: '// @version 1.0\nwindow.__old = 1;', version: '1.0' } } }));

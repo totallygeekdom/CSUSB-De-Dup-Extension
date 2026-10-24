@@ -40,6 +40,8 @@ h1 { margin: 0; font: 500 22px/28px system-ui, 'Segoe UI', Roboto, sans-serif; l
 .btn.filled { background: var(--primary); color: var(--on-primary); }
 .btn.tonal { background: var(--primary-container); color: var(--on-primary-container); }
 .btn.text { background: transparent; color: var(--primary-text); padding: 0 12px; }
+.btn.wide { width: 100%; margin-top: 12px; }
+.btn:disabled { opacity: .45; cursor: default; box-shadow: none !important; transform: none !important; }
 .btn.small { height: 32px; padding: 0 16px; border-radius: 16px; }
 .btn:hover { box-shadow: 0 1px 2px rgba(0,0,0,.3), 0 1px 3px 1px rgba(0,0,0,.15); }
 .btn.text:hover { box-shadow: none; background: color-mix(in srgb, var(--primary) 10%, transparent); }

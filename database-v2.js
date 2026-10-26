@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - Database v2
 // @namespace    http://tampermonkey.net/
-// @version      2.58
+// @version      2.62
 // @description  Tracks duplicate entries in a database stored in browser localStorage (exports an .xlsx spreadsheet) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -15,7 +15,7 @@
     if (window.__elm451CsvDatabaseLoaded) return;
     window.__elm451CsvDatabaseLoaded = true;
 
-    const VERSION = '2.58'; // keep in sync with @version
+    const VERSION = '2.62'; // keep in sync with @version
     const STORAGE_KEY = 'elm_csv_database';
     const UI_KEY = 'elm_show_db_ui';
     function showDbUi() { try { return localStorage.getItem(UI_KEY) !== 'false'; } catch (e) { return true; } }
@@ -128,14 +128,23 @@
     // The review queue URL never changes per profile, so the database is keyed on
     // the Spark ID of each contact in the pair (Spark ID 1 = left/A, Spark ID 2 =
     // right/B), read from the "Spark Id: ..." diff row.
+    // Tolerant of the colon, the capitalisation and the spacing; a row labelled "Spark Id" that holds just the value works too
+    // (the main script reads it the same way).
+    const SPARK_RE = /spark[\s_-]*id\s*[:=]?\s*([^\s,|:=]+)/i;
+    function sparkFrom(text, label) {
+        const m = (text || '').match(SPARK_RE);
+        if (m) return m[1];
+        const v = (text || '').trim();
+        return /^spark[\s_-]*id\s*:?$/i.test((label || '').trim()) && /^[^\s,|]{3,}$/.test(v) ? v : '';
+    }
     function getDomSparkIds() {
-        const re = /Spark Id:\s*([^\s,|]+)/i;
         const rows = document.querySelectorAll('elm-duplicate-field-diff-form .diff-row');
         for (const row of rows) {
-            const btns = row.querySelectorAll(':scope > .diff-value-button');
-            const l = btns[0] && btns[0].textContent.match(re);
-            const r = btns[1] && btns[1].textContent.match(re);
-            if (l || r) return { a: l ? l[1] : '', b: r ? r[1] : '' };
+            const btns = row.querySelectorAll('.diff-value-button'); // the value buttons sit in <div class="diff-value"> wrappers now
+            const title = row.querySelector(':scope > .diff-title');
+            const label = title ? title.textContent : '';
+            const l = sparkFrom(btns[0] && btns[0].textContent, label), r = sparkFrom(btns[1] && btns[1].textContent, label);
+            if (l || r) return { a: l, b: r };
         }
         return { a: '', b: '' };
     }
@@ -221,20 +230,41 @@
             return [];
         }
     }
+    let saveErrorLogged = false; // the failure is logged once, not on every retry
     function saveDatabase(db) {
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); }
-        catch (e) { console.error('Database: Error saving database', e); }
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); saveErrorLogged = false; return true; }
+        catch (e) {
+            if (!saveErrorLogged) { saveErrorLogged = true; console.error('Database: Error saving database (is the browser storage full?)', e); }
+            return false;
+        }
+    }
+    // Quiet by design: nothing is logged while recording works. When a pair on screen has not been recorded for a
+    // few seconds, one line says why (again only if the reason changes). elm451Debug() prints the whole state.
+    const problem = { reason: '', since: 0, logged: false };
+    function trackRecording(reason) {
+        if (!reason) { problem.reason = ''; return; }
+        if (problem.reason !== reason) { problem.reason = reason; problem.since = Date.now(); problem.logged = false; return; }
+        if (!problem.logged && Date.now() - problem.since > 5000) {
+            problem.logged = true;
+            console.warn('[Database] the pair on screen is not being recorded: ' + reason + ' (run elm451Debug() for details)');
+        }
     }
     // Local date as YYYY-MM-DD, how Scan Date is stored (it sorts and compares correctly); the spreadsheet shows DD/MM/YYYY
     function todayStr() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
     function recordEntry(dept) {
-        if (!dept) return false;
+        const ok = recordEntryNow(dept);
+        trackRecording(ok === true ? '' : ok);
+        return ok === true;
+    }
+    // true when the pair is in the database, otherwise the reason it is not
+    function recordEntryNow(dept) {
+        if (!dept) return 'the main script has not reported this pair yet (no department signal)';
         const sparks = getDomSparkIds();
-        if (!sparks.a && !sparks.b) return false;
+        if (!sparks.a && !sparks.b) return 'no Spark IDs found on the page';
         // stale signal mid-navigation: the main script's Spark IDs must match the page
-        if (document.body.dataset.csvSpark1 !== sparks.a || document.body.dataset.csvSpark2 !== sparks.b) return false;
+        if (document.body.dataset.csvSpark1 !== sparks.a || document.body.dataset.csvSpark2 !== sparks.b) return 'the Spark IDs the main script reported do not match the page';
         const { firstName, lastName, firstName2, lastName2, full } = extractNames();
-        if (!firstName && !lastName) return false; // page content not ready
+        if (!firstName && !lastName) return 'the contact names have not loaded'; // page content not ready
         const db = getDatabase();
         const rowContents = maskNames(getBlockedRowText(dept), ...full);
         const existingIdx = db.findIndex(entry => sameSparkPair(entry, sparks.a, sparks.b));
@@ -258,12 +288,10 @@
                 && old.sparkId1 === sparks.a && old.sparkId2 === sparks.b
                 && (old.merged || '') === merged && (old.choice || '') === choice && (old.score || '') === score && (old.scanDate || '') === scanDate) return true;
             db[existingIdx] = newEntry;
-            saveDatabase(db);
-            return true;
+            return saveDatabase(db) ? true : 'the browser would not save the database (storage full?)';
         }
         db.push(newEntry);
-        saveDatabase(db);
-        return true;
+        return saveDatabase(db) ? true : 'the browser would not save the database (storage full?)';
     }
     // The main script asks for the current pair to be recorded right before it skips it, so a
     // fast skip can't beat the 1-second poll. It keeps asking until this reports success.
@@ -715,6 +743,14 @@
         return '';
     }
     const capFirst = (t) => { t = String(t || ''); return t.charAt(0).toUpperCase() + t.slice(1).toLowerCase(); };
+    // Cell colours in the spreadsheet: Bolt Score in soft versions of the list view's chip colours (green / orange / red),
+    // Dept. in the list view's chip colours, and Script vs Bolt in the light yellow of the applicant band (with its amber
+    // outline) when the script found an applicant. [key, fill, text]; the cell style number is 4 + the position here.
+    const XL_PAINT = [
+        ['score:high', 'C8E6C9', '1B5E20'], ['score:medium', 'FFE0B2', 'BF360C'], ['score:low', 'FFCDD2', 'B71C1C'],
+        ['dept:Grad/IA', 'E3F2FD', '1565C0'], ['dept:UnderGrad', 'F3E5F5', '6A1B9A'], ['dept:Forbidden', 'FCE4EC', 'C2185B'], ['dept:Appeal', 'FFF8E1', 'F57F17'],
+        ['applicant', 'FFF9C4', '']
+    ];
     function dbRows(db) {
         const rows = db.map(e => {
             // Script vs Bolt is only exported for a merged pair
@@ -722,7 +758,11 @@
             r.struck = new Set();
             r.dates = new Set(); // columns written as real dates (Scan Date), so the spreadsheet can sort and filter them
             const lostCol = { firstName: 'a', firstName2: 'b', lastName: 'a', lastName2: 'b' };
+            r.paint = new Map(); // column index -> a key of XL_PAINT: the cell's colour (Bolt Score, Dept., applicant pairs)
             DB_COLUMNS.forEach((c, i) => {
+                if (c.key === 'score' && XL_PAINT.some(x => x[0] === 'score:' + r[i].toLowerCase())) r.paint.set(i, 'score:' + r[i].toLowerCase());
+                if (c.key === 'dept' && XL_PAINT.some(x => x[0] === 'dept:' + r[i])) r.paint.set(i, 'dept:' + r[i]);
+                if (c.key === 'choice' && /^Applicant/i.test(r[i])) r.paint.set(i, 'applicant');
                 if (c.key === 'scanDate' && /^\d{4}-\d{2}-\d{2}$/.test(r[i])) r.dates.add(i);
                 if ((c.key === 'sparkId1' || c.key === 'sparkId2') && e.lostSpark && r[i] === e.lostSpark) r.struck.add(i);
                 if (r[i] && e.merged === 'Y' && (c.key === 'firstName' || c.key === 'firstName2') && e.lostFirst === lostCol[c.key]) r.struck.add(i);
@@ -850,7 +890,7 @@
         const nCols = DB_COLUMNS.length, nRows = rows.length;
         const cols = DB_COLUMNS.map((c, i) => '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + Math.round(c.width * 5.4 * 10) / 10 + '" customWidth="1"/>').join('');
         const sheetRows = rows.map((r, ri) => '<row r="' + (ri + 1) + '">' +
-            DB_COLUMNS.map((c, ci) => xlsxCell(r[ci] == null ? '' : String(r[ci]), colLetter(ci) + (ri + 1), ri === 0 ? 1 : (r.dates && r.dates.has(ci) ? 3 : r.struck && r.struck.has(ci) ? 2 : 0), !!(r.dates && r.dates.has(ci)))).join('') + '</row>').join('');
+            DB_COLUMNS.map((c, ci) => xlsxCell(r[ci] == null ? '' : String(r[ci]), colLetter(ci) + (ri + 1), ri === 0 ? 1 : (r.dates && r.dates.has(ci) ? 3 : r.struck && r.struck.has(ci) ? 2 : r.paint && r.paint.has(ci) ? 4 + XL_PAINT.findIndex(x => x[0] === r.paint.get(ci)) : 0), !!(r.dates && r.dates.has(ci)))).join('') + '</row>').join('');
         // One filter over the whole table, with the buttons hidden on every column except Bolt Score, Dept. and Merged.
         const filterKeys = ['score', 'dept', 'scanDate', 'merged'];
         const filterRef = 'A1:' + colLetter(nCols - 1) + nRows;
@@ -862,16 +902,20 @@
             '<autoFilter ref="' + filterRef + '">' + hiddenButtons + '</autoFilter></worksheet>';
         const styles = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
             '<numFmts count="1"><numFmt numFmtId="164" formatCode="dd/mm/yyyy"/></numFmts>' +
-            '<fonts count="3"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font>' +
-            '<font><strike/><sz val="11"/><color rgb="FF8A8A8A"/><name val="Calibri"/></font></fonts>' +
-            '<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>' +
-            '<fill><patternFill patternType="solid"><fgColor rgb="FFFDE3CC"/><bgColor indexed="64"/></patternFill></fill></fills>' +
-            '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
+            '<fonts count="' + (3 + XL_PAINT.length) + '"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font>' +
+            '<font><strike/><sz val="11"/><color rgb="FF8A8A8A"/><name val="Calibri"/></font>' +
+            XL_PAINT.map(x => x[2] ? '<font><sz val="11"/><color rgb="FF' + x[2] + '"/><name val="Calibri"/></font>' : '<font><sz val="11"/><name val="Calibri"/></font>').join('') + '</fonts>' +
+            '<fills count="' + (3 + XL_PAINT.length) + '"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>' +
+            '<fill><patternFill patternType="solid"><fgColor rgb="FFFDE3CC"/><bgColor indexed="64"/></patternFill></fill>' +
+            XL_PAINT.map(x => '<fill><patternFill patternType="solid"><fgColor rgb="FF' + x[1] + '"/><bgColor indexed="64"/></patternFill></fill>').join('') + '</fills>' +
+            '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>' +
+            '<border><left style="thin"><color rgb="FFF9A825"/></left><right style="thin"><color rgb="FFF9A825"/></right><top style="thin"><color rgb="FFF9A825"/></top><bottom style="thin"><color rgb="FFF9A825"/></bottom><diagonal/></border></borders>' +
             '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
-            '<cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+            '<cellXfs count="' + (4 + XL_PAINT.length) + '"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
             '<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>' +
             '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>' +
-            '<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs>' +
+            '<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>' +
+            XL_PAINT.map((x, i) => '<xf numFmtId="0" fontId="' + (3 + i) + '" fillId="' + (3 + i) + '" borderId="' + (x[0] === 'applicant' ? 1 : 0) + '" xfId="0" applyFont="1" applyFill="1"' + (x[0] === 'applicant' ? ' applyBorder="1"' : '') + '/>').join('') + '</cellXfs>' +
             '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
         const wb = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
             '<sheets><sheet name="Database" sheetId="1" r:id="rId1"/></sheets>' +
@@ -1085,7 +1129,29 @@
     setInterval(() => {
         const dept = document.body.dataset.csvDept;
         if (dept) recordEntry(dept);
+        else if (isReviewDetailPage()) trackRecording('the main script has not reported this pair yet (no department signal)');
+        else trackRecording('');
         updateDbSizeBadge();
     }, 1000);
+
+    // elm451Debug() in the console prints everything needed to work out why a pair is not being recorded
+    window.elm451Debug = function () {
+        const d = document.body.dataset;
+        let raw = '', n;
+        try { raw = localStorage.getItem(STORAGE_KEY) || ''; n = JSON.parse(raw || '[]').length; } catch (e) { n = 'unreadable: ' + e.message; }
+        let storageWritable = true;
+        try { localStorage.setItem('__elm_probe', 'x'.repeat(200000)); localStorage.removeItem('__elm_probe'); } catch (e) { storageWritable = false; }
+        const sparks = getDomSparkIds();
+        const info = {
+            databaseScript: VERSION, entries: n, storedKB: Math.round(raw.length / 1024), storageWritable,
+            onReviewPage: isReviewDetailPage(), mergePanelOpen: mergePanelOpen(),
+            mainScriptLoaded: !!window.__elm451UiPerfectionLoaded, viaExtension: window.__elm451Extension || false,
+            signals: { dept: d.csvDept, spark1: d.csvSpark1, spark2: d.csvSpark2, choice: d.csvChoice, score: d.csvScore },
+            sparksOnPage: sparks, pageNames: extractNames().full,
+            lastProblem: problem.reason || 'none'
+        };
+        console.log('[Database] state', info);
+        return info;
+    };
 
 })();

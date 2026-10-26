@@ -5,9 +5,10 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.218`, shown in the settings pane as `v2.210` |
-| Element451 - Database v2 | `database-v2.js` | `@version 2.58` |
-| Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.11`, see [section 17](#17-database-merge) |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.221`, shown in the settings pane as `v2.210` |
+| Element451 - Database v2 | `database-v2.js` | `@version 2.62` |
+| Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.12`, see [section 17](#17-database-merge) |
+
 
 The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
 `Full-Documentation-v127.0.md`) are unchanged and target the old merge page.
@@ -377,6 +378,7 @@ A badge is placed in `.cdk-column-flagged` (falling back to signals, then the ro
 ### 11.6 Import / export
 
 - **Download**: `elm_database_YYYY-MM-DD.xlsx` (an Excel workbook; also opens in LibreOffice and Google Sheets). Columns, in order: `Bolt Score, Firstname, Lastname, Firstname 2, Lastname 2, Spark ID 1, Spark ID 2, Dept., Scan Date, Merged, Script vs Bolt, Row Contents`. **Bolt Score** (High / Medium / Low) is the score chip on the merge screen, read by the main script (`body.dataset.csvScore`) and stored on the entry the first time it is seen; blank if the chip never showed. Column widths are preset (resize them in the spreadsheet), text never wraps (a value that already contains line breaks keeps them as lines in the cell), the header row is bold, shaded and **frozen**, and the **filter / sort buttons are on Bolt Score, Dept., Scan Date and Merged** (one filter over the whole table, with the dropdown buttons hidden on every other column; each dropdown also has Excel's sort options). The workbook is written by the script itself (a small stored-zip writer; no libraries). It was an `.ods` before 2.32: Excel had to repair that and ignored its frozen row, so the export is `.xlsx` now (the `.ods` and `.csv` importers were removed in 2.50).
+- **Cell colours** (the same in the Database Merge page's download): **Bolt Score** in soft versions of the list view's chip colours (High green `#C8E6C9`, Medium orange `#FFE0B2`, Low red `#FFCDD2`, each with a darker text colour); **Dept.** in the list view's chip colours (Grad/IA blue, UnderGrad purple, Forbidden pink, Appeal amber; any other department stays uncoloured); **Script vs Bolt** in the light yellow of the applicant band (`#FFF9C4`) with the band's amber outline (`#F9A825`) when the line starts with *Applicant*, i.e. the script found an applicant side. Colours are cell formatting only: they do not change the values, the filters or the sort order, and importing a file ignores them.
 - **Struck-through Spark ID**: on a merged pair the Spark ID that was merged away is struck through (grey, line through) in its Spark ID cell. The kept ID is the side selected on the `Spark Id:` row of the merge screen at the Merge click ('left' = Contact A); if that row has no selected side nothing is struck. The strike is stored as `lostSpark` on the entry, and a re-imported `.xlsx` keeps it (read back from the cell style).
 - **Struck-through names**: on a merged pair the first and last name that was **not kept** are struck through too (the side not selected on the First name / Last name row at the Merge click; Contact A = the Firstname / Lastname columns, Contact B = the "2" columns). Nothing is struck when the two names are the same, differ only in case, or one is blank. Stored as `lostFirst` / `lostLast` ('a' or 'b') and read back from the cell font / style on import. (The row labels are matched as `first name` and `last name` / `surname`; if Element labels them differently nothing is struck.)
 - **Scan Date** is the day the pair was first scanned (recorded); it moves to the merge day when the pair's merge is confirmed. It is a real Excel date cell shown as `DD/MM/YYYY` (stored internally as `YYYY-MM-DD`), so it sorts chronologically and has Excel's date filters. Re-recording an unchanged pair does not touch it; entries recorded before the column existed are blank until they are recorded again. Import accepts a date cell, `DD/MM/YYYY` or `YYYY-MM-DD`.
@@ -426,12 +428,19 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 | `elm_show_db_ui` | Database | Show Database UI |
 | `elm2_bolt_picks` | main | Bolt's original pick per conflicting row (hashed ids, `l`/`r` + timestamp, capped at 2,500 entries). Element451 saves the selection on a pair, so on a second visit the screen shows the last selection rather than Bolt's pick; this keeps Bolt's real pick for the colours and *Use Bolt AI picks* |
 
+**Engagement table.** The dual-personal-email tiebreak reads `#duplicate-engagement-details`: one row per measure, one cell per contact. Real cells read `3 email opens, last open at Jan 11, 2026 - 6:00 AM` or `1 email click, last click at …`, so the measure name is only the label: whatever follows a comma is dropped and singular/plural is ignored (`email open(s)` → `email opens`, `email click(s)` → `email clicks`). Before this, only cells with a count of 0 (no trailing text) were recognised, so the tiebreak never saw the opens and clicks of a contact that had any.
+
+**Value buttons (page layout).** Each `.diff-row` has a title, two value buttons (`button.diff-value-button`, left = Contact A, right = Contact B) and the arrows in `.diff-actions`. Element451 now wraps each value button in `<div class="diff-value">` next to a copy button (`button.diff-value-copy`), so the scripts find the value buttons anywhere in the row (`row.querySelectorAll('.diff-value-button')`), which works for both the older direct-child layout and the wrapped one. Searching only the row's direct children finds no values at all, which silently breaks reading Spark IDs, conflict detection and the picks.
+
 ### 12.3 Console output (page console, F12 → filter `elm2` or `Database`)
 
 - `[elm2] Blocked: …`, `[elm2] Not blocked — allowed dept: …`, `[elm2] Resolution done — …`, `[elm2] Suggestions by rule: {…}`
 - `[elm2] Skipping to next pair: <reason>`, `[elm2] Auto-merging pair`, `[elm2] Auto-merge not done: <reason>`
 - `[elm2] page jump: direct …` or `… clicking First / Next …`
 - `[elm2] script click on button: "…"` for script-generated clicks, and a warning with a stack trace if one is blocked by the click guard.
+- **Database script** (silent while recording works): if the pair on screen has not been recorded for 5 seconds, one warning says why: `[Database] the pair on screen is not being recorded: <reason>`. The reasons are: the main script has not reported the pair yet (no department signal), no Spark IDs on the page, the Spark IDs the main script reported do not match the page, the contact names have not loaded, or the browser would not save the database (storage full?). The warning prints again only if the reason changes, and a failed save logs its error once, not on every retry.
+- **`[elm2] No Spark IDs found on the pair on screen …`** (main script): printed once per pair when no Spark ID has been read for 4 seconds; it lists how many rows the page has and the rows that mention "spark", with every long word or number blanked out. Spark IDs are read tolerantly: `Spark Id: abc`, `Spark ID:abc`, `Spark Id abc`, or a row labelled "Spark Id" that holds only the value.
+- **`elm451Debug()`** (type it in the console on the page): prints and returns the Database script's state: its version, the number of entries and their size in KB, whether the browser storage is writable, whether you are on the review page, the main script's signals (department, Spark IDs, choice, score), the Spark IDs and names read from the page, whether the main script is loaded and whether the scripts run through the extension, and the last recording problem.
 
 ---
 

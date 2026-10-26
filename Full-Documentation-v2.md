@@ -362,6 +362,7 @@ Stored in `localStorage.elm_csv_database` as a JSON array. Each entry:
 - **Key**: the pair of **Spark IDs** (read from the `Spark Id:` diff row; Spark ID 1 = contact A, 2 = contact B), compared as an unordered set.
 - **Privacy**: only the first 3 letters of each first/last name are stored, followed by `...` when a name was cut (`Jon...`); names of 3 letters or fewer are kept. Full names are also masked out of `rowContents`. Older entries with full names are shortened automatically when the database is read.
 - **dept** values: `Grad/IA`, `UnderGrad`, `Forbidden`, `Appeal`.
+- **Blank second names**: when both contacts have the same name, the second-name fields (`firstName2`, `lastName2`) are left blank, each field on its own and ignoring case (a pair of `Ethan Suarez` / `Ethan Suarez` stores `Eth...` / `Sua...` and blank "2" columns). A blank second name means "same as the first".
 
 ### 11.3 Recording
 
@@ -373,7 +374,7 @@ The script wraps `XMLHttpRequest` and `fetch` to capture the list API response (
 
 ### 11.5 List-page badges
 
-A badge is placed in `.cdk-column-flagged` (falling back to signals, then the row). For each row the script first matches a database entry by **both Spark IDs** found in the row's API record (a contact can be in several pairs, so one shared ID is not enough), then falls back to matching the row text by names: **both contacts' 3-letter prefixes** must appear in the row. Badges are right-aligned so they line up down the column, and respect **Show Database UI**.
+A badge is placed in `.cdk-column-flagged` (falling back to signals, then the row). For each row the script first matches a database entry by **both Spark IDs** found in the row's API record (a contact can be in several pairs, so one shared ID is not enough), then falls back to matching the row text by names: **both contacts' 3-letter prefixes** must appear in the row. A blank second name is read as the first name, and when both contacts share a name that name must appear **twice** in the row, so a pair of identical names doesn't match a row with one copy of the name beside a different person. Badges are right-aligned so they line up down the column, and respect **Show Database UI**.
 
 ### 11.6 Import / export
 
@@ -450,6 +451,7 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 - **Score chip reading** assumes the chip text contains `high` / `medium` / `low`.
 - **Applicant detection** depends on the Workflows/Application rows being loaded; it re-checks about 0.6 s later, but a very slow load could mislabel a pair.
 - **Rows per page** cannot be changed from the script, and the original classic page-size box was dropped. The main script now runs with `@grant none` (build 100) so Angular's paginator component may become reachable; the page-jump console line shows which route is used.
+- **Merge script duplicates**: the Database Merge script's name-based key treats a blank second name as the first, so an old row with full second names and a new row with blanks still count as the same pair.
 - **Name matching for list badges** is a weak fallback because only 3-letter prefixes are stored; Spark IDs are the real key, and the list API must carry them (it does, in `identities[]`).
 - **Email rule**: when both emails are personal, the engagement numbers (email opens, then clicks) decide; if those tie and no name or birth year in the addresses separates them either, no pick is made and, unless Bolt picked, the pair is left for manual review.
 - **Unverified on the live site** (built from pasted HTML, mock pages and screenshots): the History page search box placement and which fields the history records carry; the First name / Last name row labels used to strike through discarded names in the export; whether Excel opens the `.xlsx` without a repair; the engagement panel toggle (`elm-duplicate-engagement-panel button.engagement-toggle`); how the kart layers with Element's dimming; and the extension's GitHub fetches until the first release exists.

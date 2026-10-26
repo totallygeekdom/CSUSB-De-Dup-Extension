@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.218
+// @version      2.221
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.218'; // keep in sync with @version
+    const VERSION = '2.221'; // keep in sync with @version
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -1079,7 +1079,9 @@
         if (!form) return [];
         const labelCounts = {};
         return Array.from(form.querySelectorAll('.diff-row')).map(row => {
-            const buttons = row.querySelectorAll(':scope > .diff-value-button');
+            // Element451 now wraps each value in <div class="diff-value"> next to a copy button, so the value buttons are
+            // found anywhere in the row (left first, right second), which works for the older direct-child layout too.
+            const buttons = row.querySelectorAll('.diff-value-button');
             const titleEl = row.querySelector(':scope > .diff-title');
             const label = titleEl ? titleEl.textContent.trim() : '';
             const leftBtn = buttons[0] || null;
@@ -1166,7 +1168,7 @@
                 ROW_STATE_KEYS.forEach(k => delete el.dataset[k]);
                 el.classList.remove('elm2-blocked-row');
                 el.removeAttribute('title');
-                el.querySelectorAll(':scope > .diff-value-button').forEach(b => b.classList.remove('elm2-agree-pick', 'elm2-pick-bolt', 'elm2-pick-ours'));
+                el.querySelectorAll('.diff-value-button').forEach(b => b.classList.remove('elm2-agree-pick', 'elm2-pick-bolt', 'elm2-pick-ours'));
                 el.dataset.elm2Pair = pairKey;
             }
             const m = rowMemory.get(row.key);
@@ -1854,9 +1856,8 @@
     // Which contact's Spark ID the merge keeps: the side selected on the "Spark Id:" row ('left' = Contact A,
     // 'right' = Contact B), or null when that row has no selected side.
     function keptSparkSide() {
-        const re = /Spark Id:\s*([^\s,|]+)/i;
         for (const row of getDiffRows()) {
-            if (re.test(row.values[0].textContent) || re.test(row.values[1].textContent)) return row.nativeSide || null;
+            if (sparkFrom(row.values[0].textContent, row.label) || sparkFrom(row.values[1].textContent, row.label)) return row.nativeSide || null;
         }
         return null;
     }
@@ -1875,14 +1876,36 @@
         out.last = lost(/\b(last\s*name|surname|family\s*name)\b/i);
         return out;
     }
+    // A Spark ID as Element451 shows it in the "Spark Id" diff row. "Spark Id: abc123" is the usual text; the colon,
+    // the capitalisation and the spacing are not relied on, and a row labelled "Spark Id" that holds just the value
+    // is read too (database-v2.js reads the same way).
+    const SPARK_RE = /spark[\s_-]*id\s*[:=]?\s*([^\s,|:=]+)/i;
+    function sparkFrom(text, label) {
+        const m = (text || '').match(SPARK_RE);
+        if (m) return m[1];
+        const v = (text || '').trim();
+        return /^spark[\s_-]*id\s*:?$/i.test((label || '').trim()) && /^[^\s,|]{3,}$/.test(v) ? v : '';
+    }
     function getSparkIds() {
-        const re = /Spark Id:\s*([^\s,|]+)/i;
         for (const row of getDiffRows()) {
-            const l = row.values[0].textContent.match(re);
-            const r = row.values[1].textContent.match(re);
-            if (l || r) return { a: l ? l[1] : '', b: r ? r[1] : '' };
+            const l = sparkFrom(row.values[0].textContent, row.label), r = sparkFrom(row.values[1].textContent, row.label);
+            if (l || r) return { a: l, b: r };
         }
         return { a: '', b: '' };
+    }
+    // Without Spark IDs the Database script cannot record a pair. If none are found for a few seconds, say so once per
+    // pair, with the rows that mention "spark" (every long word or number blanked out, so no names or IDs are logged).
+    const noSpark = { key: '', since: 0, logged: false };
+    function reportMissingSparks(found) {
+        const key = getPairKey();
+        if (found || noSpark.key !== key) { noSpark.key = found ? '' : key; noSpark.since = Date.now(); noSpark.logged = false; return; }
+        if (noSpark.logged || Date.now() - noSpark.since < 4000) return;
+        noSpark.logged = true;
+        const blank = (t) => (t || '').replace(/\s+/g, ' ').replace(/[0-9A-Za-z]{5,}/g, m => /^spark$/i.test(m) ? m : '<' + m.length + ' chars>');
+        const rows = getDiffRows();
+        const mention = rows.filter(r => /spark/i.test(r.label + ' ' + r.values[0].textContent + ' ' + r.values[1].textContent))
+            .map(r => blank(r.label + ' | ' + r.values[0].textContent + ' | ' + r.values[1].textContent));
+        console.warn('[elm2] No Spark IDs found on the pair on screen, so the Database script cannot record it. ' + rows.length + ' rows on the page; rows mentioning "spark": ' + JSON.stringify(mention));
     }
 
     // =========================================================
@@ -2015,6 +2038,7 @@
         else document.body.dataset.csvDept = detectActualDepartment().dept;
         if (sparks.a || sparks.b) { document.body.dataset.csvSpark1 = sparks.a; document.body.dataset.csvSpark2 = sparks.b; }
         else { delete document.body.dataset.csvSpark1; delete document.body.dataset.csvSpark2; }
+        reportMissingSparks(!!(sparks.a || sparks.b));
         const choice = choiceSummary('');
         if (choice) document.body.dataset.csvChoice = choice; else delete document.body.dataset.csvChoice;
         const score = getScoreChipLevel(); // Bolt's score for the database's first column (high / medium / low)
@@ -2285,7 +2309,10 @@
         rows.forEach(r => {
             const cells = Array.from(r.querySelectorAll('bolt-cell')).map(c => c.textContent.trim());
             const m = cells.map(t => t.match(/^([\d,]+)\s+(.+)$/i));
-            if (m.length >= 2 && m[0] && m[1]) out[m[0][2].toLowerCase()] = [parseInt(m[0][1].replace(/,/g, ''), 10), parseInt(m[1][1].replace(/,/g, ''), 10)];
+            // The measure is the label only: "3 email opens, last open at Jan 11, 2026 - 6:00 AM" and "1 email click, last
+            // click at …" are "email opens" and "email clicks" (the part after a comma goes, and so does singular vs plural).
+            const measure = (t) => t.toLowerCase().replace(/,.*$/, '').trim().replace(/s$/, '') + 's';
+            if (m.length >= 2 && m[0] && m[1]) out[measure(m[0][2])] = [parseInt(m[0][1].replace(/,/g, ''), 10), parseInt(m[1][1].replace(/,/g, ''), 10)];
         });
         return Object.keys(out).length ? out : null;
     }
@@ -2546,7 +2573,7 @@
             const agree = both && ai === script;
             const conflict = both && ai !== script;
             // Conflict rows: color the two value buttons by who picked them.
-            const btns = row.element.querySelectorAll(':scope > .diff-value-button');
+            const btns = row.element.querySelectorAll('.diff-value-button');
             ['left', 'right'].forEach((side, idx) => {
                 const btn = btns[idx];
                 if (!btn) return;
@@ -2569,7 +2596,7 @@
             const el = row.element;
             const side = attr ? el.dataset[attr] : null;
             el.classList.toggle('elm2-preview-row', !!side);
-            el.querySelectorAll(':scope > .diff-value-button').forEach((b, i) => {
+            el.querySelectorAll('.diff-value-button').forEach((b, i) => {
                 b.classList.toggle('elm2-preview-pick', !!side && (side === 'left' ? 0 : 1) === i);
             });
         });

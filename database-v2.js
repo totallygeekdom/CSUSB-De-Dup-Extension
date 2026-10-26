@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - Database v2
 // @namespace    http://tampermonkey.net/
-// @version      2.61
+// @version      2.62
 // @description  Tracks duplicate entries in a database stored in browser localStorage (exports an .xlsx spreadsheet) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -15,7 +15,7 @@
     if (window.__elm451CsvDatabaseLoaded) return;
     window.__elm451CsvDatabaseLoaded = true;
 
-    const VERSION = '2.61'; // keep in sync with @version
+    const VERSION = '2.62'; // keep in sync with @version
     const STORAGE_KEY = 'elm_csv_database';
     const UI_KEY = 'elm_show_db_ui';
     function showDbUi() { try { return localStorage.getItem(UI_KEY) !== 'false'; } catch (e) { return true; } }
@@ -743,6 +743,14 @@
         return '';
     }
     const capFirst = (t) => { t = String(t || ''); return t.charAt(0).toUpperCase() + t.slice(1).toLowerCase(); };
+    // Cell colours in the spreadsheet: Bolt Score in soft versions of the list view's chip colours (green / orange / red),
+    // Dept. in the list view's chip colours, and Script vs Bolt in the light yellow of the applicant band (with its amber
+    // outline) when the script found an applicant. [key, fill, text]; the cell style number is 4 + the position here.
+    const XL_PAINT = [
+        ['score:high', 'C8E6C9', '1B5E20'], ['score:medium', 'FFE0B2', 'BF360C'], ['score:low', 'FFCDD2', 'B71C1C'],
+        ['dept:Grad/IA', 'E3F2FD', '1565C0'], ['dept:UnderGrad', 'F3E5F5', '6A1B9A'], ['dept:Forbidden', 'FCE4EC', 'C2185B'], ['dept:Appeal', 'FFF8E1', 'F57F17'],
+        ['applicant', 'FFF9C4', '']
+    ];
     function dbRows(db) {
         const rows = db.map(e => {
             // Script vs Bolt is only exported for a merged pair
@@ -750,7 +758,11 @@
             r.struck = new Set();
             r.dates = new Set(); // columns written as real dates (Scan Date), so the spreadsheet can sort and filter them
             const lostCol = { firstName: 'a', firstName2: 'b', lastName: 'a', lastName2: 'b' };
+            r.paint = new Map(); // column index -> a key of XL_PAINT: the cell's colour (Bolt Score, Dept., applicant pairs)
             DB_COLUMNS.forEach((c, i) => {
+                if (c.key === 'score' && XL_PAINT.some(x => x[0] === 'score:' + r[i].toLowerCase())) r.paint.set(i, 'score:' + r[i].toLowerCase());
+                if (c.key === 'dept' && XL_PAINT.some(x => x[0] === 'dept:' + r[i])) r.paint.set(i, 'dept:' + r[i]);
+                if (c.key === 'choice' && /^Applicant/i.test(r[i])) r.paint.set(i, 'applicant');
                 if (c.key === 'scanDate' && /^\d{4}-\d{2}-\d{2}$/.test(r[i])) r.dates.add(i);
                 if ((c.key === 'sparkId1' || c.key === 'sparkId2') && e.lostSpark && r[i] === e.lostSpark) r.struck.add(i);
                 if (r[i] && e.merged === 'Y' && (c.key === 'firstName' || c.key === 'firstName2') && e.lostFirst === lostCol[c.key]) r.struck.add(i);
@@ -878,7 +890,7 @@
         const nCols = DB_COLUMNS.length, nRows = rows.length;
         const cols = DB_COLUMNS.map((c, i) => '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + Math.round(c.width * 5.4 * 10) / 10 + '" customWidth="1"/>').join('');
         const sheetRows = rows.map((r, ri) => '<row r="' + (ri + 1) + '">' +
-            DB_COLUMNS.map((c, ci) => xlsxCell(r[ci] == null ? '' : String(r[ci]), colLetter(ci) + (ri + 1), ri === 0 ? 1 : (r.dates && r.dates.has(ci) ? 3 : r.struck && r.struck.has(ci) ? 2 : 0), !!(r.dates && r.dates.has(ci)))).join('') + '</row>').join('');
+            DB_COLUMNS.map((c, ci) => xlsxCell(r[ci] == null ? '' : String(r[ci]), colLetter(ci) + (ri + 1), ri === 0 ? 1 : (r.dates && r.dates.has(ci) ? 3 : r.struck && r.struck.has(ci) ? 2 : r.paint && r.paint.has(ci) ? 4 + XL_PAINT.findIndex(x => x[0] === r.paint.get(ci)) : 0), !!(r.dates && r.dates.has(ci)))).join('') + '</row>').join('');
         // One filter over the whole table, with the buttons hidden on every column except Bolt Score, Dept. and Merged.
         const filterKeys = ['score', 'dept', 'scanDate', 'merged'];
         const filterRef = 'A1:' + colLetter(nCols - 1) + nRows;
@@ -890,16 +902,20 @@
             '<autoFilter ref="' + filterRef + '">' + hiddenButtons + '</autoFilter></worksheet>';
         const styles = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
             '<numFmts count="1"><numFmt numFmtId="164" formatCode="dd/mm/yyyy"/></numFmts>' +
-            '<fonts count="3"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font>' +
-            '<font><strike/><sz val="11"/><color rgb="FF8A8A8A"/><name val="Calibri"/></font></fonts>' +
-            '<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>' +
-            '<fill><patternFill patternType="solid"><fgColor rgb="FFFDE3CC"/><bgColor indexed="64"/></patternFill></fill></fills>' +
-            '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
+            '<fonts count="' + (3 + XL_PAINT.length) + '"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font>' +
+            '<font><strike/><sz val="11"/><color rgb="FF8A8A8A"/><name val="Calibri"/></font>' +
+            XL_PAINT.map(x => x[2] ? '<font><sz val="11"/><color rgb="FF' + x[2] + '"/><name val="Calibri"/></font>' : '<font><sz val="11"/><name val="Calibri"/></font>').join('') + '</fonts>' +
+            '<fills count="' + (3 + XL_PAINT.length) + '"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>' +
+            '<fill><patternFill patternType="solid"><fgColor rgb="FFFDE3CC"/><bgColor indexed="64"/></patternFill></fill>' +
+            XL_PAINT.map(x => '<fill><patternFill patternType="solid"><fgColor rgb="FF' + x[1] + '"/><bgColor indexed="64"/></patternFill></fill>').join('') + '</fills>' +
+            '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>' +
+            '<border><left style="thin"><color rgb="FFF9A825"/></left><right style="thin"><color rgb="FFF9A825"/></right><top style="thin"><color rgb="FFF9A825"/></top><bottom style="thin"><color rgb="FFF9A825"/></bottom><diagonal/></border></borders>' +
             '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
-            '<cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+            '<cellXfs count="' + (4 + XL_PAINT.length) + '"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
             '<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>' +
             '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>' +
-            '<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs>' +
+            '<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>' +
+            XL_PAINT.map((x, i) => '<xf numFmtId="0" fontId="' + (3 + i) + '" fillId="' + (3 + i) + '" borderId="' + (x[0] === 'applicant' ? 1 : 0) + '" xfId="0" applyFont="1" applyFill="1"' + (x[0] === 'applicant' ? ' applyBorder="1"' : '') + '/>').join('') + '</cellXfs>' +
             '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
         const wb = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
             '<sheets><sheet name="Database" sheetId="1" r:id="rId1"/></sheets>' +

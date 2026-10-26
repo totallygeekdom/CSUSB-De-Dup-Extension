@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - Database v2
 // @namespace    http://tampermonkey.net/
-// @version      2.62
+// @version      2.63
 // @description  Tracks duplicate entries in a database stored in browser localStorage (exports an .xlsx spreadsheet) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -15,7 +15,7 @@
     if (window.__elm451CsvDatabaseLoaded) return;
     window.__elm451CsvDatabaseLoaded = true;
 
-    const VERSION = '2.62'; // keep in sync with @version
+    const VERSION = '2.63'; // keep in sync with @version
     const STORAGE_KEY = 'elm_csv_database';
     const UI_KEY = 'elm_show_db_ui';
     function showDbUi() { try { return localStorage.getItem(UI_KEY) !== 'false'; } catch (e) { return true; } }
@@ -263,8 +263,15 @@
         if (!sparks.a && !sparks.b) return 'no Spark IDs found on the page';
         // stale signal mid-navigation: the main script's Spark IDs must match the page
         if (document.body.dataset.csvSpark1 !== sparks.a || document.body.dataset.csvSpark2 !== sparks.b) return 'the Spark IDs the main script reported do not match the page';
-        const { firstName, lastName, firstName2, lastName2, full } = extractNames();
+        const names = extractNames();
+        const { firstName, lastName, full } = names;
         if (!firstName && !lastName) return 'the contact names have not loaded'; // page content not ready
+        // When both contacts have the same name, the second one is left blank (Firstname 2 / Lastname 2): the name adds
+        // nothing, and the Spark ID that was merged away already shows which contact lost. Compared in full, ignoring
+        // capitals, one field at a time. Matching treats a blank second name as the same as the first (matchRowToDbEntry).
+        const sameName = (a, b) => !!a && (a || '').trim().toLowerCase() === (b || '').trim().toLowerCase();
+        const firstName2 = sameName(full[0], full[2]) ? '' : names.firstName2;
+        const lastName2 = sameName(full[1], full[3]) ? '' : names.lastName2;
         const db = getDatabase();
         const rowContents = maskNames(getBlockedRowText(dept), ...full);
         const existingIdx = db.findIndex(entry => sameSparkPair(entry, sparks.a, sparks.b));
@@ -368,9 +375,12 @@
             // master and the duplicate columns) to match, not just one name.
             const has = (f, l) => f.length >= 2 && l.length >= 2 && startsWord(rowText, f) && startsWord(rowText, l);
             const f1 = nameBase(entry.firstName).toLowerCase(), l1 = nameBase(entry.lastName).toLowerCase();
-            const f2 = nameBase(entry.firstName2).toLowerCase(), l2 = nameBase(entry.lastName2).toLowerCase();
-            const second = f2 && l2;
-            if (has(f1, l1) && (!second || has(f2, l2))) {
+            // A blank second name means "same as the first" (the recorder leaves it blank when both contacts share a name)
+            const f2 = nameBase(entry.firstName2).toLowerCase() || f1, l2 = nameBase(entry.lastName2).toLowerCase() || l1;
+            // a name the two contacts share has to appear twice in the row (once per contact), not just once
+            const occurrences = (t) => (rowText.match(new RegExp('(^|[^a-z0-9])' + escRe(t), 'g')) || []).length;
+            const sharedTwice = (a, b) => a !== b || occurrences(a) >= 2;
+            if (has(f1, l1) && has(f2, l2) && sharedTwice(f1, f2) && sharedTwice(l1, l2)) {
                 usedDbIndices.add(i);
                 return entry;
             }

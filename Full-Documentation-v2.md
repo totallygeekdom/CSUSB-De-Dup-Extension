@@ -5,8 +5,8 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.218`, shown in the settings pane as `v2.210` |
-| Element451 - Database v2 | `database-v2.js` | `@version 2.59` |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.220`, shown in the settings pane as `v2.210` |
+| Element451 - Database v2 | `database-v2.js` | `@version 2.61` |
 | Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.11`, see [section 17](#17-database-merge) |
 
 The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
@@ -426,6 +426,8 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 | `elm_show_db_ui` | Database | Show Database UI |
 | `elm2_bolt_picks` | main | Bolt's original pick per conflicting row (hashed ids, `l`/`r` + timestamp, capped at 2,500 entries). Element451 saves the selection on a pair, so on a second visit the screen shows the last selection rather than Bolt's pick; this keeps Bolt's real pick for the colours and *Use Bolt AI picks* |
 
+**Value buttons (page layout).** Each `.diff-row` has a title, two value buttons (`button.diff-value-button`, left = Contact A, right = Contact B) and the arrows in `.diff-actions`. Element451 now wraps each value button in `<div class="diff-value">` next to a copy button (`button.diff-value-copy`), so the scripts find the value buttons anywhere in the row (`row.querySelectorAll('.diff-value-button')`), which works for both the older direct-child layout and the wrapped one. Searching only the row's direct children finds no values at all, which silently breaks reading Spark IDs, conflict detection and the picks.
+
 ### 12.3 Console output (page console, F12 → filter `elm2` or `Database`)
 
 - `[elm2] Blocked: …`, `[elm2] Not blocked — allowed dept: …`, `[elm2] Resolution done — …`, `[elm2] Suggestions by rule: {…}`
@@ -433,6 +435,7 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 - `[elm2] page jump: direct …` or `… clicking First / Next …`
 - `[elm2] script click on button: "…"` for script-generated clicks, and a warning with a stack trace if one is blocked by the click guard.
 - **Database script** (silent while recording works): if the pair on screen has not been recorded for 5 seconds, one warning says why: `[Database] the pair on screen is not being recorded: <reason>`. The reasons are: the main script has not reported the pair yet (no department signal), no Spark IDs on the page, the Spark IDs the main script reported do not match the page, the contact names have not loaded, or the browser would not save the database (storage full?). The warning prints again only if the reason changes, and a failed save logs its error once, not on every retry.
+- **`[elm2] No Spark IDs found on the pair on screen …`** (main script): printed once per pair when no Spark ID has been read for 4 seconds; it lists how many rows the page has and the rows that mention "spark", with every long word or number blanked out. Spark IDs are read tolerantly: `Spark Id: abc`, `Spark ID:abc`, `Spark Id abc`, or a row labelled "Spark Id" that holds only the value.
 - **`elm451Debug()`** (type it in the console on the page): prints and returns the Database script's state: its version, the number of entries and their size in KB, whether the browser storage is writable, whether you are on the review page, the main script's signals (department, Spark IDs, choice, score), the Spark IDs and names read from the page, whether the main script is loaded and whether the scripts run through the extension, and the last recording problem.
 
 ---

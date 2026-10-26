@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - Database v2
 // @namespace    http://tampermonkey.net/
-// @version      2.59
+// @version      2.61
 // @description  Tracks duplicate entries in a database stored in browser localStorage (exports an .xlsx spreadsheet) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -15,7 +15,7 @@
     if (window.__elm451CsvDatabaseLoaded) return;
     window.__elm451CsvDatabaseLoaded = true;
 
-    const VERSION = '2.59'; // keep in sync with @version
+    const VERSION = '2.61'; // keep in sync with @version
     const STORAGE_KEY = 'elm_csv_database';
     const UI_KEY = 'elm_show_db_ui';
     function showDbUi() { try { return localStorage.getItem(UI_KEY) !== 'false'; } catch (e) { return true; } }
@@ -128,14 +128,23 @@
     // The review queue URL never changes per profile, so the database is keyed on
     // the Spark ID of each contact in the pair (Spark ID 1 = left/A, Spark ID 2 =
     // right/B), read from the "Spark Id: ..." diff row.
+    // Tolerant of the colon, the capitalisation and the spacing; a row labelled "Spark Id" that holds just the value works too
+    // (the main script reads it the same way).
+    const SPARK_RE = /spark[\s_-]*id\s*[:=]?\s*([^\s,|:=]+)/i;
+    function sparkFrom(text, label) {
+        const m = (text || '').match(SPARK_RE);
+        if (m) return m[1];
+        const v = (text || '').trim();
+        return /^spark[\s_-]*id\s*:?$/i.test((label || '').trim()) && /^[^\s,|]{3,}$/.test(v) ? v : '';
+    }
     function getDomSparkIds() {
-        const re = /Spark Id:\s*([^\s,|]+)/i;
         const rows = document.querySelectorAll('elm-duplicate-field-diff-form .diff-row');
         for (const row of rows) {
-            const btns = row.querySelectorAll(':scope > .diff-value-button');
-            const l = btns[0] && btns[0].textContent.match(re);
-            const r = btns[1] && btns[1].textContent.match(re);
-            if (l || r) return { a: l ? l[1] : '', b: r ? r[1] : '' };
+            const btns = row.querySelectorAll('.diff-value-button'); // the value buttons sit in <div class="diff-value"> wrappers now
+            const title = row.querySelector(':scope > .diff-title');
+            const label = title ? title.textContent : '';
+            const l = sparkFrom(btns[0] && btns[0].textContent, label), r = sparkFrom(btns[1] && btns[1].textContent, label);
+            if (l || r) return { a: l, b: r };
         }
         return { a: '', b: '' };
     }

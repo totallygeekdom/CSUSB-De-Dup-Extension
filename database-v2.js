@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - Database v2
 // @namespace    http://tampermonkey.net/
-// @version      2.58
+// @version      2.59
 // @description  Tracks duplicate entries in a database stored in browser localStorage (exports an .xlsx spreadsheet) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -15,7 +15,7 @@
     if (window.__elm451CsvDatabaseLoaded) return;
     window.__elm451CsvDatabaseLoaded = true;
 
-    const VERSION = '2.58'; // keep in sync with @version
+    const VERSION = '2.59'; // keep in sync with @version
     const STORAGE_KEY = 'elm_csv_database';
     const UI_KEY = 'elm_show_db_ui';
     function showDbUi() { try { return localStorage.getItem(UI_KEY) !== 'false'; } catch (e) { return true; } }
@@ -221,20 +221,41 @@
             return [];
         }
     }
+    let saveErrorLogged = false; // the failure is logged once, not on every retry
     function saveDatabase(db) {
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); }
-        catch (e) { console.error('Database: Error saving database', e); }
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); saveErrorLogged = false; return true; }
+        catch (e) {
+            if (!saveErrorLogged) { saveErrorLogged = true; console.error('Database: Error saving database (is the browser storage full?)', e); }
+            return false;
+        }
+    }
+    // Quiet by design: nothing is logged while recording works. When a pair on screen has not been recorded for a
+    // few seconds, one line says why (again only if the reason changes). elm451Debug() prints the whole state.
+    const problem = { reason: '', since: 0, logged: false };
+    function trackRecording(reason) {
+        if (!reason) { problem.reason = ''; return; }
+        if (problem.reason !== reason) { problem.reason = reason; problem.since = Date.now(); problem.logged = false; return; }
+        if (!problem.logged && Date.now() - problem.since > 5000) {
+            problem.logged = true;
+            console.warn('[Database] the pair on screen is not being recorded: ' + reason + ' (run elm451Debug() for details)');
+        }
     }
     // Local date as YYYY-MM-DD, how Scan Date is stored (it sorts and compares correctly); the spreadsheet shows DD/MM/YYYY
     function todayStr() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
     function recordEntry(dept) {
-        if (!dept) return false;
+        const ok = recordEntryNow(dept);
+        trackRecording(ok === true ? '' : ok);
+        return ok === true;
+    }
+    // true when the pair is in the database, otherwise the reason it is not
+    function recordEntryNow(dept) {
+        if (!dept) return 'the main script has not reported this pair yet (no department signal)';
         const sparks = getDomSparkIds();
-        if (!sparks.a && !sparks.b) return false;
+        if (!sparks.a && !sparks.b) return 'no Spark IDs found on the page';
         // stale signal mid-navigation: the main script's Spark IDs must match the page
-        if (document.body.dataset.csvSpark1 !== sparks.a || document.body.dataset.csvSpark2 !== sparks.b) return false;
+        if (document.body.dataset.csvSpark1 !== sparks.a || document.body.dataset.csvSpark2 !== sparks.b) return 'the Spark IDs the main script reported do not match the page';
         const { firstName, lastName, firstName2, lastName2, full } = extractNames();
-        if (!firstName && !lastName) return false; // page content not ready
+        if (!firstName && !lastName) return 'the contact names have not loaded'; // page content not ready
         const db = getDatabase();
         const rowContents = maskNames(getBlockedRowText(dept), ...full);
         const existingIdx = db.findIndex(entry => sameSparkPair(entry, sparks.a, sparks.b));
@@ -258,12 +279,10 @@
                 && old.sparkId1 === sparks.a && old.sparkId2 === sparks.b
                 && (old.merged || '') === merged && (old.choice || '') === choice && (old.score || '') === score && (old.scanDate || '') === scanDate) return true;
             db[existingIdx] = newEntry;
-            saveDatabase(db);
-            return true;
+            return saveDatabase(db) ? true : 'the browser would not save the database (storage full?)';
         }
         db.push(newEntry);
-        saveDatabase(db);
-        return true;
+        return saveDatabase(db) ? true : 'the browser would not save the database (storage full?)';
     }
     // The main script asks for the current pair to be recorded right before it skips it, so a
     // fast skip can't beat the 1-second poll. It keeps asking until this reports success.
@@ -1085,7 +1104,29 @@
     setInterval(() => {
         const dept = document.body.dataset.csvDept;
         if (dept) recordEntry(dept);
+        else if (isReviewDetailPage()) trackRecording('the main script has not reported this pair yet (no department signal)');
+        else trackRecording('');
         updateDbSizeBadge();
     }, 1000);
+
+    // elm451Debug() in the console prints everything needed to work out why a pair is not being recorded
+    window.elm451Debug = function () {
+        const d = document.body.dataset;
+        let raw = '', n;
+        try { raw = localStorage.getItem(STORAGE_KEY) || ''; n = JSON.parse(raw || '[]').length; } catch (e) { n = 'unreadable: ' + e.message; }
+        let storageWritable = true;
+        try { localStorage.setItem('__elm_probe', 'x'.repeat(200000)); localStorage.removeItem('__elm_probe'); } catch (e) { storageWritable = false; }
+        const sparks = getDomSparkIds();
+        const info = {
+            databaseScript: VERSION, entries: n, storedKB: Math.round(raw.length / 1024), storageWritable,
+            onReviewPage: isReviewDetailPage(), mergePanelOpen: mergePanelOpen(),
+            mainScriptLoaded: !!window.__elm451UiPerfectionLoaded, viaExtension: window.__elm451Extension || false,
+            signals: { dept: d.csvDept, spark1: d.csvSpark1, spark2: d.csvSpark2, choice: d.csvChoice, score: d.csvScore },
+            sparksOnPage: sparks, pageNames: extractNames().full,
+            lastProblem: problem.reason || 'none'
+        };
+        console.log('[Database] state', info);
+        return info;
+    };
 
 })();

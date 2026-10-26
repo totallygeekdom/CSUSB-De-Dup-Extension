@@ -6,7 +6,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 | Script | File | Current version |
 |---|---|---|
 | Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.218`, shown in the settings pane as `v2.210` |
-| Element451 - Database v2 | `database-v2.js` | `@version 2.58` |
+| Element451 - Database v2 | `database-v2.js` | `@version 2.59` |
 | Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.11`, see [section 17](#17-database-merge) |
 
 The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
@@ -432,6 +432,8 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 - `[elm2] Skipping to next pair: <reason>`, `[elm2] Auto-merging pair`, `[elm2] Auto-merge not done: <reason>`
 - `[elm2] page jump: direct …` or `… clicking First / Next …`
 - `[elm2] script click on button: "…"` for script-generated clicks, and a warning with a stack trace if one is blocked by the click guard.
+- **Database script** (silent while recording works): if the pair on screen has not been recorded for 5 seconds, one warning says why: `[Database] the pair on screen is not being recorded: <reason>`. The reasons are: the main script has not reported the pair yet (no department signal), no Spark IDs on the page, the Spark IDs the main script reported do not match the page, the contact names have not loaded, or the browser would not save the database (storage full?). The warning prints again only if the reason changes, and a failed save logs its error once, not on every retry.
+- **`elm451Debug()`** (type it in the console on the page): prints and returns the Database script's state: its version, the number of entries and their size in KB, whether the browser storage is writable, whether you are on the review page, the main script's signals (department, Spark IDs, choice, score), the Spark IDs and names read from the page, whether the main script is loaded and whether the scripts run through the extension, and the last recording problem.
 
 ---
 

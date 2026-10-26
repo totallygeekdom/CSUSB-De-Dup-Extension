@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.220`, shown in the settings pane as `v2.210` |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.221`, shown in the settings pane as `v2.210` |
 | Element451 - Database v2 | `database-v2.js` | `@version 2.61` |
 | Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.11`, see [section 17](#17-database-merge) |
 
@@ -425,6 +425,8 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 | `elm_csv_database` | Database | Recorded pairs (JSON array) |
 | `elm_show_db_ui` | Database | Show Database UI |
 | `elm2_bolt_picks` | main | Bolt's original pick per conflicting row (hashed ids, `l`/`r` + timestamp, capped at 2,500 entries). Element451 saves the selection on a pair, so on a second visit the screen shows the last selection rather than Bolt's pick; this keeps Bolt's real pick for the colours and *Use Bolt AI picks* |
+
+**Engagement table.** The dual-personal-email tiebreak reads `#duplicate-engagement-details`: one row per measure, one cell per contact. Real cells read `3 email opens, last open at Jan 11, 2026 - 6:00 AM` or `1 email click, last click at …`, so the measure name is only the label: whatever follows a comma is dropped and singular/plural is ignored (`email open(s)` → `email opens`, `email click(s)` → `email clicks`). Before this, only cells with a count of 0 (no trailing text) were recognised, so the tiebreak never saw the opens and clicks of a contact that had any.
 
 **Value buttons (page layout).** Each `.diff-row` has a title, two value buttons (`button.diff-value-button`, left = Contact A, right = Contact B) and the arrows in `.diff-actions`. Element451 now wraps each value button in `<div class="diff-value">` next to a copy button (`button.diff-value-copy`), so the scripts find the value buttons anywhere in the row (`row.querySelectorAll('.diff-value-button')`), which works for both the older direct-child layout and the wrapped one. Searching only the row's direct children finds no values at all, which silently breaks reading Spark IDs, conflict detection and the picks.
 

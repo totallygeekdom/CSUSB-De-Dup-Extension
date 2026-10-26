@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.220
+// @version      2.221
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.220'; // keep in sync with @version
+    const VERSION = '2.221'; // keep in sync with @version
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -2309,7 +2309,10 @@
         rows.forEach(r => {
             const cells = Array.from(r.querySelectorAll('bolt-cell')).map(c => c.textContent.trim());
             const m = cells.map(t => t.match(/^([\d,]+)\s+(.+)$/i));
-            if (m.length >= 2 && m[0] && m[1]) out[m[0][2].toLowerCase()] = [parseInt(m[0][1].replace(/,/g, ''), 10), parseInt(m[1][1].replace(/,/g, ''), 10)];
+            // The measure is the label only: "3 email opens, last open at Jan 11, 2026 - 6:00 AM" and "1 email click, last
+            // click at …" are "email opens" and "email clicks" (the part after a comma goes, and so does singular vs plural).
+            const measure = (t) => t.toLowerCase().replace(/,.*$/, '').trim().replace(/s$/, '') + 's';
+            if (m.length >= 2 && m[0] && m[1]) out[measure(m[0][2])] = [parseInt(m[0][1].replace(/,/g, ''), 10), parseInt(m[1][1].replace(/,/g, ''), 10)];
         });
         return Object.keys(out).length ? out : null;
     }

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - Database Merge v2
 // @namespace    http://tampermonkey.net/
-// @version      1.12
+// @version      1.13
 // @description  Adds a "Merge Databases" page to the Database script: combine several exported databases (and this browser's) into one, with a breakdown
 // @author       You
 // @match        https://*.element451.io/*
@@ -21,7 +21,7 @@
     'use strict';
     if (window.__elm451DbMergeLoaded) return;
     window.__elm451DbMergeLoaded = true;
-    const VERSION = '1.12'; // keep in sync with @version
+    const VERSION = '1.13'; // keep in sync with @version
 
     // =========================================================
     // STORED DATABASE AND FILE FORMATS
@@ -334,7 +334,7 @@
         const ids = [e.sparkId1, e.sparkId2].filter(Boolean).sort().join('|');
         if (ids) return 's:' + ids;
         const name = (a, b) => ((a || '') + '|' + (b || '')).toLowerCase();
-        return 'n:' + [name(e.firstName, e.lastName), name(e.firstName2, e.lastName2)].sort().join('~');
+        return 'n:' + [name(e.firstName, e.lastName), name(e.firstName2 || e.firstName, e.lastName2 || e.lastName)].sort().join('~'); // a blank second name is the same as the first
     }
     const isMerged = (e) => e.merged === 'Y';
     // Does the incoming entry replace the one already kept? The most up to date copy wins: the later Scan Date (a

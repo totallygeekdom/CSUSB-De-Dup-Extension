@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.221`, shown in the settings pane as `v2.210` |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.222`, shown in the settings pane |
 | Element451 - Database v2 | `database-v2.js` | `@version 2.62` |
 | Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.12`, see [section 17](#17-database-merge) |
 
@@ -332,6 +332,8 @@ All of these are CSS/DOM additions made by the main script. Colours use a Materi
 ### 10.2 Header controls
 
 - A 40px round **gear** button (an inline SVG, outlined Material "settings", so macOS does not draw an emoji) opens the settings pane. If the Database script is installed, a tonal `Database N` pill sits just left of it (then the hidden Merges counter, when shown: order is Database, Merges, gear).
+
+- **Title bar colour**: the script sets `<meta name="theme-color">` to the header colour it samples, so an installed web app's title bar (and the browser toolbar on mobile) matches the Element451 header. It darkens live with the page: while a profile's sidebar or a dialog dims the page (any `.cdk-overlay-backdrop`), the colour is the header colour blended with that backdrop, following the fade in and out, and it returns to the header colour when the backdrop closes. Our own countdown scrim covers only the merge panel, so it doesn't change it.
 
 ### 10.3 Settings pane
 

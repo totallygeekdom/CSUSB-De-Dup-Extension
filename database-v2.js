@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - Database v2
 // @namespace    http://tampermonkey.net/
-// @version      2.63
+// @version      2.64
 // @description  Tracks duplicate entries in a database stored in browser localStorage (exports an .xlsx spreadsheet) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -15,7 +15,7 @@
     if (window.__elm451CsvDatabaseLoaded) return;
     window.__elm451CsvDatabaseLoaded = true;
 
-    const VERSION = '2.63'; // keep in sync with @version
+    const VERSION = '2.64'; // keep in sync with @version
     const STORAGE_KEY = 'elm_csv_database';
     const UI_KEY = 'elm_show_db_ui';
     function showDbUi() { try { return localStorage.getItem(UI_KEY) !== 'false'; } catch (e) { return true; } }
@@ -754,12 +754,12 @@
     }
     const capFirst = (t) => { t = String(t || ''); return t.charAt(0).toUpperCase() + t.slice(1).toLowerCase(); };
     // Cell colours in the spreadsheet: Bolt Score in soft versions of the list view's chip colours (green / orange / red),
-    // Dept. in the list view's chip colours, and Script vs Bolt in the light yellow of the applicant band (with its amber
-    // outline) when the script found an applicant. [key, fill, text]; the cell style number is 4 + the position here.
+    // Dept. in the list view's chip colours, and Script vs Bolt in the light yellow of the applicant band (with dark yellow
+    // text) when the script found an applicant. [key, fill, text]; the cell style number is 4 + the position here.
     const XL_PAINT = [
         ['score:high', 'C8E6C9', '1B5E20'], ['score:medium', 'FFE0B2', 'BF360C'], ['score:low', 'FFCDD2', 'B71C1C'],
         ['dept:Grad/IA', 'E3F2FD', '1565C0'], ['dept:UnderGrad', 'F3E5F5', '6A1B9A'], ['dept:Forbidden', 'FCE4EC', 'C2185B'], ['dept:Appeal', 'FFF8E1', 'F57F17'],
-        ['applicant', 'FFF9C4', '']
+        ['applicant', 'FFF9C4', '9A6700']
     ];
     function dbRows(db) {
         const rows = db.map(e => {
@@ -918,14 +918,13 @@
             '<fills count="' + (3 + XL_PAINT.length) + '"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>' +
             '<fill><patternFill patternType="solid"><fgColor rgb="FFFDE3CC"/><bgColor indexed="64"/></patternFill></fill>' +
             XL_PAINT.map(x => '<fill><patternFill patternType="solid"><fgColor rgb="FF' + x[1] + '"/><bgColor indexed="64"/></patternFill></fill>').join('') + '</fills>' +
-            '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>' +
-            '<border><left style="thin"><color rgb="FFF9A825"/></left><right style="thin"><color rgb="FFF9A825"/></right><top style="thin"><color rgb="FFF9A825"/></top><bottom style="thin"><color rgb="FFF9A825"/></bottom><diagonal/></border></borders>' +
+            '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
             '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
             '<cellXfs count="' + (4 + XL_PAINT.length) + '"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
             '<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>' +
             '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>' +
             '<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>' +
-            XL_PAINT.map((x, i) => '<xf numFmtId="0" fontId="' + (3 + i) + '" fillId="' + (3 + i) + '" borderId="' + (x[0] === 'applicant' ? 1 : 0) + '" xfId="0" applyFont="1" applyFill="1"' + (x[0] === 'applicant' ? ' applyBorder="1"' : '') + '/>').join('') + '</cellXfs>' +
+            XL_PAINT.map((x, i) => '<xf numFmtId="0" fontId="' + (3 + i) + '" fillId="' + (3 + i) + '" borderId="0" xfId="0" applyFont="1" applyFill="1"/>').join('') + '</cellXfs>' +
             '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
         const wb = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
             '<sheets><sheet name="Database" sheetId="1" r:id="rId1"/></sheets>' +

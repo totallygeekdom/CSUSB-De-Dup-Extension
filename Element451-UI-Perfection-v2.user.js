@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.222
+// @version      2.223
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,16 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.222'; // keep in sync with @version
+    const VERSION = '2.223'; // keep in sync with @version
+    // Chrome's install prompt for the web app: held back until Install is clicked on the card at the top of the
+    // settings pane. The card shows only while Chrome says the page is installable, and the X hides it for good.
+    let installPrompt = null;
+    function syncInstallCard() {
+        const card = document.getElementById('elm-install-card');
+        if (card) card.hidden = !installPrompt || localStorage.getItem('elm_install_dismissed') === 'true';
+    }
+    window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; syncInstallCard(); });
+    window.addEventListener('appinstalled', () => { installPrompt = null; syncInstallCard(); });
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -609,6 +618,16 @@
         #elm-settings-close:focus-visible { outline: 2px solid var(--md-primary); }
         #elm-settings-pane .settings-body { padding: 0 24px 24px; }
         #elm-settings-pane .settings-body > .settings-section-title:first-child { margin-top: 4px; }
+        #elm-settings-pane .elm-install { position: relative; margin: 4px 0 0; padding: 16px; border-radius: 24px; background: var(--md-primary-container); color: var(--md-on-primary-container); }
+        #elm-settings-pane .elm-install[hidden] { display: none; }
+        #elm-settings-pane .elm-install-title { font-size: 16px; line-height: 24px; font-weight: 500; letter-spacing: .1px; padding-right: 32px; margin-bottom: 4px; }
+        #elm-settings-pane .elm-install p { margin: 0 0 12px; font-size: 14px; line-height: 20px; letter-spacing: .25px; }
+        #elm-settings-pane .elm-install-btn { height: 40px; padding: 0 24px; border: none; border-radius: 20px; background: var(--md-primary); color: #fff; font: 500 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .1px; cursor: pointer; transition: border-radius .25s var(--md-ease), box-shadow .2s var(--md-ease); }
+        #elm-settings-pane .elm-install-btn:hover { border-radius: 12px; box-shadow: var(--md-elev-1, 0 1px 3px rgba(0,0,0,.25)); }
+        #elm-settings-pane .elm-install-btn:focus-visible, #elm-settings-pane .elm-install-x:focus-visible { outline: 2px solid var(--md-on-primary-container); outline-offset: 2px; }
+        #elm-settings-pane .elm-install-x { position: absolute; top: 8px; right: 8px; width: 32px; height: 32px; padding: 0; display: flex; align-items: center; justify-content: center; border: none; border-radius: 50%; background: transparent; color: inherit; cursor: pointer; }
+        #elm-settings-pane .elm-install-x:hover { background: color-mix(in srgb, var(--md-on-primary-container) 12%, transparent); }
+        #elm-settings-pane .elm-install-x svg { width: 18px; height: 18px; fill: currentColor; }
         #elm-settings-pane .settings-section-title { font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: var(--md-primary-text); text-transform: none; margin: 24px 0 4px; }
         /* M3 Expressive list: each setting is its own container, 2px apart; the first and last of a group get the large outer corners */
         #elm-settings-pane .elm-list { display: flex; flex-direction: column; gap: 2px; }
@@ -3502,6 +3521,12 @@
                 <div class="settings-title">Settings</div>
             </div>
             <div class="settings-body">
+                <div id="elm-install-card" class="elm-install" hidden>
+                    <button id="elm-install-x" class="elm-install-x" aria-label="Dismiss"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>
+                    <div class="elm-install-title">Install as an app</div>
+                    <p>Open Element451 in its own window, without the browser's tabs and address bar.</p>
+                    <button id="elm-install-btn" class="elm-install-btn">Install</button>
+                </div>
                 <div class="settings-section-title">Automation</div>
                 <div class="elm-list">
                 <div class="elm-item">
@@ -3585,6 +3610,15 @@
         `;
         document.body.appendChild(pane);
         document.getElementById('elm-settings-close').onclick = () => toggleSettingsPane(false);
+        document.getElementById('elm-install-btn').onclick = async () => {
+            const prompt = installPrompt;
+            if (!prompt) return;
+            installPrompt = null; // Chrome allows one prompt() per event
+            syncInstallCard();
+            try { await prompt.prompt(); } catch (e) { /* the dialog could not open; Chrome offers a new event later */ }
+        };
+        document.getElementById('elm-install-x').onclick = () => { localStorage.setItem('elm_install_dismissed', 'true'); syncInstallCard(); };
+        syncInstallCard();
         function toggleHtml(id) {
             return `<label class="elm-toggle-switch"><input type="checkbox" id="${id}"><span class="elm-toggle-slider"></span></label>`;
         }

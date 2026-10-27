@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.223
+// @version      2.224
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.223'; // keep in sync with @version
+    const VERSION = '2.224'; // keep in sync with @version
     // Chrome's install prompt for the web app: held back until Install is clicked on the card at the top of the
     // settings pane. The card shows only while Chrome says the page is installable, and the X hides it for good.
     let installPrompt = null;
@@ -1641,7 +1641,11 @@
     function updateThemeColor() {
         if (!headerRgb) return;
         let [r, g, b] = headerRgb;
-        document.querySelectorAll('.cdk-overlay-backdrop').forEach(el => {
+        // Element's overlay backdrops (profile sidebar, dialogs), our settings pane's overlay, and any other
+        // full-window dim layer (a class with "backdrop" or "scrim" in it that covers the window).
+        document.querySelectorAll('.cdk-overlay-backdrop, #elm-settings-overlay, [class*="backdrop"], [class*="scrim"]').forEach(el => {
+            const box = el.getBoundingClientRect();
+            if (box.width < innerWidth * 0.9 || box.height < innerHeight * 0.9) return; // not a window-wide dim (e.g. our countdown scrim covers only the merge panel)
             const cs = getComputedStyle(el);
             const m = cs.backgroundColor.match(/rgba?\(([^)]+)\)/);
             if (!m) return;
@@ -3505,6 +3509,7 @@
         void pane.offsetWidth;
         pane.classList.toggle('open', shouldOpen);
         overlay.classList.toggle('open', shouldOpen);
+        followBackdrops(); // the title bar dims with the overlay
     }
     function injectSettingsPane() {
         if (document.getElementById('elm-settings-pane')) return;

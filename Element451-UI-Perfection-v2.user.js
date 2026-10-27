@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.221
+// @version      2.222
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.221'; // keep in sync with @version
+    const VERSION = '2.222'; // keep in sync with @version
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -1615,6 +1615,46 @@
             if (el.tagName === 'BOLT-STACKABLE-SIDEBAR-SECTION' || el.closest('bolt-stackable-sidebar-section')) el.removeAttribute('title');
         });
     }
+    // The installed web app's title bar (and the browser toolbar on mobile) follows <meta name="theme-color">.
+    // It is the header colour, darkened by whatever dim layers are open (a profile's sidebar backdrop, dialogs),
+    // so the title bar dims together with the page. headerRgb is the header's own colour (syncHeaderColor).
+    let headerRgb = null, themeFrames = 0, themeObserved = null;
+    function updateThemeColor() {
+        if (!headerRgb) return;
+        let [r, g, b] = headerRgb;
+        document.querySelectorAll('.cdk-overlay-backdrop').forEach(el => {
+            const cs = getComputedStyle(el);
+            const m = cs.backgroundColor.match(/rgba?\(([^)]+)\)/);
+            if (!m) return;
+            const [br, bg, bb, ba = 1] = m[1].split(',').map(parseFloat);
+            const a = ba * (parseFloat(cs.opacity) || 0); // opacity follows the fade in / out
+            if (!(a > 0)) return;
+            r = r * (1 - a) + br * a; g = g * (1 - a) + bg * a; b = b * (1 - a) + bb * a;
+        });
+        const hex = '#' + [r, g, b].map(v => Math.round(v).toString(16).padStart(2, '0')).join('');
+        let meta = document.querySelector('meta[name="theme-color"]');
+        if (!meta) { meta = document.createElement('meta'); meta.name = 'theme-color'; document.head.appendChild(meta); }
+        if (meta.content !== hex) meta.content = hex;
+    }
+    // Re-reads the colour for the next ~0.6 s of frames, so the title bar follows a backdrop's fade.
+    function followBackdrops() {
+        const running = themeFrames > 0;
+        themeFrames = 36;
+        if (running) return;
+        const tick = () => { updateThemeColor(); if (--themeFrames > 0) requestAnimationFrame(tick); };
+        requestAnimationFrame(tick);
+    }
+    function watchBackdrops() {
+        const box = document.querySelector('.cdk-overlay-container');
+        if (!box || box === themeObserved) return;
+        themeObserved = box;
+        new MutationObserver(followBackdrops).observe(box, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style'] });
+    }
+    function setThemeColor(r, g, b) {
+        headerRgb = [r, g, b];
+        watchBackdrops();
+        updateThemeColor();
+    }
     // Element451's orange header colour, read from the header bar itself, for our own UI accents.
     function syncHeaderColor() {
         let el = document.querySelector('.bolt-navigation-right');
@@ -1626,6 +1666,7 @@
                 // opaque and not white/near-white/grey: that is the header colour
                 if (a > 0.9 && Math.max(r, g, b) - Math.min(r, g, b) > 40) {
                     document.documentElement.style.setProperty('--elm2-header-color', c);
+                    setThemeColor(r, g, b);
                     return;
                 }
             }

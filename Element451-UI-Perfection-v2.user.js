@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.231
+// @version      2.232
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.231'; // keep in sync with @version
+    const VERSION = '2.232'; // keep in sync with @version
     // Chrome's install prompt for the web app: held back until Install is clicked on the card at the top of the
     // settings pane. The card shows only while Chrome says the page is installable, and the X hides it for good.
     let installPrompt = null;
@@ -437,7 +437,8 @@
         #elm2-pick-compare-bar {
             display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
             padding: 12px 16px; margin: 0 0 12px;
-            background: var(--md-surface-container); border: none; border-radius: 12px;
+            background: #fff; border: none; border-radius: 12px;
+            box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12); /* a thin outline: at rest it sits on the white Records card */
             font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif;
             /* Pinned under the Previous / position / Next bar while the field list scrolls (the script sets top to that bar's
                height, injectPickComparisonBar). */
@@ -446,7 +447,7 @@
         /* Element451's form clips its content with overflow: hidden, which makes it a scroll container and stops anything inside from
            sticking to the panel. overflow: clip clips the same way without that; flow-root keeps the block formatting context. */
         form.diff-form:has(> #elm2-pick-compare-bar) { overflow: clip !important; display: flow-root !important; }
-        #elm2-pick-compare-bar.stuck { box-shadow: 0 -8px 0 #fff, 0 2px 4px rgba(0, 0, 0, 0.15); } /* only while pinned: the white strip hides rows passing behind the gap */
+        #elm2-pick-compare-bar.stuck { box-shadow: 0 -8px 0 #fff, 0 0 0 1px rgba(0, 0, 0, 0.12), 0 4px 12px rgba(0, 0, 0, 0.18); } /* only while pinned: the white strip hides rows passing behind the gap */
         #elm2-pick-compare-count { font-size: 14px; line-height: 20px; letter-spacing: .25px; color: var(--md-on-surface-variant); flex: 1 1 auto; min-width: 160px; }
         #elm2-pick-compare-bar button {
             height: 40px; padding: 0 24px; border-radius: 20px; box-sizing: border-box;

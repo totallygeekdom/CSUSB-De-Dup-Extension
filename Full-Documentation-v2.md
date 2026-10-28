@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.231`, shown in the settings pane |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.232`, shown in the settings pane |
 | Element451 - Database v2 | `database-v2.js` | `@version 2.62` |
 | Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.12`, see [section 17](#17-database-merge) |
 
@@ -321,7 +321,7 @@ All of these are CSS/DOM additions made by the main script. Colours use a Materi
 
 - **Pick colours** (Highlight Rows): on a row where Bolt and we agree, the chosen value is **green**; on a row where we differ, Bolt's pick is **blue** and ours is **orange**; rows where our rules have no opinion keep Element's default styling. There are no legends or text badges, and arrows are never restyled.
 - **Applicant band**: with an applicant side, that contact's card is outlined and a yellow band marks that side's column of values (disabled on blocked pairs).
-- **Comparison bar** under the contact header: a one-line status ("Our N suggestion(s) match Bolt's picks (x conflicting of y fields)" / "⚠ n of N suggestions differ from Bolt's picks" / "automation is off", etc.) plus two buttons: **Use Bolt AI picks** and **Use our picks**. It is **pinned**: while the field list scrolls it stays just under the Previous / position / Next bar (sticky; the form's `overflow: hidden` is swapped for `overflow: clip` so it can stick), with a white strip and a soft shadow behind it while it is pinned.
+- **Comparison bar** under the contact header: a one-line status ("Our N suggestion(s) match Bolt's picks (x conflicting of y fields)" / "⚠ n of N suggestions differ from Bolt's picks" / "automation is off", etc.) plus two buttons: **Use Bolt AI picks** and **Use our picks**. It is **pinned**: while the field list scrolls it stays just under the Previous / position / Next bar (sticky; the form's `overflow: hidden` is swapped for `overflow: clip` so it can stick), The bar is a white card with a thin outline; while it is pinned it also gets a stronger shadow and a white strip above it, so it stands out from the grey navigation bar.
 - **Hover preview**: hovering (or focusing) either button highlights in blue exactly what it would select on the rows it would change, with the other values neutral; the green/blue/orange pick colours are hidden meanwhile. Disabled on blocked pairs.
 - **Score chips** (High / Medium / Low): High stays green; Medium is orange and Low is red, applied inline with `!important` because Element's per-level rules override stylesheets.
 - **Pinned queue nav**: the Previous / position / Next bar stays at the top while you scroll the panel (below Element's header if that is sticky/fixed).

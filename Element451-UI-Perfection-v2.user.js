@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.221
+// @version      2.227
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,16 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.221'; // keep in sync with @version
+    const VERSION = '2.227'; // keep in sync with @version
+    // Chrome's install prompt for the web app: held back until Install is clicked on the card at the top of the
+    // settings pane. The card shows only while Chrome says the page is installable, and the X hides it for good.
+    let installPrompt = null;
+    function syncInstallCard() {
+        const card = document.getElementById('elm-install-card');
+        if (card) card.hidden = !installPrompt || localStorage.getItem('elm_install_dismissed') === 'true';
+    }
+    window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; syncInstallCard(); });
+    window.addEventListener('appinstalled', () => { installPrompt = null; syncInstallCard(); });
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -159,31 +168,34 @@
         #elm2-kart-lane .elm2-kart { position: absolute; will-change: transform; }
         #elm2-kart-lane .elm2-kart svg { display: block; overflow: visible; animation: elm2-kart-bob .5s steps(1) infinite; }
         #elm2-kart-lane .elm2-kart.flip svg { transform: scaleX(-1); }
-        #elm2-kart-lane .elm2-kart.c1 { --c: #29b6f6; --c2: #e1f5fe; } /* Mario Kart mini-turbo colours */
-        #elm2-kart-lane .elm2-kart.c2 { --c: #ffc107; --c2: #fff3c4; }
-        #elm2-kart-lane .elm2-kart.c3 { --c: #b44cff; --c2: #f3d9ff; }
-        #elm2-kart-lane .elm2-kart .hubA { animation: elm2-kart-a .24s steps(1) infinite; }
-        #elm2-kart-lane .elm2-kart .hubB { animation: elm2-kart-b .24s steps(1) infinite; }
-        #elm2-kart-lane .elm2-kart .sparks, #elm2-kart-lane .elm2-kart .flame, #elm2-kart-lane .elm2-kart .lines { opacity: 0; }
-        #elm2-kart-lane .elm2-kart .sp { fill: var(--c, #fff); }
+        #elm2-kart-lane .elm2-kart.c1 { --c: #29b6f6; --c2: #e1f5fe; } /* the three drift-spark colours: blue, orange and yellow, pink */
+        #elm2-kart-lane .elm2-kart.c2 { --c: #f09033; --c2: #fff332; }
+        #elm2-kart-lane .elm2-kart.c3 { --c: #ff4fa3; --c2: #ffd9ec; }
+        #elm2-kart-lane .elm2-kart .hubA, #elm2-kart-lane .elm2-kart .bA { animation: elm2-kart-a .24s steps(1) infinite; }
+        #elm2-kart-lane .elm2-kart .hubB, #elm2-kart-lane .elm2-kart .bB { animation: elm2-kart-b .24s steps(1) infinite; }
+        #elm2-kart-lane .elm2-kart .sparks, #elm2-kart-lane .elm2-kart .lines { opacity: 0; }
+        #elm2-kart-lane .elm2-kart .lA { animation: elm2-kart-a .16s steps(1) infinite; }
+        #elm2-kart-lane .elm2-kart .lB { animation: elm2-kart-b .16s steps(1) infinite; }
+        #elm2-kart-lane .elm2-kart .so { fill: var(--c, #f09033); }
+        #elm2-kart-lane .elm2-kart .sy { fill: var(--c2, #fff332); }
         #elm2-kart-lane .elm2-kart .lines path { fill: var(--c, #fff); }
-        #elm2-kart-lane .elm2-kart .flame { transform-box: fill-box; transform-origin: 100% 50%; }
+        #elm2-kart-lane .elm2-kart .lines .hd { fill: var(--c2, #fff); }
         #elm2-kart-lane .elm2-kart.c1 .sparks, #elm2-kart-lane .elm2-kart.c2 .sparks, #elm2-kart-lane .elm2-kart.c3 .sparks { opacity: 1; }
-        #elm2-kart-lane .elm2-kart.c1 .flame, #elm2-kart-lane .elm2-kart.c2 .flame, #elm2-kart-lane .elm2-kart.c3 .flame { opacity: 1; scale: .5 1; animation: elm2-kart-flame .1s steps(1) infinite; }
-        #elm2-kart-lane .elm2-kart.c2 .flame { scale: .75 1; }
-        #elm2-kart-lane .elm2-kart.c3 .flame { scale: 1 1; }
-        #elm2-kart-lane .elm2-kart .sp { animation: elm2-kart-spark .16s steps(1) infinite; }
-        #elm2-kart-lane .elm2-kart .s2, #elm2-kart-lane .elm2-kart .s5 { animation-delay: -.05s; }
-        #elm2-kart-lane .elm2-kart .s3, #elm2-kart-lane .elm2-kart .s6 { animation-delay: -.1s; }
-        #elm2-kart-lane .elm2-kart .s4, #elm2-kart-lane .elm2-kart .s7 { animation-delay: -.13s; }
+        #elm2-kart-lane .elm2-kart.c1 .pl.x { display: none; } /* the first colour throws fewer sparks */
+        #elm2-kart-lane .elm2-kart .tr { display: none; } /* the wheel trails grow with each stage (the drive-off keeps the last size) */
+        #elm2-kart-lane .elm2-kart.c1 .t1, #elm2-kart-lane .elm2-kart.c2 .t2, #elm2-kart-lane .elm2-kart.c3 .t3 { display: inline; }
+        /* Each spark is a small plus that flares and drifts back and down, then goes out; the five are out of step. */
+        #elm2-kart-lane .elm2-kart .pl { animation: elm2-kart-spark .48s steps(1) infinite; animation-delay: var(--d, 0s); }
+        #elm2-kart-lane .elm2-kart .pl .pa { animation: elm2-kart-arm .48s steps(1) infinite; animation-delay: var(--d, 0s); }
+        #elm2-kart-lane .elm2-kart .p1 { --d: -.12s; } #elm2-kart-lane .elm2-kart .p2 { --d: -.24s; }
+        #elm2-kart-lane .elm2-kart .p3 { --d: -.36s; } #elm2-kart-lane .elm2-kart .p4 { --d: -.06s; }
         #elm2-kart-lane .elm2-kart.go svg { animation: none; }
-        #elm2-kart-lane .elm2-kart.go .flame { scale: 1.6 1.3; }
         #elm2-kart-lane .elm2-kart.go .lines { opacity: 1; }
         @keyframes elm2-kart-bob { 0% { margin-top: 0; } 50% { margin-top: -4px; } }
         @keyframes elm2-kart-a { 0% { opacity: 1; } 50% { opacity: 0; } }
         @keyframes elm2-kart-b { 0% { opacity: 0; } 50% { opacity: 1; } }
-        @keyframes elm2-kart-flame { 0% { transform: scaleY(1); } 50% { transform: scaleY(.7); } }
-        @keyframes elm2-kart-spark { 0% { opacity: 1; } 33% { opacity: 0; } 66% { opacity: .6; } }
+        @keyframes elm2-kart-spark { 0% { opacity: 1; transform: translate(0, 0); } 25% { transform: translate(-1px, 0); } 50% { transform: translate(-2px, 1px); } 75% { opacity: 0; } }
+        @keyframes elm2-kart-arm { 0% { opacity: 0; } 25% { opacity: 1; } 50% { opacity: 0; } }
         #elm2-merge-overlay .elm2-lamps { display: none; }
         #elm2-merge-overlay .elm2-merge-card.race .elm2-ring svg, #elm2-merge-overlay .elm2-merge-card.race #elm2-merge-count { display: none; }
         #elm2-merge-overlay .elm2-merge-card.race .elm2-lamps { position: absolute; left: 0; right: 0; top: 50%; height: 68px; margin-top: -34px; box-sizing: border-box; padding: 0 12px; border-radius: 34px; background: #1f2124; box-shadow: inset 0 2px 6px rgba(0,0,0,.5); display: flex; align-items: center; justify-content: space-between; }
@@ -609,6 +621,16 @@
         #elm-settings-close:focus-visible { outline: 2px solid var(--md-primary); }
         #elm-settings-pane .settings-body { padding: 0 24px 24px; }
         #elm-settings-pane .settings-body > .settings-section-title:first-child { margin-top: 4px; }
+        #elm-settings-pane .elm-install { position: relative; margin: 4px 0 0; padding: 16px; border-radius: 24px; background: var(--md-primary-container); color: var(--md-on-primary-container); }
+        #elm-settings-pane .elm-install[hidden] { display: none; }
+        #elm-settings-pane .elm-install-title { font-size: 16px; line-height: 24px; font-weight: 500; letter-spacing: .1px; padding-right: 32px; margin-bottom: 4px; }
+        #elm-settings-pane .elm-install p { margin: 0 0 12px; font-size: 14px; line-height: 20px; letter-spacing: .25px; }
+        #elm-settings-pane .elm-install-btn { height: 40px; padding: 0 24px; border: none; border-radius: 20px; background: var(--md-primary); color: #fff; font: 500 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .1px; cursor: pointer; transition: border-radius .25s var(--md-ease), box-shadow .2s var(--md-ease); }
+        #elm-settings-pane .elm-install-btn:hover { border-radius: 12px; box-shadow: var(--md-elev-1, 0 1px 3px rgba(0,0,0,.25)); }
+        #elm-settings-pane .elm-install-btn:focus-visible, #elm-settings-pane .elm-install-x:focus-visible { outline: 2px solid var(--md-on-primary-container); outline-offset: 2px; }
+        #elm-settings-pane .elm-install-x { position: absolute; top: 8px; right: 8px; width: 32px; height: 32px; padding: 0; display: flex; align-items: center; justify-content: center; border: none; border-radius: 50%; background: transparent; color: inherit; cursor: pointer; }
+        #elm-settings-pane .elm-install-x:hover { background: color-mix(in srgb, var(--md-on-primary-container) 12%, transparent); }
+        #elm-settings-pane .elm-install-x svg { width: 18px; height: 18px; fill: currentColor; }
         #elm-settings-pane .settings-section-title { font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: var(--md-primary-text); text-transform: none; margin: 24px 0 4px; }
         /* M3 Expressive list: each setting is its own container, 2px apart; the first and last of a group get the large outer corners */
         #elm-settings-pane .elm-list { display: flex; flex-direction: column; gap: 2px; }
@@ -1615,6 +1637,50 @@
             if (el.tagName === 'BOLT-STACKABLE-SIDEBAR-SECTION' || el.closest('bolt-stackable-sidebar-section')) el.removeAttribute('title');
         });
     }
+    // The installed web app's title bar (and the browser toolbar on mobile) follows <meta name="theme-color">.
+    // It is the header colour, darkened by whatever dim layers are open (a profile's sidebar backdrop, dialogs),
+    // so the title bar dims together with the page. headerRgb is the header's own colour (syncHeaderColor).
+    let headerRgb = null, themeFrames = 0, themeObserved = null;
+    function updateThemeColor() {
+        if (!headerRgb) return;
+        let [r, g, b] = headerRgb;
+        // Element's overlay backdrops (profile sidebar, dialogs), our settings pane's overlay, and any other
+        // full-window dim layer (a class with "backdrop" or "scrim" in it that covers the window).
+        document.querySelectorAll('.cdk-overlay-backdrop, #elm-settings-overlay, [class*="backdrop"], [class*="scrim"]').forEach(el => {
+            const box = el.getBoundingClientRect();
+            if (box.width < innerWidth * 0.9 || box.height < innerHeight * 0.9) return; // not a window-wide dim (e.g. our countdown scrim covers only the merge panel)
+            const cs = getComputedStyle(el);
+            const m = cs.backgroundColor.match(/rgba?\(([^)]+)\)/);
+            if (!m) return;
+            const [br, bg, bb, ba = 1] = m[1].split(',').map(parseFloat);
+            const a = ba * (parseFloat(cs.opacity) || 0); // opacity follows the fade in / out
+            if (!(a > 0)) return;
+            r = r * (1 - a) + br * a; g = g * (1 - a) + bg * a; b = b * (1 - a) + bb * a;
+        });
+        const hex = '#' + [r, g, b].map(v => Math.round(v).toString(16).padStart(2, '0')).join('');
+        let meta = document.querySelector('meta[name="theme-color"]');
+        if (!meta) { meta = document.createElement('meta'); meta.name = 'theme-color'; document.head.appendChild(meta); }
+        if (meta.content !== hex) meta.content = hex;
+    }
+    // Re-reads the colour for the next ~0.6 s of frames, so the title bar follows a backdrop's fade.
+    function followBackdrops() {
+        const running = themeFrames > 0;
+        themeFrames = 36;
+        if (running) return;
+        const tick = () => { updateThemeColor(); if (--themeFrames > 0) requestAnimationFrame(tick); };
+        requestAnimationFrame(tick);
+    }
+    function watchBackdrops() {
+        const box = document.querySelector('.cdk-overlay-container');
+        if (!box || box === themeObserved) return;
+        themeObserved = box;
+        new MutationObserver(followBackdrops).observe(box, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style'] });
+    }
+    function setThemeColor(r, g, b) {
+        headerRgb = [r, g, b];
+        watchBackdrops();
+        updateThemeColor();
+    }
     // Element451's orange header colour, read from the header bar itself, for our own UI accents.
     function syncHeaderColor() {
         let el = document.querySelector('.bolt-navigation-right');
@@ -1626,6 +1692,7 @@
                 // opaque and not white/near-white/grey: that is the header colour
                 if (a > 0.9 && Math.max(r, g, b) - Math.min(r, g, b) > 40) {
                     document.documentElement.style.setProperty('--elm2-header-color', c);
+                    setThemeColor(r, g, b);
                     return;
                 }
             }
@@ -2765,61 +2832,77 @@
     // (16px in from the edge), boosts at 3 and drives under the panel from 1. The lane is exactly that strip, so the
     // kart is clipped at the panel's edge (which looks like going under it), sits above the page dimming and
     // below the toasts (z-index 9990 < 10002).
-    // The driver is the CSUSB coyote in side profile, upright in a go-kart, drawn as pixel art. Proportions follow
-    // the Super Mario Kart sprite sheet it was modelled on (about a 30 px canvas, 7 px wheels at the bottom corners,
-    // a thin pan between them, a head half the sprite's height, a 1 px dark outline); every pixel is original.
-    // It is stored as 31 short rows and drawn as one SVG path per colour (runs of pixels), so it is tiny.
+    // The driver is the CSUSB coyote in side profile, upright in a go-kart, drawn as pixel art (28 x 29 px, a
+    // 1 px dark outline, 7 px wheels at the bottom corners). It is stored as 29 short rows and drawn as one SVG path
+    // per colour (runs of pixels), so it is tiny. The drift sparks and the speed lines are
+    // drawn on top of it (kartSvg) and recoloured through --c / --c2 by the stage class (c1, c2, c3, go).
     const KART = {
-        pal: { a: '#2f6fd6', b: '#6fa3f7', c: '#1a4aa0', d: '#0d1530', e: '#b9bfc7', f: '#e1e5ea', g: '#7f8791', h: '#ffffff', i: '#cfd6e2', j: '#14171d', k: '#6b1a28', l: '#343f48', m: '#8794a0', n: '#d3dce3', o: '#8a929c', p: '#5b626c' },
+        pal: { d: '#002929', a: '#0042f3', b: '#0084ff', c: '#ceefef', e: '#0000e7', t: '#294a4a', w: '#ffffff', g: '#7b7b7b', h: '#a0a0a0', i: '#b8b8b8', j: '#d0d0d0', u: '#4a6b6b', s: '#e7ad8c' },
         rows: [
-            '..............................',
-            '.............d................',
-            '......dd....dcd...............',
-            '.....dbcd..dbecd..............',
-            '.....dbecdddbeed..............',
-            '.....dbeebbbaaacd.............',
-            '.....dbaaaacccccd.............',
-            '.....dbaaaaahhhcddd...........',
-            '....dbaaaaaahjjafffdddd.......',
-            '....dbaaaaaahjjeeeeffjjd......',
-            '....dbaaeaaaaeeeeeeeejjd......',
-            '....dcaeeeaaaaeeeeeeedd.......',
-            '.....dcaaaaaaaakhkhkhd........',
-            '......dcaaaaaacdddddd.........',
-            '.......daaaaaacd..............',
-            '.......dbaaaaacd.....dd.......',
-            '......ddcaaaaacd....djjd......',
-            '.....dccdaaaaahd....djjd......',
-            '.....dcciihhhhhfdddddjjd......',
-            '.dddddcciihhhhhabbbbccjd......',
-            'dooooocciihhhhhaacccccdjd.....',
-            'ppoooocciihhhhhhhdddccdjd.....',
-            'dpppppcciihhhhhhd...dd.djd....',
-            '.dddddccdaaaaaacdddddd..ddd...',
-            '..dllldabaaaaaaabbbbbcddllld..',
-            '.dlllllaaaaaaaaaaaaaacdllllld.',
-            'dllmmmllhhhhhhhhhhhhhallmmmlld',
-            'dllmlmllaaaaaaaaaaaaacllmlmlld',
-            'dllmmmllcccccccccccccdllmmmlld',
-            '.dllllldddddddddddddd.dllllld.',
-            '..dllld................dllld..'],
-        w: 30, h: 31
+            '..............d.............',
+            '.........d...dbd............',
+            '........ded.dbhd............',
+            '.......dehdddbhd............',
+            '.......deaaabjjbd...........',
+            '.......deaabiwdjd...dd......',
+            '.......deaabiwdjddddbdd.....',
+            '......deaaaabiijjbbbjbd.....',
+            '......deaaaaabidjjjjjjd.....',
+            '.......deaaaabiidddwdwd.....',
+            '.......deaaaaabiidddddd.....',
+            '........deaaaabiiiiwdwd.....',
+            '........deaaabhhdddiiid.....',
+            '.......dddeaabhhd..ddd......',
+            '......dwbbddehhddd..........',
+            '.....dcaaabbddddbbdd........',
+            '....ddcaaaaabbbeaabdd.......',
+            '...dsdceaaaaaaadeeeddd......',
+            '...dsdcdeeaaaaaaddd.ddd.....',
+            '...dsdccddeeeeddbbbdbbdddd..',
+            '.ccdsdccccddddbbaaabaaduuud.',
+            '.dddddccccwwwwaaaabaaadddtd.',
+            '.ddttddcccccwwaaaaaaadduudd.',
+            'ddtggtddddccccaeeeaaaduttudd',
+            'dtgtdgtdwddcccedddeedttggtdd',
+            'dtgctgtdhwwddddhhhdddtgtdgtd',
+            'dtgccgtdhhhwwwwwwwwhdtgctgtd',
+            '.dtggtd.dddddddddddd.dtggtd.',
+            '..dddd................dddd..'],
+        w: 28, h: 29
     };
-    const KART_PX = 4, KART_W = KART.w, KART_H = KART.h, KART_PAD_L = 22; // 22 px of room on the left for the flame
+    const KART_PX = 4, KART_W = KART.w, KART_H = KART.h, KART_PAD_L = 22; // 22 px of room on the left for the sparks and speed lines
+    // Drift sparks, in sprite pixels: the centre of each plus-shaped spark (the last number is 1 for the ones left out in
+    // the first stage) and, for each wheel, a trail of sparks (O = the outer colour, Y = the inner one) that grows with
+    // each stage. The trails sit on the ground line and start at x = -1 (rear wheel) and x = 19 (front wheel).
+    const KART_PLUS = [[-2, 22, 1], [-4, 26, 1], [7, 25, 0], [13, 23, 1], [16, 26, 0]];
+    const KART_TRAILS = [
+        ['OY..', '.OY.', 'OOYY'],
+        ['OY....', 'OYY...', '.OYY..', 'OOOYYY'],
+        ['OY......', 'OYY.....', '.OYYY...', '.OOYYY..', 'OOOOYYYY']];
+    const KART_TRAIL_X = [-1, 19], KART_GROUND = 29; // the row under the wheels
+    // wheel glints: two diagonal pairs of rim pixels that swap, so the wheels look like they turn
+    const KART_GLINTS = [[[3, 23], [4, 27], [23, 24], [24, 27]], [[5, 24], [2, 26], [25, 25], [22, 26]]];
     function kartSvg() {
         const runs = {};
         KART.rows.forEach((r, y) => { let x = 0; while (x < r.length) { const c = r[x]; if (c === '.') { x++; continue; } let e = x; while (e < r.length && r[e] === c) e++; runs[c] = (runs[c] || '') + 'M' + x + ' ' + y + 'h' + (e - x) + 'v1h-' + (e - x) + 'z'; x = e; } });
         const body = Object.keys(runs).map(c => `<path fill="${KART.pal[c]}" d="${runs[c]}"/>`).join('');
-        const cross = (x, y, n) => `<path class="sp s${n}" d="M${x + 1} ${y}h1v1h-1zM${x} ${y + 1}h3v1h-3zM${x + 1} ${y + 2}h1v1h-1z"/>`;
-        // wheel hubs (the bright pixel) flip between two spots to look like spinning
-        const hubs = '<g class="hubA"><path fill="#d3dce3" d="M4 26h1v1h-1zM25 26h1v1h-1z"/></g><g class="hubB"><path fill="#d3dce3" d="M4 28h1v1h-1zM25 28h1v1h-1z"/></g>';
-        // colour-coded charge, like a Mario Kart drift: sparks at the wheels and a flame at the exhaust
-        // (blue, then orange, then purple), plus speed lines once it drives off; --c/--c2 come from the stage class
-        const sparks = cross(0, 28, 1) + cross(8, 29, 2) + cross(13, 27, 3) + cross(-2, 24, 4) + cross(21, 29, 5) + cross(28, 27, 6) + cross(30, 24, 7);
-        const flame = '<g class="flame"><path style="fill:var(--c,#ff9800)" d="M-9 20h9v3h-9zM-16 21h7v1h-7z"/><path style="fill:var(--c2,#ffe0b2)" d="M-11 21h11v1h-11zM-5 20h5v3h-5z"/><path fill="#fff" d="M-6 21h6v1h-6z"/></g>';
-        const lines = '<g class="lines"><path d="M-22 12h9v1h-9zM-18 18h12v1h-12zM-21 25h10v1h-10z"/></g>';
+        const px = (x, y) => 'M' + x + ' ' + y + 'h1v1h-1z';
+        const plus = ([x, y, extra], i) => `<g class="pl p${i}${extra ? ' x' : ''}"><path class="so pa" d="${px(x, y - 1) + px(x - 1, y) + px(x + 1, y) + px(x, y + 1)}"/><path class="sy" d="${px(x, y)}"/></g>`;
+        const trail = (rows, shift) => KART_TRAIL_X.map((ox) => {
+            let o = '', y2 = '';
+            rows.forEach((r, j) => [...r].forEach((c, i) => { const x = ox + i + shift, y = KART_GROUND - rows.length + j; if (c === 'O') o += px(x, y); else if (c === 'Y') y2 += px(x, y); }));
+            return `<path class="so" d="${o}"/><path class="sy" d="${y2}"/>`;
+        }).join('');
+        const glints = (g) => `<path fill="#ceefef" d="${g.map(([x, y]) => px(x, y)).join('')}"/>`;
+        const hubs = `<g class="hubA">${glints(KART_GLINTS[0])}</g><g class="hubB">${glints(KART_GLINTS[1])}</g>`;
+        // the sparks: a trail at each wheel (it flickers between two shapes; one size per stage) and five plus-shaped sparks; the colour comes from the stage
+        const sparks = KART_TRAILS.map((rows, i) => `<g class="tr t${i + 1}"><g class="bA">${trail(rows, 0)}</g><g class="bB">${trail(rows, -1)}</g></g>`).join('') + KART_PLUS.map(plus).join('');
+        // the speed lines (only while driving off): thin 1 px dashes streaming back from the kart, two sets that swap
+        // so they seem to rush past; each has a lighter lead pixel. [y, x of the tail, x of the head]
+        const dash = ([y, x0, x1]) => `<path d="${'M' + x0 + ' ' + y + 'h' + (x1 - x0) + 'v1h-' + (x1 - x0) + 'z'}"/><path class="hd" d="${px(x1, y)}"/>`;
+        const lines = '<g class="lines"><g class="lA">' + [[8, -17, -9], [13, -22, -11], [18, -14, -7], [22, -21, -12]].map(dash).join('') + '</g><g class="lB">' + [[6, -12, -5], [11, -17, -8], [16, -22, -13], [20, -13, -6], [24, -19, -11]].map(dash).join('') + '</g></g>';
         return `<svg viewBox="-${KART_PAD_L} 0 ${KART_W + KART_PAD_L} ${KART_H}" width="${(KART_W + KART_PAD_L) * KART_PX}" height="${KART_H * KART_PX}" shape-rendering="crispEdges">` +
-            lines + flame + body + hubs + `<g class="sparks">${sparks}</g></svg>`;
+            lines + body + hubs + `<g class="sparks">${sparks}</g></svg>`;
     }
     function removeKartLane() {
         const lane = document.getElementById('elm2-kart-lane');
@@ -2848,13 +2931,13 @@
         kart.style.bottom = '0';
         lane.appendChild(kart);
         document.body.appendChild(lane);
-        // far enough to be completely under the panel, flame and speed lines included (the lane clips at its edge)
+        // far enough to be completely under the panel, speed lines included (the lane clips at its edge)
         kart._dist = onLeft ? laneW - left : -(left + boxW);
         return kart;
     }
-    // Mario Kart start: the kart charges while the lights count down, like a drift mini-turbo (blue sparks and a small
-    // flame at 3, yellow at 2, purple at 1), the same single shake for each colour; it stays put until the lights go green, then
-    // drives off under the panel with a full-size purple boost and speed lines.
+    // Mario Kart start: the kart charges while the lights count down, like a drift mini-turbo (drift sparks that grow
+    // with each stage: blue at 3, orange and yellow at 2, pink at 1), the same single shake for each colour; it stays put
+    // until the lights go green, then drives off under the panel with pink speed lines.
     function chargeKart(kart, stage) {
         if (!kart || !kart.isConnected) return;
         kart.classList.remove('c1', 'c2', 'c3');
@@ -3445,6 +3528,7 @@
         void pane.offsetWidth;
         pane.classList.toggle('open', shouldOpen);
         overlay.classList.toggle('open', shouldOpen);
+        followBackdrops(); // the title bar dims with the overlay
     }
     function injectSettingsPane() {
         if (document.getElementById('elm-settings-pane')) return;
@@ -3461,6 +3545,12 @@
                 <div class="settings-title">Settings</div>
             </div>
             <div class="settings-body">
+                <div id="elm-install-card" class="elm-install" hidden>
+                    <button id="elm-install-x" class="elm-install-x" aria-label="Dismiss"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>
+                    <div class="elm-install-title">Install as an app</div>
+                    <p>Open Element451 in its own window, without the browser's tabs and address bar.</p>
+                    <button id="elm-install-btn" class="elm-install-btn">Install</button>
+                </div>
                 <div class="settings-section-title">Automation</div>
                 <div class="elm-list">
                 <div class="elm-item">
@@ -3544,6 +3634,15 @@
         `;
         document.body.appendChild(pane);
         document.getElementById('elm-settings-close').onclick = () => toggleSettingsPane(false);
+        document.getElementById('elm-install-btn').onclick = async () => {
+            const prompt = installPrompt;
+            if (!prompt) return;
+            installPrompt = null; // Chrome allows one prompt() per event
+            syncInstallCard();
+            try { await prompt.prompt(); } catch (e) { /* the dialog could not open; Chrome offers a new event later */ }
+        };
+        document.getElementById('elm-install-x').onclick = () => { localStorage.setItem('elm_install_dismissed', 'true'); syncInstallCard(); };
+        syncInstallCard();
         function toggleHtml(id) {
             return `<label class="elm-toggle-switch"><input type="checkbox" id="${id}"><span class="elm-toggle-slider"></span></label>`;
         }

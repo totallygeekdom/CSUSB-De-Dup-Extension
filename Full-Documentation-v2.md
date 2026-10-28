@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.221`, shown in the settings pane as `v2.210` |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.227`, shown in the settings pane |
 | Element451 - Database v2 | `database-v2.js` | `@version 2.62` |
 | Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.12`, see [section 17](#17-database-merge) |
 
@@ -298,7 +298,7 @@ Merging is permanent, so auto-merge is opt-in (**When done = Merge**, which rese
 
    The length is the **Merge countdown** setting (default 4 s, minimum 2 s), and that is the whole wait. The exception is **4 seconds, race lights** (stored as `elm_merge_countdown = race`): a start signal instead of the ring. Three dark lamps (*Get ready…*), red lamps at 3, 2 and 1 seconds left, then all green with *GO!* for 0.3 s before the click; the lamp steps are shortened to 0.925 s so the whole style still takes exactly 4 s.
 
-   **Kart:** with race lights, a pixel-art go-kart with the CSUSB coyote waits in the dimmed strip beside the merge panel. It "charges" like a Mario Kart drift mini-turbo while the lights count down (blue sparks at 3, yellow at 2, purple at 1, one shake per colour) and drives off under the panel when the lights go green. It is drawn as inline SVG (a text bitmap, one path per colour). It is skipped if the strip is narrower than about 200 px or *reduce motion* is on, and it sits above the page dimming and below the toasts.
+   **Kart:** with race lights, a pixel-art go-kart with the CSUSB coyote (a 28 × 29 px sprite) waits in the dimmed strip beside the merge panel. It charges like a Mario Kart drift mini-turbo while the lights count down: drift sparks at the wheels, **blue** at 3, **orange and yellow** at 2 and **pink** at 1, with one shake of the kart per colour. The sparks are a trail at each wheel, which grows with each stage (small, medium, large), plus small plus-shaped sparks that flare, drift back and go out (the first colour throws fewer), and the wheels flicker as they turn. When the lights go green the kart drives off under the panel with pink speed lines streaming behind it (thin pixel dashes in two sets that swap, each with a lighter lead pixel). It is drawn as inline SVG (a text bitmap, one path per colour). It is skipped if the strip is narrower than about 200 px or *reduce motion* is on, and it sits above the page dimming and below the toasts.
 3. Cancelling, or the pair changing, aborts and shows a toast.
 4. When the countdown ends, a **final gate** re-checks: the pair is unchanged and unblocked, every conflicting field has a selected side (rows that *need review* stop the merge), no twins flag, and the Merge Contacts button exists and is enabled. If it fails because a field needs review, the pair stays on screen. Any other failure: Auto-Skip on → skip, off → a toast says why ("Auto-merge stopped: …").
 5. Only then is **Merge Contacts** clicked (once per pair), and the merge-tracking logic takes over.
@@ -333,9 +333,13 @@ All of these are CSS/DOM additions made by the main script. Colours use a Materi
 
 - A 40px round **gear** button (an inline SVG, outlined Material "settings", so macOS does not draw an emoji) opens the settings pane. If the Database script is installed, a tonal `Database N` pill sits just left of it (then the hidden Merges counter, when shown: order is Database, Merges, gear).
 
+- **Title bar colour**: the script sets `<meta name="theme-color">` to the header colour it samples, so an installed web app's title bar (and the browser toolbar on mobile) matches the Element451 header. It darkens live with the page: while anything dims the whole window, the colour is the header colour blended with that dim layer. That covers a profile's sidebar and dialogs (`.cdk-overlay-backdrop`), our settings pane's overlay, and any other window-wide layer whose class contains `backdrop` or `scrim` (this is how the Advanced Filters panel is picked up). The colour follows the fade in and out and returns to the header colour when the layer closes. Layers that cover only part of the window, like our countdown scrim over the merge panel, are ignored.
+
 ### 10.3 Settings pane
 
 A right-hand Material 3 panel with a close button at the top left next to the title, laid out as an **M3 Expressive list**: each setting (and each Database button) is its own light container, with large outer corners on the first and last of a group (`.elm-list` / `.elm-item`). Controls: a discrete Material 3 **slider** (stop dots, value bubble while dragging), two **segmented buttons** (Use picks from, When done), selects for the countdown and department, and Material 3 switches. Descriptions under each control reserve their height so the controls below do not jump. A build line shows `New layout · v2-build-N`.
+
+**Install as an app card** (top of the pane): shown only while Chrome says the page can be installed (the script holds the `beforeinstallprompt` event until you click **Install**, which opens Chrome's own install dialog). It looks like the extension popup's "One setting to turn on" card, and its **X** hides it for good (`elm_install_dismissed`). It does not show when the app is already installed, in browsers without installable web apps (Firefox), or if Chrome never offered the install.
 
 ### 10.4 List page
 
@@ -433,6 +437,7 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 | `elm_merge_countdown` | main | Cancel window seconds (2–15) |
 | `elm_auto_skip_blocked` | main | Auto-Skip |
 | `elm_next_after_merge` | main | Next after merge (default on) |
+| `elm_install_dismissed` | main | the X on the Install as an app card was clicked |
 | `elm_outcome_toasts` | main | Toasts switch (default on; forced off with the slider on None, forced on while Auto-Skip or auto-merge is on) |
 | `elm_highlight_rows` | main | Highlight Rows |
 | `elm_allowed_department` | main | Allowed Department |

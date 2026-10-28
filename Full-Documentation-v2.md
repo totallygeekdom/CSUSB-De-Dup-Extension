@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.225`, shown in the settings pane |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.224`, shown in the settings pane |
 | Element451 - Database v2 | `database-v2.js` | `@version 2.62` |
 | Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.12`, see [section 17](#17-database-merge) |
 
@@ -339,7 +339,7 @@ All of these are CSS/DOM additions made by the main script. Colours use a Materi
 
 A right-hand Material 3 panel with a close button at the top left next to the title, laid out as an **M3 Expressive list**: each setting (and each Database button) is its own light container, with large outer corners on the first and last of a group (`.elm-list` / `.elm-item`). Controls: a discrete Material 3 **slider** (stop dots, value bubble while dragging), two **segmented buttons** (Use picks from, When done), selects for the countdown and department, and Material 3 switches. Descriptions under each control reserve their height so the controls below do not jump. A build line shows `New layout · v2-build-N`.
 
-**Install as an app card** (top of the pane): shown only while Chrome says the page can be installed (the script holds the `beforeinstallprompt` event until you click **Install**, which opens Chrome's own install dialog). It looks like the extension popup's "One setting to turn on" card, and it is shown only once: its **X**, or clicking **Install** (whether or not you accept Chrome's dialog), hides it for good (`elm_install_dismissed` in the browser's local storage for that Element451 address). It does not show when the app is already installed, in browsers without installable web apps (Firefox), or if Chrome never offered the install.
+**Install as an app card** (top of the pane): shown only while Chrome says the page can be installed (the script holds the `beforeinstallprompt` event until you click **Install**, which opens Chrome's own install dialog). It looks like the extension popup's "One setting to turn on" card, and its **X** hides it for good (`elm_install_dismissed`). It does not show when the app is already installed, in browsers without installable web apps (Firefox), or if Chrome never offered the install.
 
 ### 10.4 List page
 
@@ -437,7 +437,7 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 | `elm_merge_countdown` | main | Cancel window seconds (2–15) |
 | `elm_auto_skip_blocked` | main | Auto-Skip |
 | `elm_next_after_merge` | main | Next after merge (default on) |
-| `elm_install_dismissed` | main | the Install as an app card was dismissed or Install was clicked (never shown again) |
+| `elm_install_dismissed` | main | the X on the Install as an app card was clicked |
 | `elm_outcome_toasts` | main | Toasts switch (default on; forced off with the slider on None, forced on while Auto-Skip or auto-merge is on) |
 | `elm_highlight_rows` | main | Highlight Rows |
 | `elm_allowed_department` | main | Allowed Department |

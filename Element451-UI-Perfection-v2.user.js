@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.225
+// @version      2.226
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.225'; // keep in sync with @version
+    const VERSION = '2.226'; // keep in sync with @version
     // Chrome's install prompt for the web app: held back until Install is clicked on the card at the top of the
     // settings pane. The card shows only while Chrome says the page is installable, and the X hides it for good.
     let installPrompt = null;
@@ -180,6 +180,8 @@
         #elm2-kart-lane .elm2-kart .flame { transform-box: fill-box; transform-origin: 100% 50%; }
         #elm2-kart-lane .elm2-kart.c1 .sparks, #elm2-kart-lane .elm2-kart.c2 .sparks, #elm2-kart-lane .elm2-kart.c3 .sparks { opacity: 1; }
         #elm2-kart-lane .elm2-kart.c1 .pl.x { display: none; } /* the first colour throws fewer sparks */
+        #elm2-kart-lane .elm2-kart .tr { display: none; } /* the wheel trails grow with each stage (the drive-off keeps the last size) */
+        #elm2-kart-lane .elm2-kart.c1 .t1, #elm2-kart-lane .elm2-kart.c2 .t2, #elm2-kart-lane .elm2-kart.c3 .t3 { display: inline; }
         /* Each spark is a small plus that flares and drifts back and down, then goes out; the five are out of step. */
         #elm2-kart-lane .elm2-kart .pl { animation: elm2-kart-spark .48s steps(1) infinite; animation-delay: var(--d, 0s); }
         #elm2-kart-lane .elm2-kart .pl .pa { animation: elm2-kart-arm .48s steps(1) infinite; animation-delay: var(--d, 0s); }
@@ -2869,10 +2871,15 @@
         w: 28, h: 29
     };
     const KART_PX = 4, KART_W = KART.w, KART_H = KART.h, KART_PAD_L = 22; // 22 px of room on the left for the sparks, flame and speed lines
-    // Drift sparks, in sprite pixels: the centre of each plus-shaped spark (x = left out in the first stage) and, for
-    // each wheel, the corner of its trail of sparks (orange pixels outside, yellow inside).
+    // Drift sparks, in sprite pixels: the centre of each plus-shaped spark (the last number is 1 for the ones left out in
+    // the first stage) and, for each wheel, a trail of sparks (O = the outer colour, Y = the inner one) that grows with
+    // each stage. The trails sit on the ground line and start at x = -1 (rear wheel) and x = 19 (front wheel).
     const KART_PLUS = [[-2, 22, 1], [-4, 26, 1], [7, 25, 0], [13, 23, 1], [16, 26, 0]];
-    const KART_TRAIL = { origin: [[-1, 25], [19, 26]], rows: ['OY....', 'OYY...', '.OYY..', 'OOOYYY'] };
+    const KART_TRAILS = [
+        ['OY..', '.OY.', 'OOYY'],
+        ['OY....', 'OYY...', '.OYY..', 'OOOYYY'],
+        ['OY......', 'OYY.....', '.OYYY...', '.OOYYY..', 'OOOOYYYY']];
+    const KART_TRAIL_X = [-1, 19], KART_GROUND = 29; // the row under the wheels
     // wheel glints: two diagonal pairs of rim pixels that swap, so the wheels look like they turn
     const KART_GLINTS = [[[3, 23], [4, 27], [23, 24], [24, 27]], [[5, 24], [2, 26], [25, 25], [22, 26]]];
     function kartSvg() {
@@ -2881,15 +2888,15 @@
         const body = Object.keys(runs).map(c => `<path fill="${KART.pal[c]}" d="${runs[c]}"/>`).join('');
         const px = (x, y) => 'M' + x + ' ' + y + 'h1v1h-1z';
         const plus = ([x, y, extra], i) => `<g class="pl p${i}${extra ? ' x' : ''}"><path class="so pa" d="${px(x, y - 1) + px(x - 1, y) + px(x + 1, y) + px(x, y + 1)}"/><path class="sy" d="${px(x, y)}"/></g>`;
-        const trail = (shift) => KART_TRAIL.origin.map(([ox, oy]) => {
+        const trail = (rows, shift) => KART_TRAIL_X.map((ox) => {
             let o = '', y2 = '';
-            KART_TRAIL.rows.forEach((r, j) => [...r].forEach((c, i) => { if (c === 'O') o += px(ox + i + shift, oy + j); else if (c === 'Y') y2 += px(ox + i + shift, oy + j); }));
+            rows.forEach((r, j) => [...r].forEach((c, i) => { const x = ox + i + shift, y = KART_GROUND - rows.length + j; if (c === 'O') o += px(x, y); else if (c === 'Y') y2 += px(x, y); }));
             return `<path class="so" d="${o}"/><path class="sy" d="${y2}"/>`;
         }).join('');
         const glints = (g) => `<path fill="#ceefef" d="${g.map(([x, y]) => px(x, y)).join('')}"/>`;
         const hubs = `<g class="hubA">${glints(KART_GLINTS[0])}</g><g class="hubB">${glints(KART_GLINTS[1])}</g>`;
-        // the sparks: a trail at each wheel (it flickers between two shapes) and five plus-shaped sparks; the colour comes from the stage
-        const sparks = `<g class="bA">${trail(0)}</g><g class="bB">${trail(-1)}</g>` + KART_PLUS.map(plus).join('');
+        // the sparks: a trail at each wheel (it flickers between two shapes; one size per stage) and five plus-shaped sparks; the colour comes from the stage
+        const sparks = KART_TRAILS.map((rows, i) => `<g class="tr t${i + 1}"><g class="bA">${trail(rows, 0)}</g><g class="bB">${trail(rows, -1)}</g></g>`).join('') + KART_PLUS.map(plus).join('');
         // the exhaust flame (only while driving off) is drawn from the exhaust pipe, which ends at x = 3, y = 17..19
         const flame = '<g transform="translate(3 -3)"><g class="flame"><path style="fill:var(--c,#ff9800)" d="M-9 20h9v3h-9zM-16 21h7v1h-7z"/><path style="fill:var(--c2,#ffe0b2)" d="M-11 21h11v1h-11zM-5 20h5v3h-5z"/><path fill="#fff" d="M-6 21h6v1h-6z"/></g></g>';
         const lines = '<g class="lines"><path d="M-22 12h9v1h-9zM-18 18h12v1h-12zM-21 25h10v1h-10z"/></g>';

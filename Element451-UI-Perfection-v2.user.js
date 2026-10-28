@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.229
+// @version      2.230
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.229'; // keep in sync with @version
+    const VERSION = '2.230'; // keep in sync with @version
     // Chrome's install prompt for the web app: held back until Install is clicked on the card at the top of the
     // settings pane. The card shows only while Chrome says the page is installable, and the X hides it for good.
     let installPrompt = null;
@@ -57,9 +57,10 @@
             const c = document.createElement('canvas');
             c.width = c.height = n;
             const g = c.getContext('2d');
-            g.fillStyle = hex; g.fillRect(0, 0, n, n); // full-bleed, with the logo well inside the safe area for round and rounded icons
+            g.fillStyle = hex;
+            g.beginPath(); g.roundRect(0, 0, n, n, n * 0.22); g.fill(); // rounded corners, transparent outside them
             if (ink) {
-                const w = Math.round(n * 0.62), h = Math.round(w * ink.height / ink.width);
+                const w = Math.round(n * 0.68), h = Math.round(w * ink.height / ink.width);
                 g.imageSmoothingQuality = 'high';
                 g.drawImage(ink, Math.round((n - w) / 2), Math.round((n - h) / 2), w, h);
             }
@@ -67,7 +68,7 @@
         };
         const base = location.origin + '/';
         const manifest = { name: 'Element451', short_name: 'Element451', id: base, start_url: base, scope: base, display: 'standalone', background_color: hex, theme_color: hex,
-            icons: [192, 512].map(n => ({ src: icon(n), sizes: n + 'x' + n, type: 'image/png', purpose: 'any maskable' })) };
+            icons: [192, 512].map(n => ({ src: icon(n), sizes: n + 'x' + n, type: 'image/png', purpose: 'any' })) };
         document.addEventListener('securitypolicyviolation', (e) => {
             if (e.violatedDirective.startsWith('manifest-src') || e.violatedDirective.startsWith('default-src')) console.log('[elm2] the page\'s security policy refuses an added web app manifest, so Chrome will not offer to install it');
         }, { once: true });

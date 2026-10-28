@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.227`, shown in the settings pane |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.228`, shown in the settings pane |
 | Element451 - Database v2 | `database-v2.js` | `@version 2.62` |
 | Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.12`, see [section 17](#17-database-merge) |
 
@@ -339,7 +339,7 @@ All of these are CSS/DOM additions made by the main script. Colours use a Materi
 
 A right-hand Material 3 panel with a close button at the top left next to the title, laid out as an **M3 Expressive list**: each setting (and each Database button) is its own light container, with large outer corners on the first and last of a group (`.elm-list` / `.elm-item`). Controls: a discrete Material 3 **slider** (stop dots, value bubble while dragging), two **segmented buttons** (Use picks from, When done), selects for the countdown and department, and Material 3 switches. Descriptions under each control reserve their height so the controls below do not jump. A build line shows `New layout · v2-build-N`.
 
-**Install as an app card** (top of the pane): shown only while Chrome says the page can be installed (the script holds the `beforeinstallprompt` event until you click **Install**, which opens Chrome's own install dialog). It looks like the extension popup's "One setting to turn on" card, and its **X** hides it for good (`elm_install_dismissed`). It does not show when the app is already installed, in browsers without installable web apps (Firefox), or if Chrome never offered the install.
+**Install as an app card** (top of the pane): shown only while Chrome says the page can be installed (the script holds the `beforeinstallprompt` event until you click **Install**, which opens Chrome's own install dialog). It looks like the extension popup's "One setting to turn on" card, and its **X** hides it for good (`elm_install_dismissed`). Element451 ships no web app manifest, so the script adds one itself (a blob `<link rel="manifest">` named *Element451*, a standalone window starting at the site root, and an orange icon with the coyote kart drawn on a canvas); Chrome then offers the install as it would for any web app. If the page's security policy (`manifest-src` / `default-src`) refuses it, the console says `[elm2] the page's security policy refuses an added web app manifest…` and nothing else changes. The card does not show when the app is already installed or in browsers without installable web apps (Firefox).
 
 ### 10.4 List page
 

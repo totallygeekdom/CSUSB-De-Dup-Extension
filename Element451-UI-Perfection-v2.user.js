@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.231
+// @version      2.230
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.231'; // keep in sync with @version
+    const VERSION = '2.230'; // keep in sync with @version
     // Chrome's install prompt for the web app: held back until Install is clicked on the card at the top of the
     // settings pane. The card shows only while Chrome says the page is installable, and the X hides it for good.
     let installPrompt = null;
@@ -23,7 +23,7 @@
         if (card) card.hidden = !installPrompt || localStorage.getItem('elm_install_dismissed') === 'true';
     }
     window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; syncInstallCard(); console.log('[elm2] Chrome offered to install the page as an app (Settings, top)'); });
-    window.addEventListener('appinstalled', () => { installPrompt = null; localStorage.setItem('elm_install_dismissed', 'true'); syncInstallCard(); }); // installed: the card is done, even if the app is uninstalled later
+    window.addEventListener('appinstalled', () => { installPrompt = null; syncInstallCard(); });
     // Element451 ships no web app manifest, so Chrome never offers the install. When the page has none, the script adds one
     // (name, the CSUSB logo on the header orange as the icon, start page, standalone window); Chrome then offers the install as it
     // would for any web app. If the page's security policy (manifest-src / default-src) refuses it, the console says so and nothing changes.

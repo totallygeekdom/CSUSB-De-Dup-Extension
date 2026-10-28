@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.227
+// @version      2.228
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.227'; // keep in sync with @version
+    const VERSION = '2.228'; // keep in sync with @version
     // Chrome's install prompt for the web app: held back until Install is clicked on the card at the top of the
     // settings pane. The card shows only while Chrome says the page is installable, and the X hides it for good.
     let installPrompt = null;
@@ -22,8 +22,38 @@
         const card = document.getElementById('elm-install-card');
         if (card) card.hidden = !installPrompt || localStorage.getItem('elm_install_dismissed') === 'true';
     }
-    window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; syncInstallCard(); });
+    window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; syncInstallCard(); console.log('[elm2] Chrome offered to install the page as an app (Settings, top)'); });
     window.addEventListener('appinstalled', () => { installPrompt = null; syncInstallCard(); });
+    // Element451 ships no web app manifest, so Chrome never offers the install. When the page has none, the script adds one
+    // (name, orange icon with the coyote, start page, standalone window); Chrome then offers the install as it would for
+    // any web app. If the page's security policy (manifest-src / default-src) refuses it, the console says so and nothing changes.
+    let manifestAdded = false;
+    function ensureManifest() {
+        if (manifestAdded) return;
+        manifestAdded = true;
+        if (document.querySelector('link[rel="manifest"]')) return;
+        const hex = headerRgb ? '#' + headerRgb.map(v => Math.round(v).toString(16).padStart(2, '0')).join('') : '#ef6c00';
+        const icon = (n) => {
+            const c = document.createElement('canvas');
+            c.width = c.height = n;
+            const g = c.getContext('2d');
+            g.fillStyle = hex; g.fillRect(0, 0, n, n); // full-bleed, with the kart well inside the safe area
+            const px = Math.max(1, Math.floor(n * 0.62 / KART.w));
+            const ox = Math.round((n - KART.w * px) / 2), oy = Math.round((n - KART.h * px) / 2);
+            KART.rows.forEach((r, y) => [...r].forEach((ch, x) => { if (ch !== '.') { g.fillStyle = KART.pal[ch]; g.fillRect(ox + x * px, oy + y * px, px, px); } }));
+            return c.toDataURL('image/png');
+        };
+        const base = location.origin + '/';
+        const manifest = { name: 'Element451', short_name: 'Element451', id: base, start_url: base, scope: base, display: 'standalone', background_color: hex, theme_color: hex,
+            icons: [192, 512].map(n => ({ src: icon(n), sizes: n + 'x' + n, type: 'image/png', purpose: 'any maskable' })) };
+        document.addEventListener('securitypolicyviolation', (e) => {
+            if (e.violatedDirective.startsWith('manifest-src') || e.violatedDirective.startsWith('default-src')) console.log('[elm2] the page\'s security policy refuses an added web app manifest, so Chrome will not offer to install it');
+        }, { once: true });
+        const link = document.createElement('link');
+        link.rel = 'manifest';
+        link.href = URL.createObjectURL(new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' }));
+        document.head.appendChild(link);
+    }
     // =========================================================
     // CONFIGURATION (same localStorage keys as the classic script, so settings
     // carry over if both scripts are ever installed side by side)
@@ -3440,6 +3470,7 @@
         injectMergeCounter();
         colorScoreChips();
         syncHeaderColor(); // the header is on every page, not just the review page
+        ensureManifest(); // after the header colour is known (the icon uses it)
         injectPager();
         injectHistorySearch();
         stripFilterTooltips();

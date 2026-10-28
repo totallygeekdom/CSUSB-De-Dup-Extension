@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.226
+// @version      2.227
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.226'; // keep in sync with @version
+    const VERSION = '2.227'; // keep in sync with @version
     // Chrome's install prompt for the web app: held back until Install is clicked on the card at the top of the
     // settings pane. The card shows only while Chrome says the page is installable, and the X hides it for good.
     let installPrompt = null;
@@ -173,11 +173,13 @@
         #elm2-kart-lane .elm2-kart.c3 { --c: #ff4fa3; --c2: #ffd9ec; }
         #elm2-kart-lane .elm2-kart .hubA, #elm2-kart-lane .elm2-kart .bA { animation: elm2-kart-a .24s steps(1) infinite; }
         #elm2-kart-lane .elm2-kart .hubB, #elm2-kart-lane .elm2-kart .bB { animation: elm2-kart-b .24s steps(1) infinite; }
-        #elm2-kart-lane .elm2-kart .sparks, #elm2-kart-lane .elm2-kart .flame, #elm2-kart-lane .elm2-kart .lines { opacity: 0; }
+        #elm2-kart-lane .elm2-kart .sparks, #elm2-kart-lane .elm2-kart .lines { opacity: 0; }
+        #elm2-kart-lane .elm2-kart .lA { animation: elm2-kart-a .16s steps(1) infinite; }
+        #elm2-kart-lane .elm2-kart .lB { animation: elm2-kart-b .16s steps(1) infinite; }
         #elm2-kart-lane .elm2-kart .so { fill: var(--c, #f09033); }
         #elm2-kart-lane .elm2-kart .sy { fill: var(--c2, #fff332); }
         #elm2-kart-lane .elm2-kart .lines path { fill: var(--c, #fff); }
-        #elm2-kart-lane .elm2-kart .flame { transform-box: fill-box; transform-origin: 100% 50%; }
+        #elm2-kart-lane .elm2-kart .lines .hd { fill: var(--c2, #fff); }
         #elm2-kart-lane .elm2-kart.c1 .sparks, #elm2-kart-lane .elm2-kart.c2 .sparks, #elm2-kart-lane .elm2-kart.c3 .sparks { opacity: 1; }
         #elm2-kart-lane .elm2-kart.c1 .pl.x { display: none; } /* the first colour throws fewer sparks */
         #elm2-kart-lane .elm2-kart .tr { display: none; } /* the wheel trails grow with each stage (the drive-off keeps the last size) */
@@ -188,12 +190,10 @@
         #elm2-kart-lane .elm2-kart .p1 { --d: -.12s; } #elm2-kart-lane .elm2-kart .p2 { --d: -.24s; }
         #elm2-kart-lane .elm2-kart .p3 { --d: -.36s; } #elm2-kart-lane .elm2-kart .p4 { --d: -.06s; }
         #elm2-kart-lane .elm2-kart.go svg { animation: none; }
-        #elm2-kart-lane .elm2-kart.go .flame { opacity: 1; scale: 1.6 1.3; animation: elm2-kart-flame .1s steps(1) infinite; }
         #elm2-kart-lane .elm2-kart.go .lines { opacity: 1; }
         @keyframes elm2-kart-bob { 0% { margin-top: 0; } 50% { margin-top: -4px; } }
         @keyframes elm2-kart-a { 0% { opacity: 1; } 50% { opacity: 0; } }
         @keyframes elm2-kart-b { 0% { opacity: 0; } 50% { opacity: 1; } }
-        @keyframes elm2-kart-flame { 0% { transform: scaleY(1); } 50% { transform: scaleY(.7); } }
         @keyframes elm2-kart-spark { 0% { opacity: 1; transform: translate(0, 0); } 25% { transform: translate(-1px, 0); } 50% { transform: translate(-2px, 1px); } 75% { opacity: 0; } }
         @keyframes elm2-kart-arm { 0% { opacity: 0; } 25% { opacity: 1; } 50% { opacity: 0; } }
         #elm2-merge-overlay .elm2-lamps { display: none; }
@@ -2834,7 +2834,7 @@
     // below the toasts (z-index 9990 < 10002).
     // The driver is the CSUSB coyote in side profile, upright in a go-kart, drawn as pixel art (28 x 29 px, a
     // 1 px dark outline, 7 px wheels at the bottom corners). It is stored as 29 short rows and drawn as one SVG path
-    // per colour (runs of pixels), so it is tiny. The drift sparks, the exhaust flame and the speed lines are
+    // per colour (runs of pixels), so it is tiny. The drift sparks and the speed lines are
     // drawn on top of it (kartSvg) and recoloured through --c / --c2 by the stage class (c1, c2, c3, go).
     const KART = {
         pal: { d: '#002929', a: '#0042f3', b: '#0084ff', c: '#ceefef', e: '#0000e7', t: '#294a4a', w: '#ffffff', g: '#7b7b7b', h: '#a0a0a0', i: '#b8b8b8', j: '#d0d0d0', u: '#4a6b6b', s: '#e7ad8c' },
@@ -2870,7 +2870,7 @@
             '..dddd................dddd..'],
         w: 28, h: 29
     };
-    const KART_PX = 4, KART_W = KART.w, KART_H = KART.h, KART_PAD_L = 22; // 22 px of room on the left for the sparks, flame and speed lines
+    const KART_PX = 4, KART_W = KART.w, KART_H = KART.h, KART_PAD_L = 22; // 22 px of room on the left for the sparks and speed lines
     // Drift sparks, in sprite pixels: the centre of each plus-shaped spark (the last number is 1 for the ones left out in
     // the first stage) and, for each wheel, a trail of sparks (O = the outer colour, Y = the inner one) that grows with
     // each stage. The trails sit on the ground line and start at x = -1 (rear wheel) and x = 19 (front wheel).
@@ -2897,11 +2897,12 @@
         const hubs = `<g class="hubA">${glints(KART_GLINTS[0])}</g><g class="hubB">${glints(KART_GLINTS[1])}</g>`;
         // the sparks: a trail at each wheel (it flickers between two shapes; one size per stage) and five plus-shaped sparks; the colour comes from the stage
         const sparks = KART_TRAILS.map((rows, i) => `<g class="tr t${i + 1}"><g class="bA">${trail(rows, 0)}</g><g class="bB">${trail(rows, -1)}</g></g>`).join('') + KART_PLUS.map(plus).join('');
-        // the exhaust flame (only while driving off) is drawn from the exhaust pipe, which ends at x = 3, y = 17..19
-        const flame = '<g transform="translate(3 -3)"><g class="flame"><path style="fill:var(--c,#ff9800)" d="M-9 20h9v3h-9zM-16 21h7v1h-7z"/><path style="fill:var(--c2,#ffe0b2)" d="M-11 21h11v1h-11zM-5 20h5v3h-5z"/><path fill="#fff" d="M-6 21h6v1h-6z"/></g></g>';
-        const lines = '<g class="lines"><path d="M-22 12h9v1h-9zM-18 18h12v1h-12zM-21 25h10v1h-10z"/></g>';
+        // the speed lines (only while driving off): thin 1 px dashes streaming back from the kart, two sets that swap
+        // so they seem to rush past; each has a lighter lead pixel. [y, x of the tail, x of the head]
+        const dash = ([y, x0, x1]) => `<path d="${'M' + x0 + ' ' + y + 'h' + (x1 - x0) + 'v1h-' + (x1 - x0) + 'z'}"/><path class="hd" d="${px(x1, y)}"/>`;
+        const lines = '<g class="lines"><g class="lA">' + [[8, -17, -9], [13, -22, -11], [18, -14, -7], [22, -21, -12]].map(dash).join('') + '</g><g class="lB">' + [[6, -12, -5], [11, -17, -8], [16, -22, -13], [20, -13, -6], [24, -19, -11]].map(dash).join('') + '</g></g>';
         return `<svg viewBox="-${KART_PAD_L} 0 ${KART_W + KART_PAD_L} ${KART_H}" width="${(KART_W + KART_PAD_L) * KART_PX}" height="${KART_H * KART_PX}" shape-rendering="crispEdges">` +
-            lines + flame + body + hubs + `<g class="sparks">${sparks}</g></svg>`;
+            lines + body + hubs + `<g class="sparks">${sparks}</g></svg>`;
     }
     function removeKartLane() {
         const lane = document.getElementById('elm2-kart-lane');
@@ -2930,13 +2931,13 @@
         kart.style.bottom = '0';
         lane.appendChild(kart);
         document.body.appendChild(lane);
-        // far enough to be completely under the panel, flame and speed lines included (the lane clips at its edge)
+        // far enough to be completely under the panel, speed lines included (the lane clips at its edge)
         kart._dist = onLeft ? laneW - left : -(left + boxW);
         return kart;
     }
-    // Mario Kart start: the kart charges while the lights count down, like a drift mini-turbo (blue sparks and a small
-    // flame at 3, yellow at 2, purple at 1), the same single shake for each colour; it stays put until the lights go green, then
-    // drives off under the panel with a full-size purple boost and speed lines.
+    // Mario Kart start: the kart charges while the lights count down, like a drift mini-turbo (drift sparks that grow
+    // with each stage: blue at 3, orange and yellow at 2, pink at 1), the same single shake for each colour; it stays put
+    // until the lights go green, then drives off under the panel with pink speed lines.
     function chargeKart(kart, stage) {
         if (!kart || !kart.isConnected) return;
         kart.classList.remove('c1', 'c2', 'c3');

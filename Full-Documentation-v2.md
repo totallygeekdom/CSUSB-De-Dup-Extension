@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.226`, shown in the settings pane |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.227`, shown in the settings pane |
 | Element451 - Database v2 | `database-v2.js` | `@version 2.62` |
 | Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.12`, see [section 17](#17-database-merge) |
 
@@ -298,7 +298,7 @@ Merging is permanent, so auto-merge is opt-in (**When done = Merge**, which rese
 
    The length is the **Merge countdown** setting (default 4 s, minimum 2 s), and that is the whole wait. The exception is **4 seconds, race lights** (stored as `elm_merge_countdown = race`): a start signal instead of the ring. Three dark lamps (*Get ready…*), red lamps at 3, 2 and 1 seconds left, then all green with *GO!* for 0.3 s before the click; the lamp steps are shortened to 0.925 s so the whole style still takes exactly 4 s.
 
-   **Kart:** with race lights, a pixel-art go-kart with the CSUSB coyote (a 28 × 29 px sprite) waits in the dimmed strip beside the merge panel. It charges like a Mario Kart drift mini-turbo while the lights count down: drift sparks at the wheels, **blue** at 3, **orange and yellow** at 2 and **pink** at 1, with one shake of the kart per colour. The sparks are a trail at each wheel, which grows with each stage (small, medium, large), plus small plus-shaped sparks that flare, drift back and go out (the first colour throws fewer), and the wheels flicker as they turn. When the lights go green the kart drives off under the panel with a flame from its exhaust and speed lines in the pink. It is drawn as inline SVG (a text bitmap, one path per colour). It is skipped if the strip is narrower than about 200 px or *reduce motion* is on, and it sits above the page dimming and below the toasts.
+   **Kart:** with race lights, a pixel-art go-kart with the CSUSB coyote (a 28 × 29 px sprite) waits in the dimmed strip beside the merge panel. It charges like a Mario Kart drift mini-turbo while the lights count down: drift sparks at the wheels, **blue** at 3, **orange and yellow** at 2 and **pink** at 1, with one shake of the kart per colour. The sparks are a trail at each wheel, which grows with each stage (small, medium, large), plus small plus-shaped sparks that flare, drift back and go out (the first colour throws fewer). When the lights go green the kart drives off under the panel with a flame from its exhaust and speed lines in the pink. It is drawn as inline SVG (a text bitmap, one path per colour). It is skipped if the strip is narrower than about 200 px or *reduce motion* is on, and it sits above the page dimming and below the toasts.
 3. Cancelling, or the pair changing, aborts and shows a toast.
 4. When the countdown ends, a **final gate** re-checks: the pair is unchanged and unblocked, every conflicting field has a selected side (rows that *need review* stop the merge), no twins flag, and the Merge Contacts button exists and is enabled. If it fails because a field needs review, the pair stays on screen. Any other failure: Auto-Skip on → skip, off → a toast says why ("Auto-merge stopped: …").
 5. Only then is **Merge Contacts** clicked (once per pair), and the merge-tracking logic takes over.

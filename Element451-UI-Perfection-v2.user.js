@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.225
+// @version      2.224
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.225'; // keep in sync with @version
+    const VERSION = '2.224'; // keep in sync with @version
     // Chrome's install prompt for the web app: held back until Install is clicked on the card at the top of the
     // settings pane. The card shows only while Chrome says the page is installable, and the X hides it for good.
     let installPrompt = null;
@@ -3619,7 +3619,6 @@
             const prompt = installPrompt;
             if (!prompt) return;
             installPrompt = null; // Chrome allows one prompt() per event
-            localStorage.setItem('elm_install_dismissed', 'true'); // the card is shown once: clicking Install counts, whether or not the dialog is accepted
             syncInstallCard();
             try { await prompt.prompt(); } catch (e) { /* the dialog could not open; Chrome offers a new event later */ }
         };

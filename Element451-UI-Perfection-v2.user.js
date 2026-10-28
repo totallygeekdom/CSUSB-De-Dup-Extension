@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.226
+// @version      2.227
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.226'; // keep in sync with @version
+    const VERSION = '2.227'; // keep in sync with @version
     // Chrome's install prompt for the web app: held back until Install is clicked on the card at the top of the
     // settings pane. The card shows only while Chrome says the page is installable, and the X hides it for good.
     let installPrompt = null;
@@ -171,8 +171,8 @@
         #elm2-kart-lane .elm2-kart.c1 { --c: #29b6f6; --c2: #e1f5fe; } /* the three drift-spark colours: blue, orange and yellow, pink */
         #elm2-kart-lane .elm2-kart.c2 { --c: #f09033; --c2: #fff332; }
         #elm2-kart-lane .elm2-kart.c3 { --c: #ff4fa3; --c2: #ffd9ec; }
-        #elm2-kart-lane .elm2-kart .hubA, #elm2-kart-lane .elm2-kart .bA { animation: elm2-kart-a .24s steps(1) infinite; }
-        #elm2-kart-lane .elm2-kart .hubB, #elm2-kart-lane .elm2-kart .bB { animation: elm2-kart-b .24s steps(1) infinite; }
+        #elm2-kart-lane .elm2-kart .bA { animation: elm2-kart-a .24s steps(1) infinite; }
+        #elm2-kart-lane .elm2-kart .bB { animation: elm2-kart-b .24s steps(1) infinite; }
         #elm2-kart-lane .elm2-kart .sparks, #elm2-kart-lane .elm2-kart .flame, #elm2-kart-lane .elm2-kart .lines { opacity: 0; }
         #elm2-kart-lane .elm2-kart .so { fill: var(--c, #f09033); }
         #elm2-kart-lane .elm2-kart .sy { fill: var(--c2, #fff332); }
@@ -2880,8 +2880,6 @@
         ['OY....', 'OYY...', '.OYY..', 'OOOYYY'],
         ['OY......', 'OYY.....', '.OYYY...', '.OOYYY..', 'OOOOYYYY']];
     const KART_TRAIL_X = [-1, 19], KART_GROUND = 29; // the row under the wheels
-    // wheel glints: two diagonal pairs of rim pixels that swap, so the wheels look like they turn
-    const KART_GLINTS = [[[3, 23], [4, 27], [23, 24], [24, 27]], [[5, 24], [2, 26], [25, 25], [22, 26]]];
     function kartSvg() {
         const runs = {};
         KART.rows.forEach((r, y) => { let x = 0; while (x < r.length) { const c = r[x]; if (c === '.') { x++; continue; } let e = x; while (e < r.length && r[e] === c) e++; runs[c] = (runs[c] || '') + 'M' + x + ' ' + y + 'h' + (e - x) + 'v1h-' + (e - x) + 'z'; x = e; } });
@@ -2893,15 +2891,13 @@
             rows.forEach((r, j) => [...r].forEach((c, i) => { const x = ox + i + shift, y = KART_GROUND - rows.length + j; if (c === 'O') o += px(x, y); else if (c === 'Y') y2 += px(x, y); }));
             return `<path class="so" d="${o}"/><path class="sy" d="${y2}"/>`;
         }).join('');
-        const glints = (g) => `<path fill="#ceefef" d="${g.map(([x, y]) => px(x, y)).join('')}"/>`;
-        const hubs = `<g class="hubA">${glints(KART_GLINTS[0])}</g><g class="hubB">${glints(KART_GLINTS[1])}</g>`;
         // the sparks: a trail at each wheel (it flickers between two shapes; one size per stage) and five plus-shaped sparks; the colour comes from the stage
         const sparks = KART_TRAILS.map((rows, i) => `<g class="tr t${i + 1}"><g class="bA">${trail(rows, 0)}</g><g class="bB">${trail(rows, -1)}</g></g>`).join('') + KART_PLUS.map(plus).join('');
         // the exhaust flame (only while driving off) is drawn from the exhaust pipe, which ends at x = 3, y = 17..19
         const flame = '<g transform="translate(3 -3)"><g class="flame"><path style="fill:var(--c,#ff9800)" d="M-9 20h9v3h-9zM-16 21h7v1h-7z"/><path style="fill:var(--c2,#ffe0b2)" d="M-11 21h11v1h-11zM-5 20h5v3h-5z"/><path fill="#fff" d="M-6 21h6v1h-6z"/></g></g>';
         const lines = '<g class="lines"><path d="M-22 12h9v1h-9zM-18 18h12v1h-12zM-21 25h10v1h-10z"/></g>';
         return `<svg viewBox="-${KART_PAD_L} 0 ${KART_W + KART_PAD_L} ${KART_H}" width="${(KART_W + KART_PAD_L) * KART_PX}" height="${KART_H * KART_PX}" shape-rendering="crispEdges">` +
-            lines + flame + body + hubs + `<g class="sparks">${sparks}</g></svg>`;
+            lines + flame + body + `<g class="sparks">${sparks}</g></svg>`;
     }
     function removeKartLane() {
         const lane = document.getElementById('elm2-kart-lane');

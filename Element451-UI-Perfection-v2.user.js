@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.233
+// @version      2.234
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.233'; // keep in sync with @version
+    const VERSION = '2.234'; // keep in sync with @version
     // Chrome's install prompt for the web app: held back until Install is clicked on the card at the top of the
     // settings pane. The card shows only while Chrome says the page is installable, and the X hides it for good.
     let installPrompt = null;
@@ -224,8 +224,12 @@
         #elm2-kart-lane .elm2-kart.c1 { --c: #29b6f6; --c2: #e1f5fe; } /* the three drift-spark colours: blue, orange and yellow, pink */
         #elm2-kart-lane .elm2-kart.c2 { --c: #f09033; --c2: #fff332; }
         #elm2-kart-lane .elm2-kart.c3 { --c: #ff4fa3; --c2: #ffd9ec; }
-        #elm2-kart-lane .elm2-kart .hubA, #elm2-kart-lane .elm2-kart .bA { animation: elm2-kart-a .24s steps(1) infinite; }
-        #elm2-kart-lane .elm2-kart .hubB, #elm2-kart-lane .elm2-kart .bB { animation: elm2-kart-b .24s steps(1) infinite; }
+        #elm2-kart-lane .elm2-kart .hubA { animation: elm2-kart-a .24s steps(1) infinite; }
+        #elm2-kart-lane .elm2-kart .hubB { animation: elm2-kart-b .24s steps(1) infinite; }
+        /* the wheel sparks billow to the left: three copies of each trail drift back and up, one after the other, and thin out */
+        #elm2-kart-lane .elm2-kart .pf { animation: elm2-kart-puff .48s steps(1) infinite; }
+        #elm2-kart-lane .elm2-kart .pf.f1 { animation-delay: -.16s; }
+        #elm2-kart-lane .elm2-kart .pf.f2 { animation-delay: -.32s; }
         #elm2-kart-lane .elm2-kart .sparks, #elm2-kart-lane .elm2-kart .lines { opacity: 0; }
         #elm2-kart-lane .elm2-kart .lA { animation: elm2-kart-a .16s steps(1) infinite; }
         #elm2-kart-lane .elm2-kart .lB { animation: elm2-kart-b .16s steps(1) infinite; }
@@ -248,6 +252,7 @@
         @keyframes elm2-kart-a { 0% { opacity: 1; } 50% { opacity: 0; } }
         @keyframes elm2-kart-b { 0% { opacity: 0; } 50% { opacity: 1; } }
         @keyframes elm2-kart-spark { 0% { opacity: 1; transform: translate(0, 0); } 25% { transform: translate(-1px, 0); } 50% { transform: translate(-2px, 1px); } 75% { opacity: 0; } }
+        @keyframes elm2-kart-puff { 0% { opacity: 1; transform: translate(0, 0); } 25% { transform: translate(-2px, -1px); } 50% { transform: translate(-4px, -1px); } 75% { opacity: .5; transform: translate(-6px, -2px); } }
         @keyframes elm2-kart-arm { 0% { opacity: 0; } 25% { opacity: 1; } 50% { opacity: 0; } }
         #elm2-merge-overlay .elm2-lamps { display: none; }
         #elm2-merge-overlay .elm2-merge-card.race .elm2-ring svg, #elm2-merge-overlay .elm2-merge-card.race #elm2-merge-count { display: none; }
@@ -2974,8 +2979,8 @@
         }).join('');
         const glints = (g) => `<path fill="#ceefef" d="${g.map(([x, y]) => px(x, y)).join('')}"/>`;
         const hubs = `<g class="hubA">${glints(KART_GLINTS[0])}</g><g class="hubB">${glints(KART_GLINTS[1])}</g>`;
-        // the sparks: a trail at each wheel (it flickers between two shapes; one size per stage) and five plus-shaped sparks; the colour comes from the stage
-        const sparks = KART_TRAILS.map((rows, i) => `<g class="tr t${i + 1}"><g class="bA">${trail(rows, 0)}</g><g class="bB">${trail(rows, -1)}</g></g>`).join('') + KART_PLUS.map(plus).join('');
+        // the sparks: a trail at each wheel (billowing to the left; one size per stage) and five plus-shaped sparks; the colour comes from the stage
+        const sparks = KART_TRAILS.map((rows, i) => `<g class="tr t${i + 1}">${[0, 1, 2].map(n => `<g class="pf f${n}">${trail(rows, 0)}</g>`).join('')}</g>`).join('') + KART_PLUS.map(plus).join('');
         // the speed lines (only while driving off): thin 1 px dashes streaming back from the kart, two sets that swap
         // so they seem to rush past; each has a lighter lead pixel. [y, x of the tail, x of the head]
         const dash = ([y, x0, x1]) => `<path d="${'M' + x0 + ' ' + y + 'h' + (x1 - x0) + 'v1h-' + (x1 - x0) + 'z'}"/><path class="hd" d="${px(x1, y)}"/>`;

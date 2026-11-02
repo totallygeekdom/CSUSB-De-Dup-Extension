@@ -252,7 +252,7 @@
         @keyframes elm2-kart-a { 0% { opacity: 1; } 50% { opacity: 0; } }
         @keyframes elm2-kart-b { 0% { opacity: 0; } 50% { opacity: 1; } }
         @keyframes elm2-kart-spark { 0% { opacity: 1; transform: translate(0, 0); } 25% { transform: translate(-1px, 0); } 50% { transform: translate(-2px, 1px); } 75% { opacity: 0; } }
-        @keyframes elm2-kart-puff { 0% { opacity: 1; transform: translate(0, 0); } 25% { transform: translate(-2px, -1px); } 50% { transform: translate(-4px, -1px); } 75% { opacity: .5; transform: translate(-6px, -2px); } }
+        @keyframes elm2-kart-puff { 0% { opacity: 1; transform: translate(0, 0); } 25% { transform: translate(-2px, 0); } 50% { transform: translate(-4px, 0); } 75% { opacity: .5; transform: translate(-6px, 0); } }
         @keyframes elm2-kart-arm { 0% { opacity: 0; } 25% { opacity: 1; } 50% { opacity: 0; } }
         #elm2-merge-overlay .elm2-lamps { display: none; }
         #elm2-merge-overlay .elm2-merge-card.race .elm2-ring svg, #elm2-merge-overlay .elm2-merge-card.race #elm2-merge-count { display: none; }

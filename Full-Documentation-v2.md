@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.232`, shown in the settings pane |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.233`, shown in the settings pane |
 | Element451 - Database v2 | `database-v2.js` | `@version 2.62` |
 | Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.12`, see [section 17](#17-database-merge) |
 
@@ -260,7 +260,7 @@ Only rows where the two sides differ (conflicts) are considered. Rules run **in 
 | 8 | Date of birth validity | Reject a year that starts with 0 or is below 1900 |
 | 9 | First generation | Prefer `Yes` over `No` |
 | 10 | Intended term | Prefer the later term code in parentheses, e.g. `(2274)` |
-| 11 | Name case | If the values differ only by case, prefer Title Case over ALL CAPS or all lower-case |
+| 11 | Name case | If the values differ only by case, prefer Title Case over ALL CAPS or all lower-case. A single letter (an initial) has no Title Case, so the capital wins (`I` over `i`) |
 
 **Fallback and manual review.** After the rules, every conflicting row ends in one of three states:
 

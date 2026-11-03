@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.234
+// @version      2.235
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.234'; // keep in sync with @version
+    const VERSION = '2.235'; // keep in sync with @version
     // Chrome's install prompt for the web app: held back until Install is clicked on the card at the top of the
     // settings pane. The card shows only while Chrome says the page is installable, and the X hides it for good.
     let installPrompt = null;
@@ -226,10 +226,8 @@
         #elm2-kart-lane .elm2-kart.c3 { --c: #ff4fa3; --c2: #ffd9ec; }
         #elm2-kart-lane .elm2-kart .hubA { animation: elm2-kart-a .24s steps(1) infinite; }
         #elm2-kart-lane .elm2-kart .hubB { animation: elm2-kart-b .24s steps(1) infinite; }
-        /* the wheel sparks billow to the left: three copies of each trail drift back and up, one after the other, and thin out */
-        #elm2-kart-lane .elm2-kart .pf { animation: elm2-kart-puff .48s steps(1) infinite; }
-        #elm2-kart-lane .elm2-kart .pf.f1 { animation-delay: -.16s; }
-        #elm2-kart-lane .elm2-kart .pf.f2 { animation-delay: -.32s; }
+        /* the wheel sparks: each trail stays put and single sparks fly off it to the left, one step at a time, thinning out */
+        #elm2-kart-lane .elm2-kart .pt { animation: elm2-kart-puff .48s steps(1) infinite; }
         #elm2-kart-lane .elm2-kart .sparks, #elm2-kart-lane .elm2-kart .lines { opacity: 0; }
         #elm2-kart-lane .elm2-kart .lA { animation: elm2-kart-a .16s steps(1) infinite; }
         #elm2-kart-lane .elm2-kart .lB { animation: elm2-kart-b .16s steps(1) infinite; }
@@ -2964,6 +2962,7 @@
         ['OY....', 'OYY...', '.OYY..', 'OOOYYY'],
         ['OY......', 'OYY.....', '.OYYY...', '.OOYYY..', 'OOOOYYYY']];
     const KART_TRAIL_X = [-1, 19], KART_GROUND = 29; // the row under the wheels
+    const KART_FLYOFF = [[28, 0, 0, 1], [28, -.32, 0, 1], [27, -.16, 1, 2], [27, -.24, 0, 3]];
     // wheel glints: two diagonal pairs of rim pixels that swap, so the wheels look like they turn
     const KART_GLINTS = [[[3, 23], [4, 27], [23, 24], [24, 27]], [[5, 24], [2, 26], [25, 25], [22, 26]]];
     function kartSvg() {
@@ -2972,6 +2971,10 @@
         const body = Object.keys(runs).map(c => `<path fill="${KART.pal[c]}" d="${runs[c]}"/>`).join('');
         const px = (x, y) => 'M' + x + ' ' + y + 'h1v1h-1z';
         const plus = ([x, y, extra], i) => `<g class="pl p${i}${extra ? ' x' : ''}"><path class="so pa" d="${px(x, y - 1) + px(x - 1, y) + px(x + 1, y) + px(x, y + 1)}"/><path class="sy" d="${px(x, y)}"/></g>`;
+        // single sparks that leave each trail and fly off to the left (the animation moves them 2 px a step), more of them each stage;
+        // [row, delay in s, inner colour, first stage that has it]
+        const flyoffs = (stage) => KART_FLYOFF.filter(f => f[3] <= stage).map(([y, delay, inner]) =>
+            KART_TRAIL_X.map(x => `<g class="pt" style="animation-delay:${delay}s"><path class="${inner ? 'sy' : 'so'}" d="${px(x - 1, y)}"/></g>`).join('')).join('');
         const trail = (rows, shift) => KART_TRAIL_X.map((ox) => {
             let o = '', y2 = '';
             rows.forEach((r, j) => [...r].forEach((c, i) => { const x = ox + i + shift, y = KART_GROUND - rows.length + j; if (c === 'O') o += px(x, y); else if (c === 'Y') y2 += px(x, y); }));
@@ -2979,8 +2982,8 @@
         }).join('');
         const glints = (g) => `<path fill="#ceefef" d="${g.map(([x, y]) => px(x, y)).join('')}"/>`;
         const hubs = `<g class="hubA">${glints(KART_GLINTS[0])}</g><g class="hubB">${glints(KART_GLINTS[1])}</g>`;
-        // the sparks: a trail at each wheel (billowing to the left; one size per stage) and five plus-shaped sparks; the colour comes from the stage
-        const sparks = KART_TRAILS.map((rows, i) => `<g class="tr t${i + 1}">${[0, 1, 2].map(n => `<g class="pf f${n}">${trail(rows, 0)}</g>`).join('')}</g>`).join('') + KART_PLUS.map(plus).join('');
+        // the sparks: a trail at each wheel (one size per stage) with single sparks flying off it to the left and five plus-shaped sparks; the colour comes from the stage
+        const sparks = KART_TRAILS.map((rows, i) => `<g class="tr t${i + 1}">${trail(rows, 0)}${flyoffs(i + 1)}</g>`).join('') + KART_PLUS.map(plus).join('');
         // the speed lines (only while driving off): thin 1 px dashes streaming back from the kart, two sets that swap
         // so they seem to rush past; each has a lighter lead pixel. [y, x of the tail, x of the head]
         const dash = ([y, x0, x1]) => `<path d="${'M' + x0 + ' ' + y + 'h' + (x1 - x0) + 'v1h-' + (x1 - x0) + 'z'}"/><path class="hd" d="${px(x1, y)}"/>`;

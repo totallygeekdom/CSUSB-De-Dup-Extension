@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.247
+// @version      2.248
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.247'; // keep in sync with @version
+    const VERSION = '2.248'; // keep in sync with @version
     // Chrome's install prompt for the web app: held back until Install is clicked on the card at the top of the
     // settings pane. The card shows only while Chrome says the page is installable, and the X hides it for good.
     let installPrompt = null;
@@ -2982,17 +2982,17 @@
     // edge (1, 2, 4, 6, 10, 17 px), slides left in bigger and bigger steps while it shrinks (10, 6, 4, 2, 1 px) and dies away. Taken from a drawn picture:
     // a digit is how strong the pixel is, 9 for the middle of the line, 7 for its lighter ends; . is empty.
     const KART_STREAK = [
-        '................................................7.',
-        '..............................................77..',
-        '...........................................7997...',
-        '.......................................799997.....',
-        '.................................7999999997.......',
-        '......................79999999999999997...........',
-        '...............7999999997.........................',
-        '.........799997...................................',
-        '......7997........................................',
-        '...77.............................................',
-        '.7................................................'];
+        '.................................................7',
+        '...............................................77.',
+        '............................................7997..',
+        '........................................799997....',
+        '..................................7999999997......',
+        '.......................79999999999999997..........',
+        '...................7999999997.....................',
+        '..............799997..............................',
+        '.........7997.....................................',
+        '....77............................................',
+        '7.................................................'];
     const KART_STREAK_STEP = 0.04; // seconds a frame (11 frames = the .44 s of the animation)
     const KART_TONGUE = [[0, 1, 2, 1], [1, 2, 3, 1], [1, 3, 4, 2]]; // how far the fire licks out to the left of a wave row (at most 2), by stage
     // wheel glints: two diagonal pairs of rim pixels that swap, so the wheels look like they turn
@@ -3027,16 +3027,17 @@
         const sparks = [1, 2, 3].map(st => `<g class="tr t${st}">${KART_WAVE.map((_, f) => `<g class="wv" style="animation-delay:${(-(KART_WAVE.length - f) * KART_WAVE_STEP).toFixed(2)}s">${KART_TRAIL_X.map(ox => wavePx(f, st, ox)).join('')}</g>`).join('')}</g>`).join('') + KART_PLUS.map(plus).join('');
         // the speed lines are finer than the sprite: a picture pixel is 1 sprite pixel wide but only a quarter of one tall (1 screen px at the usual
         // 4x), so a line is a thin hairline with soft rows above and below it, not a chunky band.
-        // the speed lines (only while driving off): six lines, each the 11 frames of KART_STREAK, 1 px tall, on different rows, shifted left by a different amount
-        // (so they start at different places) and starting at different moments; two are behind the kart, four in front. [row, start in frames, shift left in px]
-        const streak = ([y, start, shift]) => KART_STREAK.map((row, k) => {
+        // the speed lines (only while driving off): six lines, each the 11 frames of KART_STREAK, 1 px tall, all across the same 50 px (the field's left edge
+        // is x = -22, its right edge the right edge of the sprite); they differ only in their row and in when they start. Two are behind the kart, four
+        // in front. [row, start in frames]
+        const streak = ([y, start]) => KART_STREAK.map((row, k) => {
             const by = {};
-            [...row].forEach((ch, c) => { if (ch !== '.') by[ch] = (by[ch] || '') + px(c - KART_PAD_L - shift, y); });
+            [...row].forEach((ch, c) => { if (ch !== '.') by[ch] = (by[ch] || '') + px(c - KART_PAD_L, y); });
             const delay = -(KART_STREAK.length - (start + k) % KART_STREAK.length) * KART_STREAK_STEP; // frame k shows when (time - start) is in its slot
             return `<g class="sk" style="animation-delay:${delay.toFixed(2)}s">` + Object.keys(by).map(a => `<path fill-opacity="${(a / 9).toFixed(2)}" d="${by[a]}"/>`).join('') + '</g>';
         }).join('');
-        const linesBehind = '<g class="lines">' + [[13, 4, 5], [21, 8, 1]].map(streak).join('') + '</g>';
-        const lines = '<g class="lines">' + [[4, 0, 0], [9, 6, 8], [17, 2, 3], [26, 9, 12]].map(streak).join('') + '</g>';
+        const linesBehind = '<g class="lines">' + [[13, 4], [21, 8]].map(streak).join('') + '</g>';
+        const lines = '<g class="lines">' + [[4, 0], [9, 6], [17, 2], [26, 9]].map(streak).join('') + '</g>';
         return `<svg viewBox="-${KART_PAD_L} 0 ${KART_W + KART_PAD_L} ${KART_H}" width="${(KART_W + KART_PAD_L) * KART_PX}" height="${KART_H * KART_PX}" shape-rendering="crispEdges">` +
             linesBehind + body + hubs + `<g class="sparks">${sparks}</g>` + lines + '</svg>';
     }

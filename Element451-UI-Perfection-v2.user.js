@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.234
+// @version      2.235
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.234'; // keep in sync with @version
+    const VERSION = '2.235'; // keep in sync with @version
     // Chrome's install prompt for the web app: held back until Install is clicked on the card at the top of the
     // settings pane. The card shows only while Chrome says the page is installable, and the X hides it for good.
     let installPrompt = null;
@@ -234,8 +234,8 @@
         #elm2-kart-lane .elm2-kart .fr.f3 { animation-delay: -.12s; }
         #elm2-kart-lane .elm2-kart .tip { opacity: .6; }
         #elm2-kart-lane .elm2-kart .sparks, #elm2-kart-lane .elm2-kart .lines { opacity: 0; }
-        #elm2-kart-lane .elm2-kart .lA { animation: elm2-kart-a .16s steps(1) infinite; }
-        #elm2-kart-lane .elm2-kart .lB { animation: elm2-kart-b .16s steps(1) infinite; }
+        /* speed lines: rows of dashes (repeating every 16 px) stream to the left across the whole kart, in front of it, each row at its own speed */
+        #elm2-kart-lane .elm2-kart .ln { animation: elm2-kart-streak .16s steps(4) infinite; }
         #elm2-kart-lane .elm2-kart .so { fill: var(--c, #f09033); }
         #elm2-kart-lane .elm2-kart .sy { fill: var(--c2, #fff332); }
         #elm2-kart-lane .elm2-kart .lines path { fill: var(--c, #fff); }
@@ -250,11 +250,12 @@
         #elm2-kart-lane .elm2-kart .p1 { --d: -.12s; } #elm2-kart-lane .elm2-kart .p2 { --d: -.24s; }
         #elm2-kart-lane .elm2-kart .p3 { --d: -.36s; } #elm2-kart-lane .elm2-kart .p4 { --d: -.06s; }
         #elm2-kart-lane .elm2-kart.go svg { animation: none; }
-        #elm2-kart-lane .elm2-kart.go .lines { opacity: 1; }
+        #elm2-kart-lane .elm2-kart.go .lines { opacity: .8; } /* a little see-through, so the kart still shows under the lines */
         @keyframes elm2-kart-bob { 0% { margin-top: 0; } 50% { margin-top: -4px; } }
         @keyframes elm2-kart-a { 0% { opacity: 1; } 50% { opacity: 0; } }
         @keyframes elm2-kart-b { 0% { opacity: 0; } 50% { opacity: 1; } }
         @keyframes elm2-kart-spark { 0% { opacity: 1; transform: translate(0, 0); } 25% { transform: translate(-1px, 0); } 50% { transform: translate(-2px, 1px); } 75% { opacity: 0; } }
+        @keyframes elm2-kart-streak { 0% { transform: translateX(0); } 100% { transform: translateX(-16px); } }
         @keyframes elm2-kart-frame { 0% { opacity: 1; } 25% { opacity: 0; } }
         @keyframes elm2-kart-arm { 0% { opacity: 0; } 25% { opacity: 1; } 50% { opacity: 0; } }
         #elm2-merge-overlay .elm2-lamps { display: none; }
@@ -2995,12 +2996,15 @@
         const hubs = `<g class="hubA">${glints(KART_GLINTS[0])}</g><g class="hubB">${glints(KART_GLINTS[1])}</g>`;
         // the sparks: a trail at each wheel (one size per stage) with tongues of fire licking out of its left side and five plus-shaped sparks; the colour comes from the stage
         const sparks = KART_TRAILS.map((rows, i) => `<g class="tr t${i + 1}">${trail(rows, 0)}${[0, 1, 2, 3].map(f => `<g class="fr f${f}">${tongues(rows, i + 1, f)}</g>`).join('')}</g>`).join('') + KART_PLUS.map(plus).join('');
-        // the speed lines (only while driving off): thin 1 px dashes streaming back from the kart, two sets that swap
-        // so they seem to rush past; each has a lighter lead pixel. [y, x of the tail, x of the head]
-        const dash = ([y, x0, x1]) => `<path d="${'M' + x0 + ' ' + y + 'h' + (x1 - x0) + 'v1h-' + (x1 - x0) + 'z'}"/><path class="hd" d="${px(x1, y)}"/>`;
-        const lines = '<g class="lines"><g class="lA">' + [[8, -17, -9], [13, -22, -11], [18, -14, -7], [22, -21, -12]].map(dash).join('') + '</g><g class="lB">' + [[6, -12, -5], [11, -17, -8], [16, -22, -13], [20, -13, -6], [24, -19, -11]].map(dash).join('') + '</g></g>';
+        // the speed lines (only while driving off): rows of thin dashes that repeat every 16 px and stream to the left across the kart, drawn in front of it;
+        // each has a lighter lead pixel. [row, offset, dash length, seconds per 16 px]
+        const lines = '<clipPath id="elm2-kart-clip"><rect x="-' + KART_PAD_L + '" y="0" width="' + (KART_W + KART_PAD_L) + '" height="' + KART_H + '"/></clipPath><g class="lines" clip-path="url(#elm2-kart-clip)">' + [[5, 0, 8, .2], [10, 6, 10, .14], [15, 3, 7, .18], [20, 9, 11, .12], [24, 1, 8, .16], [27, 11, 6, .22]].map(([y, off, len, dur]) => {
+            let body2 = '', lead = '';
+            for (let x = -38 + off; x <= 46; x += 16) { body2 += 'M' + x + ' ' + y + 'h' + (len - 1) + 'v1h-' + (len - 1) + 'z'; lead += px(x + len - 1, y); }
+            return `<g class="ln" style="animation-duration:${dur}s"><path d="${body2}"/><path class="hd" d="${lead}"/></g>`;
+        }).join('') + '</g>';
         return `<svg viewBox="-${KART_PAD_L} 0 ${KART_W + KART_PAD_L} ${KART_H}" width="${(KART_W + KART_PAD_L) * KART_PX}" height="${KART_H * KART_PX}" shape-rendering="crispEdges">` +
-            lines + body + hubs + `<g class="sparks">${sparks}</g></svg>`;
+            body + hubs + `<g class="sparks">${sparks}</g>` + lines + '</svg>';
     }
     function removeKartLane() {
         const lane = document.getElementById('elm2-kart-lane');

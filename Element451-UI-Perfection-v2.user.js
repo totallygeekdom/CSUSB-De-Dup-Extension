@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.239
+// @version      2.241
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.239'; // keep in sync with @version
+    const VERSION = '2.241'; // keep in sync with @version
     // Chrome's install prompt for the web app: held back until Install is clicked on the card at the top of the
     // settings pane. The card shows only while Chrome says the page is installable, and the X hides it for good.
     let installPrompt = null;
@@ -226,17 +226,14 @@
         #elm2-kart-lane .elm2-kart.c3 { --c: #ff4fa3; --c2: #ffd9ec; }
         #elm2-kart-lane .elm2-kart .hubA { animation: elm2-kart-a .24s steps(1) infinite; }
         #elm2-kart-lane .elm2-kart .hubB { animation: elm2-kart-b .24s steps(1) infinite; }
-        /* the wheel sparks are a wave that swells, curls over to the left and crashes into spray (six frames, one at a time), with
+        /* the wheel sparks are a wave that swells, curls over to the left and crashes into spray (twelve frames, one at a time), with
            tongues of fire licking out of its left edge while it builds */
-        #elm2-kart-lane .elm2-kart .wv { animation: elm2-kart-frame6 .48s steps(1) infinite; }
-        #elm2-kart-lane .elm2-kart .wv.w1 { animation-delay: -.40s; } #elm2-kart-lane .elm2-kart .wv.w2 { animation-delay: -.32s; }
-        #elm2-kart-lane .elm2-kart .wv.w3 { animation-delay: -.24s; } #elm2-kart-lane .elm2-kart .wv.w4 { animation-delay: -.16s; }
-        #elm2-kart-lane .elm2-kart .wv.w5 { animation-delay: -.08s; }
+        #elm2-kart-lane .elm2-kart .wv { animation: elm2-kart-frame12 .48s steps(1) infinite; }
         #elm2-kart-lane .elm2-kart .tip { opacity: .6; }
         #elm2-kart-lane .elm2-kart .sparks, #elm2-kart-lane .elm2-kart .lines { opacity: 0; }
-        /* speed lines: each line is 19 frames across the width of the sprite (it grows out of the right edge, slides left, then shrinks
+        /* speed lines: each line is 14 frames across the width of the sprite (it grows out of the right edge, slides left, then shrinks
            into the left edge); one frame shows at a time, and the lines start at different moments */
-        #elm2-kart-lane .elm2-kart .sk { animation: elm2-kart-sk .76s steps(1) infinite; }
+        #elm2-kart-lane .elm2-kart .sk { animation: elm2-kart-sk .56s steps(1) infinite; }
         #elm2-kart-lane .elm2-kart .so { fill: var(--c, #f09033); }
         #elm2-kart-lane .elm2-kart .sy { fill: var(--c2, #fff332); }
         #elm2-kart-lane .elm2-kart .lines path { fill: var(--c, #fff); }
@@ -256,8 +253,8 @@
         @keyframes elm2-kart-a { 0% { opacity: 1; } 50% { opacity: 0; } }
         @keyframes elm2-kart-b { 0% { opacity: 0; } 50% { opacity: 1; } }
         @keyframes elm2-kart-spark { 0% { opacity: 1; transform: translate(0, 0); } 25% { transform: translate(-1px, 0); } 50% { transform: translate(-2px, 1px); } 75% { opacity: 0; } }
-        @keyframes elm2-kart-sk { 0% { opacity: 1; } 5.263% { opacity: 0; } } /* visible for 1 of the 19 frames */
-        @keyframes elm2-kart-frame6 { 0% { opacity: 1; } 16.667% { opacity: 0; } } /* visible for 1 of the 6 frames */
+        @keyframes elm2-kart-sk { 0% { opacity: 1; } 7.143% { opacity: 0; } } /* visible for 1 of the 14 frames */
+        @keyframes elm2-kart-frame12 { 0% { opacity: 1; } 8.333% { opacity: 0; } } /* visible for 1 of the 12 frames */
         @keyframes elm2-kart-arm { 0% { opacity: 0; } 25% { opacity: 1; } 50% { opacity: 0; } }
         #elm2-merge-overlay .elm2-lamps { display: none; }
         #elm2-merge-overlay .elm2-merge-card.race .elm2-ring svg, #elm2-merge-overlay .elm2-merge-card.race #elm2-merge-count { display: none; }
@@ -2964,25 +2961,32 @@
     // the first stage) and, for each wheel, the wave of sparks below. The waves sit on the ground line; their right end is at
     // x = -1 + 6 (rear wheel) and x = 19 + 6 (front wheel), see KART_TRAIL_X.
     const KART_PLUS = [[-2, 22, 1], [-4, 26, 1], [7, 25, 0], [13, 23, 1], [16, 26, 0]];
-    // The wheel sparks, six frames of 12 x 6 px (O = the outer colour, Y = the inner one; the wheel is at the right end, the wave
-    // runs to the left): a low swell, a rising swell, a crest leaning left, the crest curling over, the crash into droplets, spray.
+    // The wheel sparks, twelve frames of 12 x 6 px (O = the outer colour, Y = the inner one; the wheel is at the right end, the wave
+    // runs to the left): a low swell that rises, leans left and curls over, then crashes into droplets and spray, and settles again.
     const KART_WAVE = [
         ['............', '............', '......OY....', '......OYY...', '.......OYY..', '......OOOYYY'],
+        ['............', '............', '......OY....', '......OYY...', '......OOYY..', '.....OOOOYYY'],
         ['............', '......OY....', '......OYY...', '.....OYYY...', '.....OOYYY..', '....OOOOYYYY'],
+        ['............', '.....OOY....', '....OYYYY...', '....OYYYY...', '....OOYYYY..', '...OOOOYYYYY'],
         ['....OO......', '...OOYY.....', '...OYYYY....', '....OYYYY...', '....OOYYYY..', '...OOOOYYYYY'],
+        ['..OOOO......', '..OOYYYO....', '..OYYYYY....', '....OYYYY...', '....OOYYYY..', '..OOOOOYYYYY'],
         ['.OOOO.......', 'OOYYYO......', '..OYYYYY....', '....OYYYY...', '....OOYYYY..', '..OOOOOYYYYY'],
+        ['.OO..OO.....', 'OO.YY.O.....', '..OY.YYY....', '....OYYYY...', '....OOYYYY..', '..OOOOOYYYYY'],
         ['O..O........', '.O..Y.......', '..O....OY...', '....O.OYY...', '.....OOYYY..', '...OOOOYYYYY'],
-        ['............', 'O...........', '...O........', '.O...O......', '..O..OO.Y...', '.OO.OOOOYYYY']];
+        ['............', '.O..........', '..O.....Y...', '...O..OYY...', '....OOOYYY..', '..OOOOOYYYYY'],
+        ['............', 'O...........', '...O........', '.O...O......', '..O..OO.Y...', '.OO.OOOOYYYY'],
+        ['............', '............', '............', '...O..O.....', '.....OOYY...', '....OOOOOYYY']];
+    const KART_WAVE_STEP = 0.04; // seconds a frame (12 frames = the .48 s of the animation)
     const KART_WAVE_CLIP = [3, 1, 0]; // by stage: the first row and column used (the first stage is small, the third uses it all)
     const KART_TRAIL_X = [-1, 19], KART_GROUND = 29; // the row under the wheels
     // one speed line, frame by frame: [x of its left end, length] in a field as wide as the sprite (28 px). It grows out of the right
-    // edge (1, 2, 4, 6, 10 px, never longer than 10), slides left (1 px, then 2 px a frame) until it meets the left edge, then shrinks into it (6, 4, 2, 1 px).
+    // edge (1, 2, 4, 6, 10 px, never longer than 10), slides left with doubling steps (1, 2, 4, 8 ... px a frame) until it meets the left edge, then shrinks into it (6, 4, 2, 1 px).
     const KART_STREAK = (() => {
         const w = KART_W, grow = [1, 2, 4, 6, 10], peak = grow[grow.length - 1], shrink = [6, 4, 2, 1], f = grow.map(len => [w - len, len]);
-        for (let x = w - peak, step = 1; x > 0; step = 2) { x = Math.max(0, x - step); f.push([x, peak]); }
+        for (let x = w - peak, step = 1; x > 0; step *= 2) { x = Math.max(0, x - step); f.push([x, peak]); } // the steps double: 1, 2, 4, 8 ... px a frame, until it meets the left edge
         return f.concat(shrink.map(len => [0, len]));
     })();
-    const KART_STREAK_STEP = 0.04; // seconds a frame (19 frames = the .76 s of the animation)
+    const KART_STREAK_STEP = 0.04; // seconds a frame (14 frames = the .56 s of the animation)
     const KART_TONGUE = [[0, 1, 2, 1], [1, 2, 3, 1], [1, 3, 4, 2]]; // how far the fire licks out to the left of a wave row (at most 2), by stage
     // wheel glints: two diagonal pairs of rim pixels that swap, so the wheels look like they turn
     const KART_GLINTS = [[[3, 23], [4, 27], [23, 24], [24, 27]], [[5, 24], [2, 26], [25, 25], [22, 26]]];
@@ -2992,7 +2996,7 @@
         const body = Object.keys(runs).map(c => `<path fill="${KART.pal[c]}" d="${runs[c]}"/>`).join('');
         const px = (x, y) => 'M' + x + ' ' + y + 'h1v1h-1z';
         const plus = ([x, y, extra], i) => `<g class="pl p${i}${extra ? ' x' : ''}"><path class="so pa" d="${px(x, y - 1) + px(x - 1, y) + px(x + 1, y) + px(x, y + 1)}"/><path class="sy" d="${px(x, y)}"/></g>`;
-        // one frame of the wave at one wheel; while it swells and curls (frames 0 to 3) tongues of fire lick out of the left edge of every row
+        // one frame of the wave at one wheel; while it swells and curls (frames 0 to 7) tongues of fire lick out of the left edge of every row
         // (TONGUE[stage][(frame + 2 * row) % 4] px, at most 2, the second paler), a different length on every row and frame
         const wavePx = (f, stage, ox) => {
             const lo = KART_WAVE_CLIP[stage - 1];
@@ -3004,7 +3008,7 @@
                     if (ch === 'O') o += px(ox + c - 6, KART_GROUND - 6 + ro); else y2 += px(ox + c - 6, KART_GROUND - 6 + ro);
                 });
                 const first = r.search(/[^.]/);
-                if (f > 3 || first < lo) return;
+                if (f > 7 || first < lo) return;
                 const len = Math.min(2, KART_TONGUE[stage - 1][(f + 2 * ro) % 4]);
                 for (let k = 1; k <= len && first - k >= 0; k++) { const d = px(ox + first - k - 6, KART_GROUND - 6 + ro); if (k > 1) far += d; else near += d; }
             });
@@ -3013,11 +3017,11 @@
         const glints = (g) => `<path fill="#ceefef" d="${g.map(([x, y]) => px(x, y)).join('')}"/>`;
         const hubs = `<g class="hubA">${glints(KART_GLINTS[0])}</g><g class="hubB">${glints(KART_GLINTS[1])}</g>`;
         // the sparks: a wave at each wheel (one size per stage) and five plus-shaped sparks; the colour comes from the stage
-        const sparks = [1, 2, 3].map(st => `<g class="tr t${st}">${KART_WAVE.map((_, f) => `<g class="wv w${f}">${KART_TRAIL_X.map(ox => wavePx(f, st, ox)).join('')}</g>`).join('')}</g>`).join('') + KART_PLUS.map(plus).join('');
-        // the speed lines (only while driving off): six lines drawn in front of the kart, each 19 frames long in a field as wide as the
+        const sparks = [1, 2, 3].map(st => `<g class="tr t${st}">${KART_WAVE.map((_, f) => `<g class="wv" style="animation-delay:${(-(KART_WAVE.length - f) * KART_WAVE_STEP).toFixed(2)}s">${KART_TRAIL_X.map(ox => wavePx(f, st, ox)).join('')}</g>`).join('')}</g>`).join('') + KART_PLUS.map(plus).join('');
+        // the speed lines (only while driving off): six lines drawn in front of the kart, each 14 frames long in a field as wide as the
         // sprite (KART_STREAK). Its two ends are the light colour, the middle the regular one. The lines sit on different rows and
         // start at different moments. [row, start in frames]
-        const lines = '<g class="lines">' + [[6, 0], [11, 9], [16, 3], [20, 13], [24, 6], [27, 16]].map(([y, start]) =>
+        const lines = '<g class="lines">' + [[6, 0], [11, 7], [16, 3], [20, 10], [24, 5], [27, 12]].map(([y, start]) =>
             KART_STREAK.map(([x0, len], k) => {
                 const ends = len === 1 ? px(x0, y) : px(x0, y) + px(x0 + len - 1, y);
                 const mid = len > 2 ? 'M' + (x0 + 1) + ' ' + y + 'h' + (len - 2) + 'v1h-' + (len - 2) + 'z' : '';

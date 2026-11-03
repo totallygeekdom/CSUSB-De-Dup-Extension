@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.243
+// @version      2.244
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.243'; // keep in sync with @version
+    const VERSION = '2.244'; // keep in sync with @version
     // Chrome's install prompt for the web app: held back until Install is clicked on the card at the top of the
     // settings pane. The card shows only while Chrome says the page is installable, and the X hides it for good.
     let installPrompt = null;
@@ -231,9 +231,9 @@
         #elm2-kart-lane .elm2-kart .wv { animation: elm2-kart-frame12 .48s steps(1) infinite; }
         #elm2-kart-lane .elm2-kart .tip { opacity: .6; }
         #elm2-kart-lane .elm2-kart .sparks, #elm2-kart-lane .elm2-kart .lines { opacity: 0; }
-        /* speed lines: each line is 16 frames across the whole drawing (it grows out of the right edge, slides left, then shrinks
+        /* speed lines: each line is 10 frames across the whole drawing (it grows out of the right edge, slides left, then shrinks
            into the left edge); one frame shows at a time, and the lines start at different moments */
-        #elm2-kart-lane .elm2-kart .sk { animation: elm2-kart-sk .64s steps(1) infinite; }
+        #elm2-kart-lane .elm2-kart .sk { animation: elm2-kart-sk .4s steps(1) infinite; }
         #elm2-kart-lane .elm2-kart .so { fill: var(--c, #f09033); }
         #elm2-kart-lane .elm2-kart .sy { fill: var(--c2, #fff332); }
         #elm2-kart-lane .elm2-kart .lines path { fill: var(--c, #fff); }
@@ -252,7 +252,7 @@
         @keyframes elm2-kart-a { 0% { opacity: 1; } 50% { opacity: 0; } }
         @keyframes elm2-kart-b { 0% { opacity: 0; } 50% { opacity: 1; } }
         @keyframes elm2-kart-spark { 0% { opacity: 1; transform: translate(0, 0); } 25% { transform: translate(-1px, 0); } 50% { transform: translate(-2px, 1px); } 75% { opacity: 0; } }
-        @keyframes elm2-kart-sk { 0% { opacity: 1; } 6.25% { opacity: 0; } } /* visible for 1 of the 16 frames */
+        @keyframes elm2-kart-sk { 0% { opacity: 1; } 10% { opacity: 0; } } /* visible for 1 of the 10 frames */
         @keyframes elm2-kart-frame12 { 0% { opacity: 1; } 8.333% { opacity: 0; } } /* visible for 1 of the 12 frames */
         @keyframes elm2-kart-arm { 0% { opacity: 0; } 25% { opacity: 1; } 50% { opacity: 0; } }
         #elm2-merge-overlay .elm2-lamps { display: none; }
@@ -2978,28 +2978,22 @@
     const KART_WAVE_STEP = 0.04; // seconds a frame (12 frames = the .48 s of the animation)
     const KART_WAVE_CLIP = [3, 1, 0]; // by stage: the first row and column used (the first stage is small, the third uses it all)
     const KART_TRAIL_X = [-1, 19], KART_GROUND = 29; // the row under the wheels
-    // One speed line, frame by frame, 1 px thick in a field 50 px wide (the 22 px behind the kart plus the 28 px of the sprite): it grows out of
-    // the right edge (1, 2, 4, 6, 10 px), slides left with doubling steps (1, 2, 4, 8 ... px a frame) until it meets the left edge, then shrinks
-    // into it (10, 6, 4, 2, 1 px). Each character is a pixel: . empty, 1 = the colour, 2, 3 and 4 = fainter and fainter.
+    // One speed line, frame by frame, in a field 50 px wide (the 22 px behind the kart plus the 28 px of the sprite): it grows out of the right
+    // edge, slides left in bigger and bigger steps while it shrinks, and dies away. Each frame is its rows, [offset from the line's own row,
+    // pixels]: a digit is how strong the pixel is (9 = the full colour, 1 = barely there), . is empty. The rows above and below the line's own row are
+    // its soft edges.
     const KART_STREAK = [
-        '.................................................1',
-        '................................................22',
-        '..............................................2112',
-        '............................................211112',
-        '........................................2111111112',
-        '.................................32222222222222223',
-        '................................32222222222222223.',
-        '.............................322222222222222223...',
-        '.........................322222222222222223.......',
-        '.................322222222222222223...............',
-        '322222222222222223................................',
-        '2111111112........................................',
-        '211112............................................',
-        '2112..............................................',
-        '22................................................',
-        '1.................................................'];
-    const KART_STREAK_ALPHA = { 1: 1, 2: 0.77, 3: 0.5, 4: 0.17 };
-    const KART_STREAK_STEP = 0.04; // seconds a frame (16 frames = the .64 s of the animation)
+        [[0, '.................................................4'], [1, '.................................................4']],
+        [[0, '..............................................1576'], [1, '..............................................1455']],
+        [[-1, '.............................................11111'], [0, '............................................167777'], [1, '............................................134444']],
+        [[-1, '........................................1222222222'], [0, '........................................2788888888'], [1, '........................................1344444443']],
+        [[-1, '.................................12333333333333333'], [0, '.................................48999999999999999'], [1, '.................................12333333333333333']],
+        [[-1, '................................23444444432.......'], [0, '................................47888888874.......'], [1, '................................12222222221.......']],
+        [[-1, '..............................2444441.............'], [0, '..............................4777762.............']],
+        [[-1, '..........................45541...................'], [0, '..........................46751...................']],
+        [[0, '.................143..............................'], [1, '.................143..............................']],
+        [[0, '.51...............................................'], [1, '.3................................................']]];
+    const KART_STREAK_STEP = 0.04; // seconds a frame (10 frames = the .4 s of the animation)
     const KART_TONGUE = [[0, 1, 2, 1], [1, 2, 3, 1], [1, 3, 4, 2]]; // how far the fire licks out to the left of a wave row (at most 2), by stage
     // wheel glints: two diagonal pairs of rim pixels that swap, so the wheels look like they turn
     const KART_GLINTS = [[[3, 23], [4, 27], [23, 24], [24, 27]], [[5, 24], [2, 26], [25, 25], [22, 26]]];
@@ -3031,17 +3025,16 @@
         const hubs = `<g class="hubA">${glints(KART_GLINTS[0])}</g><g class="hubB">${glints(KART_GLINTS[1])}</g>`;
         // the sparks: a wave at each wheel (one size per stage) and five plus-shaped sparks; the colour comes from the stage
         const sparks = [1, 2, 3].map(st => `<g class="tr t${st}">${KART_WAVE.map((_, f) => `<g class="wv" style="animation-delay:${(-(KART_WAVE.length - f) * KART_WAVE_STEP).toFixed(2)}s">${KART_TRAIL_X.map(ox => wavePx(f, st, ox)).join('')}</g>`).join('')}</g>`).join('') + KART_PLUS.map(plus).join('');
-        // the speed lines (only while driving off): six lines, 1 px thick, each the 16 frames of KART_STREAK across the whole drawing (the field's left
-        // edge is x = -22, its right edge the right edge of the sprite). They sit on different rows and start at different moments; two of them
-        // are behind the kart, four in front. [row, start in frames, behind]
-        const streak = ([y, start]) => KART_STREAK.map((row, k) => {
-            const by = { 1: '', 2: '', 3: '', 4: '' };
-            [...row].forEach((ch, c) => { if (ch !== '.') by[ch] += px(c - KART_PAD_L, y); });
+        // the speed lines (only while driving off): six lines, each the 10 frames of KART_STREAK, on different rows, shifted left by a different amount
+        // (so they start at different places) and starting at different moments; two are behind the kart, four in front. [row, start in frames, shift left in px]
+        const streak = ([y, start, shift]) => KART_STREAK.map((rows, k) => {
+            const by = {};
+            rows.forEach(([dy, row]) => [...row].forEach((ch, c) => { if (ch !== '.') by[ch] = (by[ch] || '') + px(c - KART_PAD_L - shift, y + dy); }));
             const delay = -(KART_STREAK.length - (start + k) % KART_STREAK.length) * KART_STREAK_STEP; // frame k shows when (time - start) is in its slot
-            return `<g class="sk" style="animation-delay:${delay.toFixed(2)}s">` + [1, 2, 3, 4].filter(a => by[a]).map(a => `<path fill-opacity="${KART_STREAK_ALPHA[a]}" d="${by[a]}"/>`).join('') + '</g>';
+            return `<g class="sk" style="animation-delay:${delay.toFixed(2)}s">` + Object.keys(by).map(a => `<path fill-opacity="${(a / 9).toFixed(2)}" d="${by[a]}"/>`).join('') + '</g>';
         }).join('');
-        const linesBehind = '<g class="lines">' + [[13, 8], [21, 5]].map(streak).join('') + '</g>';
-        const lines = '<g class="lines">' + [[4, 0], [9, 11], [17, 3], [26, 13]].map(streak).join('') + '</g>';
+        const linesBehind = '<g class="lines">' + [[13, 4, 8], [21, 8, 2]].map(streak).join('') + '</g>';
+        const lines = '<g class="lines">' + [[4, 0, 0], [9, 6, 12], [17, 2, 4], [26, 9, 18]].map(streak).join('') + '</g>';
         return `<svg viewBox="-${KART_PAD_L} 0 ${KART_W + KART_PAD_L} ${KART_H}" width="${(KART_W + KART_PAD_L) * KART_PX}" height="${KART_H * KART_PX}" shape-rendering="crispEdges">` +
             linesBehind + body + hubs + `<g class="sparks">${sparks}</g>` + lines + '</svg>';
     }

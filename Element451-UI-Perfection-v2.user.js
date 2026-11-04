@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.254
+// @version      2.257
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.254'; // keep in sync with @version
+    const VERSION = '2.257'; // keep in sync with @version
     // Chrome's install prompt for the web app: held back until Install is clicked on the card at the top of the
     // settings pane. The card shows only while Chrome says the page is installable, and the X hides it for good.
     let installPrompt = null;
@@ -1468,10 +1468,13 @@
     // equal to a reviewer name shown in the table's "who" column (collected from the page as it is browsed).
     // (Not a plain "user" key: in Element451's API the contacts themselves are "users".)
     const HIST_SKIP_KEYS = /^(actor|who|reviewer|performer|initiator|author|operator|creator)(_?(id|name|email))?$|(^|_)(by|merged_?by|created_?by|performed_?by|updated_?by|reviewed_?by)$|^(ai_analysis|feedback)$/i;
+    // Capitals and accents are ignored on both sides: "jose" finds José and "hernandez" finds Hernández (otherwise the accented
+    // letter split a name into pieces, so "jose" found nothing and "ndez" found Hernández).
+    const histFold = (t) => String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     const histReviewers = new Set();
     function noteHistReviewers() {
         document.querySelectorAll('.bolt-table-rows-wrap .cdk-column-who .user-name').forEach(el => {
-            const n = el.textContent.trim().toLowerCase();
+            const n = histFold(el.textContent.trim());
             if (n) histReviewers.add(n);
         });
     }
@@ -1480,7 +1483,7 @@
         (function walk(o) {
             if (o === null || o === undefined) return;
             if (typeof o === 'string' || typeof o === 'number') {
-                const v = String(o).toLowerCase();
+                const v = histFold(o);
                 if (histReviewers.has(v.trim())) return; // the reviewer's name
                 values.push(v);
                 v.split(/[^a-z0-9]+/).forEach(t => { if (t) tokens.push(t); });
@@ -1609,7 +1612,7 @@
         }
     }
     async function histSearch(query, ui) {
-        const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+        const words = histFold(query).split(/\s+/).filter(Boolean);
         const run = ++histRun;
         histClearHits();
         noteHistReviewers();

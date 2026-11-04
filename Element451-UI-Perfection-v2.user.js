@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.251
+// @version      2.252
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.251'; // keep in sync with @version
+    const VERSION = '2.252'; // keep in sync with @version
     // Chrome's install prompt for the web app: held back until Install is clicked on the card at the top of the
     // settings pane. The card shows only while Chrome says the page is installable, and the X hides it for good.
     let installPrompt = null;
@@ -3033,14 +3033,14 @@
             return `<path class="so" d="${o}"/><path class="sy" d="${y2}"/><path class="so" d="${near}"/><path class="so tip" d="${far}"/>`;
         };
         const glints = (g) => `<path fill="#ceefef" d="${g.map(([x, y]) => px(x, y)).join('')}"/>`;
-        // the pink tyre borders (only while driving off): the whole circle is a faint pink and a bright arc 6 px long runs round it, 2 px a step,
+        // the pink tyre borders (only while driving off): the whole circle is a faint pink and two bright arcs 6 px long, on opposite sides, run round it, 2 px a step,
         // a step a frame of 0.04 s, so a lap takes the 10 steps (0.4 s); both wheels turn together
         const n = KART_RIM.length, rimSteps = n / 2;
         const rims = '<g class="rims">' + KART_RIM_X.map(wx => {
             const at = (i) => { const [x, y] = KART_RIM[((i % n) + n) % n]; return px(wx + x, KART_RIM_Y + y); };
             return `<path fill-opacity=".25" d="${KART_RIM.map((_, i) => at(i)).join('')}"/>` + Array.from({ length: rimSteps }, (_, k) => {
                 const h = 2 * k;
-                return `<g class="rim" style="animation-delay:${(-(rimSteps - k) * KART_STREAK_STEP).toFixed(2)}s">` + [1, 0.85, 0.7, 0.55, 0.4, 0.3].map((a, d) => `<path fill-opacity="${a}" d="${at(h - d)}"/>`).join('') + '</g>';
+                return `<g class="rim" style="animation-delay:${(-(rimSteps - k) * KART_STREAK_STEP).toFixed(2)}s">` + [1, 0.85, 0.7, 0.55, 0.4, 0.3].map((a, d) => `<path fill-opacity="${a}" d="${at(h - d) + at(h + n / 2 - d)}"/>`).join('') + '</g>'; // two arcs, on opposite sides of the tyre
             }).join('');
         }).join('') + '</g>';
         const hubs = `<g class="hubA">${glints(KART_GLINTS[0])}</g><g class="hubB">${glints(KART_GLINTS[1])}</g>`;

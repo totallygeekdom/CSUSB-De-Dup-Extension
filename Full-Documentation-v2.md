@@ -6,7 +6,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 | Script | File | Current version |
 |---|---|---|
 | Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.248`, shown in the settings pane |
-| Element451 - Database v2 | `database-v2.js` | `@version 2.62` |
+| Element451 - Database v2 | `database-v2.js` | `@version 2.65` |
 | Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.12`, see [section 17](#17-database-merge) |
 
 
@@ -392,6 +392,8 @@ The script wraps `XMLHttpRequest` and `fetch` to capture the list API response (
 ### 11.5 List-page badges
 
 A badge is placed in `.cdk-column-flagged` (falling back to signals, then the row). For each row the script first matches a database entry by **both Spark IDs** found in the row's API record (a contact can be in several pairs, so one shared ID is not enough), then falls back to matching the row text by names: **both contacts' 3-letter prefixes** must appear in the row. A blank second name is read as the first name, and when both contacts share a name that name must appear **twice** in the row, so a pair of identical names doesn't match a row with one copy of the name beside a different person. Badges are right-aligned so they line up down the column, and respect **Show Database UI**.
+
+**Speed with a big database.** The database is read every second (the counter, the recording) and, on the list page, once per row. With thousands of entries that used to freeze the page: every row was compared against every entry, building several regular expressions each time (a few thousand entries blocked the page for over half a second every two seconds). Now the parsed database is kept in memory and read again only when the stored text changes (saving refreshes it, and another tab or script changing it is noticed), and lookup tables are built once per change: by Spark ID pair, by Spark ID, and by the first letters of the first name. A list row is only compared with the entries its words point to, in database order, so the result is the same as before. Entries whose names or IDs contain characters other than letters and digits are always checked in full.
 
 ### 11.6 Import / export
 

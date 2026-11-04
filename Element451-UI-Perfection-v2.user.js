@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.249
+// @version      2.250
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.249'; // keep in sync with @version
+    const VERSION = '2.250'; // keep in sync with @version
     // Chrome's install prompt for the web app: held back until Install is clicked on the card at the top of the
     // settings pane. The card shows only while Chrome says the page is installable, and the X hides it for good.
     let installPrompt = null;
@@ -248,20 +248,20 @@
         #elm2-kart-lane .elm2-kart .p3 { --d: -.36s; } #elm2-kart-lane .elm2-kart .p4 { --d: -.06s; }
         #elm2-kart-lane .elm2-kart.go svg { animation: none; }
         #elm2-kart-lane .elm2-kart.go .lines { opacity: 1; }
-        /* driving off: no sparks and no wheel glints; the rims of the tyres turn pink instead, a pink arc running round each rim */
+        /* driving off: no sparks and no wheel glints; the borders of the tyres turn pink instead, a pink arc running round each tyre */
         #elm2-kart-lane .elm2-kart.go .sparks, #elm2-kart-lane .elm2-kart.go .hubA, #elm2-kart-lane .elm2-kart.go .hubB { display: none; }
         #elm2-kart-lane .elm2-kart .rims { opacity: 0; }
         #elm2-kart-lane .elm2-kart .rims path { fill: var(--c, #ff4fa3); }
         #elm2-kart-lane .elm2-kart.go .rims { opacity: 1; }
-        #elm2-kart-lane .elm2-kart .rim10 { animation: elm2-kart-rim10 .4s steps(1) infinite; }
-        #elm2-kart-lane .elm2-kart .rim8 { animation: elm2-kart-rim8 .32s steps(1) infinite; }
+        #elm2-kart-lane .elm2-kart .rim0 { animation: elm2-kart-rim0 .44s steps(1) infinite; }
+        #elm2-kart-lane .elm2-kart .rim1 { animation: elm2-kart-rim1 .48s steps(1) infinite; }
         @keyframes elm2-kart-bob { 0% { margin-top: 0; } 50% { margin-top: -4px; } }
         @keyframes elm2-kart-a { 0% { opacity: 1; } 50% { opacity: 0; } }
         @keyframes elm2-kart-b { 0% { opacity: 0; } 50% { opacity: 1; } }
         @keyframes elm2-kart-spark { 0% { opacity: 1; transform: translate(0, 0); } 25% { transform: translate(-1px, 0); } 50% { transform: translate(-2px, 1px); } 75% { opacity: 0; } }
         @keyframes elm2-kart-sk { 0% { opacity: 1; } 9.091% { opacity: 0; } } /* visible for 1 of the 11 frames */
-        @keyframes elm2-kart-rim10 { 0% { opacity: 1; } 10% { opacity: 0; } } /* visible for 1 of the 10 steps */
-        @keyframes elm2-kart-rim8 { 0% { opacity: 1; } 12.5% { opacity: 0; } } /* visible for 1 of the 8 steps */
+        @keyframes elm2-kart-rim0 { 0% { opacity: 1; } 9.091% { opacity: 0; } } /* the rear tyre: visible for 1 of the 11 steps */
+        @keyframes elm2-kart-rim1 { 0% { opacity: 1; } 8.333% { opacity: 0; } } /* the front tyre: visible for 1 of the 12 steps */
         @keyframes elm2-kart-frame12 { 0% { opacity: 1; } 8.333% { opacity: 0; } } /* visible for 1 of the 12 frames */
         @keyframes elm2-kart-arm { 0% { opacity: 0; } 25% { opacity: 1; } 50% { opacity: 0; } }
         #elm2-merge-overlay .elm2-lamps { display: none; }
@@ -3004,10 +3004,10 @@
         '7.................................................'];
     const KART_STREAK_STEP = 0.04; // seconds a frame (11 frames = the .44 s of the animation)
     const KART_TONGUE = [[0, 1, 2, 1], [1, 2, 3, 1], [1, 3, 4, 2]]; // how far the fire licks out to the left of a wave row (at most 2), by stage
-    // The rim pixels of each wheel in order round the wheel (clockwise); while the kart drives off a pink arc runs round them.
+    // The pixels of the outer border of each tyre (its dark outline), in order round the wheel (clockwise); while the kart drives off a pink arc runs round them.
     const KART_RIMS = [
-        [[3, 23], [4, 23], [5, 24], [5, 25], [5, 26], [4, 27], [3, 27], [2, 26], [2, 25], [2, 24]],
-        [[23, 24], [24, 24], [25, 25], [25, 26], [24, 27], [23, 27], [22, 26], [22, 25]]];
+        [[1, 21], [2, 21], [3, 21], [4, 21], [5, 21], [6, 22], [7, 23], [7, 24], [7, 25], [7, 26], [6, 27], [5, 28], [4, 28], [3, 28], [2, 28], [1, 27], [0, 26], [0, 25], [0, 24], [0, 23], [1, 22]],
+        [[22, 20], [23, 20], [24, 20], [25, 20], [26, 20], [26, 21], [26, 22], [27, 23], [27, 24], [27, 25], [27, 26], [26, 27], [25, 28], [24, 28], [23, 28], [22, 28], [21, 27], [20, 26], [20, 25], [20, 24], [21, 23], [21, 22], [22, 21]]];
     // wheel glints: two diagonal pairs of rim pixels that swap, so the wheels look like they turn
     const KART_GLINTS = [[[3, 23], [4, 27], [23, 24], [24, 27]], [[5, 24], [2, 26], [25, 25], [22, 26]]];
     function kartSvg() {
@@ -3035,12 +3035,15 @@
             return `<path class="so" d="${o}"/><path class="sy" d="${y2}"/><path class="so" d="${near}"/><path class="so tip" d="${far}"/>`;
         };
         const glints = (g) => `<path fill="#ceefef" d="${g.map(([x, y]) => px(x, y)).join('')}"/>`;
-        // the pink rims (only while driving off): the whole rim is a faint pink, and a bright arc 4 px long runs round it one pixel a step,
-        // a step a frame of 0.04 s (the rear rim has 10 pixels, the front one 8)
-        const rims = '<g class="rims">' + KART_RIMS.map(ring => {
-            const n = ring.length, at = (i) => { const [x, y] = ring[((i % n) + n) % n]; return px(x, y); };
-            const base = `<path fill-opacity=".35" d="${ring.map(([x, y]) => px(x, y)).join('')}"/>`;
-            return base + ring.map((_, k) => `<g class="rim${n}" style="animation-delay:${(-(n - k) * KART_STREAK_STEP).toFixed(2)}s"><path d="${at(k)}"/><path fill-opacity=".8" d="${at(k - 1)}"/><path fill-opacity=".55" d="${at(k - 2)}"/><path fill-opacity=".3" d="${at(k - 3)}"/></g>`).join('');
+        // the pink tyre borders (only while driving off): the whole border is a faint pink and a bright arc 5 px long runs round it, 2 px a step, a step a
+        // frame of 0.04 s (the rear border has 21 pixels, 11 steps, the front one 23, 12 steps)
+        const rims = '<g class="rims">' + KART_RIMS.map((ring, w) => {
+            const n = ring.length, steps = Math.ceil(n / 2), at = (i) => { const [x, y] = ring[((i % n) + n) % n]; return px(x, y); };
+            const base = `<path fill-opacity=".3" d="${ring.map(([x, y]) => px(x, y)).join('')}"/>`;
+            return base + Array.from({ length: steps }, (_, k) => {
+                const h = 2 * k;
+                return `<g class="rim${w}" style="animation-delay:${(-(steps - k) * KART_STREAK_STEP).toFixed(2)}s"><path d="${at(h)}"/><path fill-opacity=".85" d="${at(h - 1)}"/><path fill-opacity=".65" d="${at(h - 2)}"/><path fill-opacity=".45" d="${at(h - 3)}"/><path fill-opacity=".3" d="${at(h - 4)}"/></g>`;
+            }).join('');
         }).join('') + '</g>';
         const hubs = `<g class="hubA">${glints(KART_GLINTS[0])}</g><g class="hubB">${glints(KART_GLINTS[1])}</g>`;
         // the sparks: a wave at each wheel (one size per stage) and five plus-shaped sparks; the colour comes from the stage

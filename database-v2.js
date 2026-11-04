@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - Database v2
 // @namespace    http://tampermonkey.net/
-// @version      2.64
+// @version      2.65
 // @description  Tracks duplicate entries in a database stored in browser localStorage (exports an .xlsx spreadsheet) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -15,7 +15,7 @@
     if (window.__elm451CsvDatabaseLoaded) return;
     window.__elm451CsvDatabaseLoaded = true;
 
-    const VERSION = '2.64'; // keep in sync with @version
+    const VERSION = '2.65'; // keep in sync with @version
     const STORAGE_KEY = 'elm_csv_database';
     const UI_KEY = 'elm_show_db_ui';
     function showDbUi() { try { return localStorage.getItem(UI_KEY) !== 'false'; } catch (e) { return true; } }
@@ -153,6 +153,39 @@
         const y = [a, b].filter(Boolean).sort().join('|');
         return !!x && x === y;
     }
+    // The key of a pair of Spark IDs (unordered), as sameSparkPair compares them; '' when there are none.
+    function pairKey(a, b) { return [a || '', b || ''].filter(Boolean).sort().join('|'); }
+    // Lookup tables over the cached database, built the first time they are needed after a change (a list page asks for 50 rows, a row against
+    // thousands of entries, every couple of seconds, so nothing here may scan the whole database per row):
+    //   byPair: the key of the Spark ID pair -> the first entry with it; byId: a Spark ID -> the entries that have it;
+    //   byName: a first name's (lower-case, 2 to 3 letter) prefix -> the entries that start with it; slow: entries whose names or IDs hold characters
+    //   other than letters and digits, which the word lookups cannot place, so they are always checked in full.
+    function dbIndex(db) {
+        if (dbCache && dbCache.db === db && dbCache.index) return dbCache.index;
+        const index = { byPair: new Map(), byId: new Map(), byName: new Map(), slow: [], maxName: 0 };
+        const plain = (t) => /^[a-z0-9]+$/i.test(t);
+        db.forEach((e, i) => {
+            const key = pairKey(e.sparkId1, e.sparkId2);
+            if (key && !index.byPair.has(key)) index.byPair.set(key, i);
+            let odd = false;
+            [e.sparkId1, e.sparkId2].forEach(id => {
+                if (!id) return;
+                if (!plain(id)) odd = true;
+                const list = index.byId.get(id);
+                if (list) list.push(i); else index.byId.set(id, [i]);
+            });
+            const f1 = nameBase(e.firstName).toLowerCase(), l1 = nameBase(e.lastName).toLowerCase();
+            const f2 = nameBase(e.firstName2).toLowerCase() || f1, l2 = nameBase(e.lastName2).toLowerCase() || l1;
+            if (![f1, l1, f2, l2].every(n => n === '' || plain(n))) odd = true;
+            if (odd) { index.slow.push(i); return; }
+            if (f1.length < 2 || l1.length < 2) return; // no name match is possible (it needs two letters of each name), only the Spark IDs above
+            const list = index.byName.get(f1);
+            if (list) list.push(i); else index.byName.set(f1, [i]);
+            if (f1.length > index.maxName) index.maxName = f1.length;
+        });
+        if (dbCache && dbCache.db === db) dbCache.index = index;
+        return index;
+    }
     function escRe(t) { return t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
     function containsId(text, id) {
         return !!id && id.length >= 4 && new RegExp('(^|[^A-Za-z0-9])' + escRe(id) + '($|[^A-Za-z0-9])').test(text);
@@ -210,9 +243,14 @@
     // =========================================================
     // DATABASE OPERATIONS (unchanged data model/storage)
     // =========================================================
+    // The database is read every second (the counter, the recording) and, on the list page, for every row, so with thousands of entries the parsed
+    // copy is kept in memory and only read again when the stored text has changed (the other scripts and tabs can change it); saveDatabase refreshes it.
+    // dbCache.index is built when it is first needed (see dbIndex).
+    let dbCache = null; // { raw: the stored text, db: the parsed entries, index: lookup tables or null }
     function getDatabase() {
         try {
             const data = localStorage.getItem(STORAGE_KEY);
+            if (dbCache && dbCache.raw === data) return dbCache.db;
             const db = data ? JSON.parse(data) : [];
             // entries saved before name truncation existed are shortened (and re-saved) here
             let changed = false;
@@ -223,17 +261,21 @@
                     changed = true;
                 }
             });
-            if (changed) localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+            let raw = data;
+            if (changed) { raw = JSON.stringify(db); localStorage.setItem(STORAGE_KEY, raw); }
+            dbCache = { raw, db, index: null };
             return db;
         } catch (e) {
             console.error('Database: Error reading database', e);
+            dbCache = null;
             return [];
         }
     }
     let saveErrorLogged = false; // the failure is logged once, not on every retry
     function saveDatabase(db) {
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); saveErrorLogged = false; return true; }
+        try { const raw = JSON.stringify(db); localStorage.setItem(STORAGE_KEY, raw); dbCache = { raw, db, index: null }; saveErrorLogged = false; return true; }
         catch (e) {
+            dbCache = null; // the entries may have been changed in memory but not saved: read them again
             if (!saveErrorLogged) { saveErrorLogged = true; console.error('Database: Error saving database (is the browser storage full?)', e); }
             return false;
         }
@@ -274,7 +316,8 @@
         const lastName2 = sameName(full[1], full[3]) ? '' : names.lastName2;
         const db = getDatabase();
         const rowContents = maskNames(getBlockedRowText(dept), ...full);
-        const existingIdx = db.findIndex(entry => sameSparkPair(entry, sparks.a, sparks.b));
+        const pairAt = pairKey(sparks.a, sparks.b) ? dbIndex(db).byPair.get(pairKey(sparks.a, sparks.b)) : undefined;
+        const existingIdx = pairAt === undefined ? -1 : pairAt;
         const old = existingIdx !== -1 ? db[existingIdx] : null;
         // Merged (Y/N) and "Script vs Bolt" come from the main script: the choice is what it chose over Bolt on
         // the pair on screen; Merged turns Y when the merge is confirmed (see 'elm2-pair-merged' below).
@@ -314,7 +357,8 @@
         const d = e.detail;
         if (!d) return;
         const db = getDatabase();
-        const idx = db.findIndex(entry => sameSparkPair(entry, d.a || '', d.b || ''));
+        const at = pairKey(d.a, d.b) ? dbIndex(db).byPair.get(pairKey(d.a, d.b)) : undefined;
+        const idx = at === undefined ? -1 : at;
         if (idx === -1) { console.log('[csv] merged pair is not in the database:', d.a, d.b); return; }
         db[idx].merged = 'Y';
         db[idx].scanDate = todayStr();
@@ -362,11 +406,21 @@
     // =========================================================
     function startsWord(text, prefix) { return new RegExp('(^|[^a-z0-9])' + escRe(prefix)).test(text); }
     function matchRowToDbEntry(row, db, usedDbIndices) {
-        const rowText = row.textContent.trim().toLowerCase();
-        for (let i = 0; i < db.length; i++) {
+        const rowTextRaw = row.textContent;
+        const rowText = rowTextRaw.trim().toLowerCase();
+        // only the entries that could match are looked at, in database order: those with a Spark ID that is a word of the row, those whose first name
+        // starts a word of the row, and the odd ones (see dbIndex)
+        const index = dbIndex(db);
+        const found = new Set(index.slow);
+        (rowTextRaw.match(/[A-Za-z0-9]{4,}/g) || []).forEach(w => { const l = index.byId.get(w); if (l) l.forEach(k => found.add(k)); });
+        (rowText.match(/[a-z0-9]{2,}/g) || []).forEach(w => {
+            for (let n = 2; n <= Math.min(w.length, index.maxName); n++) { const l = index.byName.get(w.slice(0, n)); if (l) l.forEach(k => found.add(k)); }
+        });
+        const candidates = Array.from(found).sort((a, b) => a - b);
+        for (const i of candidates) {
             if (usedDbIndices.has(i)) continue;
             const entry = db[i];
-            if (containsId(row.textContent, entry.sparkId1) || containsId(row.textContent, entry.sparkId2)) {
+            if (containsId(rowTextRaw, entry.sparkId1) || containsId(rowTextRaw, entry.sparkId2)) {
                 usedDbIndices.add(i);
                 return entry;
             }
@@ -501,7 +555,13 @@
     // one shared ID alone isn't enough when the entry has two).
     function dbEntryForApi(api, db) {
         if (!api) return null;
-        for (const entry of db) {
+        const index = dbIndex(db);
+        // the entries that have one of the record's Spark IDs (or, without them, an ID that is a word of the record), in database order
+        const found = new Set(index.slow);
+        const words = api.sparks.length ? api.sparks : (api.raw.match(/[A-Za-z0-9]{4,}/g) || []);
+        words.forEach(w => { const l = index.byId.get(w); if (l) l.forEach(k => found.add(k)); });
+        for (const i of Array.from(found).sort((a, b) => a - b)) {
+            const entry = db[i];
             const ids = [entry.sparkId1, entry.sparkId2].filter(Boolean);
             if (!ids.length) continue;
             if (api.sparks.length) {

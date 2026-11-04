@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.252
+// @version      2.253
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.252'; // keep in sync with @version
+    const VERSION = '2.253'; // keep in sync with @version
     // Chrome's install prompt for the web app: held back until Install is clicked on the card at the top of the
     // settings pane. The card shows only while Chrome says the page is installable, and the X hides it for good.
     let installPrompt = null;
@@ -248,8 +248,8 @@
         #elm2-kart-lane .elm2-kart .p3 { --d: -.36s; } #elm2-kart-lane .elm2-kart .p4 { --d: -.06s; }
         #elm2-kart-lane .elm2-kart.go svg { animation: none; }
         #elm2-kart-lane .elm2-kart.go .lines { opacity: 1; }
-        /* driving off: no sparks and no wheel glints; the borders of the tyres turn pink instead, a pink arc running round each tyre */
-        #elm2-kart-lane .elm2-kart.go .sparks, #elm2-kart-lane .elm2-kart.go .hubA, #elm2-kart-lane .elm2-kart.go .hubB { display: none; }
+        /* driving off: no sparks; the borders of the tyres turn pink instead, pink arcs running round each tyre (the white glints on the wheels keep turning) */
+        #elm2-kart-lane .elm2-kart.go .sparks { display: none; }
         #elm2-kart-lane .elm2-kart .rims { opacity: 0; }
         #elm2-kart-lane .elm2-kart .rims path { fill: var(--c, #ff4fa3); }
         #elm2-kart-lane .elm2-kart.go .rims { opacity: 1; }

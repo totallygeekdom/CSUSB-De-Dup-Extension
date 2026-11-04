@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.255`, shown in the settings pane |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.256`, shown in the settings pane |
 | Element451 - Database v2 | `database-v2.js` | `@version 2.65` |
 | Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.12`, see [section 17](#17-database-merge) |
 

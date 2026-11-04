@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.255
+// @version      2.256
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.255'; // keep in sync with @version
+    const VERSION = '2.256'; // keep in sync with @version
     // Chrome's install prompt for the web app: held back until Install is clicked on the card at the top of the
     // settings pane. The card shows only while Chrome says the page is installable, and the X hides it for good.
     let installPrompt = null;
@@ -758,7 +758,7 @@
         #elm-settings-pane .elm-slider-head { min-height: 40px; }
         #elm-settings-pane .setting-row.elm-seg-head { min-height: 32px; padding-bottom: 0; }
         /* Material 3 checkboxes (Allowed departments) */
-        #elm-settings-pane .elm-checks { display: flex; flex-wrap: wrap; gap: 4px 24px; padding: 4px 0 2px; }
+        #elm-settings-pane .elm-checks { display: flex; flex-direction: column; align-items: flex-start; gap: 0; padding: 4px 0 2px; } /* listed one under the other */
         #elm-settings-pane .elm-check { position: relative; display: inline-flex; align-items: center; gap: 12px; min-height: 40px; cursor: pointer; font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--md-on-surface); }
         #elm-settings-pane .elm-check input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; z-index: 1; }
         #elm-settings-pane .elm-check-box { position: relative; flex: none; width: 18px; height: 18px; box-sizing: border-box; border: 2px solid var(--md-on-surface-variant); border-radius: 2px; transition: background-color .15s var(--md-ease), border-color .15s var(--md-ease); }

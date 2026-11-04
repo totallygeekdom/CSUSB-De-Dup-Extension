@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.254`, shown in the settings pane |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.255`, shown in the settings pane |
 | Element451 - Database v2 | `database-v2.js` | `@version 2.65` |
 | Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.12`, see [section 17](#17-database-merge) |
 
@@ -181,9 +181,9 @@ Off: the script stops on those pairs and leaves them on screen, showing the popu
 - **Highlight Rows** (`elm_highlight_rows`, default on): the pick colours on rows and the applicant band.
 - **Show Database UI** (added by the Database script, `elm_show_db_ui`, default on): shows/hides the header `DB:` counter and the list-view department chips. Recording and the Download / Upload / Clear buttons are unaffected.
 
-### 4.7 Department
+### 4.7 Allowed departments
 
-**Allowed Department**: `All`, `UnderGrad` (default), `Grad/IA`, `None` (`elm_allowed_department`). A pair whose detected department differs is a blocker. **None** blocks everything (used for scan runs).
+Two checkboxes, **UnderGrad** and **Grad/IA**, in the Automation section right under the *Pairs in range* slider (`elm_allowed_department`, stored as `All` when both are ticked, `UnderGrad` (the default) or `Grad/IA` when one is, and `None` when neither is). A pair whose detected department is not ticked is a blocker. With neither ticked everything is blocked (used for scan runs).
 
 ### 4.8 Database
 
@@ -219,7 +219,7 @@ The pane's **Info** section (last, in a single list container) lists the version
 
 To scan the whole queue and record every pair without acting on any, use either:
 
-- **Allowed Department = None** (every pair is a wrong-department blocker), or
+- **no department ticked under Allowed departments** (every pair is a wrong-department blocker), or
 - **Slider = None** (nothing is in range),
 
 with **Auto-Skip on**. Every pair is recorded in the database and skipped with no popups. Skipping is robust against two real-world problems: the **Next duplicate** button can be disabled for a moment while Element loads the next pair (the click is retried every 0.5 s, up to 10 tries, and re-tried once after 3 s if a click did not move on), and consecutive pairs with identical names (handled by the position in the pair key). If it cannot advance, a "no next pair" notice appears.
@@ -234,7 +234,7 @@ A pair is blocked when any of these is true. Blocked pairs get red styling (the 
 |---|---|
 | **Forbidden** | Either contact's name contains `test`, or equals one of three hard-coded names (`angela armstrong`, `gillespie armstrong`, `mariah armstrong`) |
 | **Appeal** | Any row value, on either side, contains the word `appeal` (the side is reported) |
-| **Wrong department** | The detected department differs from **Allowed Department** (see below) |
+| **Wrong department** | The detected department is not ticked under **Allowed departments** (see below) |
 | **Student ID mismatch** | A row containing `School Id:` shows two different numeric IDs |
 
 **Department detection.** A row counts as Grad/IA when it is a Workflows / Application / Program / `type:` / `status:` row whose text contains `GRAD_` or "grad student" or an `IA_` / `_IA_` / `_IA ` marker **and** `status: Finished`. Otherwise the pair is **UnderGrad**. For a blocked UnderGrad pair the *first diff row* is highlighted red, as the classic script highlighted its first row; it is only a marker, because UnderGrad is "no Grad/IA row found".
@@ -442,7 +442,7 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 | `elm_install_dismissed` | main | the X on the Install as an app card was clicked |
 | `elm_outcome_toasts` | main | Toasts switch (default on; forced off with the slider on None, forced on while Auto-Skip or auto-merge is on) |
 | `elm_highlight_rows` | main | Highlight Rows |
-| `elm_allowed_department` | main | Allowed Department |
+| `elm_allowed_department` | main | Allowed departments (the two checkboxes) |
 | `elm_show_merge_counter` | main | Hidden: show the merge counter |
 | `elm_merge_count` | main | Merge counter value |
 | `elm_csv_database` | Database | Recorded pairs (JSON array) |
@@ -490,7 +490,7 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 | No "Update available" chip | It appears only after a newer GitHub Release exists and Chrome has been restarted (or the extension reloaded) |
 | Database buttons / badges still blue or old | The Database script on your side is an older copy; check it shows the latest `@version` |
 | Nothing is auto-applied | Slider on None, pair out of range, or **Use picks from = Bolt's** (nothing to apply) |
-| Everything gets skipped | Slider None or Allowed Department None with Auto-Skip on = scan mode |
+| Everything gets skipped | Slider None, or no Allowed department ticked, with Auto-Skip on = scan mode |
 | Auto-merge never runs | When done is Wait for me (it resets every session), slider on None, pair flagged as twins, or the final gate failed (see the toast / `[elm2] Auto-merge not done`) |
 | Skips lose database entries | Make sure both scripts are the latest builds (the record-before-skip handshake) |
 | Scan stalls after a few pairs | Fixed in build 81 (queue position in the pair key, retrying Next); update the main script |

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.248
+// @version      2.249
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.248'; // keep in sync with @version
+    const VERSION = '2.249'; // keep in sync with @version
     // Chrome's install prompt for the web app: held back until Install is clicked on the card at the top of the
     // settings pane. The card shows only while Chrome says the page is installable, and the X hides it for good.
     let installPrompt = null;
@@ -248,11 +248,20 @@
         #elm2-kart-lane .elm2-kart .p3 { --d: -.36s; } #elm2-kart-lane .elm2-kart .p4 { --d: -.06s; }
         #elm2-kart-lane .elm2-kart.go svg { animation: none; }
         #elm2-kart-lane .elm2-kart.go .lines { opacity: 1; }
+        /* driving off: no sparks and no wheel glints; the rims of the tyres turn pink instead, a pink arc running round each rim */
+        #elm2-kart-lane .elm2-kart.go .sparks, #elm2-kart-lane .elm2-kart.go .hubA, #elm2-kart-lane .elm2-kart.go .hubB { display: none; }
+        #elm2-kart-lane .elm2-kart .rims { opacity: 0; }
+        #elm2-kart-lane .elm2-kart .rims path { fill: var(--c, #ff4fa3); }
+        #elm2-kart-lane .elm2-kart.go .rims { opacity: 1; }
+        #elm2-kart-lane .elm2-kart .rim10 { animation: elm2-kart-rim10 .4s steps(1) infinite; }
+        #elm2-kart-lane .elm2-kart .rim8 { animation: elm2-kart-rim8 .32s steps(1) infinite; }
         @keyframes elm2-kart-bob { 0% { margin-top: 0; } 50% { margin-top: -4px; } }
         @keyframes elm2-kart-a { 0% { opacity: 1; } 50% { opacity: 0; } }
         @keyframes elm2-kart-b { 0% { opacity: 0; } 50% { opacity: 1; } }
         @keyframes elm2-kart-spark { 0% { opacity: 1; transform: translate(0, 0); } 25% { transform: translate(-1px, 0); } 50% { transform: translate(-2px, 1px); } 75% { opacity: 0; } }
         @keyframes elm2-kart-sk { 0% { opacity: 1; } 9.091% { opacity: 0; } } /* visible for 1 of the 11 frames */
+        @keyframes elm2-kart-rim10 { 0% { opacity: 1; } 10% { opacity: 0; } } /* visible for 1 of the 10 steps */
+        @keyframes elm2-kart-rim8 { 0% { opacity: 1; } 12.5% { opacity: 0; } } /* visible for 1 of the 8 steps */
         @keyframes elm2-kart-frame12 { 0% { opacity: 1; } 8.333% { opacity: 0; } } /* visible for 1 of the 12 frames */
         @keyframes elm2-kart-arm { 0% { opacity: 0; } 25% { opacity: 1; } 50% { opacity: 0; } }
         #elm2-merge-overlay .elm2-lamps { display: none; }
@@ -2995,6 +3004,10 @@
         '7.................................................'];
     const KART_STREAK_STEP = 0.04; // seconds a frame (11 frames = the .44 s of the animation)
     const KART_TONGUE = [[0, 1, 2, 1], [1, 2, 3, 1], [1, 3, 4, 2]]; // how far the fire licks out to the left of a wave row (at most 2), by stage
+    // The rim pixels of each wheel in order round the wheel (clockwise); while the kart drives off a pink arc runs round them.
+    const KART_RIMS = [
+        [[3, 23], [4, 23], [5, 24], [5, 25], [5, 26], [4, 27], [3, 27], [2, 26], [2, 25], [2, 24]],
+        [[23, 24], [24, 24], [25, 25], [25, 26], [24, 27], [23, 27], [22, 26], [22, 25]]];
     // wheel glints: two diagonal pairs of rim pixels that swap, so the wheels look like they turn
     const KART_GLINTS = [[[3, 23], [4, 27], [23, 24], [24, 27]], [[5, 24], [2, 26], [25, 25], [22, 26]]];
     function kartSvg() {
@@ -3022,6 +3035,13 @@
             return `<path class="so" d="${o}"/><path class="sy" d="${y2}"/><path class="so" d="${near}"/><path class="so tip" d="${far}"/>`;
         };
         const glints = (g) => `<path fill="#ceefef" d="${g.map(([x, y]) => px(x, y)).join('')}"/>`;
+        // the pink rims (only while driving off): the whole rim is a faint pink, and a bright arc 4 px long runs round it one pixel a step,
+        // a step a frame of 0.04 s (the rear rim has 10 pixels, the front one 8)
+        const rims = '<g class="rims">' + KART_RIMS.map(ring => {
+            const n = ring.length, at = (i) => { const [x, y] = ring[((i % n) + n) % n]; return px(x, y); };
+            const base = `<path fill-opacity=".35" d="${ring.map(([x, y]) => px(x, y)).join('')}"/>`;
+            return base + ring.map((_, k) => `<g class="rim${n}" style="animation-delay:${(-(n - k) * KART_STREAK_STEP).toFixed(2)}s"><path d="${at(k)}"/><path fill-opacity=".8" d="${at(k - 1)}"/><path fill-opacity=".55" d="${at(k - 2)}"/><path fill-opacity=".3" d="${at(k - 3)}"/></g>`).join('');
+        }).join('') + '</g>';
         const hubs = `<g class="hubA">${glints(KART_GLINTS[0])}</g><g class="hubB">${glints(KART_GLINTS[1])}</g>`;
         // the sparks: a wave at each wheel (one size per stage) and five plus-shaped sparks; the colour comes from the stage
         const sparks = [1, 2, 3].map(st => `<g class="tr t${st}">${KART_WAVE.map((_, f) => `<g class="wv" style="animation-delay:${(-(KART_WAVE.length - f) * KART_WAVE_STEP).toFixed(2)}s">${KART_TRAIL_X.map(ox => wavePx(f, st, ox)).join('')}</g>`).join('')}</g>`).join('') + KART_PLUS.map(plus).join('');
@@ -3039,7 +3059,7 @@
         const linesBehind = '<g class="lines">' + [[13, 4], [21, 8]].map(streak).join('') + '</g>';
         const lines = '<g class="lines">' + [[4, 0], [9, 6], [17, 2], [26, 9]].map(streak).join('') + '</g>';
         return `<svg viewBox="-${KART_PAD_L} 0 ${KART_W + KART_PAD_L} ${KART_H}" width="${(KART_W + KART_PAD_L) * KART_PX}" height="${KART_H * KART_PX}" shape-rendering="crispEdges">` +
-            linesBehind + body + hubs + `<g class="sparks">${sparks}</g>` + lines + '</svg>';
+            linesBehind + body + hubs + rims + `<g class="sparks">${sparks}</g>` + lines + '</svg>';
     }
     function removeKartLane() {
         const lane = document.getElementById('elm2-kart-lane');

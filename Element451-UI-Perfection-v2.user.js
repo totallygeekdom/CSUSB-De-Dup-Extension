@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.254
+// @version      2.258
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.254'; // keep in sync with @version
+    const VERSION = '2.258'; // keep in sync with @version
     // Chrome's install prompt for the web app: held back until Install is clicked on the card at the top of the
     // settings pane. The card shows only while Chrome says the page is installable, and the X hides it for good.
     let installPrompt = null;
@@ -1531,16 +1531,49 @@
         document.querySelectorAll('.elm2-search-hit').forEach(r => r.classList.remove('elm2-search-hit'));
         document.querySelectorAll('.elm2-hit-box').forEach(b => b.remove());
     }
-    async function histGoTo(page, rowIndex) {
+    // The table's page size, when it is known for sure: the paginator's own setting, or the length of a page that is not the last one
+    // (the last page is short). Remembered, so it is still known once the table is on its last page.
+    let histTableSize = 0;
+    function histKnownTableSize(pag) {
+        const st = pag && readPagerState(pag);
+        if (!st) return 0;
+        const inst = getPaginatorInstance(pag);
+        if (inst && inst.pageSize) histTableSize = inst.pageSize;
+        else if (st.end < st.total) histTableSize = st.end - st.start + 1;
+        return histTableSize;
+    }
+    // The History table's own columns that hold the profiles (not who did it, when, or how): what a search word should be found in.
+    const HIST_ROW_SKIP = '.cdk-column-who, .cdk-column-when, .cdk-column-action, .cdk-column-method, .cdk-column-actions';
+    function histRowQualifies(row, words) {
+        const text = Array.from(row.children).filter(c => !c.matches(HIST_ROW_SKIP)).map(c => c.textContent).join(' ');
+        return histMatches(text, words);
+    }
+    // Goes to the match: page and row are where it sits in the pages the search read from the API (limit records each); the table can
+    // show another number of records a page (the "items per page" setting), so the record's place is worked out from its position in
+    // the whole list. The row found is checked against the words searched for, and if it does not hold them a row on the page that does is used.
+    async function histGoTo(page, rowIndex, limit) {
         const pag = document.querySelector('mat-paginator');
         histClearHits();
-        if (pag) {
+        let target = { page, row: rowIndex };
+        const size = histKnownTableSize(pag);
+        if (size && limit && size !== limit) {
+            const at = (page - 1) * limit + rowIndex; // the record's place in the whole list
+            target = { page: Math.floor(at / size) + 1, row: at % size };
+        }
+        const st = pag && readPagerState(pag);
+        if (st && st.index !== Math.max(0, Math.min(st.pages - 1, target.page - 1))) { // not on that page yet: go there and wait for it to load
             const before = rangeLabelText(pag);
-            await pagerGoToPage(pag, page);
+            await pagerGoToPage(pag, target.page);
             await waitForRangeChange(pag, before, 3000);
             await sleep(500);
         }
-        const row = document.querySelectorAll('.bolt-table-rows-wrap bolt-row.cdk-row')[rowIndex];
+        const rows = Array.from(document.querySelectorAll('.bolt-table-rows-wrap bolt-row.cdk-row'));
+        let row = rows[target.row];
+        const words = hs && hs.words;
+        if (words && rows.length && !(row && histRowQualifies(row, words))) {
+            const holds = rows.map((r, i) => [r, i]).filter(([r]) => histRowQualifies(r, words));
+            if (holds.length) row = holds.sort((a, b) => Math.abs(a[1] - target.row) - Math.abs(b[1] - target.row))[0][0];
+        }
         if (row) { histMarkHit(row); row.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
     }
     // The scan state of the current search. The first match is jumped to straight away; the scan then carries
@@ -1562,7 +1595,7 @@
         const m = h.matches[h.cursor];
         histStatus(h, ui);
         histButtons(h, ui);
-        histGoTo(m.page, m.row);
+        histGoTo(m.page, m.row, h.limit);
     }
     function histNext(ui) {
         const h = hs;
@@ -1620,13 +1653,14 @@
         const limit = Math.max(1, parseInt(new URL(histReq.url).searchParams.get('limit'), 10) || 50);
         const pag = document.querySelector('mat-paginator');
         const st = pag && readPagerState(pag);
+        histKnownTableSize(pag);
         try { if (!histMode) histMode = await histDetectMode(limit); } catch (e) {
             if (run === histRun) ui.status.textContent = 'Search failed: ' + e.message;
             return;
         }
         if (run !== histRun) return;
         hs = { run, words, limit, page: 0, rows: null, i: 0, scanned: 0, found: 0, matches: [], cursor: -1, pagesDone: 0, prevKey: null, end: false,
-               pages: st ? Math.min(HIST_MAX_PAGES, st.pages) : HIST_MAX_PAGES, pagesKnown: !!st };
+               pages: st ? Math.min(HIST_MAX_PAGES, Math.max(1, Math.ceil(st.total / limit))) : HIST_MAX_PAGES, pagesKnown: !!st };
         histScan(ui);
     }
     function histClear(ui, input) {

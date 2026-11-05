@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.254`, shown in the settings pane |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.258`, shown in the settings pane |
 | Element451 - Database v2 | `database-v2.js` | `@version 2.65` |
 | Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.12`, see [section 17](#17-database-merge) |
 
@@ -349,6 +349,7 @@ A right-hand Material 3 panel with a close button at the top left next to the ti
   - **Status line**: `Searching page 5 of 104…`, `Searching page 5 of 104… Match 1 of 1`, `Match 1 of 3`, or `No matches found in 104 pages`.
   - **How it scans**: the page loads 50 merges at a time from `.../v2/users/relationships/duplicates/history?limit=50&offset=N`. The script remembers the page's own last request to that URL (including the auth token) and replays it for page 1, 2, 3…. Before paging it requests offsets 0 and 1 to learn whether `offset` counts pages from 0, pages from 1 or records. If no request has been captured yet (the page loaded before the script), go to another page of the list once. The Database script ignores history responses.
   - **Matching**: word-based partial matching over every value of the record, never the field names. Each typed word must be the start of a word in the record ("lov" finds Lovelace, "ovel" does not); a word with an @, digit or punctuation (an email, ID or date) is matched inside the whole value. Order doesn't matter, and with three or more words one may be missing ("First Middle Last" finds First Last).
+  - **Finding the row**: a match is at a place in the whole list (page and row of the API pages the search read, `limit` records each). The table can show a different number of records per page (the "items per page" setting), so the script works out the table page and row from that place, and then checks that the row holds the words searched for (in the profile columns, not *who*, *when* or *method*); if it does not, the nearest row on the page that does is highlighted.
   - **Skipped fields**: free text (`ai_analysis`, `feedback`) and **who did the merge**: keys like `actor`, `reviewer`, `performer`, `creator`, `author`, `*_by`, and any value equal to a reviewer name shown in the table's "who" column on the pages you have browsed. A plain `user` key is searched, because in Element451's API the contacts are the "users".
   - **Narrow windows**: the header row wraps instead of squishing. The pager drops under the header row when the two don't fit, and the status text moves onto its own line above the box before anything is clipped.
 - **Search bar style**: Element's expanded header search (`bolt-expandable-search`, review queue and History) and the History search share one Material 3 Expressive look: a 56 px full-round bar (the header row is kept 56 px tall even while the search is closed, so nothing moves when it opens) filled `#F5F5F5` (`--md-search-fill`), no outline, the search icon at the leading edge, 16 px text. Only the expanded state of Element's own search is restyled; it already slides open by itself.

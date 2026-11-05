@@ -14,7 +14,8 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest moved to Ubuntu 26.04, which Playwright 1.56 cannot install Chromium (and its system packages) on.
+    runs-on: ubuntu-24.04
     permissions:
       contents: write   # to create the release on a tag
     steps:

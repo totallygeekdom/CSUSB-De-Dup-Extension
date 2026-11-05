@@ -17,7 +17,7 @@ chip). Two v2 scripts target it, plus an optional third that merges databases:
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.259` (shown in the settings pane) |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.260` (shown in the settings pane) |
 | Element451 - Database v2 | `database-v2.js` | `@version 2.65` |
 | Element451 - Database Merge v2 (optional, pairs with Database) | `database-merge-v2.js` | `@version 1.12` |
 
@@ -36,7 +36,7 @@ the resolution rules, auto-merge, every website restyle, the database format, li
   - **Auto-Skip**: skips blocked, out-of-range and possible-twins pairs with no popup (Next duplicate
     only, never Dismiss); off = stop on them and show the appeal / possible-twins popups.
   - **Next after merge**: after a merge, presses "Next duplicate" on the "Merge completed" card (default on).
-  - Slider **None** (or Allowed Department **None**) with Auto-Skip on is a **scan**: every pair is
+  - Slider **None** (or no Allowed department ticked) with Auto-Skip on is a **scan**: every pair is
     recorded in the database and skipped.
 - **Stops on a Bolt error**: when the score chip reads **Error** (Bolt's analysis failed) the script does nothing to the pair, not even skip it, and shows a `Stop: Bolt error` toast.
 - **Blockers**: forbidden names, an `appeal` keyword, wrong department, student-ID mismatch (ignored pairs are already filtered out of the v2 queue).
@@ -135,7 +135,7 @@ UI Perfection works without the Database script. The Database script needs UI Pe
 | `elm_next_after_merge` | UI Perfection | Next after merge (default on) |
 | `elm_outcome_toasts` | UI Perfection | Toasts switch |
 | `elm_highlight_rows` | UI Perfection | Highlight Rows |
-| `elm_allowed_department` | UI Perfection | Allowed Department |
+| `elm_allowed_department` | UI Perfection | Allowed departments (UnderGrad, Grad/IA checkboxes) |
 | `elm_show_merge_counter` | UI Perfection | Hidden: show the merge counter |
 | `elm_merge_count` | UI Perfection | Merge counter value |
 | `elm2_bolt_picks` | UI Perfection | Bolt's original pick per conflicting row, hashed (no names or emails), so a revisited pair still shows what Bolt picked |

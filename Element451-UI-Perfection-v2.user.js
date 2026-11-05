@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.259
+// @version      2.260
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.259'; // keep in sync with @version
+    const VERSION = '2.260'; // keep in sync with @version
     // Chrome's install prompt for the web app: held back until Install is clicked on the card at the top of the
     // settings pane. The card shows only while Chrome says the page is installable, and the X hides it for good.
     let installPrompt = null;
@@ -766,6 +766,15 @@
                dragging, clicking and keyboard use are native. */
         #elm-settings-pane .elm-slider-head { min-height: 40px; }
         #elm-settings-pane .setting-row.elm-seg-head { min-height: 32px; padding-bottom: 0; }
+        /* Material 3 checkboxes (Allowed departments) */
+        #elm-settings-pane .elm-checks { display: flex; flex-direction: column; align-items: flex-start; gap: 0; padding: 4px 0 2px; } /* listed one under the other */
+        #elm-settings-pane .elm-check { position: relative; display: inline-flex; align-items: center; gap: 12px; min-height: 40px; cursor: pointer; font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--md-on-surface); }
+        #elm-settings-pane .elm-check input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; z-index: 1; }
+        #elm-settings-pane .elm-check-box { position: relative; flex: none; width: 18px; height: 18px; box-sizing: border-box; border: 2px solid var(--md-on-surface-variant); border-radius: 2px; transition: background-color .15s var(--md-ease), border-color .15s var(--md-ease); }
+        #elm-settings-pane .elm-check-box::after { content: ''; position: absolute; left: 4px; top: 0; width: 5px; height: 10px; box-sizing: border-box; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg) scale(0); transition: transform .15s var(--md-ease); }
+        #elm-settings-pane .elm-check input:checked + .elm-check-box { background: var(--md-primary); border-color: var(--md-primary); }
+        #elm-settings-pane .elm-check input:checked + .elm-check-box::after { transform: rotate(45deg) scale(1); }
+        #elm-settings-pane .elm-check input:focus-visible + .elm-check-box { outline: 2px solid var(--md-primary); outline-offset: 3px; }
         #elm-settings-pane .elm-level-label { font-size: 14px; font-weight: 500; letter-spacing: .1px; color: var(--md-primary-text); }
         #elm-settings-pane .elm-slider { padding: 22px 2px 12px; }
         #elm-settings-pane .m3s { position: relative; height: 44px; --p: 0; --gap: 6px; }
@@ -1477,10 +1486,13 @@
     // equal to a reviewer name shown in the table's "who" column (collected from the page as it is browsed).
     // (Not a plain "user" key: in Element451's API the contacts themselves are "users".)
     const HIST_SKIP_KEYS = /^(actor|who|reviewer|performer|initiator|author|operator|creator)(_?(id|name|email))?$|(^|_)(by|merged_?by|created_?by|performed_?by|updated_?by|reviewed_?by)$|^(ai_analysis|feedback)$/i;
+    // Capitals and accents are ignored on both sides: "jose" finds José and "hernandez" finds Hernández (otherwise the accented
+    // letter split a name into pieces, so "jose" found nothing and "ndez" found Hernández).
+    const histFold = (t) => String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     const histReviewers = new Set();
     function noteHistReviewers() {
         document.querySelectorAll('.bolt-table-rows-wrap .cdk-column-who .user-name').forEach(el => {
-            const n = el.textContent.trim().toLowerCase();
+            const n = histFold(el.textContent.trim());
             if (n) histReviewers.add(n);
         });
     }
@@ -1489,7 +1501,7 @@
         (function walk(o) {
             if (o === null || o === undefined) return;
             if (typeof o === 'string' || typeof o === 'number') {
-                const v = String(o).toLowerCase();
+                const v = histFold(o);
                 if (histReviewers.has(v.trim())) return; // the reviewer's name
                 values.push(v);
                 v.split(/[^a-z0-9]+/).forEach(t => { if (t) tokens.push(t); });
@@ -1540,16 +1552,49 @@
         document.querySelectorAll('.elm2-search-hit').forEach(r => r.classList.remove('elm2-search-hit'));
         document.querySelectorAll('.elm2-hit-box').forEach(b => b.remove());
     }
-    async function histGoTo(page, rowIndex) {
+    // The table's page size, when it is known for sure: the paginator's own setting, or the length of a page that is not the last one
+    // (the last page is short). Remembered, so it is still known once the table is on its last page.
+    let histTableSize = 0;
+    function histKnownTableSize(pag) {
+        const st = pag && readPagerState(pag);
+        if (!st) return 0;
+        const inst = getPaginatorInstance(pag);
+        if (inst && inst.pageSize) histTableSize = inst.pageSize;
+        else if (st.end < st.total) histTableSize = st.end - st.start + 1;
+        return histTableSize;
+    }
+    // The History table's own columns that hold the profiles (not who did it, when, or how): what a search word should be found in.
+    const HIST_ROW_SKIP = '.cdk-column-who, .cdk-column-when, .cdk-column-action, .cdk-column-method, .cdk-column-actions';
+    function histRowQualifies(row, words) {
+        const text = Array.from(row.children).filter(c => !c.matches(HIST_ROW_SKIP)).map(c => c.textContent).join(' ');
+        return histMatches(text, words);
+    }
+    // Goes to the match: page and row are where it sits in the pages the search read from the API (limit records each); the table can
+    // show another number of records a page (the "items per page" setting), so the record's place is worked out from its position in
+    // the whole list. The row found is checked against the words searched for, and if it does not hold them a row on the page that does is used.
+    async function histGoTo(page, rowIndex, limit) {
         const pag = document.querySelector('mat-paginator');
         histClearHits();
-        if (pag) {
+        let target = { page, row: rowIndex };
+        const size = histKnownTableSize(pag);
+        if (size && limit && size !== limit) {
+            const at = (page - 1) * limit + rowIndex; // the record's place in the whole list
+            target = { page: Math.floor(at / size) + 1, row: at % size };
+        }
+        const st = pag && readPagerState(pag);
+        if (st && st.index !== Math.max(0, Math.min(st.pages - 1, target.page - 1))) { // not on that page yet: go there and wait for it to load
             const before = rangeLabelText(pag);
-            await pagerGoToPage(pag, page);
+            await pagerGoToPage(pag, target.page);
             await waitForRangeChange(pag, before, 3000);
             await sleep(500);
         }
-        const row = document.querySelectorAll('.bolt-table-rows-wrap bolt-row.cdk-row')[rowIndex];
+        const rows = Array.from(document.querySelectorAll('.bolt-table-rows-wrap bolt-row.cdk-row'));
+        let row = rows[target.row];
+        const words = hs && hs.words;
+        if (words && rows.length && !(row && histRowQualifies(row, words))) {
+            const holds = rows.map((r, i) => [r, i]).filter(([r]) => histRowQualifies(r, words));
+            if (holds.length) row = holds.sort((a, b) => Math.abs(a[1] - target.row) - Math.abs(b[1] - target.row))[0][0];
+        }
         if (row) { histMarkHit(row); row.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
     }
     // The scan state of the current search. The first match is jumped to straight away; the scan then carries
@@ -1571,7 +1616,7 @@
         const m = h.matches[h.cursor];
         histStatus(h, ui);
         histButtons(h, ui);
-        histGoTo(m.page, m.row);
+        histGoTo(m.page, m.row, h.limit);
     }
     function histNext(ui) {
         const h = hs;
@@ -1618,7 +1663,7 @@
         }
     }
     async function histSearch(query, ui) {
-        const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+        const words = histFold(query).split(/\s+/).filter(Boolean);
         const run = ++histRun;
         histClearHits();
         noteHistReviewers();
@@ -1629,13 +1674,14 @@
         const limit = Math.max(1, parseInt(new URL(histReq.url).searchParams.get('limit'), 10) || 50);
         const pag = document.querySelector('mat-paginator');
         const st = pag && readPagerState(pag);
+        histKnownTableSize(pag);
         try { if (!histMode) histMode = await histDetectMode(limit); } catch (e) {
             if (run === histRun) ui.status.textContent = 'Search failed: ' + e.message;
             return;
         }
         if (run !== histRun) return;
         hs = { run, words, limit, page: 0, rows: null, i: 0, scanned: 0, found: 0, matches: [], cursor: -1, pagesDone: 0, prevKey: null, end: false,
-               pages: st ? Math.min(HIST_MAX_PAGES, st.pages) : HIST_MAX_PAGES, pagesKnown: !!st };
+               pages: st ? Math.min(HIST_MAX_PAGES, Math.max(1, Math.ceil(st.total / limit))) : HIST_MAX_PAGES, pagesKnown: !!st };
         histScan(ui);
     }
     function histClear(ui, input) {
@@ -3737,6 +3783,14 @@
                 <div id="elm-apply-level-desc" class="elm-level-desc elm-desc-2"></div>
                 </div>
                 <div class="elm-item">
+                <div class="setting-row elm-seg-head"><label>Allowed departments</label></div>
+                <div class="elm-checks">
+                    <label class="elm-check"><input type="checkbox" id="elm-dept-undergrad"><span class="elm-check-box"></span><span>UnderGrad</span></label>
+                    <label class="elm-check"><input type="checkbox" id="elm-dept-gradia"><span class="elm-check-box"></span><span>Grad/IA</span></label>
+                </div>
+                <div id="elm-dept-desc" class="elm-level-desc"></div>
+                </div>
+                <div class="elm-item">
                 <div class="setting-row elm-seg-head"><label>Use picks from</label></div>
                 <div class="elm-seg" id="elm-use-picks" role="radiogroup" aria-label="Use picks from">
                     <button type="button" role="radio" data-v="bolt">Bolt's</button>
@@ -3779,20 +3833,6 @@
                 <div class="elm-item">
                 <div class="setting-row"><label>Toasts</label>${toggleHtml('elm-outcome-toasts')}</div>
                 <div class="elm-level-desc elm-toast-desc">Short "Merge: 2/3" and "Skip: Appeal" toasts. Always on while Auto-Skip or auto-merge is on; always off when no pairs are in range (slider on None).</div>
-                </div>
-                </div>
-                <div class="settings-section-title">Department</div>
-                <div class="elm-list">
-                <div class="elm-item">
-                <div class="setting-row">
-                    <label>Allowed Department</label>
-                    <select id="elm-allowed-department">
-                        <option value="All">All</option>
-                        <option value="UnderGrad">UnderGrad</option>
-                        <option value="Grad/IA">Grad/IA</option>
-                        <option value="None">None</option>
-                    </select>
-                </div>
                 </div>
                 </div>
                 <div id="elm-settings-info">
@@ -3911,9 +3951,22 @@
                 if (onChange) onChange();
             });
         }
-        const deptSelect = document.getElementById('elm-allowed-department');
-        deptSelect.value = CFG.ALLOWED_DEPARTMENT;
-        deptSelect.addEventListener('change', () => localStorage.setItem('elm_allowed_department', deptSelect.value));
+        // Allowed departments: two checkboxes, stored in the same key and values as the old drop-down (All, UnderGrad, Grad/IA, None)
+        const deptUnder = document.getElementById('elm-dept-undergrad'), deptGrad = document.getElementById('elm-dept-gradia'), deptDesc = document.getElementById('elm-dept-desc');
+        function showDeptDesc() {
+            deptDesc.textContent = deptUnder.checked && deptGrad.checked ? 'Pairs from both departments are worked on.'
+                : deptUnder.checked ? 'Only UnderGrad pairs are worked on; any other pair is blocked.'
+                : deptGrad.checked ? 'Only Grad/IA pairs are worked on; any other pair is blocked.'
+                : 'No department is allowed: every pair is blocked (a scan, with Auto-Skip on).';
+        }
+        const deptNow = CFG.ALLOWED_DEPARTMENT;
+        deptUnder.checked = deptNow === 'All' || deptNow === 'UnderGrad';
+        deptGrad.checked = deptNow === 'All' || deptNow === 'Grad/IA';
+        showDeptDesc();
+        [deptUnder, deptGrad].forEach(box => box.addEventListener('change', () => {
+            localStorage.setItem('elm_allowed_department', deptUnder.checked && deptGrad.checked ? 'All' : deptUnder.checked ? 'UnderGrad' : deptGrad.checked ? 'Grad/IA' : 'None');
+            showDeptDesc();
+        }));
     }
 
 })();

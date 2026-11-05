@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.259`, shown in the settings pane |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.260`, shown in the settings pane |
 | Element451 - Database v2 | `database-v2.js` | `@version 2.65` |
 | Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.12`, see [section 17](#17-database-merge) |
 
@@ -181,9 +181,9 @@ Off: the script stops on those pairs and leaves them on screen, showing the popu
 - **Highlight Rows** (`elm_highlight_rows`, default on): the pick colours on rows and the applicant band.
 - **Show Database UI** (added by the Database script, `elm_show_db_ui`, default on): shows/hides the header `DB:` counter and the list-view department chips. Recording and the Download / Upload / Clear buttons are unaffected.
 
-### 4.7 Department
+### 4.7 Allowed departments
 
-**Allowed Department**: `All`, `UnderGrad` (default), `Grad/IA`, `None` (`elm_allowed_department`). A pair whose detected department differs is a blocker. **None** blocks everything (used for scan runs).
+Two checkboxes, **UnderGrad** and **Grad/IA**, in the Automation section right under the *Pairs in range* slider (`elm_allowed_department`, stored as `All` when both are ticked, `UnderGrad` (the default) or `Grad/IA` when one is, and `None` when neither is). A pair whose detected department is not ticked is a blocker. With neither ticked everything is blocked (used for scan runs).
 
 ### 4.8 Database
 
@@ -219,7 +219,7 @@ The pane's **Info** section (last, in a single list container) lists the version
 
 To scan the whole queue and record every pair without acting on any, use either:
 
-- **Allowed Department = None** (every pair is a wrong-department blocker), or
+- **no department ticked under Allowed departments** (every pair is a wrong-department blocker), or
 - **Slider = None** (nothing is in range),
 
 with **Auto-Skip on**. Every pair is recorded in the database and skipped with no popups. Skipping is robust against two real-world problems: the **Next duplicate** button can be disabled for a moment while Element loads the next pair (the click is retried every 0.5 s, up to 10 tries, and re-tried once after 3 s if a click did not move on), and consecutive pairs with identical names (handled by the position in the pair key). If it cannot advance, a "no next pair" notice appears.
@@ -234,7 +234,7 @@ A pair is blocked when any of these is true. Blocked pairs get red styling (the 
 |---|---|
 | **Forbidden** | Either contact's name contains `test`, or equals one of three hard-coded names (`angela armstrong`, `gillespie armstrong`, `mariah armstrong`) |
 | **Appeal** | Any row value, on either side, contains the word `appeal` (the side is reported) |
-| **Wrong department** | The detected department differs from **Allowed Department** (see below) |
+| **Wrong department** | The detected department is not ticked under **Allowed departments** (see below) |
 | **Student ID mismatch** | A row containing `School Id:` shows two different numeric IDs |
 
 **Department detection.** A row counts as Grad/IA when it is a Workflows / Application / Program / `type:` / `status:` row whose text contains `GRAD_` or "grad student" or an `IA_` / `_IA_` / `_IA ` marker **and** `status: Finished`. Otherwise the pair is **UnderGrad**. For a blocked UnderGrad pair the *first diff row* is highlighted red, as the classic script highlighted its first row; it is only a marker, because UnderGrad is "no Grad/IA row found".
@@ -348,7 +348,7 @@ A right-hand Material 3 panel with a close button at the top left next to the ti
 - **History search** (History tab, in the table header's actions slot; if that slot isn't found it goes before the pager, then above the table): a Material 3 Expressive search field that starts as a search icon and slides open when clicked (hint "Search merged profiles"; Escape, the icon, or clicking away from an empty box closes it). Enter starts the search, as on the review queue. **Previous match** / **Next match** step through the matches found so far (found matches are remembered, so Previous goes back without re-scanning), a status line sits left of the box, and the **×** cancels the search and clears the highlight. The first match is jumped to straight away (the pager goes to its page and the row gets a rounded orange box) while the scan carries on in the background, so the count grows as more are found.
   - **Status line**: `Searching page 5 of 104…`, `Searching page 5 of 104… Match 1 of 1`, `Match 1 of 3`, or `No matches found in 104 pages`.
   - **How it scans**: the page loads 50 merges at a time from `.../v2/users/relationships/duplicates/history?limit=50&offset=N`. The script remembers the page's own last request to that URL (including the auth token) and replays it for page 1, 2, 3…. Before paging it requests offsets 0 and 1 to learn whether `offset` counts pages from 0, pages from 1 or records. If no request has been captured yet (the page loaded before the script), go to another page of the list once. The Database script ignores history responses.
-  - **Matching**: word-based partial matching over every value of the record, never the field names. Each typed word must be the start of a word in the record ("lov" finds Lovelace, "ovel" does not); a word with an @, digit or punctuation (an email, ID or date) is matched inside the whole value. Order doesn't matter, and with three or more words one may be missing ("First Middle Last" finds First Last).
+  - **Matching**: word-based partial matching over every value of the record, never the field names. Capitals and accents are ignored on both sides ("jose" finds José, "hernandez" finds Hernández). Each typed word must be the start of a word in the record ("lov" finds Lovelace, "ovel" does not); a word with an @, digit or punctuation (an email, ID or date) is matched inside the whole value. Order doesn't matter, and with three or more words one may be missing ("First Middle Last" finds First Last).
   - **Skipped fields**: free text (`ai_analysis`, `feedback`) and **who did the merge**: keys like `actor`, `reviewer`, `performer`, `creator`, `author`, `*_by`, and any value equal to a reviewer name shown in the table's "who" column on the pages you have browsed. A plain `user` key is searched, because in Element451's API the contacts are the "users".
   - **Narrow windows**: the header row wraps instead of squishing. The pager drops under the header row when the two don't fit, and the status text moves onto its own line above the box before anything is clipped.
 - **Search bar style**: Element's expanded header search (`bolt-expandable-search`, review queue and History) and the History search share one Material 3 Expressive look: a 56 px full-round bar (the header row is kept 56 px tall even while the search is closed, so nothing moves when it opens) filled `#F5F5F5` (`--md-search-fill`), no outline, the search icon at the leading edge, 16 px text. Only the expanded state of Element's own search is restyled; it already slides open by itself.
@@ -443,7 +443,7 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 | `elm_install_dismissed` | main | the X on the Install as an app card was clicked |
 | `elm_outcome_toasts` | main | Toasts switch (default on; forced off with the slider on None, forced on while Auto-Skip or auto-merge is on) |
 | `elm_highlight_rows` | main | Highlight Rows |
-| `elm_allowed_department` | main | Allowed Department |
+| `elm_allowed_department` | main | Allowed departments (the two checkboxes) |
 | `elm_show_merge_counter` | main | Hidden: show the merge counter |
 | `elm_merge_count` | main | Merge counter value |
 | `elm_csv_database` | Database | Recorded pairs (JSON array) |
@@ -491,7 +491,7 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 | No "Update available" chip | It appears only after a newer GitHub Release exists and Chrome has been restarted (or the extension reloaded) |
 | Database buttons / badges still blue or old | The Database script on your side is an older copy; check it shows the latest `@version` |
 | Nothing is auto-applied | Slider on None, pair out of range, or **Use picks from = Bolt's** (nothing to apply) |
-| Everything gets skipped | Slider None or Allowed Department None with Auto-Skip on = scan mode |
+| Everything gets skipped | Slider None, or no Allowed department ticked, with Auto-Skip on = scan mode |
 | Auto-merge never runs | When done is Wait for me (it resets every session), slider on None, pair flagged as twins, or the final gate failed (see the toast / `[elm2] Auto-merge not done`) |
 | Skips lose database entries | Make sure both scripts are the latest builds (the record-before-skip handshake) |
 | Scan stalls after a few pairs | Fixed in build 81 (queue position in the pair key, retrying Next); update the main script |

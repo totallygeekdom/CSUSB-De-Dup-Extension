@@ -766,6 +766,15 @@
                dragging, clicking and keyboard use are native. */
         #elm-settings-pane .elm-slider-head { min-height: 40px; }
         #elm-settings-pane .setting-row.elm-seg-head { min-height: 32px; padding-bottom: 0; }
+        /* Material 3 checkboxes (Allowed departments) */
+        #elm-settings-pane .elm-checks { display: flex; flex-direction: column; align-items: flex-start; gap: 0; padding: 4px 0 2px; } /* listed one under the other */
+        #elm-settings-pane .elm-check { position: relative; display: inline-flex; align-items: center; gap: 12px; min-height: 40px; cursor: pointer; font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--md-on-surface); }
+        #elm-settings-pane .elm-check input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; z-index: 1; }
+        #elm-settings-pane .elm-check-box { position: relative; flex: none; width: 18px; height: 18px; box-sizing: border-box; border: 2px solid var(--md-on-surface-variant); border-radius: 2px; transition: background-color .15s var(--md-ease), border-color .15s var(--md-ease); }
+        #elm-settings-pane .elm-check-box::after { content: ''; position: absolute; left: 4px; top: 0; width: 5px; height: 10px; box-sizing: border-box; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg) scale(0); transition: transform .15s var(--md-ease); }
+        #elm-settings-pane .elm-check input:checked + .elm-check-box { background: var(--md-primary); border-color: var(--md-primary); }
+        #elm-settings-pane .elm-check input:checked + .elm-check-box::after { transform: rotate(45deg) scale(1); }
+        #elm-settings-pane .elm-check input:focus-visible + .elm-check-box { outline: 2px solid var(--md-primary); outline-offset: 3px; }
         #elm-settings-pane .elm-level-label { font-size: 14px; font-weight: 500; letter-spacing: .1px; color: var(--md-primary-text); }
         #elm-settings-pane .elm-slider { padding: 22px 2px 12px; }
         #elm-settings-pane .m3s { position: relative; height: 44px; --p: 0; --gap: 6px; }
@@ -3737,6 +3746,14 @@
                 <div id="elm-apply-level-desc" class="elm-level-desc elm-desc-2"></div>
                 </div>
                 <div class="elm-item">
+                <div class="setting-row elm-seg-head"><label>Allowed departments</label></div>
+                <div class="elm-checks">
+                    <label class="elm-check"><input type="checkbox" id="elm-dept-undergrad"><span class="elm-check-box"></span><span>UnderGrad</span></label>
+                    <label class="elm-check"><input type="checkbox" id="elm-dept-gradia"><span class="elm-check-box"></span><span>Grad/IA</span></label>
+                </div>
+                <div id="elm-dept-desc" class="elm-level-desc"></div>
+                </div>
+                <div class="elm-item">
                 <div class="setting-row elm-seg-head"><label>Use picks from</label></div>
                 <div class="elm-seg" id="elm-use-picks" role="radiogroup" aria-label="Use picks from">
                     <button type="button" role="radio" data-v="bolt">Bolt's</button>
@@ -3779,20 +3796,6 @@
                 <div class="elm-item">
                 <div class="setting-row"><label>Toasts</label>${toggleHtml('elm-outcome-toasts')}</div>
                 <div class="elm-level-desc elm-toast-desc">Short "Merge: 2/3" and "Skip: Appeal" toasts. Always on while Auto-Skip or auto-merge is on; always off when no pairs are in range (slider on None).</div>
-                </div>
-                </div>
-                <div class="settings-section-title">Department</div>
-                <div class="elm-list">
-                <div class="elm-item">
-                <div class="setting-row">
-                    <label>Allowed Department</label>
-                    <select id="elm-allowed-department">
-                        <option value="All">All</option>
-                        <option value="UnderGrad">UnderGrad</option>
-                        <option value="Grad/IA">Grad/IA</option>
-                        <option value="None">None</option>
-                    </select>
-                </div>
                 </div>
                 </div>
                 <div id="elm-settings-info">
@@ -3911,9 +3914,22 @@
                 if (onChange) onChange();
             });
         }
-        const deptSelect = document.getElementById('elm-allowed-department');
-        deptSelect.value = CFG.ALLOWED_DEPARTMENT;
-        deptSelect.addEventListener('change', () => localStorage.setItem('elm_allowed_department', deptSelect.value));
+        // Allowed departments: two checkboxes, stored in the same key and values as the old drop-down (All, UnderGrad, Grad/IA, None)
+        const deptUnder = document.getElementById('elm-dept-undergrad'), deptGrad = document.getElementById('elm-dept-gradia'), deptDesc = document.getElementById('elm-dept-desc');
+        function showDeptDesc() {
+            deptDesc.textContent = deptUnder.checked && deptGrad.checked ? 'Pairs from both departments are worked on.'
+                : deptUnder.checked ? 'Only UnderGrad pairs are worked on; any other pair is blocked.'
+                : deptGrad.checked ? 'Only Grad/IA pairs are worked on; any other pair is blocked.'
+                : 'No department is allowed: every pair is blocked (a scan, with Auto-Skip on).';
+        }
+        const deptNow = CFG.ALLOWED_DEPARTMENT;
+        deptUnder.checked = deptNow === 'All' || deptNow === 'UnderGrad';
+        deptGrad.checked = deptNow === 'All' || deptNow === 'Grad/IA';
+        showDeptDesc();
+        [deptUnder, deptGrad].forEach(box => box.addEventListener('change', () => {
+            localStorage.setItem('elm_allowed_department', deptUnder.checked && deptGrad.checked ? 'All' : deptUnder.checked ? 'UnderGrad' : deptGrad.checked ? 'Grad/IA' : 'None');
+            showDeptDesc();
+        }));
     }
 
 })();

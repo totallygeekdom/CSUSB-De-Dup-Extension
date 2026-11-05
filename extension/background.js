@@ -44,7 +44,17 @@ async function codeFor(script, cache) {
   return cached && cached.code && !newer(bundled.version, cached.version) ? cached : bundled;
 }
 
-async function syncScripts() {
+// Registration is unregister-then-register per script, so two overlapping runs (install + a popup toggle, or
+// the update check finishing while a toggle is in flight) could both unregister and then both register,
+// which throws "Duplicate script ID". Run them one at a time.
+let syncQueue = Promise.resolve();
+function syncScripts() {
+  const run = syncQueue.then(syncScriptsNow, syncScriptsNow);
+  syncQueue = run.catch(() => {});
+  return run;
+}
+
+async function syncScriptsNow() {
   if (!(await userScriptsAvailable())) return false;
   const { enabled, cache } = await getState();
   for (const script of SCRIPTS) {
@@ -53,7 +63,12 @@ async function syncScripts() {
     const { code } = await codeFor(script, cache);
     // the first snippet tells the page which extension version is running (the scripts show it in their settings pane)
     const ver = JSON.stringify(chrome.runtime.getManifest().version);
-    await chrome.userScripts.register([{ id: script.id, matches: MATCHES, js: [{ code: 'window.__elm451Extension = ' + ver + ';' }, { code }], runAt: 'document_idle', world: 'MAIN' }]);
+    const def = { id: script.id, matches: MATCHES, js: [{ code: 'window.__elm451Extension = ' + ver + ';' }, { code }], runAt: 'document_idle', world: 'MAIN' };
+    try { await chrome.userScripts.register([def]); }
+    catch (e) {
+      // already registered (a stale copy survived): replace it in place; a script that still fails must not stop the others
+      try { await chrome.userScripts.update([def]); } catch (e2) { console.warn('Dedup Tools: could not register ' + script.name + ':', e2 && e2.message || e2); }
+    }
   }
   return true;
 }
@@ -93,14 +108,18 @@ async function checkShellUpdate() {
 
 async function updateBadge() {
   const { shellUpdate } = await getState();
-  await chrome.action.setBadgeText({ text: shellUpdate ? '↑' : '' });
-  await chrome.action.setBadgeBackgroundColor({ color: '#ef6c00' });
+  try {
+    await chrome.action.setBadgeText({ text: shellUpdate ? '↑' : '' });
+    await chrome.action.setBadgeBackgroundColor({ color: '#ef6c00' });
+  } catch (e) { /* badge is cosmetic */ }
 }
 
 async function runChecks() {
-  await syncScripts();          // register what we have right away
-  await checkScriptUpdates();   // then fetch anything newer from GitHub
-  await checkShellUpdate();
+  // each step on its own, so one failing (offline, API gated, a bad response) never skips the others or ends as an uncaught rejection
+  const step = async (name, fn) => { try { await fn(); } catch (e) { console.warn('Dedup Tools: ' + name + ' failed:', e && e.message || e); } };
+  await step('register scripts', syncScripts);          // register what we have right away
+  await step('script update check', checkScriptUpdates); // then fetch anything newer from GitHub
+  await step('extension update check', checkShellUpdate);
 }
 
 chrome.runtime.onInstalled.addListener(runChecks);   // install, reload, and extension updates
@@ -109,6 +128,7 @@ chrome.runtime.onStartup.addListener(runChecks);     // every time Chrome starts
 // The popup talks to us through these messages.
 chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   (async () => {
+   try {
     const st = await getState();
     if (msg.type === 'status') {
       const versions = {};
@@ -130,6 +150,10 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
     } else if (msg.type === 'sync') {
       reply({ ok: await syncScripts() });
     }
+   } catch (e) {
+    console.warn('Dedup Tools: message "' + (msg && msg.type) + '" failed:', e && e.message || e);
+    try { reply({ ok: false, error: String(e && e.message || e) }); } catch (e2) { /* the popup closed */ }
+   }
   })();
   return true; // the reply is sent asynchronously
 });

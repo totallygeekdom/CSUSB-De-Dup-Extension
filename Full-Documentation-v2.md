@@ -5,8 +5,8 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.261`, shown in the settings pane |
-| Element451 - Database v2 | `database-v2.js` | `@version 2.65` |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.262`, shown in the settings pane |
+| Element451 - Database v2 | `database-v2.js` | `@version 2.66` |
 | Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.12`, see [section 17](#17-database-merge) |
 
 
@@ -386,6 +386,8 @@ Bolt's overview card is replaced by our own: a **rating chip** (High, Medium, Lo
 
 **Rating.** High needs 70+ points **and** at least two strong matches (an ID, birth date, exact email or phone) **and** no hard conflict. Medium is 45+; Low is 15+, and any hard conflict caps the pair at Low; under 15 is Not a match. These are deliberately cautious: merging two people is the worse mistake. The weights, thresholds and nickname list are in `SCORE_W`, `SCORE_CUT` and `NICK` at the top of the score engine, which is a set of pure functions (no page access) between the `SCORE ENGINE START` / `END` comments.
 
+**Score chips.** The chips in the review sidebar and on the list show our rating too. A chip reads **Pending**, in Bolt's blue, until the pair has been analysed. The review page remembers each rating (localStorage `elm_pair_ratings`, keyed by the pair's two Spark IDs, the 4000 most recent) and a list row finds it through `data-csv-sparks`, the Spark IDs the Database script sets on a row from the list API. Without the Database script, or when the list API was not captured, list rows stay Pending. A chip that shows Bolt's own *Error* is left alone.
+
 The slider, the Auto-Apply range check and the merge brief use this rating; the database's Bolt Score column still records Bolt's own chip.
 
 ---
@@ -470,6 +472,7 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 | `elm_next_after_merge` | main | Next after merge (default on) |
 | `elm_dedup_path` | main | the path of the Deduplication page, learnt from the list page, for the installed app's shortcut |
 | `elm_install_dismissed` | main | the X on the Install as an app card was clicked |
+| `elm_pair_ratings` | main | our rating per pair (keyed by the two Spark IDs), for the score chips on the list |
 | `elm_outcome_toasts` | main | Toasts switch (default on; forced off with the slider on None, forced on while Auto-Skip or auto-merge is on) |
 | `elm_highlight_rows` | main | Highlight Rows |
 | `elm_allowed_department` | main | Allowed departments (the two checkboxes) |
@@ -546,7 +549,7 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 - **Database Merge**: a third, optional script that merges several exported databases on a page of its own (section 17).
 - **Chrome extension**: unpacked extension that runs both scripts and updates them from GitHub when Chrome starts, popup with switches, build + release workflow (section 16).
 - **Versions**: the settings pane lists Main script, Database script and Extension versions in one style.
-- **Our own rating**: a points-based rating and plain-English write-up replace Bolt's overview card (section 10.6).
+- **Our own rating**: a points-based rating and plain-English write-up replace Bolt's overview card; score chips show our rating, or Pending (section 10.6).
 - **Fixes along the way**: stall on identical consecutive names / disabled Next button, twins warning signal count, cut-off date text in filters, clipped filters panel, selected-chip colour specificity.
 
 ## 16. Chrome extension

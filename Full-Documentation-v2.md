@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.262`, shown in the settings pane |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.263`, shown in the settings pane |
 | Element451 - Database v2 | `database-v2.js` | `@version 2.66` |
 | Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.12`, see [section 17](#17-database-merge) |
 
@@ -135,7 +135,7 @@ Five positions, chosen by **our rating** (section 10.6; Bolt's score is one inpu
 | **High** | rating **High** |
 | **Medium** | **High** and **Medium** |
 | **Low** | **High**, **Medium** and **Low** |
-| **All** | every pair, even one rated Not a match |
+| **All** | every pair, whatever its rating |
 
 An applicant side does **not** put a pair in range (applicants can have any score); the applicant rule only
 affects *which side is picked* when **Use picks from = Ours** ([section 7](#7-field-resolution-rules)). On High, Medium and Low the script waits up to 3 seconds for the score chip to render before deciding.
@@ -361,7 +361,7 @@ Both scripts append toasts to one shared stack, **bottom-left**, newest at the b
 
 ### 10.6 Dedup analysis (our rating and write-up)
 
-Bolt's overview card is replaced by our own: a **rating chip** (High, Medium, Low or Not a match), the point total, and a short plain-English write-up. The **View Bolt's write-up** button swaps Bolt's original header and text back (and **Back to our write-up** returns); Bolt's text is only hidden, never removed. Hovering the chip lists the points per field, and the console logs the same breakdown with the evidence read, for each pair.
+Bolt's overview card is replaced by our own: a **rating chip** (High, Medium or Low), the point total, and a short plain-English write-up. The **View Bolt's write-up** button swaps Bolt's original header and text back (and **Back to our write-up** returns); Bolt's text is only hidden, never removed. Hovering the chip lists the points per field, and the console logs the same breakdown with the evidence read, for each pair.
 
 **Where the data comes from.** The diff form only shows fields that differ, so differences are read from its rows, and the fields that *match* are read from Bolt's own bullet list (for example `date of birth: identical (2008-12-16)`), which names the field and its value. Names come from the contact cards when the form has no name rows. The rating needs Bolt's overview on screen; until then the Bolt chip is used.
 
@@ -384,7 +384,7 @@ Bolt's overview card is replaced by our own: a **rating chip** (High, Medium, Lo
 | Bolt High / Medium / Low | +20 / +8 / -5 | |
 | Bolt says "different people" | | -25 |
 
-**Rating.** High needs 70+ points **and** at least two strong matches (an ID, birth date, exact email or phone) **and** no hard conflict. Medium is 45+; Low is 15+, and any hard conflict caps the pair at Low; under 15 is Not a match. These are deliberately cautious: merging two people is the worse mistake. The weights, thresholds and nickname list are in `SCORE_W`, `SCORE_CUT` and `NICK` at the top of the score engine, which is a set of pure functions (no page access) between the `SCORE ENGINE START` / `END` comments.
+**Rating.** High needs 70+ points **and** at least two strong matches (an ID, birth date, exact email or phone) **and** no hard conflict. Medium is 45+; everything else is Low, and any hard conflict caps the pair at Low. A Low pair under 15 points is described as probably different people in the write-up. These are deliberately cautious: merging two people is the worse mistake. The weights, thresholds and nickname list are in `SCORE_W`, `SCORE_CUT` and `NICK` at the top of the score engine, which is a set of pure functions (no page access) between the `SCORE ENGINE START` / `END` comments.
 
 **Score chips.** The chips in the review sidebar and on the list show our rating too. A chip reads **Pending**, in Bolt's blue, until the pair has been analysed. The review page remembers each rating (localStorage `elm_pair_ratings`, keyed by the pair's two Spark IDs, the 4000 most recent) and a list row finds it through `data-csv-sparks`, the Spark IDs the Database script sets on a row from the list API. Without the Database script, or when the list API was not captured, list rows stay Pending. A chip that shows Bolt's own *Error* is left alone.
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.262
+// @version      2.263
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.262'; // keep in sync with @version
+    const VERSION = '2.263'; // keep in sync with @version
     // Chrome's install prompt for the web app: held back until Install is clicked on the card at the top of the
     // settings pane. The card shows only while Chrome says the page is installable, and the X hides it for good.
     let installPrompt = null;
@@ -217,7 +217,7 @@
         .elm2-an-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 6px; }
         .elm2-an-title { font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: #1a1c20; }
         .elm2-an-chip { display: inline-block; padding: 1px 10px; border-radius: 12px; font-size: 12px; line-height: 20px; font-weight: 600; color: #fff; cursor: help; }
-        .elm2-an-high { background: #2e7d32; } .elm2-an-medium { background: #ef6c00; } .elm2-an-low { background: #d32f2f; } .elm2-an-none { background: #5f6368; }
+        .elm2-an-high { background: #2e7d32; } .elm2-an-medium { background: #ef6c00; } .elm2-an-low { background: #d32f2f; }
         .elm2-an-pts { font-size: 12px; color: #5f6368; }
         .elm2-an-toggle { margin-left: auto; padding: 2px 10px; border: 1px solid rgba(26, 28, 32, .24); border-radius: 12px; background: transparent; color: #434750; font: inherit; font-size: 12px; line-height: 18px; cursor: pointer; }
         .elm2-an-toggle:hover { background: rgba(26, 28, 32, .06); }
@@ -1994,7 +1994,7 @@
         for (const chip of chips) { const lvl = chipLevel(chip); if (lvl) return lvl; }
         return null;
     }
-    // The pair's rating: ours (high / medium / low, or 'none' for a pair we think is different) once Bolt's overview is
+    // The pair's rating: ours (high / medium / low) once Bolt's overview is
     // on screen to read the matching fields from, else Bolt's chip.
     function getScoreChipLevel() {
         const r = currentRating();
@@ -2430,7 +2430,7 @@
         if (ev.bolt && ev.bolt.different) add('boltDifferent', 'Bolt "different people"', W.boltDifferent, 'against', 'Bolt flagged them as different people');
         // totals
         let pts = 0; items.forEach(i => { pts += i.pts; });
-        let level = pts >= SCORE_CUT.high && strong >= 2 ? 'high' : pts >= SCORE_CUT.medium ? 'medium' : pts >= SCORE_CUT.low ? 'low' : 'none';
+        let level = pts >= SCORE_CUT.high && strong >= 2 ? 'high' : pts >= SCORE_CUT.medium ? 'medium' : 'low';
         if (level === 'high' && hard) level = 'low';
         if (hard && level === 'medium') level = 'low';
         // (70 points on weak fields alone, with fewer than two strong matches, lands on Medium by the line above)
@@ -2438,11 +2438,11 @@
         const present = keyFields.filter(k => k === 'dob' ? (da && db) : k === 'email' ? (ea.length && eb.length) : k === 'phone' ? (pa && pb) : (scDigits(A[k]) && scDigits(B[k])));
         const missing = keyFields.filter(k => !present.includes(k));
         const thin = !present.some(k => k === 'coyote' || k === 'cas') && present.length < 2;
-        return { points: pts, level, hard, strong, items, missing, thin };
+        return { points: pts, level, hard, strong, items, missing, thin, different: pts < SCORE_CUT.low };
     }
     // ---- SCORE ENGINE END ----
     // ---- WRITE-UP START: the score turned into plain sentences (templates, no AI, so it always agrees with the points) ----
-    const WRITE_LEVEL = { high: 'High', medium: 'Medium', low: 'Low', none: 'Not a match' };
+    const WRITE_LEVEL = { high: 'High', medium: 'Medium', low: 'Low' };
     function writeUp(res, ev) {
         const list = (a) => a.length < 2 ? a.join('') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1];
         const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -2456,8 +2456,8 @@
         const conflict = res.hard || against.some(i => i.key === 'twins');
         out.verdict = res.level === 'high' ? 'Almost certainly the same person.'
             : res.level === 'medium' ? (res.thin ? 'Probably the same person, but the evidence is thin.' : 'Probably the same person.')
-            : res.level === 'low' ? (conflict || boltDiff ? 'Possibly different people.' : 'Not enough to say.')
-            : 'Probably different people.';
+            : res.different ? 'Probably different people.'
+            : conflict || boltDiff ? 'Possibly different people.' : 'Not enough to say.';
         // what lines up
         const nameBoth = names.length === 2 && names.every(n => n.key === 'first' ? n.pts >= SCORE_W.first[0] : n.pts >= SCORE_W.last[0]);
         const matchPhrases = [];
@@ -2604,7 +2604,7 @@
     // The review page remembers each rating it computes, keyed by the pair's two Spark IDs; a list row is matched to it through the
     // Spark IDs the Database script reads from the list API (data-csv-sparks). Without those, a row stays Pending.
     const RATINGS_KEY = 'elm_pair_ratings', RATINGS_MAX = 4000;
-    const RATING_CODE = { high: 'h', medium: 'm', low: 'l', none: 'n' }, RATING_BY_CODE = { h: 'high', m: 'medium', l: 'low', n: 'none' };
+    const RATING_CODE = { high: 'h', medium: 'm', low: 'l' }, RATING_BY_CODE = { h: 'high', m: 'medium', l: 'low', n: 'low' }; // 'n' was a short-lived fourth level, now Low
     let ratingsCache = null;
     function loadRatings() {
         if (ratingsCache) return ratingsCache;
@@ -2632,7 +2632,7 @@
         }
         return null;
     }
-    const CHIP_STYLE = { high: ['High', '#2e7d32'], medium: ['Medium', '#ef6c00'], low: ['Low', '#d32f2f'], none: ['No match', '#5f6368'], pending: ['Pending', 'var(--elm2-bolt-blue, #1976d2)'] };
+    const CHIP_STYLE = { high: ['High', '#2e7d32'], medium: ['Medium', '#ef6c00'], low: ['Low', '#d32f2f'], pending: ['Pending', 'var(--elm2-bolt-blue, #1976d2)'] };
     function setChip(chip, kind) {
         const [label, color] = CHIP_STYLE[kind];
         if (chip.dataset.elm2Label === label && chip.dataset.elm2Kind === kind) return;
@@ -3622,7 +3622,7 @@
         if (score) {
             const l = line();
             text(l, 'Rating: ');
-            strong(l, WRITE_LEVEL[score] || score, 'brief-score brief-score-' + (score === 'none' ? 'low' : score));
+            strong(l, WRITE_LEVEL[score] || score, 'brief-score brief-score-' + score);
             if (bolt && bolt !== score) text(l, ' (Bolt: ' + bolt.charAt(0).toUpperCase() + bolt.slice(1) + ')');
         }
         const { picks, over } = mergeStats();
@@ -4273,7 +4273,7 @@
             'Pairs with a High rating.',
             'Pairs with a High or Medium rating.',
             'Pairs with a High, Medium or Low rating.',
-            'Every pair, even one rated Not a match.'
+            'Every pair, whatever its rating.'
         ];
         const syncLevel = () => {
             levelSlider.value = CFG.RANGE_LEVEL;

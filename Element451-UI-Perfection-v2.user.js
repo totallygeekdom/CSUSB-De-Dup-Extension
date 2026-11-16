@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.264
+// @version      2.265
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.264'; // keep in sync with @version
+    const VERSION = '2.265'; // keep in sync with @version
     // Chrome's install prompt for the web app: held back until Install is clicked on the card at the top of the
     // settings pane. The card shows only while Chrome says the page is installable, and the X hides it for good.
     let installPrompt = null;
@@ -217,7 +217,7 @@
         .elm2-an-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 6px; }
         .elm2-an-title { font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: #1a1c20; }
         .elm2-an-chip { display: inline-block; padding: 1px 10px; border-radius: 12px; font-size: 12px; line-height: 20px; font-weight: 600; color: #fff; cursor: help; }
-        .elm2-an-high { background: #2e7d32; } .elm2-an-medium { background: #ef6c00; } .elm2-an-low { background: #d32f2f; }
+        .elm2-an-high { background: #2e7d32; } .elm2-an-medium { background: #ef6c00; } .elm2-an-low { background: #d32f2f; } .elm2-an-pending { background: var(--elm2-bolt-blue, #1976d2); }
         .elm2-an-pts { font-size: 12px; color: #5f6368; }
         .elm2-an-toggle { margin-left: auto; padding: 2px 10px; border: 1px solid rgba(26, 28, 32, .24); border-radius: 12px; background: transparent; color: #434750; font: inherit; font-size: 12px; line-height: 18px; cursor: pointer; }
         .elm2-an-toggle:hover { background: rgba(26, 28, 32, .06); }
@@ -1954,7 +1954,9 @@
     }
     // The score chip of the pair on screen. The review queue list (behind the sidebar) has a chip on
     // every row, so a plain "first chip on the page" can belong to a different pair: look inside the
-    // sidebar that holds the diff form first, then ignore chips that sit in the list's table rows.
+    // sidebar that holds the diff form first, then ignore chips that sit in the list's table rows. A chip in a list row is
+    // never this pair's score, so when none is found the answer is "no chip" (not the first row's chip).
+    const LIST_ROW = 'elm-review-queue-table, bolt-table, cdk-table, table, tr, bolt-row, [role="row"], [role="cell"]';
     function getScoreChips() {
         const all = Array.from(document.querySelectorAll('elm-deduplication-score-chip .bolt-chip, elm-deduplication-score-chip bolt-chip'));
         const form = getDiffForm();
@@ -1963,8 +1965,8 @@
             const inScope = all.filter(c => scope.contains(c));
             if (inScope.length) return inScope;
         }
-        const outsideList = all.filter(c => !c.closest('elm-review-queue-table, bolt-table, cdk-table, table, tr, [role="row"]'));
-        return outsideList.length ? outsideList : all;
+        const outsideList = all.filter(c => !c.closest(LIST_ROW));
+        return outsideList.length || form ? outsideList : all;
     }
     function chipLevel(chip) {
         const cls = chip.className && chip.className.toString ? chip.className.toString() : '';
@@ -2553,7 +2555,10 @@
         else if (bolt.said.address && bolt.said.address.state === 'match') addrState = 'match';
         const app = findApplicantSide();
         sides[0].applicant = app === 'left'; sides[1].applicant = app === 'right';
-        return { A: sides[0], B: sides[1], addrState, bolt: { level: getBoltChipLevel(), different: bolt.different } };
+        let boltLevel = getBoltChipLevel();
+        if (boltLevel === 'high' && bolt.different) { console.log('[elm2] Bolt chip reads High but Bolt\'s text says different people: the chip is ignored'); boltLevel = null; }
+        const chips = getScoreChips();
+        return { A: sides[0], B: sides[1], addrState, bolt: { level: boltLevel, different: bolt.different }, chips: { found: chips.length, levels: chips.map(c => chipLevel(c) || '?').join('/') } };
     }
     let anCache = { t: 0, key: '', out: null };
     // The rating of the pair on screen: { res, ev, write }, or null until Bolt's overview has rendered.
@@ -2577,7 +2582,8 @@
         if (anView.pair !== pk) { anView.pair = pk; anView.bolt = false; }
         const { res, ev, write } = rating;
         rememberRating(res.level);
-        const sig = JSON.stringify([pk, res.points, res.level, write.paragraphs, anView.bolt]);
+        const boltLevel = getBoltChipLevel();
+        const sig = JSON.stringify([pk, res.points, res.level, write.paragraphs, anView.bolt, boltLevel]);
         card.classList.toggle('elm2-an-bolt', anView.bolt);
         card.classList.toggle('elm2-an-ours', !anView.bolt);
         if (old && old.dataset.sig === sig) return;
@@ -2585,10 +2591,18 @@
         const el = document.createElement('div');
         el.className = 'elm2-an'; el.dataset.sig = sig;
         const bar = document.createElement('div'); bar.className = 'elm2-an-bar';
-        const title = document.createElement('span'); title.className = 'elm2-an-title'; title.textContent = 'Dedup analysis';
-        const chip = document.createElement('span'); chip.className = 'elm2-an-chip elm2-an-' + res.level; chip.textContent = WRITE_LEVEL[res.level];
-        chip.title = res.items.map(i => i.label + ' ' + (i.pts > 0 ? '+' : '') + i.pts).join('\n') + '\nTotal ' + res.points + ' points';
-        const pts = document.createElement('span'); pts.className = 'elm2-an-pts'; pts.textContent = res.points + ' pts';
+        const title = document.createElement('span'); title.className = 'elm2-an-title'; title.textContent = anView.bolt ? 'Bolt analysis' : 'Dedup analysis';
+        // our rating and points normally; with Bolt's write-up showing, Bolt's own score (its chip) instead
+        const chip = document.createElement('span'), pts = document.createElement('span'); pts.className = 'elm2-an-pts';
+        if (anView.bolt) {
+            chip.className = 'elm2-an-chip elm2-an-' + (boltLevel || 'low'); chip.textContent = boltLevel ? WRITE_LEVEL[boltLevel] : 'No score';
+            if (!boltLevel) chip.className = 'elm2-an-chip elm2-an-pending';
+            chip.title = "Bolt's own score for this pair";
+        } else {
+            chip.className = 'elm2-an-chip elm2-an-' + res.level; chip.textContent = WRITE_LEVEL[res.level];
+            chip.title = res.items.map(i => i.label + ' ' + (i.pts > 0 ? '+' : '') + i.pts).join('\n') + '\nTotal ' + res.points + ' points';
+            pts.textContent = res.points + ' pts';
+        }
         const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'elm2-an-toggle';
         btn.textContent = anView.bolt ? 'Back to our write-up' : 'View Bolt\'s write-up';
         btn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); anView.bolt = !anView.bolt; renderOurAnalysis(); });
@@ -2599,7 +2613,7 @@
         write.paragraphs.forEach(t => { const p = document.createElement('p'); p.textContent = t; text.appendChild(p); });
         el.appendChild(text);
         body.insertBefore(el, body.firstChild);
-        console.log('[elm2] analysis:', WRITE_LEVEL[res.level], res.points + ' pts |', res.items.map(i => i.key + ' ' + (i.pts > 0 ? '+' : '') + i.pts).join(', '), '| evidence:', JSON.stringify({ A: ev.A, B: ev.B, addr: ev.addrState }));
+        console.log('[elm2] analysis:', WRITE_LEVEL[res.level], res.points + ' pts |', res.items.map(i => i.key + ' ' + (i.pts > 0 ? '+' : '') + i.pts).join(', '), '| Bolt chips read:', ev.chips.found + ' (' + ev.chips.levels + ')', '| evidence:', JSON.stringify({ A: ev.A, B: ev.B, addr: ev.addrState }));
     }
     // ---- ANALYSIS CARD END ----
     // ---- SCORE CHIPS: the chips on the list and in the review sidebar show our rating, "Pending" (in Bolt's blue) until a pair has been analysed ----

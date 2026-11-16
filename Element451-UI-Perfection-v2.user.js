@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.263
+// @version      2.264
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.263'; // keep in sync with @version
+    const VERSION = '2.264'; // keep in sync with @version
     // Chrome's install prompt for the web app: held back until Install is clicked on the card at the top of the
     // settings pane. The card shows only while Chrome says the page is installable, and the X hides it for good.
     let installPrompt = null;
@@ -221,9 +221,11 @@
         .elm2-an-pts { font-size: 12px; color: #5f6368; }
         .elm2-an-toggle { margin-left: auto; padding: 2px 10px; border: 1px solid rgba(26, 28, 32, .24); border-radius: 12px; background: transparent; color: #434750; font: inherit; font-size: 12px; line-height: 18px; cursor: pointer; }
         .elm2-an-toggle:hover { background: rgba(26, 28, 32, .06); }
-        /* Score chips (list and sidebar): the label comes from data-elm2-label, so a re-render of Bolt's text cannot flicker it. */
-        elm-deduplication-score-chip bolt-chip .bolt-chip-text[data-elm2-label] { font-size: 0 !important; }
-        elm-deduplication-score-chip bolt-chip .bolt-chip-text[data-elm2-label]::after { content: attr(data-elm2-label); font-size: 12px; line-height: 20px; font-weight: 500; }
+        /* Score chips (list and sidebar): the whole chip shows only our label (data-elm2-label), whatever Bolt put inside it (its own
+           High / Medium / Low text, an info icon); drawing it from the chip's own ::after also keeps a re-render of Bolt's text from flickering it. */
+        elm-deduplication-score-chip bolt-chip[data-elm2-label] { font-size: 0 !important; }
+        elm-deduplication-score-chip bolt-chip[data-elm2-label] > * { display: none !important; }
+        elm-deduplication-score-chip bolt-chip[data-elm2-label]::after { content: attr(data-elm2-label); font-size: 12px; line-height: 20px; font-weight: 500; color: #fff; }
         .elm2-an-text p { margin: 0 0 6px; font-size: 13px; line-height: 19px; color: #434750; }
         .elm2-an-text .elm2-an-verdict { font-size: 14px; font-weight: 600; color: #1a1c20; }
         #elm2-merge-overlay #elm2-merge-cancel { position: relative; width: 100%; height: 48px; border: none; border-radius: 24px; background: #b3261e; color: #fff; font-family: inherit; font-weight: 500; font-size: 14px; line-height: 20px; letter-spacing: .1px; cursor: pointer; overflow: hidden; transition: box-shadow .2s var(--md-ease); }
@@ -2639,8 +2641,7 @@
         chip.dataset.elm2Label = label; chip.dataset.elm2Kind = kind;
         ['background-color', 'border-color'].forEach(p => chip.style.setProperty(p, color, 'important'));
         chip.style.setProperty('color', '#fff', 'important');
-        const text = chip.querySelector('.bolt-chip-text');
-        if (text) { text.style.setProperty('color', '#fff', 'important'); text.dataset.elm2Label = label; }
+        chip.title = kind === 'pending' ? 'Open this pair to rate it' : 'Our rating of this pair';
     }
     function syncScoreChips() {
         document.querySelectorAll('elm-deduplication-score-chip bolt-chip').forEach(chip => {

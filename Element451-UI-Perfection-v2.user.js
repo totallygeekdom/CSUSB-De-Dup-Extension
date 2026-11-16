@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.260
+// @version      2.261
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.260'; // keep in sync with @version
+    const VERSION = '2.261'; // keep in sync with @version
     // Chrome's install prompt for the web app: held back until Install is clicked on the card at the top of the
     // settings pane. The card shows only while Chrome says the page is installable, and the X hides it for good.
     let installPrompt = null;
@@ -101,7 +101,7 @@
         return isNaN(v) ? 4 : Math.max(0, Math.min(4, v));
     }
     const CFG = Object.defineProperties({}, {
-        // Slider = which pairs are in range, by Bolt score (0 None, 1 High, 2 + Medium, 3 + Low, 4 All).
+        // Slider = which pairs are in range, by our rating (Bolt's score is one input) (0 None, 1 High, 2 + Medium, 3 + Low, 4 All).
         RANGE_LEVEL:              { get() { return rangeLevel(); } },
         // Whose picks are used on pairs in range: 'ours' (our rules, incl. the applicant rule) or
         // 'bolt' (leave Bolt's picks; ours only fills rows Bolt left unselected).
@@ -210,6 +210,19 @@
         #elm2-merge-overlay #elm2-merge-summary .brief-score-high { color: #2e7d32; }
         #elm2-merge-overlay #elm2-merge-summary .brief-score-medium { color: #ef6c00; }
         #elm2-merge-overlay #elm2-merge-summary .brief-score-low { color: #d32f2f; }
+        /* Our write-up in Bolt's analysis card: ours shows by default, Bolt's own header and text come back with the button. */
+        bolt-card.analysis-card.elm2-an-ours .analysis-header, bolt-card.analysis-card.elm2-an-ours .analysis-summary { display: none !important; }
+        bolt-card.analysis-card.elm2-an-bolt .elm2-an-text { display: none; }
+        .elm2-an { margin: 0 0 8px; }
+        .elm2-an-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 6px; }
+        .elm2-an-title { font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: #1a1c20; }
+        .elm2-an-chip { display: inline-block; padding: 1px 10px; border-radius: 12px; font-size: 12px; line-height: 20px; font-weight: 600; color: #fff; cursor: help; }
+        .elm2-an-high { background: #2e7d32; } .elm2-an-medium { background: #ef6c00; } .elm2-an-low { background: #d32f2f; } .elm2-an-none { background: #5f6368; }
+        .elm2-an-pts { font-size: 12px; color: #5f6368; }
+        .elm2-an-toggle { margin-left: auto; padding: 2px 10px; border: 1px solid rgba(26, 28, 32, .24); border-radius: 12px; background: transparent; color: #434750; font: inherit; font-size: 12px; line-height: 18px; cursor: pointer; }
+        .elm2-an-toggle:hover { background: rgba(26, 28, 32, .06); }
+        .elm2-an-text p { margin: 0 0 6px; font-size: 13px; line-height: 19px; color: #434750; }
+        .elm2-an-text .elm2-an-verdict { font-size: 14px; font-weight: 600; color: #1a1c20; }
         #elm2-merge-overlay #elm2-merge-cancel { position: relative; width: 100%; height: 48px; border: none; border-radius: 24px; background: #b3261e; color: #fff; font-family: inherit; font-weight: 500; font-size: 14px; line-height: 20px; letter-spacing: .1px; cursor: pointer; overflow: hidden; transition: box-shadow .2s var(--md-ease); }
         #elm2-merge-overlay #elm2-merge-cancel::after { content: ''; position: absolute; inset: 0; background: #fff; opacity: 0; transition: opacity .2s var(--md-ease); }
         #elm2-merge-overlay #elm2-merge-cancel:hover { box-shadow: var(--md-elev-1); }
@@ -1878,7 +1891,7 @@
     // Every resolution rule below should call this instead of row.selectSide()
     // directly.
     let currentRule = '';
-    // pairInRange: whether the slider covers the pair on screen, by Bolt score. Cumulative:
+    // pairInRange: whether the slider covers the pair on screen, by our rating. Cumulative:
     // 1 High, 2 + Medium, 3 + Low, 4 every pair (even one with no score). An applicant side does
     // not put a pair in range: applicants can have any score.
     // autoApplyThisPair: in range AND "Use picks from" is Ours (so our picks get applied).
@@ -1972,10 +1985,17 @@
         console.log('[elm2] Stopped: Bolt analysis error, left for you');
         if (toastsEnabled()) showMergeNotice('Stop: Bolt error', true);
     }
-    function getScoreChipLevel() {
+    // Bolt's own chip (high / medium / low), still read as one input of our score and for the database's score column.
+    function getBoltChipLevel() {
         const chips = getScoreChips();
         for (const chip of chips) { const lvl = chipLevel(chip); if (lvl) return lvl; }
         return null;
+    }
+    // The pair's rating: ours (high / medium / low, or 'none' for a pair we think is different) once Bolt's overview is
+    // on screen to read the matching fields from, else Bolt's chip.
+    function getScoreChipLevel() {
+        const r = currentRating();
+        return r ? r.res.level : getBoltChipLevel();
     }
     function getAnalysisSummaryText() {
         const el = document.querySelector('.analysis-summary');
@@ -2237,7 +2257,7 @@
         reportMissingSparks(!!(sparks.a || sparks.b));
         const choice = choiceSummary('');
         if (choice) document.body.dataset.csvChoice = choice; else delete document.body.dataset.csvChoice;
-        const score = getScoreChipLevel(); // Bolt's score for the database's first column (high / medium / low)
+        const score = getBoltChipLevel(); // Bolt's score for the database's first column (high / medium / low)
         if (score) document.body.dataset.csvScore = score; else delete document.body.dataset.csvScore;
         // A skipped pair (Auto-Skip on) gets no popup; one left for you does.
         if (appeal && !appealWarningShown && !CFG.AUTO_SKIP_BLOCKED) {
@@ -2246,6 +2266,336 @@
             alert('⚠️ Appeal keyword detected!\n\nReason: The word "appeal" was found on the ' + sideLabel + ' of this entry.\n\nThis merge is blocked and cannot be processed.');
         }
     }
+
+    // ---- SCORE ENGINE START (pure functions: no page access, so it can be tested on its own) ----
+    // Points per field. Both sides must have the field for it to count; a missing field scores 0.
+    const SCORE_W = {
+        coyote: [100, -100], cas: [80, -80], dob: [40, -60], dobTypo: [25, -20],
+        email: [40, 0], emailName: [15, 0], phone: [25, 0],
+        first: [7, -12], firstRelated: [3, 0], last: [8, -8], lastPartial: [4, 0],
+        address: [15, -3], soft: [2, 0],
+        boltHigh: 20, boltMedium: 8, boltLow: -5, boltDifferent: -25,
+        twins: -30, applicantVsCoyote: -25,
+        emailNameFull: 6, emailNameInitial: 3, emailNameCap: 10, emailDobFull: 20, emailDobYear: 3, emailDobConflict: -8
+    };
+    const SCORE_CUT = { high: 70, medium: 45, low: 15 };
+    const NICK = [['robert', 'bob', 'rob', 'bobby', 'robbie'], ['william', 'bill', 'will', 'billy', 'willy'], ['richard', 'rick', 'dick', 'rich', 'ricky'], ['james', 'jim', 'jimmy', 'jamie'],
+        ['john', 'jon', 'johnny', 'jack'], ['michael', 'mike', 'mikey'], ['joseph', 'joe', 'joey'], ['thomas', 'tom', 'tommy'], ['christopher', 'chris'], ['daniel', 'dan', 'danny'],
+        ['anthony', 'tony'], ['matthew', 'matt'], ['andrew', 'andy', 'drew'], ['joshua', 'josh'], ['nicholas', 'nick'], ['jonathan', 'jon', 'jonny'], ['alexander', 'alex', 'xander'],
+        ['alexandra', 'alex', 'sandra'], ['samuel', 'sam', 'sammy'], ['benjamin', 'ben', 'benny'], ['edward', 'ed', 'eddie', 'ted'], ['kenneth', 'ken', 'kenny'], ['steven', 'steve', 'stephen'],
+        ['elizabeth', 'liz', 'beth', 'lisa', 'eliza', 'betty'], ['jennifer', 'jen', 'jenny'], ['katherine', 'kathryn', 'catherine', 'kate', 'katie', 'kathy', 'cathy'], ['margaret', 'maggie', 'meg', 'peggy'],
+        ['patricia', 'pat', 'patty', 'trish'], ['rebecca', 'becky', 'becca'], ['victoria', 'vicky', 'tori'], ['jessica', 'jess', 'jessie'], ['samantha', 'sam', 'sammy'], ['stephanie', 'steph'],
+        ['christina', 'christine', 'chris', 'tina'], ['deborah', 'debbie', 'deb'], ['susan', 'sue', 'suzy'], ['isabella', 'isabel', 'bella', 'izzy'], ['guadalupe', 'lupe'], ['jose', 'joe'],
+        ['francisco', 'frank', 'paco', 'pancho'], ['ricardo', 'rick', 'ricky'], ['eduardo', 'ed', 'eddie'], ['fernando', 'fern', 'nando'], ['roberto', 'rob', 'bob']];
+    const scFold = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+    const scBlank = (s) => !s || /^[-–—\s]*$/.test(String(s));
+    function scDate(s) {
+        s = String(s || '').trim(); if (scBlank(s)) return null;
+        let y, m, d, r;
+        if ((r = s.match(/\b(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})\b/))) { y = +r[1]; m = +r[2]; d = +r[3]; }
+        else if ((r = s.match(/\b(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4}|\d{2})\b/))) { m = +r[1]; d = +r[2]; y = +r[3]; if (y < 100) y += y > 30 ? 1900 : 2000; }
+        else if ((r = s.match(/\b([A-Za-z]{3,9})\.?\s+(\d{1,2}),?\s+(\d{4})\b/))) { const mi = 'jan feb mar apr may jun jul aug sep oct nov dec'.split(' ').indexOf(r[1].slice(0, 3).toLowerCase()); if (mi < 0) return null; m = mi + 1; d = +r[2]; y = +r[3]; }
+        else return null;
+        if (y < 1900 || m < 1 || m > 12 || d < 1 || d > 31) return null;
+        return String(y) + '-' + String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+    }
+    // Two dates one typo apart: a single digit wrong, or the day and month swapped.
+    function scDateTypo(a, b) {
+        const x = a.replace(/-/g, ''), y = b.replace(/-/g, '');
+        let diff = 0; for (let i = 0; i < 8; i++) if (x[i] !== y[i]) diff++;
+        if (diff <= 1) return true;
+        return a.slice(0, 4) === b.slice(0, 4) && a.slice(5, 7) === b.slice(8, 10) && a.slice(8, 10) === b.slice(5, 7);
+    }
+    const scPhone = (s) => { const d = String(s || '').replace(/\D/g, ''); return d.length >= 10 ? d.slice(-10) : ''; };
+    const scDigits = (s) => String(s || '').replace(/\D/g, '').replace(/^0+/, '');
+    function scRelatedFirst(a, b) {
+        if (!a || !b) return false;
+        if (a[0] === b[0] && (a.length === 1 || b.length === 1)) return true; // an initial
+        if (Math.min(a.length, b.length) >= 3 && (a.startsWith(b) || b.startsWith(a))) return true;
+        return NICK.some(g => g.includes(a) && g.includes(b));
+    }
+    // What the digits in an email name could be: a full date of birth, a birth year, or nothing useful.
+    function scEmailDigits(local) {
+        const out = [];
+        (String(local).match(/\d+/g) || []).forEach(run => {
+            const ok = (y, m, d) => y >= 1950 && y <= 2012 && m >= 1 && m <= 12 && d >= 1 && d <= 31;
+            const p2 = (n) => String(n).padStart(2, '0');
+            const yy = (n) => n > 26 ? 1900 + n : 2000 + n;
+            if (run.length === 8) {
+                let m = +run.slice(0, 2), d = +run.slice(2, 4), y = +run.slice(4);
+                if (ok(y, m, d)) out.push({ full: y + '-' + p2(m) + '-' + p2(d) });
+                y = +run.slice(0, 4); m = +run.slice(4, 6); d = +run.slice(6);
+                if (ok(y, m, d)) out.push({ full: y + '-' + p2(m) + '-' + p2(d) });
+            } else if (run.length === 6) {
+                const m = +run.slice(0, 2), d = +run.slice(2, 4), y = yy(+run.slice(4));
+                if (ok(y, m, d)) out.push({ full: y + '-' + p2(m) + '-' + p2(d) });
+            } else if (run.length === 4 && +run >= 1950 && +run <= 2012) out.push({ year: +run });
+        });
+        return out;
+    }
+    // How well an email name fits a person's name: 'full' (first and last), 'initial' (first initial and last) or null.
+    function scEmailName(local, first, last) {
+        const letters = String(local).toLowerCase().replace(/[^a-z]/g, '');
+        const f = scFold(first).replace(/ /g, ''), l = scFold(last).replace(/ /g, '');
+        if (l.length < 3 || !f || !letters.includes(l)) return null;
+        if (f.length >= 3 && letters.includes(f)) return 'full';
+        const toks = String(local).toLowerCase().split(/[^a-z0-9]+/).map(t => t.replace(/\d/g, '')).filter(Boolean);
+        if (toks.includes(f[0]) || letters.startsWith(f[0] + l) || letters.endsWith(l + f[0])) return 'initial';
+        return null;
+    }
+    // ev = { A: {...}, B: {...}, bolt: {level, different} }; a side has first, last, dob, emails[], phone, coyote, cas, studentType, level, school, applicant.
+    // ev.addrState: 'match' | 'mismatch' | null (the page's own address comparer decides). Returns the points, the rating and the reasons.
+    function scorePair(ev) {
+        const A = ev.A || {}, B = ev.B || {}, items = [];
+        let hard = false, strong = 0;
+        const W = SCORE_W;
+        const add = (key, label, pts, kind, phrase, extra) => { items.push(Object.assign({ key, label, pts, kind, phrase }, extra || {})); };
+        const both = (a, b) => !scBlank(a) && !scBlank(b);
+        // IDs
+        [['coyote', 'Coyote ID'], ['cas', 'CAS ID']].forEach(([k, label]) => {
+            const a = scDigits(A[k]), b = scDigits(B[k]);
+            if (a && b) {
+                if (a === b) { add(k, label, W[k][0], 'for', 'the same ' + label + ' (' + A[k] + ')', { strong: true }); strong++; }
+                else { add(k, label, W[k][1], 'against', 'different ' + label + 's (' + A[k] + ' and ' + B[k] + ')', { hard: true }); hard = true; }
+            }
+        });
+        // applicant with no Coyote ID against a contact that has one
+        const appSide = A.applicant ? 'A' : B.applicant ? 'B' : null;
+        if (appSide) {
+            const app = appSide === 'A' ? A : B, other = appSide === 'A' ? B : A;
+            if (!scDigits(app.coyote) && scDigits(other.coyote)) add('appCoyote', 'Applicant vs Coyote ID', W.applicantVsCoyote, 'against', 'one record is an applicant with no Coyote ID, while the other already has one (' + other.coyote + ')');
+        }
+        // DOB
+        const da = scDate(A.dob), db = scDate(B.dob);
+        if (da && db) {
+            if (da === db) { add('dob', 'Date of birth', W.dob[0], 'for', 'the same date of birth (' + da + ')', { strong: true }); strong++; }
+            else if (scDateTypo(da, db)) add('dob', 'Date of birth', W.dobTypo[1], 'against', 'dates of birth that are one typo apart (' + da + ' and ' + db + ')', { typo: true });
+            else { add('dob', 'Date of birth', W.dob[1], 'against', 'different dates of birth (' + da + ' and ' + db + ')', { hard: true }); hard = true; }
+        }
+        // Email: exact, or the same name part on a different domain
+        const ea = (A.emails || []).map(e => e.toLowerCase()), eb = (B.emails || []).map(e => e.toLowerCase());
+        if (ea.length && eb.length) {
+            const exact = ea.find(e => eb.includes(e));
+            if (exact) { add('email', 'Email', W.email[0], 'for', 'the same email address (' + exact + ')', { strong: true }); strong++; }
+            else if (ea.some(x => eb.some(y => x.split('@')[0] === y.split('@')[0]))) add('email', 'Email', W.emailName[0], 'for', 'email addresses with the same name part');
+            else add('email', 'Email', 0, 'info', 'different email addresses (people often have several)');
+        }
+        // Phone
+        const pa = scPhone(A.phone), pb = scPhone(B.phone);
+        if (pa && pb) { if (pa === pb) { add('phone', 'Phone', W.phone[0], 'for', 'the same phone number (' + A.phone + ')', { strong: true }); strong++; } else add('phone', 'Phone', 0, 'info', 'different phone numbers'); }
+        // Names
+        const fa = scFold(A.first), fb = scFold(B.first), la = scFold(A.last), lb = scFold(B.last);
+        let firstState = null, lastState = null;
+        if (fa && fb) firstState = fa === fb ? 'same' : scRelatedFirst(fa, fb) ? 'related' : 'differ';
+        if (la && lb) lastState = la === lb ? 'same' : (la.split(' ').some(t => t.length > 2 && lb.split(' ').includes(t)) ? 'partial' : 'differ');
+        if (firstState === 'same') add('first', 'First name', W.first[0], 'for', 'the same first name', { nameFor: 'first' });
+        else if (firstState === 'related') add('first', 'First name', W.firstRelated[0], 'for', 'similar first names (' + A.first + ' and ' + B.first + ')', { nameFor: 'first' });
+        else if (firstState === 'differ') add('first', 'First name', W.first[1], 'against', 'different first names (' + A.first + ' and ' + B.first + ')');
+        if (lastState === 'same') add('last', 'Last name', W.last[0], 'for', 'the same last name', { nameFor: 'last' });
+        else if (lastState === 'partial') add('last', 'Last name', W.lastPartial[0], 'for', 'overlapping last names (' + A.last + ' and ' + B.last + ')', { nameFor: 'last' });
+        else if (lastState === 'differ') add('last', 'Last name', W.last[1], 'against', 'different last names (' + A.last + ' and ' + B.last + ')');
+        // twins: same last name plus the same birth date or address, but a clearly different first name
+        if (firstState === 'differ' && lastState === 'same' && ((da && db && da === db) || ev.addrState === 'match')) add('twins', 'Twin pattern', W.twins, 'against', 'the first names differ (' + A.first + ' and ' + B.first + ') even though the last name and ' + (da && da === db ? 'birth date' : 'address') + ' are the same, which fits twins or family');
+        // Address
+        if (ev.addrState === 'match') add('address', 'Address', W.address[0], 'for', 'the same address');
+        else if (ev.addrState === 'mismatch') add('address', 'Address', W.address[1], 'against', 'different addresses (people move)');
+        // Soft fields
+        [['studentType', 'Student type'], ['level', 'Academic level'], ['school', 'School attended']].forEach(([k, label]) => {
+            if (both(A[k], B[k]) && scFold(A[k]) === scFold(B[k])) add(k, label, W.soft[0], 'for', 'the same ' + label.toLowerCase());
+        });
+        // Name and birth date hidden in the email addresses
+        let emFit = 0; const emNotes = [];
+        [[A, B, 'A'], [B, A, 'B']].forEach(([own, other]) => {
+            (own.emails || []).forEach(e => {
+                const local = e.split('@')[0].replace(/\+.*/, '');
+                const fit = scEmailName(local, other.first, other.last);
+                if (fit && scFold(own.first) !== scFold(other.first)) { const p = fit === 'full' ? W.emailNameFull : W.emailNameInitial; if (emFit < W.emailNameCap) { emFit = Math.min(W.emailNameCap, emFit + p); emNotes.push(local); } }
+                const odob = scDate(other.dob), owndob = scDate(own.dob);
+                if (!owndob && odob) scEmailDigits(local).forEach(g => {
+                    if (g.full && g.full === odob) { add('emailDob', 'DOB in email', W.emailDobFull, 'for', 'a birth date in the email address (' + local + ') that matches the other record'); }
+                    else if (g.full) add('emailDob', 'DOB in email', W.emailDobConflict, 'against', 'a birth date in the email address (' + local + ') that does not match the other record');
+                    else if (g.year && odob.slice(0, 4) === String(g.year)) add('emailDob', 'DOB in email', W.emailDobYear, 'for', 'the birth year in the email address (' + local + ')');
+                });
+            });
+        });
+        if (emFit) add('emailNameHint', 'Name in email', emFit, 'for', 'an email address that contains the other record\'s name (' + emNotes.join(', ') + ')');
+        // Bolt's own view
+        const bl = ev.bolt && ev.bolt.level;
+        if (bl === 'high') add('bolt', 'Bolt', W.boltHigh, 'for', 'Bolt rated the pair High');
+        else if (bl === 'medium') add('bolt', 'Bolt', W.boltMedium, 'for', 'Bolt rated the pair Medium');
+        else if (bl === 'low') add('bolt', 'Bolt', W.boltLow, 'against', 'Bolt rated the pair Low');
+        if (ev.bolt && ev.bolt.different) add('boltDifferent', 'Bolt "different people"', W.boltDifferent, 'against', 'Bolt flagged them as different people');
+        // totals
+        let pts = 0; items.forEach(i => { pts += i.pts; });
+        let level = pts >= SCORE_CUT.high && strong >= 2 ? 'high' : pts >= SCORE_CUT.medium ? 'medium' : pts >= SCORE_CUT.low ? 'low' : 'none';
+        if (level === 'high' && hard) level = 'low';
+        if (hard && level === 'medium') level = 'low';
+        // (70 points on weak fields alone, with fewer than two strong matches, lands on Medium by the line above)
+        const keyFields = ['coyote', 'cas', 'dob', 'email', 'phone'];
+        const present = keyFields.filter(k => k === 'dob' ? (da && db) : k === 'email' ? (ea.length && eb.length) : k === 'phone' ? (pa && pb) : (scDigits(A[k]) && scDigits(B[k])));
+        const missing = keyFields.filter(k => !present.includes(k));
+        const thin = !present.some(k => k === 'coyote' || k === 'cas') && present.length < 2;
+        return { points: pts, level, hard, strong, items, missing, thin };
+    }
+    // ---- SCORE ENGINE END ----
+    // ---- WRITE-UP START: the score turned into plain sentences (templates, no AI, so it always agrees with the points) ----
+    const WRITE_LEVEL = { high: 'High', medium: 'Medium', low: 'Low', none: 'Not a match' };
+    function writeUp(res, ev) {
+        const list = (a) => a.length < 2 ? a.join('') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1];
+        const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+        const fors = res.items.filter(i => i.kind === 'for' && i.key !== 'bolt' && i.key !== 'first' && i.key !== 'last');
+        const names = res.items.filter(i => i.nameFor);
+        const against = res.items.filter(i => i.kind === 'against' && i.key !== 'bolt' && i.key !== 'boltDifferent');
+        const boltDiff = res.items.some(i => i.key === 'boltDifferent');
+        const A = ev.A || {}, B = ev.B || {};
+        const full = (s) => [s.first, s.last].filter(Boolean).join(' ');
+        const out = { verdict: '', paragraphs: [] };
+        const conflict = res.hard || against.some(i => i.key === 'twins');
+        out.verdict = res.level === 'high' ? 'Almost certainly the same person.'
+            : res.level === 'medium' ? (res.thin ? 'Probably the same person, but the evidence is thin.' : 'Probably the same person.')
+            : res.level === 'low' ? (conflict || boltDiff ? 'Possibly different people.' : 'Not enough to say.')
+            : 'Probably different people.';
+        // what lines up
+        const nameBoth = names.length === 2 && names.every(n => n.key === 'first' ? n.pts >= SCORE_W.first[0] : n.pts >= SCORE_W.last[0]);
+        const matchPhrases = [];
+        if (nameBoth) matchPhrases.push('the same name (' + full(A) + ')');
+        else names.forEach(n => matchPhrases.push(n.phrase));
+        fors.forEach(i => { if (i.key !== 'emailNameHint' && i.key !== 'emailDob') matchPhrases.push(i.phrase); });
+        const hints = fors.filter(i => i.key === 'emailNameHint' || i.key === 'emailDob');
+        if (matchPhrases.length) out.paragraphs.push('Both records have ' + list(matchPhrases) + '.');
+        if (hints.length) out.paragraphs.push(cap(list(hints.map(h => h.phrase))) + '.');
+        // what does not
+        const twinsHere = against.some(i => i.key === 'twins');
+        const aPhrases = against.filter(i => !(twinsHere && i.key === 'first')).map(i => i.phrase);
+        const clauses = aPhrases.filter(p => /^(one record|the first names differ)/.test(p));
+        const shows = aPhrases.filter(p => !/^(one record|the first names differ)/.test(p));
+        const bad = (shows.length ? ['the records show ' + list(shows)] : []).concat(clauses);
+        if (boltDiff) bad.push('Bolt flagged them as different people');
+        if (bad.length) out.paragraphs.push((matchPhrases.length ? 'On the other hand, ' : 'Instead, ') + list(bad) + '.');
+        // what is missing
+        const label = { coyote: 'a Coyote ID', cas: 'a CAS ID', dob: 'a date of birth', email: 'an email address', phone: 'a phone number' };
+        const miss = res.missing.filter(k => k !== 'cas').map(k => label[k]);
+        if (res.level === 'high' && !res.thin) { /* nothing to add */ }
+        else if (miss.length >= 3) out.paragraphs.push('The records don\'t both have ' + list(miss.slice(0, 3)) + ', so there is little to confirm the match.');
+        else if (miss.length) out.paragraphs.push('Not compared (missing on at least one record): ' + list(miss) + '.');
+        const bl = ev.bolt && ev.bolt.level;
+        if (bl) out.paragraphs.push('Bolt rated this pair ' + cap(bl) + '.');
+        return out;
+    }
+    // ---- WRITE-UP END ----
+    // ---- ANALYSIS CARD: our rating and write-up replace Bolt's overview; a button brings Bolt's back ----
+    // Differences always show in the diff form; matches are hidden there, but Bolt's own bullet list names the fields that
+    // matched (with their values), so both are read: the form for what differs, Bolt's bullets for what is the same.
+    const BOLT_FIELDS = [['dob', /birth|\bdob\b/i], ['phone', /phone|mobile|cell/i], ['email', /e-?mail/i], ['address', /address/i], ['first', /first\s*name|given name/i],
+        ['last', /last\s*name|surname|family name/i], ['cas', /\bcas\b|cal state apply id/i], ['coyote', /coyote|student id|school id|campus id/i],
+        ['studentType', /student type/i], ['level', /academic level/i], ['school', /school attended|previous school|high school|college attended/i]];
+    function boltFieldKey(label) { const f = BOLT_FIELDS.find(([, re]) => re.test(label)); return f ? f[0] : null; }
+    function readBoltSummary() {
+        const el = document.querySelector('.analysis-summary');
+        const out = { text: el ? el.textContent.trim() : '', said: {}, different: false, present: !!(el && el.textContent.trim()) };
+        if (!el) return out;
+        out.different = /different (people|person|individuals?)|not (appear to be|the same)\s*(the same )?(person|people)/i.test(out.text);
+        el.querySelectorAll('li').forEach(li => {
+            const strong = li.querySelector('strong, b');
+            const label = strong ? strong.textContent.trim() : '';
+            const key = boltFieldKey(label);
+            if (!key) return;
+            const rest = li.textContent.replace(label, '').replace(/^\s*[:\-–]\s*/, '');
+            const differs = /\b(differ\w*|different|mismatch\w*|conflict\w*|do(es)? not match|not match)\b/i.test(rest);
+            const matches = !differs && /\b(identical|match(es|ed|ing)?|same|equivalent|consistent)\b/i.test(rest);
+            const v = rest.match(/\(([^()]+)\)/);
+            if (matches) out.said[key] = { state: 'match', value: v ? v[1].trim() : '' };
+            else if (differs) out.said[key] = { state: 'differ' };
+        });
+        return out;
+    }
+    function gatherEvidence() {
+        const sides = [{ emails: [] }, { emails: [] }];
+        const addr = [null, null];
+        getDiffRows().forEach(row => {
+            const label = row.label, vals = [row.values[0].textContent, row.values[1].textContent];
+            vals.forEach((v, i) => { const m = v.match(/School Id:\s*(\d+)/i); if (m) sides[i].coyote = m[1]; });
+            if (/preferred/i.test(label)) return;
+            const key = boltFieldKey(label);
+            if (!key) return;
+            vals.forEach((v, i) => {
+                if (isBlankValue(v)) return;
+                if (key === 'email') { (v.match(/[^\s,;<>()]+@[^\s,;<>()]+/g) || []).forEach(e => { if (!sides[i].emails.includes(e)) sides[i].emails.push(e); }); }
+                else if (key === 'address') { if (addr[i] === null) addr[i] = v; }
+                else if (key === 'coyote' || key === 'cas') { const d = (v.match(/\d{5,}/) || [])[0]; if (d && !sides[i][key]) sides[i][key] = d; }
+                else if (!sides[i][key]) sides[i][key] = v.trim();
+            });
+        });
+        const bolt = readBoltSummary();
+        if (!bolt.present) return null; // Bolt's overview has not rendered yet: nothing to read the matching fields from
+        // names from the contact cards when the form has no name rows (they match, or the form would show them)
+        const names = getContactNames();
+        [0, 1].forEach(i => {
+            if (!sides[i].first && !sides[i].last && names[i]) { const parts = names[i].split(/\s+/); sides[i].first = parts[0]; sides[i].last = parts.slice(1).join(' '); }
+        });
+        // a field that matched is hidden in the form: take its value from Bolt's bullet
+        Object.keys(bolt.said).forEach(k => {
+            const s = bolt.said[k];
+            if (s.state !== 'match' || k === 'address') return;
+            [0, 1].forEach(i => {
+                if (k === 'email') { if (!sides[i].emails.length) { const e = (s.value.match(/[^\s,;<>()]+@[^\s,;<>()]+/) || [])[0]; if (e) sides[i].emails.push(e); } }
+                else if (!sides[i][k] && s.value) sides[i][k] = s.value;
+                else if (!sides[i][k] && (k === 'first' || k === 'last')) { /* from the card names above */ }
+            });
+        });
+        let addrState = null;
+        if (addr[0] && addr[1]) { try { addrState = AddressComparer.compareAddresses(addr[0], addr[1]).areSame ? 'match' : 'mismatch'; } catch (e) { addrState = null; } }
+        else if (bolt.said.address && bolt.said.address.state === 'match') addrState = 'match';
+        const app = findApplicantSide();
+        sides[0].applicant = app === 'left'; sides[1].applicant = app === 'right';
+        return { A: sides[0], B: sides[1], addrState, bolt: { level: getBoltChipLevel(), different: bolt.different } };
+    }
+    let anCache = { t: 0, key: '', out: null };
+    // The rating of the pair on screen: { res, ev, write }, or null until Bolt's overview has rendered.
+    function currentRating() {
+        const now = Date.now(), key = getPairKey();
+        if (anCache.key === key && now - anCache.t < 400) return anCache.out;
+        let out = null;
+        try { const ev = gatherEvidence(); if (ev) { const res = scorePair(ev); out = { ev, res, write: writeUp(res, ev) }; } } catch (e) { console.log('[elm2] analysis failed:', e); }
+        anCache = { t: now, key, out };
+        return out;
+    }
+    const anView = { pair: '', bolt: false };
+    function renderOurAnalysis() {
+        const card = document.querySelector('bolt-card.analysis-card');
+        const body = card && card.querySelector(':scope > bolt-card-body, :scope > .bolt-card-body');
+        if (!body) return;
+        const rating = currentRating();
+        const old = body.querySelector(':scope > .elm2-an');
+        if (!rating) { if (old) old.remove(); card.classList.remove('elm2-an-ours', 'elm2-an-bolt'); return; }
+        const pk = getPairKey();
+        if (anView.pair !== pk) { anView.pair = pk; anView.bolt = false; }
+        const { res, ev, write } = rating;
+        const sig = JSON.stringify([pk, res.points, res.level, write.paragraphs, anView.bolt]);
+        card.classList.toggle('elm2-an-bolt', anView.bolt);
+        card.classList.toggle('elm2-an-ours', !anView.bolt);
+        if (old && old.dataset.sig === sig) return;
+        if (old) old.remove();
+        const el = document.createElement('div');
+        el.className = 'elm2-an'; el.dataset.sig = sig;
+        const bar = document.createElement('div'); bar.className = 'elm2-an-bar';
+        const title = document.createElement('span'); title.className = 'elm2-an-title'; title.textContent = 'Dedup analysis';
+        const chip = document.createElement('span'); chip.className = 'elm2-an-chip elm2-an-' + res.level; chip.textContent = WRITE_LEVEL[res.level];
+        chip.title = res.items.map(i => i.label + ' ' + (i.pts > 0 ? '+' : '') + i.pts).join('\n') + '\nTotal ' + res.points + ' points';
+        const pts = document.createElement('span'); pts.className = 'elm2-an-pts'; pts.textContent = res.points + ' pts';
+        const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'elm2-an-toggle';
+        btn.textContent = anView.bolt ? 'Back to our write-up' : 'View Bolt\'s write-up';
+        btn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); anView.bolt = !anView.bolt; renderOurAnalysis(); });
+        bar.append(title, chip, pts, btn);
+        el.appendChild(bar);
+        const text = document.createElement('div'); text.className = 'elm2-an-text';
+        const v = document.createElement('p'); v.className = 'elm2-an-verdict'; v.textContent = write.verdict; text.appendChild(v);
+        write.paragraphs.forEach(t => { const p = document.createElement('p'); p.textContent = t; text.appendChild(p); });
+        el.appendChild(text);
+        body.insertBefore(el, body.firstChild);
+        console.log('[elm2] analysis:', WRITE_LEVEL[res.level], res.points + ' pts |', res.items.map(i => i.key + ' ' + (i.pts > 0 ? '+' : '') + i.pts).join(', '), '| evidence:', JSON.stringify({ A: ev.A, B: ev.B, addr: ev.addrState }));
+    }
+    // ---- ANALYSIS CARD END ----
 
     // =========================================================
     // POSSIBLE TWINS / DIFFERENT PEOPLE WARNING
@@ -3211,11 +3561,12 @@
         box.textContent = '';
         const names = getContactNames().filter(Boolean);
         text(line('brief-names'), names.length === 2 ? names.join(' | ') : 'These two contacts');
-        const score = getScoreChipLevel();
+        const score = getScoreChipLevel(), bolt = getBoltChipLevel();
         if (score) {
             const l = line();
-            text(l, 'Bolt score: ');
-            strong(l, score.charAt(0).toUpperCase() + score.slice(1), 'brief-score brief-score-' + score);
+            text(l, 'Rating: ');
+            strong(l, WRITE_LEVEL[score] || score, 'brief-score brief-score-' + (score === 'none' ? 'low' : score));
+            if (bolt && bolt !== score) text(l, ' (Bolt: ' + bolt.charAt(0).toUpperCase() + bolt.slice(1) + ')');
         }
         const { picks, over } = mergeStats();
         if (picks.length === 0) { text(line(), "No script picks; Bolt's picks stand."); return; }
@@ -3665,6 +4016,7 @@
             pinReviewQueueNav();
             annotateApplicantSide();
             injectPickComparisonBar();
+            renderOurAnalysis();
         }
     }, 750);
     new MutationObserver(() => {
@@ -3860,10 +4212,10 @@
         const levelNames = ['None', 'High', 'Medium', 'Low', 'All'];
         const levelDescs = [
             'No pairs in range. With Auto-Skip on, every pair is skipped (a scan).',
-            'Pairs with a High Bolt score.',
-            'Pairs with a High or Medium Bolt score.',
-            'Pairs with a High, Medium or Low Bolt score.',
-            'Every pair, even one with no Bolt score.'
+            'Pairs with a High rating.',
+            'Pairs with a High or Medium rating.',
+            'Pairs with a High, Medium or Low rating.',
+            'Every pair, even one rated Not a match.'
         ];
         const syncLevel = () => {
             levelSlider.value = CFG.RANGE_LEVEL;

@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.260`, shown in the settings pane |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.261`, shown in the settings pane |
 | Element451 - Database v2 | `database-v2.js` | `@version 2.65` |
 | Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.12`, see [section 17](#17-database-merge) |
 
@@ -127,15 +127,15 @@ All settings are in the gear (⚙) pane. Settings are stored in `localStorage` u
 
 ### 4.1 Pairs in range (slider)
 
-Five positions, chosen by **Bolt score**, **each adding to the one before**:
+Five positions, chosen by **our rating** (section 10.6; Bolt's score is one input of it), **each adding to the one before**:
 
 | Position | Pairs in range |
 |---|---|
 | **None** | no pair is in range |
-| **High** | Bolt score **High** |
+| **High** | rating **High** |
 | **Medium** | **High** and **Medium** |
 | **Low** | **High**, **Medium** and **Low** |
-| **All** | every pair, even one with no score chip |
+| **All** | every pair, even one rated Not a match |
 
 An applicant side does **not** put a pair in range (applicants can have any score); the applicant rule only
 affects *which side is picked* when **Use picks from = Ours** ([section 7](#7-field-resolution-rules)). On High, Medium and Low the script waits up to 3 seconds for the score chip to render before deciding.
@@ -203,7 +203,7 @@ The pane's **Info** section (last, in a single list container) lists the version
 
 1. **Blockers** ([section 6](#6-blockers-lockdowns)). If any apply: red lockdown styling; the pair is recorded; then **Auto-Skip on** → skip, **off** → stop (the appeal popup shows if it is an appeal pair).
 2. Wait for Bolt's defaults to be captured (up to 3 s) and, on Low/Medium/High, the score chip (up to 3 s).
-3. Compute whether the pair is **in range** (by Bolt score only).
+3. Compute whether the pair is **in range** (by our rating only).
 4. Run field resolution ([section 7](#7-field-resolution-rules)); apply per **Use picks from**.
 5. About 0.6 s later, re-check blockers (more rows may have loaded) and run resolution again.
 6. If out of range and Auto-Skip on → skip. (Otherwise continue.)
@@ -359,6 +359,35 @@ A right-hand Material 3 panel with a close button at the top left next to the ti
 
 Both scripts append toasts to one shared stack, **bottom-left**, newest at the bottom, up to 4, each fading in/out: the Database script's `API: data captured successfully` (never shown while the merge panel is open, and one already showing is removed when the panel opens: the list refreshes in the background after a merge. "Open" means the diff form is on the page, or the review sidebar is on screen) / `unavailable, using database fallback`, and the main script's notices (Auto-merge cancelled/stopped, Going to page N…). The same message arriving again refreshes the existing toast.
 
+### 10.6 Dedup analysis (our rating and write-up)
+
+Bolt's overview card is replaced by our own: a **rating chip** (High, Medium, Low or Not a match), the point total, and a short plain-English write-up. The **View Bolt's write-up** button swaps Bolt's original header and text back (and **Back to our write-up** returns); Bolt's text is only hidden, never removed. Hovering the chip lists the points per field, and the console logs the same breakdown with the evidence read, for each pair.
+
+**Where the data comes from.** The diff form only shows fields that differ, so differences are read from its rows, and the fields that *match* are read from Bolt's own bullet list (for example `date of birth: identical (2008-12-16)`), which names the field and its value. Names come from the contact cards when the form has no name rows. The rating needs Bolt's overview on screen; until then the Bolt chip is used.
+
+**Points.** Both contacts need the field, or it scores 0 (a missing field is never held against a pair).
+
+| Field | Match | Mismatch |
+|---|---|---|
+| Coyote ID | +100 | -100, hard conflict |
+| CAS ID | +80 | -80, hard conflict |
+| Date of birth | +40 | -60, hard conflict (one typo or day/month swap: -20, not hard) |
+| Email, exact / same name part | +40 / +15 | 0 (people have several) |
+| Phone | +25 | 0 |
+| First name (same / nickname or initial) | +7 / +3 | -12 |
+| Last name (same / overlapping) | +8 / +4 | -8 |
+| Address (the page's own comparer) | +15 | -3 |
+| Student type, Academic level, School attended | +2 each | 0 |
+| Name or birth date found in an email address | up to +10 / +20 (year only +3) | -8 (a full date that disagrees) |
+| Applicant with no Coyote ID vs a contact that has one | | -25 |
+| Twin pattern (same last name and birth date or address, different first name) | | -30 |
+| Bolt High / Medium / Low | +20 / +8 / -5 | |
+| Bolt says "different people" | | -25 |
+
+**Rating.** High needs 70+ points **and** at least two strong matches (an ID, birth date, exact email or phone) **and** no hard conflict. Medium is 45+; Low is 15+, and any hard conflict caps the pair at Low; under 15 is Not a match. These are deliberately cautious: merging two people is the worse mistake. The weights, thresholds and nickname list are in `SCORE_W`, `SCORE_CUT` and `NICK` at the top of the score engine, which is a set of pure functions (no page access) between the `SCORE ENGINE START` / `END` comments.
+
+The slider, the Auto-Apply range check and the merge brief use this rating; the database's Bolt Score column still records Bolt's own chip.
+
 ---
 
 ## 11. Database v2
@@ -470,6 +499,7 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 
 - **Merge-success detection**: the "Merge completed" card (`bolt-card.merge-completion-state`) is the signal (it counts the merge, shows the `Merge: …` toast, sends the pair to the database as Merged = Y and presses Next duplicate). If Element's own "Skip merge completion screen" switch is on, that card never shows; the script then falls back to "the pair on screen changed after Merge Contacts was clicked", which cannot press Next duplicate for you.
 - **Score chip reading** assumes the chip text contains `high` / `medium` / `low`.
+- **Dedup analysis** (section 10.6) reads field labels by keyword (birth, phone, email, address, first/last name, CAS, Coyote or School Id, student type, academic level, school attended) and Bolt's bullet list wording (`identical`, `match`, `differ`); unverified for labels not yet seen on the live site. The console line `[elm2] analysis:` shows what was read for each pair.
 - **Applicant detection** depends on the Workflows/Application rows being loaded; it re-checks about 0.6 s later, but a very slow load could mislabel a pair.
 - **Rows per page** cannot be changed from the script, and the original classic page-size box was dropped. The main script now runs with `@grant none` (build 100) so Angular's paginator component may become reachable; the page-jump console line shows which route is used.
 - **Merge script duplicates**: the Database Merge script's name-based key treats a blank second name as the first, so an old row with full second names and a new row with blanks still count as the same pair.
@@ -516,6 +546,7 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 - **Database Merge**: a third, optional script that merges several exported databases on a page of its own (section 17).
 - **Chrome extension**: unpacked extension that runs both scripts and updates them from GitHub when Chrome starts, popup with switches, build + release workflow (section 16).
 - **Versions**: the settings pane lists Main script, Database script and Extension versions in one style.
+- **Our own rating**: a points-based rating and plain-English write-up replace Bolt's overview card (section 10.6).
 - **Fixes along the way**: stall on identical consecutive names / disabled Next button, twins warning signal count, cut-off date text in filters, clipped filters panel, selected-chip colour specificity.
 
 ## 16. Chrome extension

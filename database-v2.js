@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - Database v2
 // @namespace    http://tampermonkey.net/
-// @version      2.65
+// @version      2.66
 // @description  Tracks duplicate entries in a database stored in browser localStorage (exports an .xlsx spreadsheet) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -499,6 +499,7 @@
     function clearStaleAnnotations() {
         getQueueRows().forEach(row => {
             row.removeAttribute('data-csv-uid');
+            row.removeAttribute('data-csv-sparks');
             row.removeAttribute('data-csv-dept');
             const badge = row.querySelector('.csv-dept-badge');
             if (badge) badge.remove();
@@ -724,6 +725,9 @@
                 }
                 if (api) row.setAttribute('data-csv-uid', api.uniqueId);
             }
+            // the record's Spark IDs, for the main script's score chips (it matches them to the pair it rated)
+            if (api && api.sparks.length) row.setAttribute('data-csv-sparks', Array.from(new Set(api.sparks)).join('|'));
+            else row.removeAttribute('data-csv-sparks');
             // Spark ID found in the API record first; otherwise name/ID text on the row
             const dbEntry = dbEntryForApi(api, db) || matchRowToDbEntry(row, db, usedDbIndices);
             if (!dbEntry) {

@@ -6,8 +6,8 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 | Script | File | Current version |
 |---|---|---|
 | Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.266`, shown in the settings pane |
-| Element451 - Database v2 | `database-v2.js` | `@version 2.67` |
-| Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.15`, see [section 17](#17-database-merge) |
+| Element451 - Database v2 | `database-v2.js` | `@version 2.68` |
+| Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.16`, see [section 17](#17-database-merge) |
 
 
 The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
@@ -428,7 +428,7 @@ A badge is placed in `.cdk-column-flagged` (falling back to signals, then the ro
 
 ### 11.6 Import / export
 
-- **Download**: `elm_database_YYYY-MM-DD.xlsx` (opens in Excel, LibreOffice and Google Sheets). Columns, in order: `Bolt Score, Firstname, Lastname, Firstname 2, Lastname 2, Spark ID 1, Spark ID 2, Dept., Scan Date, Merged, Script vs Bolt, Row Contents`. **Bolt Score** (High / Medium / Low) is the score chip on the merge screen, read by the main script (`body.dataset.csvScore`) and stored the first time it is seen; blank if the chip never showed. The header row is bold, shaded and frozen, and the filter / sort buttons are on Bolt Score, Dept., Scan Date and Merged only. The workbook is written by the script itself (a small stored-zip writer; no libraries). It was an `.ods` before 2.32 (Excel had to repair it and ignored its frozen row); the `.ods` and `.csv` importers were removed in 2.50.
+- **Download** is always password protected and offers two forms (section 19): a password-protected `elm_database_YYYY-MM-DD.xlsx` (Excel asks for the password, then opens it as the spreadsheet described here) or an encrypted `elm_database_YYYY-MM-DD.elmdb` that only these scripts read. The spreadsheet inside: Columns, in order: `Bolt Score, Firstname, Lastname, Firstname 2, Lastname 2, Spark ID 1, Spark ID 2, Dept., Scan Date, Merged, Script vs Bolt, Row Contents`. **Bolt Score** (High / Medium / Low) is the score chip on the merge screen, read by the main script (`body.dataset.csvScore`) and stored the first time it is seen; blank if the chip never showed. The header row is bold, shaded and frozen, and the filter / sort buttons are on Bolt Score, Dept., Scan Date and Merged only. The workbook is written by the script itself (a small stored-zip writer; no libraries). It was an `.ods` before 2.32 (Excel had to repair it and ignored its frozen row); the `.ods` and `.csv` importers were removed in 2.50.
 - **Cell colours** (the same in the Database Merge page's download): **Bolt Score** in soft versions of the list view's chip colours (High green `#C8E6C9`, Medium orange `#FFE0B2`, Low red `#FFCDD2`, each with a darker text colour); **Dept.** in the list view's chip colours (Grad/IA blue, UnderGrad purple, Forbidden pink, Appeal amber; any other department stays uncoloured); **Script vs Bolt** in the light yellow of the applicant band (`#FFF9C4`) with dark yellow text (`#9A6700`, no border) when the line starts with *Applicant*, i.e. the script found an applicant side. Colours are cell formatting only: they do not change the values, the filters or the sort order, and importing a file ignores them.
 - **Struck-through Spark ID**: on a merged pair the Spark ID that was merged away is struck through (grey, line through) in its Spark ID cell. The kept ID is the side selected on the `Spark Id:` row of the merge screen at the Merge click ('left' = Contact A); if that row has no selected side nothing is struck. The strike is stored as `lostSpark` on the entry, and a re-imported `.xlsx` keeps it (read back from the cell style).
 - **Struck-through names**: on a merged pair the first and last name that was **not kept** are struck through too (the side not selected on the First name / Last name row at the Merge click; Contact A = the Firstname / Lastname columns, Contact B = the "2" columns). Nothing is struck when the two names are the same, differ only in case, or one is blank. Stored as `lostFirst` / `lostLast` ('a' or 'b') and read back from the cell font / style on import. (The row labels are matched as `first name` and `last name` / `surname`; if Element labels them differently nothing is struck.)
@@ -436,7 +436,7 @@ A badge is placed in `.cdk-column-flagged` (falling back to signals, then the ro
 - **Merged** is `Y` once the Merge completed card confirms the merge, `N` for a recorded pair that was not merged (skipped, blocked or left for you), and blank for entries recorded before this column existed.
 - **Script vs Bolt** is only filled for a merged pair (Merged = Y); it is blank for every other row. It is the auto-merge brief in one line, e.g. `2/3 agree · script chose 1 over Bolt: Email, Address`, `Applicant · script chose 1 over Bolt: Address`, `3/3 agree`, or `Bolt's picks` when the script made no picks on a merged pair. (With *Use picks from = Bolt* the wording flips to `Bolt chose N over script`.) Field names only, no personal data.
 - How the data gets there: the main script keeps `body.dataset.csvChoice` up to date for the pair on screen; at the Merge Contacts click it remembers the pair's Spark IDs and the line, asks the database script to record the pair (`elm2-record-pair`), and when the Merge completed card appears sends `elm2-pair-merged` (`detail: { a, b, choice }`), which sets Merged = Y.
-- **Upload & Replace**: accepts `.xlsx` only (shared or inline strings, dates, strike-through read from the cell fonts). Columns are read **by header name**. Names are shortened to 3 letters on import.
+- **Upload & Replace**: accepts a password-protected `.xlsx`, an `.elmdb`, and an old unprotected `.xlsx` (shared or inline strings, dates, strike-through read from the cell fonts). The saved password is tried first; a file made with another password asks for it (section 19). Columns are read **by header name**. Names are shortened to 3 letters on import.
 - **Clear Database**: asks for confirmation.
 
 ### 11.7 UI
@@ -480,6 +480,7 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 | `elm_merge_count` | main | Merge counter value |
 | `elm_csv_database` | Database | Recorded pairs (JSON array) |
 | `elm_show_db_ui` | Database | Show Database UI |
+| `elm_db_password` | Database | the database password, as typed (section 19) |
 | `elm2_bolt_picks` | main | Bolt's original pick per conflicting row (hashed ids, `l`/`r` + timestamp, capped at 2,500 entries). Element451 saves the selection on a pair, so on a second visit the screen shows the last selection rather than Bolt's pick; this keeps Bolt's real pick for the colours and *Use Bolt AI picks* |
 
 **Engagement table.** The dual-personal-email tiebreak reads `#duplicate-engagement-details`: one row per measure, one cell per contact. Real cells read `3 email opens, last open at Jan 11, 2026 - 6:00 AM` or `1 email click, last click at …`, so the measure name is only the label: whatever follows a comma is dropped and singular/plural is ignored (`email open(s)` → `email opens`, `email click(s)` → `email clicks`). Before this, only cells with a count of 0 (no trailing text) were recognised, so the tiebreak never saw the opens and clicks of a contact that had any.
@@ -553,6 +554,7 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 - **Versions**: the settings pane lists Main script, Database script and Extension versions in one style.
 - **Our own rating**: a points-based rating and plain-English write-up replace Bolt's overview card; score chips show our rating, or Pending (section 10.6).
 - **Stability and security pass** (UI 2.266, Database 2.67, Database Merge 1.15, extension 1.0.4): section 18.
+- **Protected database files** (Database 2.68, Database Merge 1.16): every download is a password-protected `.xlsx` or an encrypted `.elmdb`; section 19.
 - **Fixes along the way**: stall on identical consecutive names / disabled Next button, twins warning signal count, cut-off date text in filters, clipped filters panel, selected-chip colour specificity.
 
 ## 16. Chrome extension
@@ -583,7 +585,7 @@ Chrome cannot update an unpacked extension by itself, so the chip downloads the 
 **Build and release.** `.github/workflows/extension.yml`:
 - every pull request and every push to `main`: `node scripts/build-extension.js` (syntax-checks the scripts, writes `dist/extension/` and `dist/elm451-dedup-tools-v<version>.zip`), then `npm test` (`scripts/smoke-test.js`: loads the unpacked extension in Chromium, checks the popup, the update chip, then switches the API on and checks all three scripts register in the MAIN world and run on an `element451.io` page, that the settings pane lists the four versions, and that a toggle stops one; also that an older cached script does not replace the bundled one and a newer one does), and the zip is kept as a workflow artifact;
 - a **release** is published when the extension's version has no GitHub Release yet: on a push to `main`, the version in `extension/manifest.json` decides (`1.0.0` becomes the tag and release `v1.0.0`, created by `gh release create` on the pushed commit); on a pushed tag `vX.Y.Z` the version is taken from the tag. If that release already exists nothing happens. So **releasing = bump the version in `extension/manifest.json` and merge to `main`**; a merge that only changes the userscripts needs no release, since they update themselves from `main`.
-Locally: `npm install` once, `npm run build`, `npm test`; load `dist/extension` with **Load unpacked**. `npm run icons` re-renders the icons.
+`npm test` first runs `scripts/protected-files-test.js` (the database file protection of section 19, on its own in Node). Locally: `npm install` once, `npm run build`, `npm test`; load `dist/extension` with **Load unpacked**. `npm run icons` re-renders the icons.
 
 **Install.** Download the zip from Releases, unzip it, open `chrome://extensions`, turn on Developer mode, **Load unpacked** and pick the folder, then open the extension's **Details** and turn on **Allow user scripts**. Reload your Element451 tab.
 
@@ -596,7 +598,7 @@ Locally: `npm install` once, `npm run build`, `npm test`; load `dist/extension` 
 **Link to the Database script.** Only two things: the **Merge Databases** button is added inside the Database section of the settings pane, which the Database script creates (so the button only exists while the Database script is active), and the current database is read straight from `localStorage.elm_csv_database`, so it can be merged without downloading it first. Everything else, reading `.xlsx` and writing the merged `.xlsx`, is the script's own copy of the Database script's file code (keep the two in step when the file format changes). It is installed and updated like the others; in the Chrome extension it is a third switch in the popup (greyed while Database is off), and the settings pane lists `Database merge · vX.Y` under the database script's line.
 
 **The page.** The button opens a new tab, built from the Element451 page with DOM calls (no inline scripts, so the site's content-security policy cannot block it). It is a calm Material 3 page in the orange of the settings pane: a small title with a badge, a dashed drop zone, sources as list rows with leading icons, tonal stat cards, per-source chips, conflicts as cards with chips (the kept copy has a check), a Material dialog for the Replace confirmation and a snackbar for messages, with little motion; it follows the system's light or dark setting. The Element451 tab has to stay open while the merge page is in use. In dark mode it uses the same deep colours as the extension popup (page `#110e0c`, cards `#2a2420`, text `#f6ebe4`) so the cards stand out clearly.
-- **Sources**: drop or choose any number of `.xlsx` files; a table lists each source with its entry count, merged count and Scan Date range, and a **×** to remove a file. "This browser's database" is a source too, ticked by default; at least two sources are needed.
+- **Sources**: drop or choose any number of database files (password-protected `.xlsx`, `.elmdb`, or old plain `.xlsx`; a file the saved password does not open asks for its own, section 19); a table lists each source with its entry count, merged count and Scan Date range, and a **×** to remove a file. "This browser's database" is a source too, ticked by default; at least two sources are needed.
 - **Rules** (shown on the page): a pair is the same pair when both Spark IDs match, in either order (entries with no Spark IDs fall back to the two contacts' 3-letter names). If it appears more than once, **the most up to date copy wins**: the later Scan Date (a pair's Scan Date moves to the merge day when it is merged, and a dated entry beats an undated one). On the same date a merged copy beats an unmerged one, and after that the source higher in the list stays. The winner keeps its own fields, filling a blank Bolt score from the other copy.
 - **Breakdown** after **Merge**: a one-line summary ("7 entries from 2 sources became 4 pairs…"), then four tiles (pairs in the result, duplicates dropped, already merged, differences to check); a per-source list (entries, how many were kept in the result and how many were dropped because a newer copy is in another file, so kept + dropped always equals the source's entries); and a conflicts table (the same pair in a different department or merged state in two sources, with which copy was kept; first 200 shown).
 - **Result**: **Download merged database (.xlsx)** (same format as the Database script's export) and **Replace my database with this** (asks first, then writes `elm_csv_database`; the header counter follows within a second). Nothing in the browser changes until Replace is pressed.
@@ -635,3 +637,31 @@ A review of all three scripts and the extension for efficiency, stability and un
 - **Updates only when Chrome starts** (section 16) is by design; a browser left open for weeks keeps its scripts until it restarts or the extension is reloaded.
 - **Reading Angular's paginator** through the element's internal context is fragile by nature; it stays because the click fallback covers it.
 - **Selectors and label keywords** for Element451's markup remain the main source of breakage (section 13); nothing here can make them stable, but a broken one now fails one step instead of the loop.
+
+---
+
+## 19. Protected database files
+
+A downloaded database used to be a plain `.xlsx`: anyone who got the file could read it. Every download is now protected with a password, from the Database section of the settings pane and from the Merge Databases page alike. There is no unprotected download.
+
+**The password.** One password per browser, set the first time you download (or with **Database Password** in the Database section), at least 8 characters. It is kept in this browser (`localStorage`, key `elm_db_password`), so your own files download and upload without asking. Coworkers who set the same password open each other's files without being asked either; agree on one and pass it on some other way than with the file. **Database Password** shows the saved one (hidden until **Show** is ticked) and changes it; files made earlier keep the password they were made with.
+
+**Two forms**, chosen at each download:
+
+| | Excel file (`.xlsx`) | Encrypted file (`.elmdb`) |
+|---|---|---|
+| Opens in | Excel, after it asks for the password; also Upload and Merge Databases | Upload and Merge Databases only |
+| Protection | Excel's own "Encrypt with Password" format (ECMA-376 agile encryption: AES-256, SHA-512, 100,000 password rounds, tamper check) | AES-256-GCM, key from the password by PBKDF2-SHA256 (600,000 rounds); the entries are gzipped first, so the file is small |
+| Keeps | what the spreadsheet can carry (section 11.6) | every stored field exactly |
+
+**Opening a file** (Upload & Replace, and the Merge page's sources). The saved password is tried first, then any password that opened a file since the page loaded; if none fits, a dialog asks for the file's password and asks again after a wrong one. Cancelling changes nothing. An old unprotected `.xlsx` still opens, and so does a spreadsheet that was password-protected in Excel itself.
+
+**Where the code is.** The Database script holds the encryption, the dialogs and the saved password, between the `PROTECTED FILES START / END` markers and in the block after them. The Merge script borrows them through `window.__elm451DbFiles` (`read(file, document)`, `download(entries, document)`); with a Database script too old to offer that, it can still read plain `.xlsx` files and refuses to download.
+
+**What this does and does not protect.**
+- The **file** is safe from anyone without the password, wherever it is sent or stored. The strength is the password's: a short or guessable one can be tried offline by someone who has the file.
+- The **password in the browser** is stored as typed. Anyone who can use this browser profile on Element451 (or run a script on that page) can read it, and can read the database itself the same way. It protects files that leave the browser, not the browser.
+- A **forgotten password** cannot be recovered from a file. While it is still saved in a browser, **Database Password → Show** reveals it.
+- **Tied to the Element451 login instead of a password?** Not securely. The script could build the key from something it can read while you are signed in (your user or the school's site), but those are identifiers, not secrets, and the code that turns them into a key is public: anyone who knows them could open the file with no login at all. A key tied to one person's login would also stop coworkers opening the file. The saved password gives the same "no typing" for everyone who has set it, with real protection.
+
+**Checked how.** The encryption code was tested on its own and against `msoffcrypto-tool`, an independent implementation of Office encryption, in both directions (it opens our files, we open its files), including a wrong password, a changed file and a non-English password; then end to end on mock pages (set password, both downloads, upload back, another password, cancel, old plain file, the Merge page, a 15,000-entry database). **Not checked: opening the `.xlsx` in Excel itself**, which was not available. If Excel refuses a file that the right password should open, that is the first thing to report.

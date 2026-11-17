@@ -18,8 +18,8 @@ chip). Two v2 scripts target it, plus an optional third that merges databases:
 | Script | File | Current version |
 |---|---|---|
 | Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.266` (shown in the settings pane) |
-| Element451 - Database v2 | `database-v2.js` | `@version 2.67` |
-| Element451 - Database Merge v2 (optional, pairs with Database) | `database-merge-v2.js` | `@version 1.15` |
+| Element451 - Database v2 | `database-v2.js` | `@version 2.68` |
+| Element451 - Database Merge v2 (optional, pairs with Database) | `database-merge-v2.js` | `@version 1.16` |
 
 
 **Full documentation: [`Full-Documentation-v2.md`](Full-Documentation-v2.md)** (architecture, every setting,
@@ -58,16 +58,16 @@ the resolution rules, auto-merge, every website restyle, the database format, li
 - **Database v2**: records blocked / skipped pairs keyed on the two contacts' **Spark IDs** (the review
   URL no longer changes per pair), stores names as 3-letter prefixes (`Jon...`), shows right-aligned department
   badges on the list page (matched through the list API's `identities[]`, falling back to names; the Firstname 2 / Lastname 2 columns are left blank when both contacts share a name, and a blank counts as "same as the first"), exports an
-  **`.xlsx` spreadsheet** (columns `Bolt Score, Firstname, Lastname, Firstname 2, Lastname 2, Spark ID 1, Spark ID 2, Dept., Scan Date, Merged, Script vs Bolt, Row Contents`;
+  **password-protected `.xlsx` spreadsheet**, or an encrypted `.elmdb` file only these scripts read (every download is protected with a password you set once and the browser remembers; see section 19 of the full documentation) (columns `Bolt Score, Firstname, Lastname, Firstname 2, Lastname 2, Spark ID 1, Spark ID 2, Dept., Scan Date, Merged, Script vs Bolt, Row Contents`;
   preset column widths, frozen header row, filter buttons on Bolt Score, Dept. and Merged, the merged-away Spark ID and names struck through; Merged = Y/N, Script vs Bolt = what the script chose over Bolt)
-  and imports `.xlsx` (columns are read by header name), and has a **Show Database UI** toggle (under
+  and imports both protected forms and old plain `.xlsx` files (columns are read by header name), and has a **Show Database UI** toggle (under
   Display). Before every auto-skip the main script asks it to record the pair first.
 
 - **Database Merge** (optional): a **Merge Databases** button in the settings pane, under the Database section (it only
   appears while the Database script is active), opens a new tab where you add as many exported databases as you like
-  (`.xlsx` files, or this browser's stored one without downloading it first), merge them, read a breakdown
+  (protected `.xlsx` or `.elmdb` files, or this browser's stored one without downloading it first), merge them, read a breakdown
   (how many entries became how many pairs, duplicates dropped, how many entries each file kept or lost, differences between files and which copy won), then download the merged
-  `.xlsx` or replace this browser's database with it. When a pair is in more than one source, the most up to date copy (the later Scan Date) wins.
+  database (password protected, like every download) or replace this browser's database with it. When a pair is in more than one source, the most up to date copy (the later Scan Date) wins.
 
 ### Limitations (details in the full documentation)
 
@@ -142,5 +142,6 @@ UI Perfection works without the Database script. The Database script needs UI Pe
 | `elm2_bolt_picks` | UI Perfection | Bolt's original pick per conflicting row, hashed (no names or emails), so a revisited pair still shows what Bolt picked |
 | `elm_csv_database` | Database | Recorded pairs (JSON array, Spark-ID keyed) |
 | `elm_show_db_ui` | Database | Show Database UI |
+| `elm_db_password` | Database | the database password, as typed |
 
 The Chrome extension keeps its own switches and cached scripts in `chrome.storage.local` (see the full documentation).

@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Element451 - Database v2
 // @namespace    http://tampermonkey.net/
-// @version      2.67
-// @description  Tracks duplicate entries in a database stored in browser localStorage (exports an .xlsx spreadsheet) — adapted for the redesigned Deduplication review-queue UI
+// @version      2.68
+// @description  Tracks duplicate entries in a database stored in browser localStorage (exports a password-protected .xlsx spreadsheet or an encrypted .elmdb file) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
 // @grant        none
@@ -15,7 +15,7 @@
     if (window.__elm451CsvDatabaseLoaded) return;
     window.__elm451CsvDatabaseLoaded = true;
 
-    const VERSION = '2.67'; // keep in sync with @version (the build checks it)
+    const VERSION = '2.68'; // keep in sync with @version (the build checks it)
     const STORAGE_KEY = 'elm_csv_database';
     const UI_KEY = 'elm_show_db_ui';
     function showDbUi() { try { return localStorage.getItem(UI_KEY) !== 'false'; } catch (e) { return true; } }
@@ -414,6 +414,7 @@
     }
     // A problem with the database itself (not saved, nearly full): shown wherever you are, the merge panel included, and for longer.
     function showDbWarning(message) { putToast(message, 'error', 12000, true); }
+    function showDbWarningOk(message) { putToast(message, 'success', 4000, true); }
     let lastAnnotationSource = null; // 'api' | 'db-fallback' | null
 
     // =========================================================
@@ -1089,6 +1090,462 @@
         return rows;
     }
 
+
+    // ---- PROTECTED FILES START (bytes and a password in, bytes out: no page access, so it can be tested on its own) ----
+    // Two protected forms of the database:
+    //   1. a password-protected .xlsx, the way Excel itself does it ("Encrypt with Password": ECMA-376 agile encryption, AES-256-CBC with
+    //      SHA-512, inside a compound file), so Excel asks for the password and opens it;
+    //   2. an .elmdb file only these scripts read: the entries as JSON, gzipped, AES-256-GCM, key from the password by PBKDF2.
+    const u8cat = (...parts) => { const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0)); let o = 0; parts.forEach(p => { out.set(p, o); o += p.length; }); return out; };
+    const le32 = (n) => { const b = new Uint8Array(4); new DataView(b.buffer).setUint32(0, n >>> 0, true); return b; };
+    const b64 = (u8) => { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); };
+    const unb64 = (t) => Uint8Array.from(atob(String(t || '')), c => c.charCodeAt(0));
+    const randBytes = (n) => crypto.getRandomValues(new Uint8Array(n));
+    const utf16le = (t) => { const b = new Uint8Array(t.length * 2); for (let i = 0; i < t.length; i++) { const c = t.charCodeAt(i); b[i * 2] = c & 255; b[i * 2 + 1] = c >> 8; } return b; };
+    const digest = async (name, ...parts) => new Uint8Array(await crypto.subtle.digest(name, u8cat(...parts)));
+    // cut to n bytes, or filled up to n with 0x36 (how the format sizes keys and IVs)
+    const fit = (u8, n) => { if (u8.length >= n) return u8.subarray(0, n); const out = new Uint8Array(n).fill(0x36); out.set(u8); return out; };
+    const sameBytes = (a, b) => { if (a.length !== b.length) return false; let d = 0; for (let i = 0; i < a.length; i++) d |= a[i] ^ b[i]; return d === 0; };
+    const fileError = (message, code) => { const e = new Error(message); e.code = code; return e; };
+
+    // AES-CBC without padding (the format pads with zeros itself). The browser's AES-CBC always adds a padding block when
+    // encrypting (dropped here) and expects one when decrypting (made here: it is the encryption of nothing, chained on the last block).
+    const cbcKey = (raw) => crypto.subtle.importKey('raw', raw, 'AES-CBC', false, ['encrypt', 'decrypt']);
+    const pad16 = (u8) => u8.length % 16 ? u8cat(u8, new Uint8Array(16 - u8.length % 16)) : u8;
+    async function cbcEnc(key, iv, data) { const p = pad16(data); return new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-CBC', iv }, key, p)).subarray(0, p.length); }
+    async function cbcDec(key, iv, data) {
+        if (!data.length || data.length % 16) throw fileError('The file is damaged.', 'damaged');
+        const tail = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-CBC', iv: data.slice(data.length - 16) }, key, new Uint8Array(0)));
+        return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-CBC', iv }, key, u8cat(data, tail)));
+    }
+
+    // ---- compound file (the container Office keeps an encrypted document in): a writer and a reader
+    const CFB_MAGIC = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
+    const isCfb = (u8) => u8.length > 512 && CFB_MAGIC.every((b, i) => u8[i] === b);
+    function cfbWrite(streams) {
+        const SEC = 512, MINI = 64, CUT = 4096, END = 0xFFFFFFFE, FREE = 0xFFFFFFFF, FATSECT = 0xFFFFFFFD, DIFSECT = 0xFFFFFFFC;
+        const secsOf = (n) => Math.ceil(n / SEC);
+        // streams under 4096 bytes live in the "mini stream" (64-byte sectors, held by the root entry)
+        const miniFat = [], miniParts = [];
+        streams.forEach(s => {
+            s.mini = s.data.length < CUT;
+            if (!s.mini) return;
+            const n = Math.ceil(s.data.length / MINI);
+            s.start = n ? miniFat.length : END;
+            for (let k = 0; k < n; k++) miniFat.push(k < n - 1 ? miniFat.length + 1 : END);
+            const padded = new Uint8Array(n * MINI); padded.set(s.data); miniParts.push(padded);
+        });
+        const mini = u8cat(...miniParts);
+        // sector plan: big streams, the mini stream, the mini FAT, the directory, then the FAT (and the DIFAT when the FAT is long)
+        let next = 0;
+        const place = (n) => { const at = n ? next : END; next += n; return at; };
+        streams.forEach(s => { if (!s.mini) s.start = place(secsOf(s.data.length)); });
+        const miniStart = place(secsOf(mini.length));
+        const miniFatSecs = Math.ceil(miniFat.length / 128), miniFatStart = place(miniFatSecs);
+        const dirSecs = Math.ceil((streams.length + 1) / 4), dirStart = place(dirSecs);
+        let fatSecs = 0, difSecs = 0;
+        for (;;) {
+            const f = Math.ceil((next + fatSecs + difSecs) / 128), d = f > 109 ? Math.ceil((f - 109) / 127) : 0;
+            if (f === fatSecs && d === difSecs) break;
+            fatSecs = f; difSecs = d;
+        }
+        const fatStart = place(fatSecs), difStart = place(difSecs), total = next;
+        const out = new Uint8Array(SEC + total * SEC), dv = new DataView(out.buffer);
+        const at = (sec) => SEC + sec * SEC;
+        const fat = new Uint32Array(fatSecs * 128).fill(FREE);
+        const chain = (start, n) => { for (let k = 0; k < n; k++) fat[start + k] = k < n - 1 ? start + k + 1 : END; };
+        streams.forEach(s => { if (!s.mini) { chain(s.start, secsOf(s.data.length)); out.set(s.data, at(s.start)); } });
+        if (mini.length) { chain(miniStart, secsOf(mini.length)); out.set(mini, at(miniStart)); }
+        if (miniFatSecs) {
+            chain(miniFatStart, miniFatSecs);
+            for (let k = 0; k < miniFatSecs * 128; k++) dv.setUint32(at(miniFatStart) + k * 4, k < miniFat.length ? miniFat[k] : FREE, true);
+        }
+        chain(dirStart, dirSecs);
+        for (let k = 0; k < fatSecs; k++) fat[fatStart + k] = FATSECT;
+        for (let k = 0; k < difSecs; k++) fat[difStart + k] = DIFSECT;
+        fat.forEach((v, k) => dv.setUint32(at(fatStart) + k * 4, v, true));
+        // the directory: entry 0 is the root, then one entry per stream, arranged as a balanced red-black tree in the format's name order
+        const order = streams.map((s, i) => i + 1).sort((a, b) => { const x = streams[a - 1].name, y = streams[b - 1].name; return x.length - y.length || (x.toUpperCase() < y.toUpperCase() ? -1 : 1); });
+        const node = {}; let deepest = 0;
+        const build = (lo, hi, depth) => { if (lo > hi) return FREE; const mid = (lo + hi) >> 1, id = order[mid]; deepest = Math.max(deepest, depth); node[id] = { depth, left: build(lo, mid - 1, depth + 1), right: build(mid + 1, hi, depth + 1) }; return id; };
+        const treeRoot = build(0, order.length - 1, 0);
+        const entry = (i, name, type, o) => {
+            const p = at(dirStart) + i * 128;
+            for (let k = 0; k < name.length; k++) dv.setUint16(p + k * 2, name.charCodeAt(k), true);
+            dv.setUint16(p + 64, name ? (name.length + 1) * 2 : 0, true);
+            out[p + 66] = type; out[p + 67] = o.red ? 0 : 1;
+            dv.setUint32(p + 68, o.left, true); dv.setUint32(p + 72, o.right, true); dv.setUint32(p + 76, o.child, true);
+            dv.setUint32(p + 116, o.start, true); dv.setUint32(p + 120, o.size, true);
+        };
+        entry(0, 'Root Entry', 5, { left: FREE, right: FREE, child: treeRoot, start: miniStart, size: mini.length });
+        streams.forEach((s, i) => { const n = node[i + 1]; entry(i + 1, s.name, 2, { red: deepest > 0 && n.depth === deepest, left: n.left, right: n.right, child: FREE, start: s.start, size: s.data.length }); });
+        for (let i = streams.length + 1; i < dirSecs * 4; i++) entry(i, '', 0, { left: FREE, right: FREE, child: FREE, start: 0, size: 0 });
+        // the header
+        out.set(CFB_MAGIC, 0);
+        dv.setUint16(24, 0x3E, true); dv.setUint16(26, 3, true); dv.setUint16(28, 0xFFFE, true); dv.setUint16(30, 9, true); dv.setUint16(32, 6, true);
+        dv.setUint32(44, fatSecs, true); dv.setUint32(48, dirStart, true); dv.setUint32(56, CUT, true);
+        dv.setUint32(60, miniFatSecs ? miniFatStart : END, true); dv.setUint32(64, miniFatSecs, true);
+        dv.setUint32(68, difSecs ? difStart : END, true); dv.setUint32(72, difSecs, true);
+        for (let k = 0; k < 109; k++) dv.setUint32(76 + k * 4, k < fatSecs ? fatStart + k : FREE, true);
+        for (let d = 0; d < difSecs; d++) {
+            for (let k = 0; k < 127; k++) { const f = 109 + d * 127 + k; dv.setUint32(at(difStart + d) + k * 4, f < fatSecs ? fatStart + f : FREE, true); }
+            dv.setUint32(at(difStart + d) + 127 * 4, d < difSecs - 1 ? difStart + d + 1 : END, true);
+        }
+        return out;
+    }
+    // -> { name: bytes } of the streams in the file's root
+    function cfbRead(u8) {
+        if (!isCfb(u8)) throw fileError('The file is damaged.', 'damaged');
+        const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength), END = 0xFFFFFFFE, FREE = 0xFFFFFFFF;
+        const SEC = 1 << dv.getUint16(30, true), MINI = 1 << dv.getUint16(32, true), CUT = dv.getUint32(56, true);
+        if (SEC !== 512 && SEC !== 4096) throw fileError('The file is damaged.', 'damaged');
+        const at = (sec) => SEC + sec * SEC, maxSecs = Math.ceil(u8.length / SEC) + 1, perSec = SEC / 4;
+        const u32 = (p) => { if (p < 0 || p + 4 > u8.length) throw fileError('The file is damaged.', 'damaged'); return dv.getUint32(p, true); };
+        // the FAT's own sectors: 109 in the header, the rest through the DIFAT chain
+        const fatSecs = [];
+        for (let k = 0; k < 109; k++) { const s = u32(76 + k * 4); if (s < END - 2) fatSecs.push(s); }
+        for (let d = u32(68), n = 0; d < END - 2 && n < maxSecs; n++) {
+            for (let k = 0; k < perSec - 1; k++) { const s = u32(at(d) + k * 4); if (s < END - 2) fatSecs.push(s); }
+            d = u32(at(d) + (perSec - 1) * 4);
+        }
+        const fat = (sec) => { const f = fatSecs[Math.floor(sec / perSec)]; if (f === undefined) throw fileError('The file is damaged.', 'damaged'); return u32(at(f) + (sec % perSec) * 4); };
+        const readChain = (start, size) => {
+            const out = new Uint8Array(size);
+            for (let s = start, o = 0, n = 0; o < size; s = fat(s), n++) {
+                if (s >= END - 2 || n > maxSecs || at(s) >= u8.length) throw fileError('The file is damaged.', 'damaged');
+                out.set(u8.subarray(at(s), Math.min(at(s) + Math.min(SEC, size - o), u8.length)), o); o += SEC;
+            }
+            return out;
+        };
+        const chainLength = (start) => { let n = 0; for (let s = start; s < END - 2 && n <= maxSecs; s = fat(s)) n++; return n; };
+        const dir = readChain(u32(48), chainLength(u32(48)) * SEC), ddv = new DataView(dir.buffer);
+        const entries = [];
+        for (let p = 0; p + 128 <= dir.length; p += 128) {
+            const type = dir[p + 66], len = Math.max(0, Math.min(64, ddv.getUint16(p + 64, true)) - 2);
+            let name = ''; for (let k = 0; k < len; k += 2) name += String.fromCharCode(ddv.getUint16(p + k, true));
+            entries.push({ name, type, start: ddv.getUint32(p + 116, true), size: ddv.getUint32(p + 120, true) });
+        }
+        const root = entries.find(e => e.type === 5);
+        if (!root) throw fileError('The file is damaged.', 'damaged');
+        const miniStream = root.size ? readChain(root.start, root.size) : new Uint8Array(0);
+        const miniFatStart = u32(60), miniFat = miniFatStart < END - 2 ? readChain(miniFatStart, chainLength(miniFatStart) * SEC) : new Uint8Array(0);
+        const mdv = new DataView(miniFat.buffer);
+        const readMini = (start, size) => {
+            const out = new Uint8Array(size);
+            for (let s = start, o = 0, n = 0; o < size; s = mdv.getUint32(s * 4, true), n++) {
+                if (s * 4 + 4 > miniFat.length || n > miniFat.length) throw fileError('The file is damaged.', 'damaged');
+                out.set(miniStream.subarray(s * MINI, s * MINI + Math.min(MINI, size - o)), o); o += MINI;
+            }
+            return out;
+        };
+        const streams = {};
+        entries.forEach(e => { if (e.type === 2 && e.size <= u8.length) streams[e.name] = e.size < CUT ? readMini(e.start, e.size) : readChain(e.start, e.size); });
+        return streams;
+    }
+
+    // ---- Excel's password protection (ECMA-376 "agile" encryption)
+    const AGILE = { spin: 100000, input: [0xfe, 0xa7, 0xd2, 0x76, 0x3b, 0x4b, 0x9e, 0x79], value: [0xd7, 0xaa, 0x0f, 0x6d, 0x30, 0x61, 0x34, 0x4e], key: [0x14, 0x6e, 0x0b, 0xe7, 0xab, 0xac, 0xd0, 0xd6],
+        hmacKey: [0x5f, 0xb2, 0xad, 0x01, 0x0c, 0xb9, 0xe1, 0xf6], hmacValue: [0xa0, 0x67, 0x7f, 0x02, 0xb2, 0x2c, 0x84, 0x33] };
+    const AGILE_HASH = { SHA1: 'SHA-1', SHA256: 'SHA-256', SHA384: 'SHA-384', SHA512: 'SHA-512' };
+    // the password, hashed with the salt and then hashed again spin times (what makes guessing slow)
+    async function agilePasswordHash(hash, password, salt, spin) {
+        let h = await digest(hash, salt, utf16le(password));
+        const buf = new Uint8Array(4 + h.length), dv = new DataView(buf.buffer);
+        for (let i = 0; i < spin; i++) { dv.setUint32(0, i, true); buf.set(h, 4); h = new Uint8Array(await crypto.subtle.digest(hash, buf)); }
+        return h;
+    }
+    const agileKey = async (hash, pwHash, blockKey, bytes) => cbcKey(fit(await digest(hash, pwHash, new Uint8Array(blockKey)), bytes));
+    async function agileEncrypt(pkg, password) {
+        const H = 'SHA-512', keySalt = randBytes(16), pwSalt = randBytes(16), pkgKeyRaw = randBytes(32), verifier = randBytes(16), hmacKeyRaw = randBytes(64);
+        const pkgKey = await cbcKey(pkgKeyRaw);
+        // the package: its length, then 4096-byte segments, each encrypted with its own IV
+        const size = new Uint8Array(8); new DataView(size.buffer).setUint32(0, pkg.length, true);
+        const segs = [size];
+        for (let i = 0, n = 0; i < pkg.length; i += 4096, n++) segs.push(await cbcEnc(pkgKey, (await digest(H, keySalt, le32(n))).subarray(0, 16), pkg.subarray(i, i + 4096)));
+        const stream = u8cat(...segs);
+        // integrity: an HMAC over the encrypted package, itself stored encrypted
+        const hmac = new Uint8Array(await crypto.subtle.sign('HMAC', await crypto.subtle.importKey('raw', hmacKeyRaw, { name: 'HMAC', hash: H }, false, ['sign']), stream));
+        const encHmacKey = await cbcEnc(pkgKey, (await digest(H, keySalt, new Uint8Array(AGILE.hmacKey))).subarray(0, 16), hmacKeyRaw);
+        const encHmacValue = await cbcEnc(pkgKey, (await digest(H, keySalt, new Uint8Array(AGILE.hmacValue))).subarray(0, 16), hmac);
+        // the package key, locked with the password, plus a verifier that tells a wrong password from a right one
+        const pw = await agilePasswordHash(H, password, pwSalt, AGILE.spin);
+        const encInput = await cbcEnc(await agileKey(H, pw, AGILE.input, 32), pwSalt, verifier);
+        const encValue = await cbcEnc(await agileKey(H, pw, AGILE.value, 32), pwSalt, await digest(H, verifier));
+        const encKey = await cbcEnc(await agileKey(H, pw, AGILE.key, 32), pwSalt, pkgKeyRaw);
+        const algo = 'saltSize="16" blockSize="16" keyBits="256" hashSize="64" cipherAlgorithm="AES" cipherChaining="ChainingModeCBC" hashAlgorithm="SHA512"';
+        const xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n<encryption xmlns="http://schemas.microsoft.com/office/2006/encryption" xmlns:p="http://schemas.microsoft.com/office/2006/keyEncryptor/password" xmlns:c="http://schemas.microsoft.com/office/2006/keyEncryptor/certificate">' +
+            '<keyData ' + algo + ' saltValue="' + b64(keySalt) + '"/>' +
+            '<dataIntegrity encryptedHmacKey="' + b64(encHmacKey) + '" encryptedHmacValue="' + b64(encHmacValue) + '"/>' +
+            '<keyEncryptors><keyEncryptor uri="http://schemas.microsoft.com/office/2006/keyEncryptor/password">' +
+            '<p:encryptedKey spinCount="' + AGILE.spin + '" ' + algo + ' saltValue="' + b64(pwSalt) + '" encryptedVerifierHashInput="' + b64(encInput) + '" encryptedVerifierHashValue="' + b64(encValue) + '" encryptedKeyValue="' + b64(encKey) + '"/>' +
+            '</keyEncryptor></keyEncryptors></encryption>';
+        const info = u8cat(new Uint8Array([4, 0, 4, 0, 0x40, 0, 0, 0]), new TextEncoder().encode(xml));
+        return cfbWrite([{ name: 'EncryptionInfo', data: info }, { name: 'EncryptedPackage', data: stream }]);
+    }
+    // -> the .xlsx bytes; throws code 'password' for a wrong password
+    async function agileDecrypt(u8, password) {
+        const cfb = cfbRead(u8), info = cfb.EncryptionInfo, stream = cfb.EncryptedPackage;
+        if (!info || !stream || stream.length < 8) throw fileError('This is not a password-protected spreadsheet.', 'damaged');
+        if (info[0] !== 4 || info[2] !== 4) throw fileError('This spreadsheet uses an older kind of password protection. Open it in Excel and save it again.', 'unsupported');
+        const xml = new TextDecoder().decode(info.subarray(8));
+        const tag = (name) => (xml.match(new RegExp('<(?:\\w+:)?' + name + '\\b[^>]*>')) || [''])[0];
+        const attr = (t, a) => (t.match(new RegExp('\\s' + a + '="([^"]*)"')) || [])[1] || '';
+        const kd = tag('keyData'), ek = tag('encryptedKey'), di = tag('dataIntegrity');
+        const H = AGILE_HASH[attr(kd, 'hashAlgorithm')], PH = AGILE_HASH[attr(ek, 'hashAlgorithm')];
+        const keyBytes = parseInt(attr(kd, 'keyBits'), 10) / 8, pwKeyBytes = parseInt(attr(ek, 'keyBits'), 10) / 8, spin = parseInt(attr(ek, 'spinCount'), 10);
+        const plain = (t) => attr(t, 'cipherAlgorithm') === 'AES' && attr(t, 'cipherChaining') === 'ChainingModeCBC' && attr(t, 'blockSize') === '16';
+        if (!H || !PH || !plain(kd) || !plain(ek) || ![16, 32].includes(keyBytes) || ![16, 32].includes(pwKeyBytes) || !(spin >= 0 && spin <= 10000000)) throw fileError('This spreadsheet is protected in a way these scripts cannot read.', 'unsupported');
+        const keySalt = unb64(attr(kd, 'saltValue')), pwSalt = unb64(attr(ek, 'saltValue')), iv = fit(pwSalt, 16);
+        const pw = await agilePasswordHash(PH, password, pwSalt, spin);
+        const verifier = (await cbcDec(await agileKey(PH, pw, AGILE.input, pwKeyBytes), iv, unb64(attr(ek, 'encryptedVerifierHashInput')))).subarray(0, parseInt(attr(ek, 'saltSize'), 10) || 16);
+        const hashSize = parseInt(attr(ek, 'hashSize'), 10) || 64;
+        const want = (await cbcDec(await agileKey(PH, pw, AGILE.value, pwKeyBytes), iv, unb64(attr(ek, 'encryptedVerifierHashValue')))).subarray(0, hashSize);
+        if (!sameBytes(want, (await digest(PH, verifier)).subarray(0, hashSize))) throw fileError('Wrong password.', 'password');
+        const pkgKeyRaw = (await cbcDec(await agileKey(PH, pw, AGILE.key, pwKeyBytes), iv, unb64(attr(ek, 'encryptedKeyValue')))).subarray(0, keyBytes);
+        const pkgKey = await cbcKey(pkgKeyRaw);
+        // integrity first (when the file carries it), then the package itself
+        if (attr(di, 'encryptedHmacKey') && attr(di, 'encryptedHmacValue')) {
+            const kdHash = parseInt(attr(kd, 'hashSize'), 10) || 64;
+            const hmacKeyRaw = (await cbcDec(pkgKey, fit(await digest(H, keySalt, new Uint8Array(AGILE.hmacKey)), 16), unb64(attr(di, 'encryptedHmacKey')))).subarray(0, kdHash);
+            const hmacWant = (await cbcDec(pkgKey, fit(await digest(H, keySalt, new Uint8Array(AGILE.hmacValue)), 16), unb64(attr(di, 'encryptedHmacValue')))).subarray(0, kdHash);
+            const ok = await crypto.subtle.verify('HMAC', await crypto.subtle.importKey('raw', hmacKeyRaw, { name: 'HMAC', hash: H }, false, ['verify']), hmacWant, stream);
+            if (!ok) throw fileError('The file is damaged (its contents were changed after it was protected).', 'damaged');
+        }
+        const dv = new DataView(stream.buffer, stream.byteOffset, stream.byteLength), size = dv.getUint32(0, true);
+        if (dv.getUint32(4, true) || size > stream.length) throw fileError('The file is damaged.', 'damaged');
+        const out = new Uint8Array(size);
+        for (let i = 8, n = 0, o = 0; o < size; i += 4096, n++) {
+            const seg = stream.subarray(i, Math.min(i + 4096, stream.length));
+            const dec = await cbcDec(pkgKey, fit(await digest(H, keySalt, le32(n)), 16), seg);
+            out.set(dec.subarray(0, Math.min(dec.length, size - o)), o); o += 4096;
+        }
+        return out;
+    }
+
+    // ---- the scripts' own encrypted file (.elmdb)
+    const ELMDB_FORMAT = 'elm451-database', ELMDB_ITERATIONS = 600000;
+    const isElmdb = (u8) => { try { const head = new TextDecoder().decode(u8.subarray(0, 300)); return /^\s*\{/.test(head) && head.includes(ELMDB_FORMAT); } catch (e) { return false; } };
+    const pipeBytes = async (u8, transform) => new Uint8Array(await new Response(new Blob([u8]).stream().pipeThrough(transform)).arrayBuffer());
+    const elmdbKey = async (password, salt, iterations) => crypto.subtle.deriveKey({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations },
+        await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']), { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+    async function elmdbEncrypt(entries, password) {
+        const salt = randBytes(16), iv = randBytes(12);
+        const packed = await pipeBytes(new TextEncoder().encode(JSON.stringify({ entries })), new CompressionStream('gzip'));
+        const data = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await elmdbKey(password, salt, ELMDB_ITERATIONS), packed));
+        return JSON.stringify({ format: ELMDB_FORMAT, version: 1, about: 'Element451 Dedup database, encrypted. Open it with Upload or Merge Databases in the Element451 Dedup scripts.',
+            kdf: 'PBKDF2-SHA256', iterations: ELMDB_ITERATIONS, cipher: 'AES-256-GCM', salt: b64(salt), iv: b64(iv), data: b64(data) });
+    }
+    // -> the entries as stored; throws code 'password' for a wrong password
+    async function elmdbDecrypt(u8, password) {
+        let box;
+        try { box = JSON.parse(new TextDecoder().decode(u8)); } catch (e) { throw fileError('The file is damaged.', 'damaged'); }
+        const iterations = Number(box.iterations);
+        if (!box || box.format !== ELMDB_FORMAT || box.version !== 1 || !(iterations >= 1000 && iterations <= 10000000)) throw fileError('This database file was made by a newer version of the scripts.', 'unsupported');
+        let packed;
+        try { packed = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(box.iv) }, await elmdbKey(password, unb64(box.salt), iterations), unb64(box.data))); }
+        catch (e) { throw fileError('Wrong password.', 'password'); }
+        try { const d = JSON.parse(new TextDecoder().decode(await pipeBytes(packed, new DecompressionStream('gzip')))); if (!Array.isArray(d.entries)) throw 0; return d.entries; }
+        catch (e) { throw fileError('The file is damaged.', 'damaged'); }
+    }
+    // ---- PROTECTED FILES END ----
+
+    // =========================================================
+    // PROTECTED DOWNLOADS AND UPLOADS
+    // A database file is never written unprotected. The password is set once and kept in this browser (localStorage
+    // `elm_db_password`), so downloading and uploading your own files asks for nothing; a file made with another password
+    // asks for it. Download offers the two protected forms above; Upload reads both, and still reads an old plain .xlsx.
+    // The Merge Databases script uses the same reader and writer through window.__elm451DbFiles.
+    // =========================================================
+    const PASSWORD_KEY = 'elm_db_password', PASSWORD_MIN = 8;
+    let unsavedPassword = ''; // only used when the browser refuses to store it (storage full): it then lasts until the page is closed
+    function savedPassword() { try { return localStorage.getItem(PASSWORD_KEY) || unsavedPassword; } catch (e) { return unsavedPassword; } }
+    function storePassword(p) { unsavedPassword = p; try { localStorage.setItem(PASSWORD_KEY, p); return true; } catch (e) { return false; } }
+    const workedPasswords = []; // passwords that opened a file since the page loaded (a coworker's file can have another one)
+
+    // A small dialog built with DOM calls in whichever document asks (this page, or the Merge Databases tab).
+    // o: { title, text: [..], password: { value }, error, ok, options: [{ value, label, sub }] } -> { value } | { choice } | null (cancelled)
+    const DIALOG_CSS = `
+        .elm-dbd-scrim { position: fixed; inset: 0; z-index: 2147483000; display: grid; place-items: center; background: rgba(0, 0, 0, .4); font: 400 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .25px; }
+        .elm-dbd { box-sizing: border-box; width: min(440px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; padding: 24px; border-radius: 28px; background: #fffbf8; color: #1a1c20; box-shadow: 0 8px 28px rgba(0, 0, 0, .3); text-align: left; }
+        .elm-dbd h2 { margin: 0 0 12px; font: 400 22px/28px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #1a1c20; }
+        .elm-dbd p { margin: 0 0 12px; color: #43474e; }
+        .elm-dbd-field { display: flex; align-items: center; gap: 8px; height: 48px; margin: 4px 0 4px; padding: 0 8px 0 16px; border: 1px solid #73777f; border-radius: 8px; background: #fff; }
+        .elm-dbd-field:focus-within { border: 2px solid var(--md-primary, #ef6c00); padding: 0 7px 0 15px; }
+        .elm-dbd-field input[type="password"], .elm-dbd-field input[type="text"] { flex: 1; min-width: 0; border: none; outline: none; background: transparent; font: 400 16px/24px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #1a1c20; }
+        .elm-dbd-show { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #43474e; cursor: pointer; user-select: none; }
+        .elm-dbd-error { min-height: 20px; margin: 0 0 4px 16px; font-size: 13px; color: #b3261e; }
+        .elm-dbd-option { display: block; width: 100%; box-sizing: border-box; margin: 0 0 8px; padding: 12px 16px; border: 1px solid #c3c7cf; border-radius: 16px; background: #fff; color: #1a1c20; text-align: left; cursor: pointer; font: inherit; }
+        .elm-dbd-option:hover, .elm-dbd-option:focus-visible { border-color: var(--md-primary, #ef6c00); background: #fff4ea; outline: none; }
+        .elm-dbd-option b { display: block; font-weight: 600; font-size: 15px; }
+        .elm-dbd-option span { display: block; color: #43474e; font-size: 13px; }
+        .elm-dbd-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+        .elm-dbd-btn { height: 40px; padding: 0 24px; border: none; border-radius: 20px; background: transparent; color: var(--md-primary-text, #b34e00); font: 500 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .1px; cursor: pointer; }
+        .elm-dbd-btn:hover { background: rgba(239, 108, 0, .08); }
+        .elm-dbd-btn.filled { background: var(--md-primary, #ef6c00); color: #fff; }
+        .elm-dbd-btn.filled:hover { box-shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 1px 3px 1px rgba(0, 0, 0, .15); }
+        .elm-dbd-btn:focus-visible { outline: 2px solid var(--md-primary, #ef6c00); outline-offset: 2px; }
+        .elm-dbd-busy { display: flex; align-items: center; gap: 16px; }
+        .elm-dbd-spin { flex: none; width: 24px; height: 24px; border-radius: 50%; border: 3px solid #fde3cc; border-top-color: var(--md-primary, #ef6c00); animation: elmDbdSpin .8s linear infinite; }
+        @keyframes elmDbdSpin { to { transform: rotate(360deg); } }
+    `;
+    function dialogShell(doc) {
+        if (!doc.getElementById('elm-dbd-style')) { const st = doc.createElement('style'); st.id = 'elm-dbd-style'; st.textContent = DIALOG_CSS; (doc.head || doc.documentElement).appendChild(st); }
+        const el = (tag, cls, text) => { const e = doc.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+        const scrim = el('div', 'elm-dbd-scrim'), box = el('div', 'elm-dbd');
+        box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true');
+        scrim.appendChild(box);
+        return { el, scrim, box };
+    }
+    function dbDialog(doc, o) {
+        return new Promise(resolve => {
+            const { el, scrim, box } = dialogShell(doc);
+            box.appendChild(el('h2', '', o.title));
+            (o.text || []).forEach(t => box.appendChild(el('p', '', t)));
+            let input = null, error = null;
+            const done = (v) => { doc.removeEventListener('keydown', onKey, true); scrim.remove(); resolve(v); };
+            const accept = () => {
+                if (!input) { done({}); return; }
+                const problem = o.validate ? o.validate(input.value) : (input.value ? '' : 'Type the password.');
+                if (problem) { error.textContent = problem; input.focus(); return; }
+                done({ value: input.value });
+            };
+            const onKey = (e) => {
+                if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(null); }
+                else if (e.key === 'Enter' && input && doc.activeElement === input) { e.preventDefault(); e.stopPropagation(); accept(); }
+            };
+            if (o.password) {
+                const field = el('label', 'elm-dbd-field');
+                input = el('input'); input.type = 'password'; input.value = o.password.value || ''; input.autocomplete = 'off'; input.spellcheck = false;
+                input.setAttribute('aria-label', 'Password');
+                const show = el('label', 'elm-dbd-show'), box2 = el('input'); box2.type = 'checkbox';
+                box2.addEventListener('change', () => { input.type = box2.checked ? 'text' : 'password'; });
+                show.append(box2, doc.createTextNode('Show'));
+                field.append(input, show);
+                error = el('div', 'elm-dbd-error', o.error || '');
+                box.append(field, error);
+            }
+            (o.options || []).forEach(opt => {
+                const b = el('button', 'elm-dbd-option'); b.type = 'button';
+                b.append(el('b', '', opt.label), el('span', '', opt.sub));
+                b.addEventListener('click', () => done({ choice: opt.value }));
+                box.appendChild(b);
+            });
+            const actions = el('div', 'elm-dbd-actions');
+            const cancel = el('button', 'elm-dbd-btn', 'Cancel'); cancel.type = 'button'; cancel.addEventListener('click', () => done(null));
+            actions.appendChild(cancel);
+            if (o.ok) { const ok = el('button', 'elm-dbd-btn filled', o.ok); ok.type = 'button'; ok.addEventListener('click', accept); actions.appendChild(ok); }
+            box.appendChild(actions);
+            doc.addEventListener('keydown', onKey, true);
+            (doc.body || doc.documentElement).appendChild(scrim);
+            const first = input || box.querySelector('.elm-dbd-option') || cancel;
+            first.focus();
+            if (input) input.select();
+        });
+    }
+    // "Working..." while a file is locked or unlocked (the password is deliberately slow to check: about a second or two)
+    function busyNote(doc, text) {
+        const { el, scrim, box } = dialogShell(doc);
+        const row = el('div', 'elm-dbd-busy'); row.append(el('div', 'elm-dbd-spin'), el('div', '', text));
+        box.appendChild(row);
+        (doc.body || doc.documentElement).appendChild(scrim);
+        return () => scrim.remove();
+    }
+    // Set or change the saved password -> the password, or null when cancelled
+    async function passwordDialog(doc) {
+        const current = savedPassword();
+        const r = await dbDialog(doc, {
+            title: current ? 'Database password' : 'Set a database password',
+            text: [
+                'Database files you download are always protected with this password. It is kept in this browser, so you type it once. Coworkers need the same password to open your files, so agree on one and give it to them some other way than with the file.',
+                current ? 'Changing it affects the files you download from now on. Files made earlier keep the password they were made with.' : 'Use at least ' + PASSWORD_MIN + ' characters.'
+            ],
+            password: { value: current }, ok: 'Save',
+            validate: (v) => v.length < PASSWORD_MIN ? 'Use at least ' + PASSWORD_MIN + ' characters.' : ''
+        });
+        if (!r) return null;
+        storePassword(r.value);
+        return r.value;
+    }
+    // Opens a protected file: the saved password first, then any that worked earlier, then it asks (again after a wrong one)
+    async function openWithPassword(name, doc, open) {
+        const tried = new Set();
+        const attempt = async (p) => { const stop = busyNote(doc, 'Opening ' + name + '…'); try { return await open(p); } finally { stop(); } };
+        for (const p of [savedPassword(), ...workedPasswords]) {
+            if (!p || tried.has(p)) continue;
+            tried.add(p);
+            try { return { entries: await attempt(p) }; } catch (e) { if (e.code !== 'password') throw e; }
+        }
+        for (let wrong = false; ;) {
+            const r = await dbDialog(doc, {
+                title: 'Password needed',
+                text: ['"' + name + '" is protected' + (tried.size ? ' with a different password from the one saved in this browser.' : ' with a password.')],
+                password: { value: '' }, ok: 'Open', error: wrong ? 'That password did not open the file.' : ''
+            });
+            if (!r) throw fileError('No password was given.', 'cancel');
+            try { const entries = await attempt(r.value); if (!workedPasswords.includes(r.value)) workedPasswords.push(r.value); return { entries }; }
+            catch (e) { if (e.code !== 'password') throw e; wrong = true; }
+        }
+    }
+    // Entries read from an .elmdb file, brought to the stored shape (the same one entriesFromRows gives)
+    function cleanEntries(list) {
+        const str = (v) => v == null ? '' : String(v);
+        return list.filter(e => e && typeof e === 'object' && !Array.isArray(e)).map(e => {
+            const m = str(e.merged).trim().toUpperCase().charAt(0);
+            const out = {
+                firstName: trunc3(str(e.firstName)), lastName: trunc3(str(e.lastName)), firstName2: trunc3(str(e.firstName2)), lastName2: trunc3(str(e.lastName2)),
+                dept: str(e.dept), rowContents: str(e.rowContents), sparkId1: str(e.sparkId1), sparkId2: str(e.sparkId2),
+                merged: m === 'Y' || m === 'N' ? m : '', choice: m === 'Y' ? str(e.choice) : '', score: str(e.score).trim().toLowerCase(), scanDate: parseDate(str(e.scanDate))
+            };
+            if (e.lostSpark) out.lostSpark = str(e.lostSpark);
+            if (e.lostFirst === 'a' || e.lostFirst === 'b') out.lostFirst = e.lostFirst;
+            if (e.lostLast === 'a' || e.lostLast === 'b') out.lostLast = e.lostLast;
+            return out;
+        });
+    }
+    // Reads a database file of any kind into entries (throws with a message a person can read; code 'cancel' when no password was given)
+    async function readDbFile(file, doc) {
+        const buf = await file.arrayBuffer(), u8 = new Uint8Array(buf);
+        const fromRows = (rows) => { if (rows.length < 2) throw new Error('The file is empty or has no data rows.'); return entriesFromRows(rows); };
+        let entries;
+        if (u8[0] === 0x50 && u8[1] === 0x4B) entries = fromRows(await xlsxRows(buf)); // a plain .xlsx (how downloads were before they were protected)
+        else if (isCfb(u8)) entries = (await openWithPassword(file.name, doc || document, async (p) => { const x = await agileDecrypt(u8, p); return fromRows(await xlsxRows(x.buffer.slice(x.byteOffset, x.byteOffset + x.length))); })).entries;
+        else if (isElmdb(u8)) entries = (await openWithPassword(file.name, doc || document, async (p) => cleanEntries(await elmdbDecrypt(u8, p)))).entries;
+        else throw new Error('Please select a database file (.xlsx or .elmdb).');
+        if (entries.length === 0) throw new Error('No valid entries found in the file.');
+        return entries;
+    }
+    // Asks which protected form, builds it and hands it to the browser as a download -> true when a file was downloaded
+    async function downloadDatabase(entries, doc) {
+        doc = doc || document;
+        const password = savedPassword() || await passwordDialog(doc);
+        if (!password) return false;
+        const r = await dbDialog(doc, {
+            title: 'Download the database',
+            text: ['Both are protected with the database password saved in this browser.'],
+            options: [
+                { value: 'xlsx', label: 'Excel file (.xlsx)', sub: 'Opens in Excel after it asks for the password. Upload and Merge Databases read it too.' },
+                { value: 'elmdb', label: 'Encrypted file (.elmdb)', sub: 'Only Upload and Merge Databases in these scripts can read it. No other program opens it.' }
+            ]
+        });
+        if (!r) return false;
+        const stop = busyNote(doc, 'Protecting the file…');
+        let blob;
+        try {
+            if (r.choice === 'xlsx') blob = new Blob([await agileEncrypt(new Uint8Array(await buildXlsx(dbRows(entries)).arrayBuffer()), password)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            else blob = new Blob([await elmdbEncrypt(entries, password)], { type: 'application/octet-stream' });
+        } finally { stop(); }
+        const url = URL.createObjectURL(blob), a = doc.createElement('a');
+        a.href = url;
+        a.download = `elm_database_${new Date().toISOString().slice(0, 10)}.${r.choice}`;
+        (doc.body || doc.documentElement).appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+        return true;
+    }
+    // For the Merge Databases script: the same reader and protected writer, in its own tab's document
+    window.__elm451DbFiles = { version: 1, read: readDbFile, download: downloadDatabase };
+
     // =========================================================
     // DATABASE UI (badge in header, section in settings pane — same
     // injection targets as the classic script, provided by UI-Perfection-v2)
@@ -1131,17 +1588,6 @@
         else controlsWrapper.appendChild(badge);
         updateDbSizeBadge();
     }
-    // Reads an .xlsx database file into entries (throws with a message a person can read)
-    async function parseDbFile(file) {
-        const lower = file.name.toLowerCase();
-        let rows;
-        if (lower.endsWith('.xlsx')) rows = await xlsxRows(await file.arrayBuffer());
-        else throw new Error('Please select an .xlsx file.');
-        if (rows.length < 2) throw new Error('The file is empty or has no data rows.');
-        const entries = entriesFromRows(rows);
-        if (entries.length === 0) throw new Error('No valid entries found in the file.');
-        return entries;
-    }
     function injectDbSettingsSection() {
         if (document.getElementById('elm-settings-db-section')) return;
         const settingsBody = document.querySelector('#elm-settings-pane .settings-body');
@@ -1152,7 +1598,8 @@
             <div class="settings-section-title">Database</div>
             <button id="elm-settings-download-btn" class="settings-action-btn"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/></svg> Download Database</button>
             <button id="elm-settings-upload-btn" class="settings-action-btn"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M5 20h14v-2H5v2zm0-10h4v6h6v-6h4l-7-7-7 7z"/></svg> Upload &amp; Replace Database</button>
-            <input type="file" id="elm-db-upload-input" accept=".xlsx">
+            <input type="file" id="elm-db-upload-input" accept=".xlsx,.elmdb">
+            <button id="elm-settings-password-btn" class="settings-action-btn"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2m-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2m3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1s3.1 1.39 3.1 3.1z"/></svg> Database Password</button>
             <button id="elm-settings-clear-btn" class="settings-action-btn danger"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg> Clear Database</button>
         `;
         // above the Info section when there is one (it stays last), else at the end
@@ -1170,15 +1617,11 @@
         document.getElementById('elm-settings-download-btn').onclick = () => {
             const db = getDatabase();
             if (db.length === 0) { alert('The database is empty — no entries have been recorded yet.'); return; }
-            const blob = buildXlsx(dbRows(db));
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `elm_database_${new Date().toISOString().slice(0, 10)}.xlsx`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            // always protected: a password-protected .xlsx or an encrypted .elmdb (see downloadDatabase)
+            downloadDatabase(db, document).catch(err => alert('The database could not be downloaded: ' + (err && err.message || err)));
+        };
+        document.getElementById('elm-settings-password-btn').onclick = () => {
+            passwordDialog(document).then(p => { if (p && savedPassword() === p) showDbWarningOk('Database password saved in this browser.'); });
         };
         const uploadInput = document.getElementById('elm-db-upload-input');
         document.getElementById('elm-settings-upload-btn').onclick = () => uploadInput.click();
@@ -1186,7 +1629,7 @@
             const file = e.target.files[0];
             if (!file) return;
             try {
-                const entries = await parseDbFile(file);
+                const entries = await readDbFile(file, document);
                 if (!confirm(`Replace current database with ${entries.length} entries from "${file.name}"?`)) { uploadInput.value = ''; return; }
                 if (!saveDatabase(entries)) { alert('The database could not be saved (the browser storage is full or blocked), so nothing was replaced.'); uploadInput.value = ''; return; }
                 updateDbSizeBadge();
@@ -1194,7 +1637,7 @@
                 annotateQueueTable();
                 alert(`Database replaced with ${entries.length} entries.`);
             } catch (err) {
-                alert('Error reading the file: ' + err.message);
+                if (!err || err.code !== 'cancel') alert('Error reading the file: ' + (err && err.message || err)); // cancel: the password dialog was closed
             }
             uploadInput.value = '';
         };

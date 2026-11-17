@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.272
+// @version      2.273
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.272'; // keep in sync with @version
+    const VERSION = '2.273'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -2437,7 +2437,7 @@
         else if (lastState === 'partial') add('last', 'Last name', W.lastPartial[0], 'for', 'overlapping last names (' + A.last + ' and ' + B.last + ')', { nameFor: 'last' });
         else if (lastState === 'differ') add('last', 'Last name', W.last[1], 'against', 'different last names (' + A.last + ' and ' + B.last + ')');
         // Address
-        if (ev.addrState === 'match') add('address', 'Address', W.address[0], 'for', 'the same address');
+        if (ev.addrState === 'match') { add('address', 'Address', W.address[0], 'for', 'the same address', { strong: true }); strong++; }
         else if (ev.addrState === 'mismatch') add('address', 'Address', W.address[1], 'against', 'different addresses (people move)');
         // Soft fields
         [['studentType', 'Student type'], ['level', 'Academic level'], ['school', 'School attended']].forEach(([k, label]) => {

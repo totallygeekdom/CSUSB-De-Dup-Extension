@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Element451 - Database v2
 // @namespace    http://tampermonkey.net/
-// @version      2.68
-// @description  Tracks duplicate entries in a database stored in browser localStorage (exports a password-protected .xlsx spreadsheet or an encrypted .elmdb file) — adapted for the redesigned Deduplication review-queue UI
+// @version      2.69
+// @description  Tracks duplicate entries in a database stored in browser localStorage (exports a password-protected .xlsx spreadsheet to share, or a personal .elmdb file locked to your Element451 login) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
 // @grant        none
@@ -15,7 +15,7 @@
     if (window.__elm451CsvDatabaseLoaded) return;
     window.__elm451CsvDatabaseLoaded = true;
 
-    const VERSION = '2.68'; // keep in sync with @version (the build checks it)
+    const VERSION = '2.69'; // keep in sync with @version (the build checks it)
     const STORAGE_KEY = 'elm_csv_database';
     const UI_KEY = 'elm_show_db_ui';
     function showDbUi() { try { return localStorage.getItem(UI_KEY) !== 'false'; } catch (e) { return true; } }
@@ -596,6 +596,13 @@
             this._csvDbUrl = url;
             return origOpen.apply(this, arguments);
         };
+        // who is signed in (for the personal database file): read from the sign-in token the page sends with its own
+        // deduplication calls. Only the person's ID is kept, in memory; the token itself is not.
+        const origSetHeader = XMLHttpRequest.prototype.setRequestHeader;
+        XMLHttpRequest.prototype.setRequestHeader = function (name, value) {
+            try { if (/^authorization$/i.test(name)) noteAuthorization(this._csvDbUrl, value); } catch (e) { /* never in the page's way */ }
+            return origSetHeader.apply(this, arguments);
+        };
         const origSend = XMLHttpRequest.prototype.send;
         XMLHttpRequest.prototype.send = function () {
             this.addEventListener('load', function () {
@@ -617,6 +624,11 @@
         const origFetch = window.fetch;
         window.fetch = function (input, init) {
             const url = typeof input === 'string' ? input : input instanceof Request ? input.url : input instanceof URL ? input.href : '';
+            try {
+                const h = (init && init.headers) || (input instanceof Request ? input.headers : null);
+                const auth = h ? (typeof h.get === 'function' ? h.get('Authorization') : (h.Authorization || h.authorization)) : null;
+                if (auth) noteAuthorization(url, auth);
+            } catch (e) { /* never in the page's way */ }
             return origFetch.apply(this, arguments).then(response => {
                 try {
                     if (!url || !/duplicate|dedup/i.test(url) || /\/duplicates\/history(\?|$)/.test(url)) return response;
@@ -1095,7 +1107,8 @@
     // Two protected forms of the database:
     //   1. a password-protected .xlsx, the way Excel itself does it ("Encrypt with Password": ECMA-376 agile encryption, AES-256-CBC with
     //      SHA-512, inside a compound file), so Excel asks for the password and opens it;
-    //   2. an .elmdb file only these scripts read: the entries as JSON, gzipped, AES-256-GCM, key from the password by PBKDF2.
+    //   2. an .elmdb file only these scripts read: the entries as JSON, gzipped, AES-256-GCM, key by PBKDF2 from a secret the caller
+    //      gives (the signed-in person's Element451 identity: a personal file, with no password to type).
     const u8cat = (...parts) => { const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0)); let o = 0; parts.forEach(p => { out.set(p, o); o += p.length; }); return out; };
     const le32 = (n) => { const b = new Uint8Array(4); new DataView(b.buffer).setUint32(0, n >>> 0, true); return b; };
     const b64 = (u8) => { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); };
@@ -1322,28 +1335,28 @@
         return out;
     }
 
-    // ---- the scripts' own encrypted file (.elmdb)
+    // ---- the scripts' own encrypted file (.elmdb): locked with a secret string instead of a typed password
     const ELMDB_FORMAT = 'elm451-database', ELMDB_ITERATIONS = 600000;
     const isElmdb = (u8) => { try { const head = new TextDecoder().decode(u8.subarray(0, 300)); return /^\s*\{/.test(head) && head.includes(ELMDB_FORMAT); } catch (e) { return false; } };
     const pipeBytes = async (u8, transform) => new Uint8Array(await new Response(new Blob([u8]).stream().pipeThrough(transform)).arrayBuffer());
     const elmdbKey = async (password, salt, iterations) => crypto.subtle.deriveKey({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations },
         await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']), { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
-    async function elmdbEncrypt(entries, password) {
+    async function elmdbEncrypt(entries, secret) {
         const salt = randBytes(16), iv = randBytes(12);
         const packed = await pipeBytes(new TextEncoder().encode(JSON.stringify({ entries })), new CompressionStream('gzip'));
-        const data = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await elmdbKey(password, salt, ELMDB_ITERATIONS), packed));
-        return JSON.stringify({ format: ELMDB_FORMAT, version: 1, about: 'Element451 Dedup database, encrypted. Open it with Upload or Merge Databases in the Element451 Dedup scripts.',
+        const data = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await elmdbKey(secret, salt, ELMDB_ITERATIONS), packed));
+        return JSON.stringify({ format: ELMDB_FORMAT, version: 1, lock: 'login', about: 'Element451 Dedup database, personal copy: it opens with Upload or Merge Databases in the Element451 Dedup scripts, for the person who downloaded it, signed in to Element451.',
             kdf: 'PBKDF2-SHA256', iterations: ELMDB_ITERATIONS, cipher: 'AES-256-GCM', salt: b64(salt), iv: b64(iv), data: b64(data) });
     }
-    // -> the entries as stored; throws code 'password' for a wrong password
-    async function elmdbDecrypt(u8, password) {
+    // -> the entries as stored; throws code 'password' when the secret is not the one the file was locked with
+    async function elmdbDecrypt(u8, secret) {
         let box;
         try { box = JSON.parse(new TextDecoder().decode(u8)); } catch (e) { throw fileError('The file is damaged.', 'damaged'); }
         const iterations = Number(box.iterations);
         if (!box || box.format !== ELMDB_FORMAT || box.version !== 1 || !(iterations >= 1000 && iterations <= 10000000)) throw fileError('This database file was made by a newer version of the scripts.', 'unsupported');
         let packed;
-        try { packed = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(box.iv) }, await elmdbKey(password, unb64(box.salt), iterations), unb64(box.data))); }
-        catch (e) { throw fileError('Wrong password.', 'password'); }
+        try { packed = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(box.iv) }, await elmdbKey(secret, unb64(box.salt), iterations), unb64(box.data))); }
+        catch (e) { throw fileError('Locked to a different login.', 'password'); }
         try { const d = JSON.parse(new TextDecoder().decode(await pipeBytes(packed, new DecompressionStream('gzip')))); if (!Array.isArray(d.entries)) throw 0; return d.entries; }
         catch (e) { throw fileError('The file is damaged.', 'damaged'); }
     }
@@ -1351,11 +1364,83 @@
 
     // =========================================================
     // PROTECTED DOWNLOADS AND UPLOADS
-    // A database file is never written unprotected. The password is set once and kept in this browser (localStorage
-    // `elm_db_password`), so downloading and uploading your own files asks for nothing; a file made with another password
-    // asks for it. Download offers the two protected forms above; Upload reads both, and still reads an old plain .xlsx.
-    // The Merge Databases script uses the same reader and writer through window.__elm451DbFiles.
+    // A database file is never written unprotected. Download offers the two protected forms above:
+    //   - the Excel file is the one to share: protected with a password that is set once and kept in this browser
+    //     (localStorage `elm_db_password`), so your own files open without asking and a file made with another password asks;
+    //   - the .elmdb is personal: locked to the Element451 login of the person who downloads it, no password at all.
+    // Upload reads both, and still reads an old plain .xlsx. The Merge Databases script uses the same reader and writer
+    // through window.__elm451DbFiles.
     // =========================================================
+    // ---- who is signed in. The page sends a sign-in token with its calls to Element451; when that token is a JWT, its
+    // payload names the person (sub / user_id / ...). That ID, not the token, is what a personal file is locked to. It is an
+    // identifier rather than a secret, so this lock is lighter than a password: it keeps the file closed to anyone who does
+    // not know the person's Element451 ID, and to coworkers using these scripts under their own login.
+    const LOGIN_PREFIX = 'elm451-login:', LOGIN_MARK_KEY = 'elm_db_login_mark';
+    const JWT_RE = /^(?:Bearer\s+)?([A-Za-z0-9_-]{4,})\.([A-Za-z0-9_-]{4,})\.([A-Za-z0-9_-]*)$/;
+    let login = null; // { id, kind: 'id' | 'email', source: 'request' | 'storage', mark }
+    function identityFromClaims(c) {
+        if (!c || typeof c !== 'object') return null;
+        const u = c.user && typeof c.user === 'object' ? c.user : null;
+        const pick = [c.sub, c.user_id, c.userId, c.uid, u && (u._id || u.id), typeof c.user === 'string' ? c.user : null, c.id, c._id, c.email, u && u.email, c.username]
+            .find(v => (typeof v === 'string' && v.trim().length >= 3) || (typeof v === 'number' && isFinite(v)));
+        if (pick === undefined) return null;
+        const id = String(pick).trim().toLowerCase();
+        return { id, kind: id.includes('@') ? 'email' : 'id' };
+    }
+    function identityFromToken(t) {
+        const m = JWT_RE.exec(String(t || '').trim());
+        if (!m) return null;
+        try { return identityFromClaims(JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(m[2].replace(/-/g, '+').replace(/_/g, '/')), ch => ch.charCodeAt(0))))); }
+        catch (e) { return null; }
+    }
+    // Fallback when no deduplication call has been seen yet: the page's own stored session (a token, or a user object).
+    // Used only when everything found there names one and the same person.
+    function identityFromStorage() {
+        const found = new Map();
+        const add = (who) => { if (who) found.set(who.id, who); };
+        const userLike = (o) => o && typeof o === 'object' && !Array.isArray(o) && (o._id || o.id) && o.email ? identityFromClaims({ sub: o._id || o.id }) : null;
+        [localStorage, sessionStorage].forEach(store => {
+            try {
+                for (let i = 0; i < store.length; i++) {
+                    const key = store.key(i);
+                    if (/^(elm2?_|__elm)/.test(key)) continue; // our own keys
+                    const raw = store.getItem(key) || '';
+                    if (raw.length < 20 || raw.length > 20000) continue;
+                    add(identityFromToken(raw.replace(/^"|"$/g, '')));
+                    if (raw[0] !== '{') continue;
+                    let o; try { o = JSON.parse(raw); } catch (e) { continue; }
+                    ['access_token', 'accessToken', 'id_token', 'idToken', 'token', 'jwt'].forEach(k => { if (typeof o[k] === 'string') add(identityFromToken(o[k])); });
+                    [o, o.user, o.currentUser, o.profile, o.me].forEach(x => add(userLike(x)));
+                }
+            } catch (e) { /* storage unavailable */ }
+        });
+        return found.size === 1 ? Array.from(found.values())[0] : null;
+    }
+    function setLogin(who, source) {
+        if (!who || (login && login.id === who.id)) return;
+        if (login && login.source === 'request' && source !== 'request') return; // the page's own call is the better witness
+        const mine = login = { id: who.id, kind: who.kind, source, mark: '' };
+        // a short fingerprint of the ID, kept in this browser: it shows when the login this browser sees has changed
+        digest('SHA-256', new TextEncoder().encode(LOGIN_PREFIX + who.id)).then(h => {
+            mine.mark = Array.from(h.subarray(0, 4), b => b.toString(16).padStart(2, '0')).join('');
+            let rec = null;
+            try { rec = JSON.parse(localStorage.getItem(LOGIN_MARK_KEY) || 'null'); } catch (e) { /* ignore */ }
+            if (rec && rec.m === mine.mark) return;
+            try { localStorage.setItem(LOGIN_MARK_KEY, JSON.stringify({ m: mine.mark, t: Date.now(), c: rec ? Date.now() : 0 })); } catch (e) { /* ignore */ }
+        }).catch(() => {});
+    }
+    function noteAuthorization(url, value) {
+        if (!/duplicate|dedup/i.test(String(url || ''))) return; // Element451's own deduplication API, not some other service on the page
+        setLogin(identityFromToken(value), 'request');
+    }
+    function currentLogin() {
+        if (!login) setLogin(identityFromStorage(), 'storage');
+        return login;
+    }
+    // The login this browser sees changed in the last 30 days (another person signed in here, or the ID is not a steady one)
+    function loginChangedRecently() {
+        try { const rec = JSON.parse(localStorage.getItem(LOGIN_MARK_KEY) || 'null'); return !!(rec && rec.c && Date.now() - rec.c < 30 * 86400000); } catch (e) { return false; }
+    }
     const PASSWORD_KEY = 'elm_db_password', PASSWORD_MIN = 8;
     let unsavedPassword = ''; // only used when the browser refuses to store it (storage full): it then lasts until the page is closed
     function savedPassword() { try { return localStorage.getItem(PASSWORD_KEY) || unsavedPassword; } catch (e) { return unsavedPassword; } }
@@ -1375,7 +1460,8 @@
         .elm-dbd-show { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #43474e; cursor: pointer; user-select: none; }
         .elm-dbd-error { min-height: 20px; margin: 0 0 4px 16px; font-size: 13px; color: #b3261e; }
         .elm-dbd-option { display: block; width: 100%; box-sizing: border-box; margin: 0 0 8px; padding: 12px 16px; border: 1px solid #c3c7cf; border-radius: 16px; background: #fff; color: #1a1c20; text-align: left; cursor: pointer; font: inherit; }
-        .elm-dbd-option:hover, .elm-dbd-option:focus-visible { border-color: var(--md-primary, #ef6c00); background: #fff4ea; outline: none; }
+        .elm-dbd-option.off { opacity: .6; cursor: default; background: #f4f0ec; }
+        .elm-dbd-option:not(.off):hover, .elm-dbd-option:not(.off):focus-visible { border-color: var(--md-primary, #ef6c00); background: #fff4ea; outline: none; }
         .elm-dbd-option b { display: block; font-weight: 600; font-size: 15px; }
         .elm-dbd-option span { display: block; color: #43474e; font-size: 13px; }
         .elm-dbd-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
@@ -1427,6 +1513,7 @@
             (o.options || []).forEach(opt => {
                 const b = el('button', 'elm-dbd-option'); b.type = 'button';
                 b.append(el('b', '', opt.label), el('span', '', opt.sub));
+                if (opt.disabled) { b.disabled = true; b.classList.add('off'); }
                 b.addEventListener('click', () => done({ choice: opt.value }));
                 box.appendChild(b);
             });
@@ -1437,7 +1524,7 @@
             box.appendChild(actions);
             doc.addEventListener('keydown', onKey, true);
             (doc.body || doc.documentElement).appendChild(scrim);
-            const first = input || box.querySelector('.elm-dbd-option') || cancel;
+            const first = input || box.querySelector('.elm-dbd-option:not(.off)') || cancel;
             first.focus();
             if (input) input.select();
         });
@@ -1456,7 +1543,7 @@
         const r = await dbDialog(doc, {
             title: current ? 'Database password' : 'Set a database password',
             text: [
-                'Database files you download are always protected with this password. It is kept in this browser, so you type it once. Coworkers need the same password to open your files, so agree on one and give it to them some other way than with the file.',
+'The Excel file you download, the one for sharing, is always protected with this password. It is kept in this browser, so you type it once. Coworkers need the same password to open your files, so agree on one and give it to them some other way than with the file.',
                 current ? 'Changing it affects the files you download from now on. Files made earlier keep the password they were made with.' : 'Use at least ' + PASSWORD_MIN + ' characters.'
             ],
             password: { value: current }, ok: 'Save',
@@ -1509,7 +1596,15 @@
         let entries;
         if (u8[0] === 0x50 && u8[1] === 0x4B) entries = fromRows(await xlsxRows(buf)); // a plain .xlsx (how downloads were before they were protected)
         else if (isCfb(u8)) entries = (await openWithPassword(file.name, doc || document, async (p) => { const x = await agileDecrypt(u8, p); return fromRows(await xlsxRows(x.buffer.slice(x.byteOffset, x.byteOffset + x.length))); })).entries;
-        else if (isElmdb(u8)) entries = (await openWithPassword(file.name, doc || document, async (p) => cleanEntries(await elmdbDecrypt(u8, p)))).entries;
+        else if (isElmdb(u8)) {
+            // a personal file: it opens for the login it was locked to, and there is no password to ask for
+            const who = currentLogin();
+            if (!who) throw new Error('This is a personal file, locked to an Element451 login, and the script has not seen who is signed in yet. Open the Deduplication list, then try again.');
+            const stop = busyNote(doc || document, 'Opening ' + file.name + '…');
+            try { entries = cleanEntries(await elmdbDecrypt(u8, LOGIN_PREFIX + who.id)); }
+            catch (e) { if (e.code !== 'password') throw e; throw new Error('This personal file is locked to a different Element451 login. Only the person who downloaded it can open it, signed in as themselves. To share a database, download the Excel file.'); }
+            finally { stop(); }
+        }
         else throw new Error('Please select a database file (.xlsx or .elmdb).');
         if (entries.length === 0) throw new Error('No valid entries found in the file.');
         return entries;
@@ -1517,22 +1612,25 @@
     // Asks which protected form, builds it and hands it to the browser as a download -> true when a file was downloaded
     async function downloadDatabase(entries, doc) {
         doc = doc || document;
-        const password = savedPassword() || await passwordDialog(doc);
-        if (!password) return false;
+        const who = currentLogin();
         const r = await dbDialog(doc, {
             title: 'Download the database',
-            text: ['Both are protected with the database password saved in this browser.'],
             options: [
-                { value: 'xlsx', label: 'Excel file (.xlsx)', sub: 'Opens in Excel after it asks for the password. Upload and Merge Databases read it too.' },
-                { value: 'elmdb', label: 'Encrypted file (.elmdb)', sub: 'Only Upload and Merge Databases in these scripts can read it. No other program opens it.' }
+                { value: 'xlsx', label: 'Excel file, to share (.xlsx)', sub: 'Protected with the database password. Excel asks for it, then opens the file; coworkers open it with Upload or Merge Databases.' },
+                { value: 'elmdb', label: 'Personal file (.elmdb)', disabled: !who,
+                  sub: !who ? 'Not available yet: the script has not seen who is signed in. Open the Deduplication list and try again.'
+                      : 'Locked to your Element451 login, with no password. Only you can open it, with Upload or Merge Databases while signed in. No other program opens it.' +
+                        (loginChangedRecently() ? ' Note: a different login was seen in this browser in the last 30 days. If that was not another person, check that a personal file uploads back before relying on it.' : '') }
             ]
         });
         if (!r) return false;
+        let password = '';
+        if (r.choice === 'xlsx') { password = savedPassword() || await passwordDialog(doc); if (!password) return false; }
         const stop = busyNote(doc, 'Protecting the file…');
         let blob;
         try {
             if (r.choice === 'xlsx') blob = new Blob([await agileEncrypt(new Uint8Array(await buildXlsx(dbRows(entries)).arrayBuffer()), password)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-            else blob = new Blob([await elmdbEncrypt(entries, password)], { type: 'application/octet-stream' });
+            else blob = new Blob([await elmdbEncrypt(entries, LOGIN_PREFIX + who.id)], { type: 'application/octet-stream' });
         } finally { stop(); }
         const url = URL.createObjectURL(blob), a = doc.createElement('a');
         a.href = url;
@@ -1698,6 +1796,8 @@
             onReviewPage: isReviewDetailPage(), mergePanelOpen: mergePanelOpen(),
             mainScriptLoaded: !!window.__elm451UiPerfectionLoaded, viaExtension: window.__elm451Extension || false,
             signals: { dept: d.csvDept, spark1: d.csvSpark1, spark2: d.csvSpark2, choice: d.csvChoice, score: d.csvScore },
+            // for the personal file: whether the signed-in person was found, where, and a fingerprint that should read the same every time you are signed in
+            login: (() => { const w = currentLogin(); return w ? { found: true, from: w.source, kind: w.kind, fingerprint: w.mark || '(working)', changedInLast30Days: loginChangedRecently() } : { found: false }; })(),
             sparksOnPage: sparks, pageNames: extractNames().full,
             lastProblem: problem.reason || 'none'
         };

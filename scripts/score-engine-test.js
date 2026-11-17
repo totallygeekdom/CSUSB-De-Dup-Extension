@@ -36,6 +36,14 @@ check(ids.hard === true && ids.level === 'low', 'different Coyote IDs are still 
 const twins = score({ first: 'Ana', last: 'Cruz', dob: '2004-01-02' }, { first: 'Eva', last: 'Cruz', dob: '2004-01-02' }, { addrState: 'match' });
 check(!twins.items.some(i => i.key === 'twins') && twins.points === 40 + 8 - 12 + 25, 'no twin penalty: same last name, birth date and address with different first names is just 40 + 8 - 12 + 25 = ' + twins.points);
 
+// a matching Coyote ID or CAS ID is enough for High on its own
+check(score({ ...person, coyote: '009123456' }, { ...person, coyote: '009123456' }).level === 'high', 'the same Coyote ID and the same name is High');
+check(score({ ...person, cas: '8812345' }, { ...person, cas: '8812345' }).level === 'high', 'the same CAS ID and the same name is High');
+check(score({ first: 'Andy', last: 'Rios', coyote: '009123456' }, { first: 'Andres', last: 'Rios', coyote: '009123456' }).level === 'high', 'the same Coyote ID with a different first name is High');
+check(score({ ...person, coyote: '009123456', dob: '2004-01-02' }, { ...person, coyote: '009123456', dob: '1999-07-30' }).level !== 'high', 'the same Coyote ID with a clearly different birth date is not High (' + score({ ...person, coyote: '009123456', dob: '2004-01-02' }, { ...person, coyote: '009123456', dob: '1999-07-30' }).points + ' pts)');
+check(score({ ...person, coyote: '009123456' }, { ...person, coyote: '009999999' }).level === 'low', 'different Coyote IDs are still Low');
+// other evidence still needs two strong matches for High
+check(score({ ...person, dob: '2004-01-02' }, { ...person, dob: '2004-01-02' }, { addrState: 'match', bolt: { level: 'high' } }).level === 'medium', 'a single non-ID strong match (birth date) with 100 points is still Medium');
 // High still needs 70 points and two strong matches; weak fields alone never reach it
 const strong2 = score({ ...person, dob: '2004-01-02', phone: '3105550101' }, { ...person, dob: '2004-01-02', phone: '3105550101' });
 check(strong2.level === 'high', 'same birth date, phone and name is High (' + strong2.points + ' pts)');

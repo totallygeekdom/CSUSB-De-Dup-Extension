@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.269
+// @version      2.270
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.269'; // keep in sync with @version
+    const VERSION = '2.270'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -2467,7 +2467,10 @@
         if (ev.bolt && ev.bolt.different) add('boltDifferent', 'Bolt "different people"', W.boltDifferent, 'against', 'Bolt flagged them as different people');
         // totals
         let pts = 0; items.forEach(i => { pts += i.pts; });
-        let level = pts >= SCORE_CUT.high && strong >= 2 ? 'high' : pts >= SCORE_CUT.medium ? 'medium' : 'low';
+        // A matching Coyote ID or CAS ID is an identifier no two people share, so on its own it is enough for High (with the
+        // points and no hard conflict); every other kind of evidence needs a second strong match to back it.
+        const idMatch = items.some(i => i.strong && (i.key === 'coyote' || i.key === 'cas'));
+        let level = pts >= SCORE_CUT.high && (strong >= 2 || idMatch) ? 'high' : pts >= SCORE_CUT.medium ? 'medium' : 'low';
         if (level === 'high' && hard) level = 'low';
         if (hard && level === 'medium') level = 'low';
         // (70 points on weak fields alone, with fewer than two strong matches, lands on Medium by the line above)

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - Database v2
 // @namespace    http://tampermonkey.net/
-// @version      2.66
+// @version      2.67
 // @description  Tracks duplicate entries in a database stored in browser localStorage (exports an .xlsx spreadsheet) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -15,7 +15,7 @@
     if (window.__elm451CsvDatabaseLoaded) return;
     window.__elm451CsvDatabaseLoaded = true;
 
-    const VERSION = '2.65'; // keep in sync with @version
+    const VERSION = '2.67'; // keep in sync with @version (the build checks it)
     const STORAGE_KEY = 'elm_csv_database';
     const UI_KEY = 'elm_show_db_ui';
     function showDbUi() { try { return localStorage.getItem(UI_KEY) !== 'false'; } catch (e) { return true; } }
@@ -272,14 +272,20 @@
         }
     }
     let saveErrorLogged = false; // the failure is logged once, not on every retry
+    let saveWarnedAt = 0;        // ...and shown on the page at most once a minute while it lasts
     function saveDatabase(db) {
         try { const raw = JSON.stringify(db); localStorage.setItem(STORAGE_KEY, raw); dbCache = { raw, db, index: null }; saveErrorLogged = false; return true; }
         catch (e) {
             dbCache = null; // the entries may have been changed in memory but not saved: read them again
             if (!saveErrorLogged) { saveErrorLogged = true; console.error('Database: Error saving database (is the browser storage full?)', e); }
+            // Pairs are not being recorded: that has to be seen on the page, not only in the console.
+            if (Date.now() - saveWarnedAt > 60000) { saveWarnedAt = Date.now(); showDbWarning('Database not saved: the browser storage is full. Download the database, then clear it.'); }
             return false;
         }
     }
+    // The browser gives a site about 5 million characters of storage in all. Past this size the database is close to it.
+    const DB_NEARLY_FULL = 4000000;
+    let nearlyFullWarned = false;
     // Quiet by design: nothing is logged while recording works. When a pair on screen has not been recorded for a
     // few seconds, one line says why (again only if the reason changes). elm451Debug() prints the whole state.
     const problem = { reason: '', since: 0, logged: false };
@@ -379,8 +385,8 @@
         if (!st) { st = document.createElement('div'); st.id = 'elm2-toast-stack'; document.body.appendChild(st); }
         return st;
     }
-    function showApiToast(message, type) {
-        if (mergePanelOpen()) return; // these toasts are for the queue, never over the merge panel
+    function putToast(message, type, ms, keep) {
+        if (!document.body) return;
         const st = toastStack();
         // the same message again just refreshes the existing toast instead of stacking a copy
         let el = Array.from(st.children).find(c => c.dataset.key === 'csv:' + message);
@@ -391,14 +397,23 @@
             requestAnimationFrame(() => el.classList.add('visible'));
             while (st.children.length > 4) st.firstChild.remove();
         }
+        if (keep) el.dataset.keep = '1';
         el.className = 'elm2-toast csv-toast ' + type + ' visible';
-        el.innerHTML =
-            '<span class="csv-toast-dot"><span class="csv-toast-dot-outer"></span><span class="csv-toast-dot-inner"></span></span>' +
-            '<span class="csv-toast-text"></span>';
-        el.querySelector('.csv-toast-text').textContent = message;
+        el.textContent = '';
+        const dot = document.createElement('span'), outer = document.createElement('span'), inner = document.createElement('span'), text = document.createElement('span');
+        dot.className = 'csv-toast-dot'; outer.className = 'csv-toast-dot-outer'; inner.className = 'csv-toast-dot-inner'; text.className = 'csv-toast-text';
+        dot.append(outer, inner);
+        text.textContent = message;
+        el.append(dot, text);
         clearTimeout(el._t);
-        el._t = setTimeout(() => { el.classList.remove('visible'); setTimeout(() => el.remove(), 250); }, 4000);
+        el._t = setTimeout(() => { el.classList.remove('visible'); setTimeout(() => el.remove(), 250); }, ms);
     }
+    function showApiToast(message, type) {
+        if (mergePanelOpen()) return; // these toasts are for the queue, never over the merge panel
+        putToast(message, type, 4000, false);
+    }
+    // A problem with the database itself (not saved, nearly full): shown wherever you are, the merge panel included, and for longer.
+    function showDbWarning(message) { putToast(message, 'error', 12000, true); }
     let lastAnnotationSource = null; // 'api' | 'db-fallback' | null
 
     // =========================================================
@@ -546,7 +561,7 @@
                 name: e.name || e.full_name || '',
                 duplicateName: e.duplicate_name || '',
                 sparks: sparks.filter(Boolean),
-                raw: JSON.stringify(e)
+                raw: sparks.some(Boolean) ? '' : JSON.stringify(e) // only searched when the record gave no Spark IDs (a page of records is not small)
             };
         });
         return parsed;
@@ -600,7 +615,7 @@
     (function interceptFetch() {
         const origFetch = window.fetch;
         window.fetch = function (input, init) {
-            const url = typeof input === 'string' ? input : (input instanceof Request ? input.url : '');
+            const url = typeof input === 'string' ? input : input instanceof Request ? input.url : input instanceof URL ? input.href : '';
             return origFetch.apply(this, arguments).then(response => {
                 try {
                     if (!url || !/duplicate|dedup/i.test(url) || /\/duplicates\/history(\?|$)/.test(url)) return response;
@@ -750,14 +765,18 @@
         listAnnotationTimer = setTimeout(annotateQueueTable, 150);
     });
     let currentObserverTarget = null;
+    // Watches the queue table only. (It used to fall back to the whole page, so on every Element451 page, the ones with no
+    // queue included, each change anywhere re-ran the annotation.) The table is looked for twice a second instead.
     function startListObserver() {
         if (isReviewDetailPage()) return;
-        const container = getQueueTable() || document.body;
-        if (container !== currentObserverTarget) {
-            listObserver.disconnect();
-            listObserver.observe(container, { childList: true, subtree: true, characterData: true });
-            currentObserverTarget = container;
-        }
+        const container = getQueueTable();
+        if (container === currentObserverTarget) return;
+        listObserver.disconnect();
+        currentObserverTarget = container;
+        if (!container) return;
+        listObserver.observe(container, { childList: true, subtree: true, characterData: true });
+        if (listAnnotationTimer) clearTimeout(listAnnotationTimer);
+        listAnnotationTimer = setTimeout(annotateQueueTable, 150); // a table that just appeared: its rows are annotated right away
     }
     function checkListUrlChange() {
         const currentUrl = window.location.href;
@@ -776,13 +795,26 @@
             }, 150);
         }
     }
-    setInterval(() => { attemptFirstPageFetch(); annotateQueueTable(); startListObserver(); }, 2000);
-    setInterval(checkListUrlChange, 500);
-    // a toast that was already showing when the merge panel opened goes away with it
-    setInterval(() => {
-        if (!mergePanelOpen()) return;
-        document.querySelectorAll('#elm2-toast-stack .csv-toast').forEach(t => t.remove());
-    }, 300);
+    // A timer step that fails (Element451 changed its markup, say) is logged once and tried again on the next tick; it
+    // never takes the other timers' work down with it.
+    const stepErrors = new Set();
+    const safely = (name, fn) => () => {
+        try { fn(); }
+        catch (e) {
+            const key = name + ': ' + (e && e.message || e);
+            if (stepErrors.has(key) || stepErrors.size >= 50) return;
+            stepErrors.add(key);
+            console.error('[Database] ' + name + ' failed (logged once):', e);
+        }
+    };
+    setInterval(safely('list annotation', () => { attemptFirstPageFetch(); annotateQueueTable(); }), 2000);
+    setInterval(safely('list watch', () => { checkListUrlChange(); startListObserver(); }), 500);
+    // a toast that was already showing when the merge panel opened goes away with it (database warnings stay)
+    setInterval(safely('toast clean-up', () => {
+        const toasts = document.querySelectorAll('#elm2-toast-stack .csv-toast:not([data-keep])');
+        if (!toasts.length || !mergePanelOpen()) return; // nothing to remove: skip the layout read
+        toasts.forEach(t => t.remove());
+    }), 300);
 
     // =========================================================
     // EXPORT / IMPORT: an .xlsx spreadsheet (column widths, frozen bold header, filter / sort buttons on Bolt Score, Dept.,
@@ -1074,7 +1106,10 @@
         const count = getDatabase().length;
         setDbLabel(label, count);
         const badge = document.getElementById('elm-db-size-badge');
-        if (badge) badge.title = `Database: ${count} entries recorded`;
+        const nearlyFull = !!(dbCache && dbCache.raw && dbCache.raw.length > DB_NEARLY_FULL);
+        if (badge) badge.title = `Database: ${count} entries recorded` + (nearlyFull ? '. Nearly full: download it, then clear it, or new pairs will stop being recorded.' : '');
+        if (nearlyFull && !nearlyFullWarned) { nearlyFullWarned = true; showDbWarning('Database nearly full: download it, then clear it, so new pairs keep being recorded.'); }
+        if (!nearlyFull) nearlyFullWarned = false;
     }
     function injectDbBadge() {
         if (document.getElementById('elm-db-size-badge')) return;
@@ -1153,7 +1188,7 @@
             try {
                 const entries = await parseDbFile(file);
                 if (!confirm(`Replace current database with ${entries.length} entries from "${file.name}"?`)) { uploadInput.value = ''; return; }
-                saveDatabase(entries);
+                if (!saveDatabase(entries)) { alert('The database could not be saved (the browser storage is full or blocked), so nothing was replaced.'); uploadInput.value = ''; return; }
                 updateDbSizeBadge();
                 clearStaleAnnotations();
                 annotateQueueTable();
@@ -1167,7 +1202,7 @@
             const db = getDatabase();
             if (db.length === 0) { alert('Database is already empty.'); return; }
             if (confirm(`Are you sure you want to delete all ${db.length} entries from the database? This cannot be undone.`)) {
-                saveDatabase([]);
+                if (!saveDatabase([])) { alert('The database could not be cleared (the browser storage is blocked).'); return; }
                 updateDbSizeBadge();
                 clearStaleAnnotations();
                 alert('Database cleared.');
@@ -1194,18 +1229,18 @@
             applyDbUiSetting();
         });
     }
-    setInterval(() => { applyDbUiSetting(); injectDbBadge(); injectDbSettingsSection(); injectDbUiToggle(); }, 1000);
+    setInterval(safely('settings and badge', () => { applyDbUiSetting(); injectDbBadge(); injectDbSettingsSection(); injectDbUiToggle(); }), 1000);
 
     // =========================================================
     // AUTO-RECORD: poll body[data-csv-dept] set by UI-Perfection-v2
     // =========================================================
-    setInterval(() => {
+    setInterval(safely('recording', () => {
         const dept = document.body.dataset.csvDept;
         if (dept) recordEntry(dept);
         else if (isReviewDetailPage()) trackRecording('the main script has not reported this pair yet (no department signal)');
         else trackRecording('');
         updateDbSizeBadge();
-    }, 1000);
+    }), 1000);
 
     // elm451Debug() in the console prints everything needed to work out why a pair is not being recorded
     window.elm451Debug = function () {

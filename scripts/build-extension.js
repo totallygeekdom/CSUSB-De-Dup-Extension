@@ -62,6 +62,9 @@ for (const s of SCRIPTS) {
   new vm.Script(code, { filename: s }); // syntax check
   const m = code.match(/@version\s+(\S+)/);
   if (!m) throw new Error(s + ' has no @version');
+  // the version each script shows in its settings pane is a constant of its own: it must say the same as the header
+  const shown = code.match(/const VERSION = '([^']+)'/);
+  if (shown && shown[1] !== m[1]) throw new Error(s + ': const VERSION is ' + shown[1] + ' but @version is ' + m[1]);
   versions[s] = m[1];
   fs.writeFileSync(path.join(UNPACKED, 'scripts', s), code);
 }

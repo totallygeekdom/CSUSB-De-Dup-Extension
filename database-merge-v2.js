@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - Database Merge v2
 // @namespace    http://tampermonkey.net/
-// @version      1.14
+// @version      1.15
 // @description  Adds a "Merge Databases" page to the Database script: combine several exported databases (and this browser's) into one, with a breakdown
 // @author       You
 // @match        https://*.element451.io/*
@@ -21,7 +21,7 @@
     'use strict';
     if (window.__elm451DbMergeLoaded) return;
     window.__elm451DbMergeLoaded = true;
-    const VERSION = '1.14'; // keep in sync with @version
+    const VERSION = '1.15'; // keep in sync with @version (the build checks it)
 
     // =========================================================
     // STORED DATABASE AND FILE FORMATS
@@ -612,7 +612,9 @@
             if (!result) return;
             const ok = await ask('Replace your database?', 'This browser\'s database will become the merged one (' + plural(result.unique, 'entry', 'entries') + '). This cannot be undone, so download the merged file first if you want a backup.', 'Replace');
             if (!ok) return;
-            api.write(result.entries);
+            // the browser refuses the write when its storage is full (or blocked): say so instead of failing silently
+            try { api.write(result.entries); }
+            catch (e) { snack('Not saved: the browser storage is full or blocked. Your database is unchanged; download the merged file instead.'); return; }
             snack('Done: this browser\'s database now has ' + plural(result.unique, 'entry', 'entries') + '.');
             renderFiles();
         }

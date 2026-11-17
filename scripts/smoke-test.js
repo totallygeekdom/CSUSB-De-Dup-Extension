@@ -40,6 +40,13 @@ const check = (ok, label) => { console.log((ok ? 'ok   ' : 'FAIL ') + label); if
     await page.reload();
     await page.waitForSelector('.chip', { timeout: 10000 });
     check((await page.locator('.chip').innerText()).includes('9.9.9'), 'update chip shows the new version');
+    await sw.evaluate(() => chrome.storage.local.set({ shellUpdate: { version: '9.9.9<img src=x onerror=window.__x=1>', url: 'https://example.com/x.zip' } }));
+    await page.reload();
+    await page.waitForSelector('.chip', { timeout: 10000 });
+    check((await page.locator('.chip img').count()) === 0 && (await page.locator('.chip').innerText()).includes('<img'), 'the release version is shown as text, never as markup');
+    await sw.evaluate(() => chrome.storage.local.set({ shellUpdate: { version: '9.9.9', url: 'https://example.com/x.zip' } }));
+    await page.reload();
+    await page.waitForSelector('.chip', { timeout: 10000 });
     check((await page.locator('.stats, .stat').count()) === 0, 'the popup has no counter row');
     await page.click('.chip .x');
     await page.waitForSelector('.chip', { state: 'detached', timeout: 5000 });
@@ -58,6 +65,12 @@ const check = (ok, label) => { console.log((ok ? 'ok   ' : 'FAIL ') + label); if
     check((await syncVia({ type: 'sync' })).ok === true, 'userScripts API available once allowed, scripts registered');
     const registered = await sw.evaluate(async () => (await chrome.userScripts.getScripts()).map(s => s.id + ':' + s.world).sort().join(','));
     check(registered === 'csv:MAIN,merge:MAIN,ui:MAIN', 'all three scripts registered in the MAIN world (' + registered + ')');
+    // "Allow user scripts" switched on after the install: opening the popup (its status request) registers what is missing
+    await sw.evaluate(() => chrome.userScripts.unregister());
+    await syncVia({ type: 'status' });
+    const healed = await sw.evaluate(async () => (await chrome.userScripts.getScripts()).map(s => s.id).sort().join(','));
+    check(healed === 'csv,merge,ui', 'opening the popup registers scripts that are missing (' + healed + ')');
+    check((await syncVia({ type: 'toggle', id: 'nope', enabled: false })).ok === false, 'a toggle for an unknown script is refused');
     const site = await context.newPage();
     await site.route('https://test.element451.io/**', r => r.fulfill({ contentType: 'text/html', body: '<html><body><div class="bolt-navigation-right"><elm-universal-search>s</elm-universal-search></div></body></html>' }));
     const flags = () => site.evaluate(() => ({ ui: !!window.__elm451UiPerfectionLoaded, csv: !!window.__elm451CsvDatabaseLoaded, merge: !!window.__elm451DbMergeLoaded }));
@@ -67,12 +80,20 @@ const check = (ok, label) => { console.log((ok ? 'ok   ' : 'FAIL ') + label); if
     check(on.ui && on.csv && on.merge, 'all three scripts ran on an element451.io page');
     // newest wins: an older copy in the cache (what GitHub's main branch may hold) must not replace the bundled
     // one, a newer one must
-    await sw.evaluate(() => chrome.storage.local.set({ cache: { ui: { code: '// @version 1.0\nwindow.__old = 1;', version: '1.0' } } }));
+    // a cached copy is only used when it is one of our userscripts (header, project name, plain version): see looksLikeOurScript
+    const fake = (version, body) => '// ==UserScript==\n// @name         Element451 - Test copy\n// @version      ' + version + '\n// ==/UserScript==\n' + body + '\n// ' + 'x'.repeat(200);
+    await sw.evaluate((code) => chrome.storage.local.set({ cache: { ui: { code, version: '1.0' } } }), fake('1.0', 'window.__old = 1;'));
     await syncVia({ type: 'sync' });
     await site.reload();
     await site.waitForFunction(() => window.__elm451UiPerfectionLoaded, null, { timeout: 15000 }).catch(() => {});
     check(await site.evaluate(() => !window.__old && !!window.__elm451UiPerfectionLoaded), 'an older cached script does not replace the bundled one');
-    await sw.evaluate(() => chrome.storage.local.set({ cache: { ui: { code: '// @version 999.0\nwindow.__newer = 1;', version: '999.0' } } }));
+    await sw.evaluate(() => chrome.storage.local.set({ cache: { ui: { code: '// @version 999.0\nwindow.__notOurs = 1;', version: '999.0' } } }));
+    await syncVia({ type: 'sync' });
+    await site.reload();
+    await site.waitForFunction(() => window.__elm451UiPerfectionLoaded, null, { timeout: 15000 }).catch(() => {});
+    check(await site.evaluate(() => !window.__notOurs && !!window.__elm451UiPerfectionLoaded), 'a cached copy that is not one of our userscripts is never run');
+    check(await sw.evaluate(() => !looksLikeOurScript('<html><body>Sign in // @version 9.9</body></html>') && !looksLikeOurScript('') && !looksLikeOurScript('// ==UserScript==\n// @name Something else\n// @version 9.9\n// ==/UserScript==\n' + 'x'.repeat(300))), 'pages and other scripts are refused as updates');
+    await sw.evaluate((code) => chrome.storage.local.set({ cache: { ui: { code, version: '999.0' } } }), fake('999.0', 'window.__newer = 1;'));
     await syncVia({ type: 'sync' });
     await site.reload();
     await site.waitForFunction(() => window.__newer, null, { timeout: 15000 }).catch(() => {});

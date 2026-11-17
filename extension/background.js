@@ -14,6 +14,19 @@ const SCRIPTS = [
   { id: 'csv', name: 'Database', file: 'database-v2.js' },
   { id: 'merge', name: 'Database Merge', file: 'database-merge-v2.js' }
 ];
+const RELEASES = 'https://github.com/' + REPO + '/releases';
+const FETCH_TIMEOUT_MS = 20000;   // a request that hangs must not keep the service worker waiting
+const MAX_SCRIPT_BYTES = 3000000; // the scripts are a few hundred KB; anything far past that is not one of them
+
+// What comes back from GitHub runs inside Element451 with the signed-in person's access, so it is only accepted when it is
+// one of our userscripts: a plain version number, the userscript header, and this project's name in it. A sign-in page, an
+// error page or a cut-off download fails this and the copy already in use stays.
+const validVersion = (v) => /^\d+(\.\d+){0,3}$/.test(String(v || ''));
+function looksLikeOurScript(code) {
+  if (typeof code !== 'string' || code.length < 200 || code.length > MAX_SCRIPT_BYTES) return false;
+  const head = code.slice(0, 2000);
+  return /^\s*\/\/ ==UserScript==/.test(head) && /\/\/ ==\/UserScript==/.test(head) && /@name\s+Element451 - /.test(head) && validVersion(versionOf(code));
+}
 
 const versionOf = (code) => ((code || '').match(/@version\s+([^\s]+)/) || [])[1] || '';
 // 1.2.10 > 1.2.9: compares dotted numbers
@@ -41,7 +54,7 @@ async function codeFor(script, cache) {
   const code = await (await fetch(chrome.runtime.getURL('scripts/' + script.file))).text();
   const bundled = { code, version: versionOf(code), bundled: true };
   const cached = cache[script.id];
-  return cached && cached.code && !newer(bundled.version, cached.version) ? cached : bundled;
+  return cached && looksLikeOurScript(cached.code) && !newer(bundled.version, cached.version) ? cached : bundled;
 }
 
 // Registration is unregister-then-register per script, so two overlapping runs (install + a popup toggle, or
@@ -78,11 +91,12 @@ async function checkScriptUpdates() {
   let changed = false;
   for (const script of SCRIPTS) {
     try {
-      const res = await fetch(RAW + script.file, { cache: 'no-store' });
+      const res = await fetch(RAW + script.file, { cache: 'no-store', signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
       if (!res.ok) continue;
       const code = await res.text();
+      if (!looksLikeOurScript(code)) { console.warn('Dedup Tools: ignored what GitHub returned for ' + script.name + ' (not one of our scripts)'); continue; }
       const version = versionOf(code);
-      if (!version || (cache[script.id] && cache[script.id].version === version && cache[script.id].code === code)) continue;
+      if (cache[script.id] && cache[script.id].version === version && cache[script.id].code === code) continue;
       cache[script.id] = { code, version, fetchedAt: Date.now() };
       changed = true;
     } catch (e) { /* offline: keep what we have */ }
@@ -92,13 +106,17 @@ async function checkScriptUpdates() {
 
 async function checkShellUpdate() {
   try {
-    const res = await fetch('https://api.github.com/repos/' + REPO + '/releases/latest', { headers: { Accept: 'application/vnd.github+json' } });
+    const res = await fetch('https://api.github.com/repos/' + REPO + '/releases/latest', { headers: { Accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
     if (!res.ok) return;
     const rel = await res.json();
     const version = String(rel.tag_name || '').replace(/^v/, '');
-    const asset = (rel.assets || []).find(a => /\.zip$/i.test(a.name));
-    if (version && newer(version, chrome.runtime.getManifest().version)) {
-      await chrome.storage.local.set({ shellUpdate: { version, url: asset ? asset.browser_download_url : rel.html_url } });
+    const asset = (Array.isArray(rel.assets) ? rel.assets : []).find(a => a && /\.zip$/i.test(a.name || ''));
+    // The popup shows the version and opens the link: both are checked here, so a release can only ever send people to this
+    // project's own release downloads (anything else falls back to the releases page).
+    const link = String((asset && asset.browser_download_url) || rel.html_url || '');
+    const url = link.toLowerCase().startsWith(RELEASES.toLowerCase() + '/') ? link : RELEASES;
+    if (validVersion(version) && newer(version, chrome.runtime.getManifest().version)) {
+      await chrome.storage.local.set({ shellUpdate: { version, url } });
     } else {
       await chrome.storage.local.remove('shellUpdate');
     }
@@ -127,28 +145,40 @@ chrome.runtime.onStartup.addListener(runChecks);     // every time Chrome starts
 
 // The popup talks to us through these messages.
 chrome.runtime.onMessage.addListener((msg, sender, reply) => {
+  // only this extension's own pages (the popup) are answered
+  if (!sender || sender.id !== chrome.runtime.id || !msg || typeof msg.type !== 'string') return false;
   (async () => {
    try {
     const st = await getState();
     if (msg.type === 'status') {
       const versions = {};
       for (const script of SCRIPTS) versions[script.id] = (await codeFor(script, st.cache)).version;
+      const userScriptsOk = await userScriptsAvailable();
+      // "Allow user scripts" may have been switched on after the install (nothing tells the extension when it is): if a
+      // script that is switched on is not registered, register now, so opening the popup is enough to get going.
+      if (userScriptsOk) {
+        const have = new Set((await chrome.userScripts.getScripts()).map(s => s.id));
+        if (SCRIPTS.some(s => st.enabled[s.id] !== false && !have.has(s.id))) await syncScripts();
+      }
       reply({
-        userScriptsOk: await userScriptsAvailable(), enabled: st.enabled, versions,
+        userScriptsOk, enabled: st.enabled, versions,
         scripts: SCRIPTS.map(s => ({ id: s.id, name: s.name })),
         shellVersion: chrome.runtime.getManifest().version,
         shellUpdate: st.shellUpdate && st.dismissed !== st.shellUpdate.version ? st.shellUpdate : null
       });
     } else if (msg.type === 'toggle') {
+      if (!SCRIPTS.some(s => s.id === msg.id)) { reply({ ok: false, error: 'unknown script' }); return; }
       st.enabled[msg.id] = !!msg.enabled;
       await chrome.storage.local.set({ enabled: st.enabled });
       reply({ ok: await syncScripts() });
     } else if (msg.type === 'dismissUpdate') {
-      await chrome.storage.local.set({ dismissed: msg.version });
+      await chrome.storage.local.set({ dismissed: String(msg.version || '') });
       await updateBadge();
       reply({ ok: true });
     } else if (msg.type === 'sync') {
       reply({ ok: await syncScripts() });
+    } else {
+      reply({ ok: false, error: 'unknown message' });
     }
    } catch (e) {
     console.warn('Dedup Tools: message "' + (msg && msg.type) + '" failed:', e && e.message || e);

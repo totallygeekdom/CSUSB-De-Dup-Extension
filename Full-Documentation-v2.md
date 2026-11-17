@@ -5,9 +5,9 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.265`, shown in the settings pane |
-| Element451 - Database v2 | `database-v2.js` | `@version 2.66` |
-| Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.12`, see [section 17](#17-database-merge) |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.266`, shown in the settings pane |
+| Element451 - Database v2 | `database-v2.js` | `@version 2.67` |
+| Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.15`, see [section 17](#17-database-merge) |
 
 
 The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
@@ -494,6 +494,8 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 - `[elm2] script click on button: "…"` for script-generated clicks, and a warning with a stack trace if one is blocked by the click guard.
 - **Database script** (silent while recording works): if the pair on screen has not been recorded for 5 seconds, one warning says why: `[Database] the pair on screen is not being recorded: <reason>`. The reasons are: the main script has not reported the pair yet (no department signal), no Spark IDs on the page, the Spark IDs the main script reported do not match the page, the contact names have not loaded, or the browser would not save the database (storage full?). The warning prints again only if the reason changes, and a failed save logs its error once, not on every retry.
 - **`[elm2] No Spark IDs found on the pair on screen …`** (main script): printed once per pair when no Spark ID has been read for 4 seconds; it lists how many rows the page has and the rows that mention "spark", with every long word or number blanked out. Spark IDs are read tolerantly: `Spark Id: abc`, `Spark ID:abc`, `Spark Id abc`, or a row labelled "Spark Id" that holds only the value.
+- **No personal details in the console.** The lines above name fields, rules, counts and reasons, never a contact's values. The analysis line (`[elm2] analysis: … | read (values masked): {…}`) shows what was read with every letter turned into `x` and every digit into `9` (`"dob":"9999-99-99"`, `"emails":["xxxxx@xxxxx.xxx"]`), so it can be pasted into a bug report; `Needs review:` names the field only; `Merged 3/40` no longer repeats the card's sentence; the history record sample is masked the same way.
+- **`[elm2] <step> failed (logged once; the other steps keep running)`** / **`[Database] <step> failed (logged once)`**: one of the timer steps threw (usually Element451 changed a piece of markup). The step is tried again on every tick, the other steps are not affected, and the error is printed once per step and message instead of every tick.
 - **`elm451Debug()`** (type it in the console on the page): prints and returns the Database script's state: its version, the number of entries and their size in KB, whether the browser storage is writable, whether you are on the review page, the main script's signals (department, Spark IDs, choice, score), the Spark IDs and names read from the page, whether the main script is loaded and whether the scripts run through the extension, and the last recording problem.
 
 ---
@@ -550,6 +552,7 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 - **Chrome extension**: unpacked extension that runs both scripts and updates them from GitHub when Chrome starts, popup with switches, build + release workflow (section 16).
 - **Versions**: the settings pane lists Main script, Database script and Extension versions in one style.
 - **Our own rating**: a points-based rating and plain-English write-up replace Bolt's overview card; score chips show our rating, or Pending (section 10.6).
+- **Stability and security pass** (UI 2.266, Database 2.67, Database Merge 1.15, extension 1.0.4): section 18.
 - **Fixes along the way**: stall on identical consecutive names / disabled Next button, twins warning signal count, cut-off date text in filters, clipped filters panel, selected-chip colour specificity.
 
 ## 16. Chrome extension
@@ -568,6 +571,10 @@ The scripts (the two main ones and the optional Database Merge script) can also 
 Chrome cannot update an unpacked extension by itself, so the chip downloads the release zip and a sheet lists the steps: unzip over the extension folder, open `chrome://extensions`, click reload. The chip can be dismissed (it returns for a newer version).
 
 **Popup.** The title; an **Update available** chip (only while a newer extension release exists); one row per script (UI Perfection, Database, Database Merge) with a switch and its version (Database is greyed while UI Perfection is off, Database Merge while Database is off); a **Reload tab** prompt after a change; and a footer with the extension version. The extension asks only for the `storage` and `userScripts` permissions plus access to `*.element451.io`, the script source on GitHub and the releases API. It follows the system's light or dark setting.
+
+**What is accepted from GitHub.** The downloaded scripts run inside Element451 with the signed-in person's access, so a download is only used when it is one of this project's userscripts: it must start with the userscript header, carry `@name Element451 - …` and a plain numeric `@version`, and be of a plausible size. A sign-in page, an error page or a cut-off file is ignored (a console warning says so) and the copy already in use stays. The release check only accepts a numeric version and a link under this repository's GitHub releases (anything else opens the releases page); the popup writes the version as text. Requests give up after 20 seconds. The trust boundary is unchanged and worth knowing: **whoever can push to this repository's `main` branch can change what runs in Element451 for everyone using the extension or the Tampermonkey update links**, so protect the branch (required pull requests, two-factor sign-in on the accounts that can merge).
+
+**Self-repair.** Opening the popup registers any switched-on script that is not registered, which covers **Allow user scripts** being turned on after the install (Chrome does not tell the extension when that switch changes).
 
 **Extension storage** (`chrome.storage.local`, not the page's): `enabled` (per-script switches), `cache` (the scripts last downloaded from GitHub, with their versions), `shellUpdate` (a newer extension release, if any) and `dismissed` (the version whose update chip was dismissed).
 
@@ -595,3 +602,36 @@ Locally: `npm install` once, `npm run build`, `npm test`; load `dist/extension` 
 - **Result**: **Download merged database (.xlsx)** (same format as the Database script's export) and **Replace my database with this** (asks first, then writes `elm_csv_database`; the header counter follows within a second). Nothing in the browser changes until Replace is pressed.
 
 **Not verified live:** the new-tab page was tested in headless Chromium against mock databases; pop-up blockers can stop the new tab (the script says so).
+
+---
+
+## 18. Stability and security pass
+
+A review of all three scripts and the extension for efficiency, stability and unsafe shortcuts. What changed, and what was looked at and left alone.
+
+**Stability**
+- **A failing step no longer stops the rest.** The main script runs about twenty steps every 750 ms, the Database script five timers. One step throwing (Element451 changing a piece of markup is enough) used to skip every step after it, on every tick, and print the error each time. Each step now runs on its own and reports once (section 12.3).
+- **Full browser storage no longer stalls the queue.** The database, the settings and the merge counter share the site's few MB of `localStorage`. With it full, writing the merge counter threw inside the merge-completed handler, so **Next duplicate** was never pressed and the automation stopped. Every storage read and write in the main script now goes through guarded helpers (`lsGet` / `lsSet`).
+- **The database says when it is not saving.** A refused save was only a console line. It is now a toast on the page (the merge panel included), repeated once a minute while it lasts; the header pill's tooltip and a one-time toast warn when the database passes about 4 million characters (the browser allows about 5 million for the whole site). **Upload & Replace**, **Clear** and the Merge page's **Replace** report a failed save instead of announcing success.
+- **Page jumps** fall back to clicking First / Next when Angular's paginator object refuses the direct call (it is not a public interface and can change at any Element451 release).
+- **Stores stay in step across windows.** The remembered ratings and Bolt picks are re-read when another tab or the installed app changes them.
+- **The build fails** when a script's `const VERSION` (shown in the settings pane) differs from its `@version` (the Database script had drifted).
+
+**Efficiency**
+- The merge-completed check ran on every DOM change of the page (hundreds while a pair renders); it now runs once per burst.
+- The Database script watched the whole page for changes on every Element451 page whenever no queue table was on screen; it now watches the queue table only and looks for it twice a second.
+- The store of Bolt's picks (up to 3000 entries) was parsed again for every undecided row on every tick; it is parsed once.
+- Blocked-pair styling, the header colour and Bolt's blue are written only when they change (a blocked pair was restyled every tick), and the Database script's toast clean-up no longer forces a layout every 300 ms.
+- On a mock page with a DOM change every 4 ms, the scripts' own script time over 8 seconds fell from about 450 to 520 ms to about 180 to 200 ms. That is a mock, not Element451 itself.
+
+**Security and privacy**
+- The request hook kept a copy of the headers of **every** request the page made (they include the sign-in token). It now keeps them for the one history call it replays, in memory only, and its own bookkeeping can no longer make a page request fail.
+- Console lines no longer contain names, dates of birth, emails, phone numbers or IDs (section 12.3).
+- The extension checks what it downloads and what it shows (section 16).
+
+**Looked at and left as it is**
+- **Wrapping the page's `XMLHttpRequest` / `fetch`** is how a userscript reads the list and history data; there is no supported alternative from inside the page, and both wrappers pass every request through unchanged.
+- **`localStorage` as the database.** It is synchronous, shared with the site and limited to a few MB, but it is what lets the three scripts and Tampermonkey share one database with no extra permission. With the warnings above the limit is visible well before it is reached; moving to IndexedDB would be a rewrite of the Database and Merge scripts.
+- **Updates only when Chrome starts** (section 16) is by design; a browser left open for weeks keeps its scripts until it restarts or the extension is reloaded.
+- **Reading Angular's paginator** through the element's internal context is fragile by nature; it stays because the click fallback covers it.
+- **Selectors and label keywords** for Element451's markup remain the main source of breakage (section 13); nothing here can make them stable, but a broken one now fails one step instead of the loop.

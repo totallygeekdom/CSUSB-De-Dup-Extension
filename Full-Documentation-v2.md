@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.268`, shown in the settings pane |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.269`, shown in the settings pane |
 | Element451 - Database v2 | `database-v2.js` | `@version 2.71` |
 | Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.17`, see [section 17](#17-database-merge) |
 
@@ -371,20 +371,19 @@ Bolt's overview card is replaced by our own: a **rating chip** (High, Medium or 
 |---|---|---|
 | Coyote ID | +100 | -100, hard conflict |
 | CAS ID | +80 | -80, hard conflict |
-| Date of birth | +40 | -60, hard conflict (one typo or day/month swap: -20, not hard) |
+| Date of birth | +40 | -60 (one typo or day/month swap: -20). Heavy, but **not** a hard conflict: it does not cap the rating |
 | Email, exact / same name part | +40 / +15 | 0 (people have several) |
 | Phone | +25 | 0 |
 | First name (same / nickname or initial) | +7 / +3 | -12 |
 | Last name (same / overlapping) | +8 / +4 | -8 |
-| Address (the page's own comparer) | +15 | -3 |
-| Student type, Academic level, School attended | +2 each | 0 |
+| Address (the page's own comparer) | +25 | -3 |
+| Student type, Academic level, School attended | +5 each | 0 |
 | Name or birth date found in an email address | up to +10 / +20 (year only +3) | -8 (a full date that disagrees) |
-| Applicant with no Coyote ID vs a contact that has one | | -25 |
-| Twin pattern (same last name and birth date or address, different first name) | | -30 |
+| Applicant with no Coyote ID vs a contact that has one | | -40 |
 | Bolt High / Medium / Low | +20 / +8 / -5 | |
 | Bolt says "different people" | | -25 |
 
-**Rating.** High needs 70+ points **and** at least two strong matches (an ID, birth date, exact email or phone) **and** no hard conflict. Medium is 45+; everything else is Low, and any hard conflict caps the pair at Low. A Low pair under 15 points is described as probably different people in the write-up. These are deliberately cautious: merging two people is the worse mistake. The weights, thresholds and nickname list are in `SCORE_W`, `SCORE_CUT` and `NICK` at the top of the score engine, which is a set of pure functions (no page access) between the `SCORE ENGINE START` / `END` comments.
+**Rating.** High needs 70+ points **and** at least two strong matches (an ID, birth date, exact email or phone) **and** no hard conflict. Medium is 45+; everything else is Low. A **hard conflict** is now only two different Coyote IDs or two different CAS IDs, and it caps the pair at Low. A clearly different birth date is a -60 penalty like any other, so the other fields can outweigh it. There is no twin-pattern rule: first names that differ cost the first-name penalty (-12) and nothing more, so a pair of twins or siblings who share a last name, birth date and address scores 61 points (Medium); the separate *possible twins* check (section 8) only stops pairs with two or more conflicting rows. A Low pair under 15 points is described as probably different people in the write-up. These are deliberately cautious: merging two people is the worse mistake. The weights, thresholds and nickname list are in `SCORE_W`, `SCORE_CUT` and `NICK` at the top of the score engine, which is a set of pure functions (no page access) between the `SCORE ENGINE START` / `END` comments.
 
 **Score chips.** The chips in the review sidebar and on the list show our rating too. A chip reads **Pending**, in Bolt's blue, until the pair has been analysed. The review page remembers each rating (localStorage `elm_pair_ratings`, keyed by the pair's two Spark IDs, the 4000 most recent) and a list row finds it through `data-csv-sparks`, the Spark IDs the Database script sets on a row from the list API. Without the Database script, or when the list API was not captured, list rows stay Pending. A chip that shows Bolt's own *Error* is left alone. **Bolt's score is read only from the chip in the review sidebar**; a chip in a list row behind the sidebar belongs to another pair and is never used (no chip found means no Bolt score). A High chip beside Bolt text that says *different people* is treated as a misread and ignored; the console line `[elm2] analysis:` lists how many Bolt chips were read and their levels.
 
@@ -559,6 +558,7 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 - **Our own rating**: a points-based rating and plain-English write-up replace Bolt's overview card; score chips show our rating, or Pending (section 10.6).
 - **Stability and security pass** (UI 2.266, Database 2.67, Database Merge 1.15, extension 1.0.4): section 18.
 - **Protected database files** (Database 2.69, Database Merge 1.16): every download is a password-protected `.xlsx` to share, or a personal `.elmdb` locked to your Element451 login; section 19.
+- **Scoring weights** (UI 2.269): address match +25, student type / level / school +5 each, applicant vs Coyote ID -40; a different birth date is no longer a hard conflict; the twin-pattern penalty is removed; section 10.6.
 - **Dedup Score column** (UI 2.268, Database 2.71, Database Merge 1.17): our points total is recorded with each pair, exported, imported and merged; section 11.2.
 - **List score chips** (UI 2.267, Database 2.70): chips show on a first load and no longer take another page's rating; section 11.5.
 - **Fixes along the way**: stall on identical consecutive names / disabled Next button, twins warning signal count, cut-off date text in filters, clipped filters panel, selected-chip colour specificity.

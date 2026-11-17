@@ -22,7 +22,7 @@ chip). Two v2 scripts target it, plus an optional third that merges databases:
 | Element451 - Database Merge v2 (optional, pairs with Database) | `database-merge-v2.js` | `@version 1.17` |
 
 
-**Full documentation: [`Full-Documentation-v2.md`](Full-Documentation-v2.md)** (architecture, every setting,
+**How pairs are scored: [`SCORING.md`](SCORING.md)** (every weight, the rating rules, sample pairs). **Full documentation: [`Full-Documentation-v2.md`](Full-Documentation-v2.md)** (architecture, every setting,
 the resolution rules, auto-merge, every website restyle, the database format, limitations).
 
 ### What they do

@@ -361,6 +361,8 @@ Both scripts append toasts to one shared stack, **bottom-left**, newest at the b
 
 ### 10.6 Dedup analysis (our rating and write-up)
 
+**The current weights, the rating rules and a table of sample pairs are in [`SCORING.md`](SCORING.md)**, which is generated from the score engine and checked by `npm test`, so it always matches what runs.
+
 Bolt's overview card is replaced by our own: a **rating chip** (High, Medium or Low), the point total, and a short plain-English write-up. The **View Bolt's write-up** button swaps Bolt's original header and text back (and **Back to our write-up** returns); Bolt's text is only hidden, never removed. With Bolt's write-up showing, the chip and title show **Bolt's own score** instead of ours (no points). Hovering our chip lists the points per field, and the console logs the same breakdown with the evidence read, for each pair.
 
 **Where the data comes from.** The diff form only shows fields that differ, so differences are read from its rows, and the fields that *match* are read from Bolt's own bullet list (for example `date of birth: identical (2008-12-16)`), which names the field and its value. Names come from the contact cards when the form has no name rows. The rating needs Bolt's overview on screen; until then the Bolt chip is used.
@@ -560,6 +562,7 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 - **Protected database files** (Database 2.69, Database Merge 1.16): every download is a password-protected `.xlsx` to share, or a personal `.elmdb` locked to your Element451 login; section 19.
 - **ID weights ±120** (UI 2.272): a matching Coyote ID or CAS ID is +120 and different ones are -120 (were +100 / -100 and +80 / -80).
 - **Birth date mismatch -45** (UI 2.271): was -60.
+- **SCORING.md** (generated chart of the scoring system, kept in step by `npm test`; `npm run scoring` regenerates it).
 - **A matching address is a strong match** (UI 2.273): with one other strong match (birth date, exact email or phone) and 70+ points the pair is High, so *same birth date + name + address*, *same name + email + address* and *same name + phone + address* (with Bolt High) are High. Pairs that share an address but not a first name (twins, siblings, parent and child) stay Medium, because a different first name costs points. Name, address and soft fields alone are still never High: that is one strong match.
 - **ID match is enough for High** (UI 2.270): a matching Coyote ID or CAS ID with 70+ points and no hard conflict is High without a second strong match (it used to stay Medium however many points it had).
 - **Scoring weights** (UI 2.269): address match +25, student type / level / school +5 each, applicant vs Coyote ID -40; a different birth date is no longer a hard conflict; the twin-pattern penalty is removed; section 10.6.

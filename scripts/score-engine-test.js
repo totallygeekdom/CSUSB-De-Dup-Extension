@@ -21,6 +21,7 @@ check(SCORE_W.address[0] === 25 && pts(score(person, person, { addrState: 'match
 check(SCORE_W.address[1] === -3, 'a different address is still -3 (people move)');
 const soft = { studentType: 'ftf', level: 'ug', school: 'csusb' };
 check(['studentType', 'level', 'school'].every(k => pts(score({ ...person, ...soft }, { ...person, ...soft }), k) === 5), 'student type, academic level and school attended are +5 each');
+check(pts(score({ ...person, coyote: '009123456' }, { ...person, coyote: '009123456' }), 'coyote') === 120 && pts(score({ ...person, cas: '8812345' }, { ...person, cas: '8812345' }), 'cas') === 120 && pts(score({ ...person, coyote: '1' + '23456' }, { ...person, coyote: '654321' }), 'coyote') === -120 && pts(score({ ...person, cas: '123456' }, { ...person, cas: '654321' }), 'cas') === -120, 'a matching Coyote ID or CAS ID is +120 and different ones are -120');
 check(pts(score({ ...person, applicant: true }, { ...person, coyote: '009111222' }), 'appCoyote') === -40, 'an applicant against a contact with a Coyote ID is -40');
 
 // a different birth date is a heavy penalty, not a veto
@@ -41,7 +42,7 @@ check(score({ ...person, coyote: '009123456' }, { ...person, coyote: '009123456'
 check(score({ ...person, cas: '8812345' }, { ...person, cas: '8812345' }).level === 'high', 'the same CAS ID and the same name is High');
 check(score({ first: 'Andy', last: 'Rios', coyote: '009123456' }, { first: 'Andres', last: 'Rios', coyote: '009123456' }).level === 'high', 'the same Coyote ID with a different first name is High');
 const idDob = score({ ...person, coyote: '009123456', dob: '2004-01-02' }, { ...person, coyote: '009123456', dob: '1999-07-30' });
-check(idDob.points === 70 && idDob.level === 'high', 'the same Coyote ID and name with a clearly different birth date lands exactly on High (100 + 15 - 45 = ' + idDob.points + ' pts): a deliberate edge, change it on purpose');
+check(idDob.points === 90 && idDob.level === 'high', 'the same Coyote ID and name with a clearly different birth date is High (120 + 15 - 45 = ' + idDob.points + ' pts): an ID match outweighs a birth date that disagrees; change it on purpose');
 check(score({ ...person, coyote: '009123456' }, { ...person, coyote: '009999999' }).level === 'low', 'different Coyote IDs are still Low');
 // other evidence still needs two strong matches for High
 check(score({ ...person, dob: '2004-01-02' }, { ...person, dob: '2004-01-02' }, { addrState: 'match', bolt: { level: 'high' } }).level === 'medium', 'a single non-ID strong match (birth date) with 100 points is still Medium');

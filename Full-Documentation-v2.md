@@ -5,8 +5,8 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.266`, shown in the settings pane |
-| Element451 - Database v2 | `database-v2.js` | `@version 2.69` |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.267`, shown in the settings pane |
+| Element451 - Database v2 | `database-v2.js` | `@version 2.70` |
 | Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.16`, see [section 17](#17-database-merge) |
 
 
@@ -424,6 +424,8 @@ The script wraps `XMLHttpRequest` and `fetch` to capture the list API response (
 
 A badge is placed in `.cdk-column-flagged` (falling back to signals, then the row). For each row the script first matches a database entry by **both Spark IDs** found in the row's API record (a contact can be in several pairs, so one shared ID is not enough), then falls back to matching the row text by names: **both contacts' 3-letter prefixes** must appear in the row. A blank second name is read as the first name, and when both contacts share a name that name must appear **twice** in the row, so a pair of identical names doesn't match a row with one copy of the name beside a different person. Badges are right-aligned so they line up down the column, and respect **Show Database UI**.
 
+**Score chips on the list (where a row's Spark IDs come from).** A list chip shows the rating remembered for the pair, found by the pair's two Spark IDs, which the Database script writes on the row as `data-csv-sparks`. They come from the list API's record when the record is known to belong to the row (tied by the names on the row; a tie made earlier is checked again, because Element451 reuses row elements), and otherwise from the database entry the row was matched to, the same entry the department badge is drawn from, so the two chips on a row agree. That second source matters on a **first load**: the page asks for its list before the scripts run, so nothing is captured until you change page, and the chips used to stay Pending until you went to another page and back. Position (row *n* is record *n*) is used only when most rows already matched by name, so data captured for another page can no longer tie rows to the wrong records (it used to show another pair's rating). The chips are labelled in the frame a row is added, so a row never shows Bolt's own score for an instant. A pair stays Pending when it has no remembered rating: pairs that were skipped before Bolt's overview finished loading are recorded in the database but never rated; open one and let it load to rate it.
+
 **Speed with a big database.** The database is read every second (the counter, the recording) and, on the list page, once per row. With thousands of entries that used to freeze the page: every row was compared against every entry, building several regular expressions each time (a few thousand entries blocked the page for over half a second every two seconds). Now the parsed database is kept in memory and read again only when the stored text changes (saving refreshes it, and another tab or script changing it is noticed), and lookup tables are built once per change: by Spark ID pair, by Spark ID, and by the first letters of the first name. A list row is only compared with the entries its words point to, in database order, so the result is the same as before. Entries whose names or IDs contain characters other than letters and digits are always checked in full.
 
 ### 11.6 Import / export
@@ -556,6 +558,7 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 - **Our own rating**: a points-based rating and plain-English write-up replace Bolt's overview card; score chips show our rating, or Pending (section 10.6).
 - **Stability and security pass** (UI 2.266, Database 2.67, Database Merge 1.15, extension 1.0.4): section 18.
 - **Protected database files** (Database 2.69, Database Merge 1.16): every download is a password-protected `.xlsx` to share, or a personal `.elmdb` locked to your Element451 login; section 19.
+- **List score chips** (UI 2.267, Database 2.70): chips show on a first load and no longer take another page's rating; section 11.5.
 - **Fixes along the way**: stall on identical consecutive names / disabled Next button, twins warning signal count, cut-off date text in filters, clipped filters panel, selected-chip colour specificity.
 
 ## 16. Chrome extension

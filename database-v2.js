@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - Database v2
 // @namespace    http://tampermonkey.net/
-// @version      2.69
+// @version      2.70
 // @description  Tracks duplicate entries in a database stored in browser localStorage (exports a password-protected .xlsx spreadsheet to share, or a personal .elmdb file locked to your Element451 login) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -15,7 +15,7 @@
     if (window.__elm451CsvDatabaseLoaded) return;
     window.__elm451CsvDatabaseLoaded = true;
 
-    const VERSION = '2.69'; // keep in sync with @version (the build checks it)
+    const VERSION = '2.70'; // keep in sync with @version (the build checks it)
     const STORAGE_KEY = 'elm_csv_database';
     const UI_KEY = 'elm_show_db_ui';
     function showDbUi() { try { return localStorage.getItem(UI_KEY) !== 'false'; } catch (e) { return true; } }
@@ -685,6 +685,22 @@
         badge.textContent = labels[dept] || dept;
     }
 
+    // The row's Spark IDs, for the main script's score chips (it looks the pair's rating up by them). The list API's record is the
+    // exact source when it is known to belong to this row; otherwise the database entry the row was matched to (the same match the
+    // department chip is drawn from, so the two chips on a row always agree).
+    function setRowSparks(row, ids) {
+        const list = Array.from(new Set((ids || []).filter(Boolean)));
+        if (list.length < 2) { if (row.hasAttribute('data-csv-sparks')) row.removeAttribute('data-csv-sparks'); return; }
+        const v = list.join('|');
+        if (row.getAttribute('data-csv-sparks') !== v) row.setAttribute('data-csv-sparks', v);
+    }
+    // Does the row show this record's names? (A record with no usable name cannot be checked: it is taken as fitting.)
+    function rowHoldsNames(row, api) {
+        const text = row.textContent.trim().toLowerCase(), name = (api.name || '').trim().toLowerCase(), dup = (api.duplicateName || '').trim().toLowerCase();
+        if (name.length <= 3 && dup.length <= 3) return true;
+        return (name.length > 3 && text.includes(name)) || (dup.length > 3 && text.includes(dup));
+    }
+
     function annotateQueueTable() {
         if (isReviewDetailPage()) return;
         const currentPageKey = getPageKey();
@@ -717,15 +733,16 @@
         const rows = getQueueRows();
         if (rows.length === 0) return;
         const db = getDatabase();
-        if (db.length === 0) return;
 
         if (useDbFallback) {
+            if (db.length === 0) return;
             const usedDbIndices = new Set();
             let matched = 0;
             rows.forEach(row => {
                 const dbEntry = matchRowToDbEntry(row, db, usedDbIndices);
-                if (!dbEntry) return;
+                if (!dbEntry) { setRowSparks(row, null); return; }
                 applyBadge(row, dbEntry.dept);
+                setRowSparks(row, [dbEntry.sparkId1, dbEntry.sparkId2]); // no list data was captured (the page loaded it before this script ran): the database entry is the source
                 matched++;
             });
             if (matched > 0 && lastAnnotationSource !== 'db-fallback') {
@@ -741,23 +758,33 @@
         }
         const usedApiIndices = new Set();
         const usedDbIndices = new Set();
-        const indexFallbackSafe = apiDuplicatesList && rows.length === apiDuplicatesList.length;
+        // Each row is tied to its record by the names on it (a tie made earlier is checked again: Element451 reuses row elements, so
+        // a row can show a different pair than the one it was tied to). Position is only a last resort, and only when most rows
+        // matched by name, which shows that the captured data is the data of the page on screen, not of another page.
+        const bound = rows.map(row => {
+            const uid = row.getAttribute('data-csv-uid');
+            const at = uid ? apiDuplicatesList.findIndex(a => a.uniqueId === uid) : -1;
+            if (at >= 0 && !usedApiIndices.has(at) && rowHoldsNames(row, apiDuplicatesList[at])) { usedApiIndices.add(at); return apiDuplicatesList[at]; }
+            if (uid) row.removeAttribute('data-csv-uid');
+            return null;
+        });
+        rows.forEach((row, i) => {
+            if (bound[i]) return;
+            const api = matchRowToApiEntry(row, apiDuplicatesList, usedApiIndices);
+            if (api) { bound[i] = api; row.setAttribute('data-csv-uid', api.uniqueId); }
+        });
+        const byName = bound.filter(Boolean).length;
+        const positionOk = rows.length === apiDuplicatesList.length && byName * 2 >= rows.length;
         rows.forEach((row, rowIndex) => {
-            let uniqueId = row.getAttribute('data-csv-uid');
-            let api = uniqueId ? apiDuplicatesList.find(a => a.uniqueId === uniqueId) : null;
-            if (!api && apiDuplicatesList) {
-                api = matchRowToApiEntry(row, apiDuplicatesList, usedApiIndices);
-                if (!api && indexFallbackSafe && apiDuplicatesList[rowIndex] && !usedApiIndices.has(rowIndex)) {
-                    api = apiDuplicatesList[rowIndex];
-                    usedApiIndices.add(rowIndex);
-                }
-                if (api) row.setAttribute('data-csv-uid', api.uniqueId);
+            let api = bound[rowIndex];
+            if (!api && positionOk && apiDuplicatesList[rowIndex] && !usedApiIndices.has(rowIndex)) {
+                api = apiDuplicatesList[rowIndex];
+                usedApiIndices.add(rowIndex);
+                row.setAttribute('data-csv-uid', api.uniqueId);
             }
-            // the record's Spark IDs, for the main script's score chips (it matches them to the pair it rated)
-            if (api && api.sparks.length) row.setAttribute('data-csv-sparks', Array.from(new Set(api.sparks)).join('|'));
-            else row.removeAttribute('data-csv-sparks');
             // Spark ID found in the API record first; otherwise name/ID text on the row
-            const dbEntry = dbEntryForApi(api, db) || matchRowToDbEntry(row, db, usedDbIndices);
+            const dbEntry = db.length ? (dbEntryForApi(api, db) || matchRowToDbEntry(row, db, usedDbIndices)) : null;
+            setRowSparks(row, api && api.sparks.length ? api.sparks : dbEntry ? [dbEntry.sparkId1, dbEntry.sparkId2] : null);
             if (!dbEntry) {
                 const b = row.querySelector('.csv-dept-badge'); if (b) b.remove();
                 row.removeAttribute('data-csv-dept');

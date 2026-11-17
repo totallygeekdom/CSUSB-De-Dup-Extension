@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.266
+// @version      2.267
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.266'; // keep in sync with @version
+    const VERSION = '2.267'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -4138,6 +4138,13 @@
         mergeCheckQueued = true;
         setTimeout(() => { mergeCheckQueued = false; runStep(checkForMergeResult); }, 50);
     }).observe(document.body, { childList: true, subtree: true });
+    // Score chips are labelled before the first paint of a new row (a frame, not the next 750 ms tick: until then a row showed Bolt's
+    // own score for an instant) and again as soon as the Database script ties a row to its pair (data-csv-sparks).
+    let chipFrame = 0;
+    new MutationObserver(() => {
+        if (chipFrame) return;
+        chipFrame = requestAnimationFrame(() => { chipFrame = 0; runStep(syncScoreChips); });
+    }).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-csv-sparks'] });
 
     // =========================================================
     // MERGE COUNTER + SETTINGS PANE

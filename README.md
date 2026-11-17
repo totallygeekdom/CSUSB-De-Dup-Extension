@@ -17,12 +17,12 @@ chip). Two v2 scripts target it, plus an optional third that merges databases:
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.266` (shown in the settings pane) |
-| Element451 - Database v2 | `database-v2.js` | `@version 2.69` |
-| Element451 - Database Merge v2 (optional, pairs with Database) | `database-merge-v2.js` | `@version 1.16` |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.273` (shown in the settings pane) |
+| Element451 - Database v2 | `database-v2.js` | `@version 2.71` |
+| Element451 - Database Merge v2 (optional, pairs with Database) | `database-merge-v2.js` | `@version 1.17` |
 
 
-**Full documentation: [`Full-Documentation-v2.md`](Full-Documentation-v2.md)** (architecture, every setting,
+**How pairs are scored: [`SCORING.md`](SCORING.md)** (every weight, the rating rules, sample pairs). **Full documentation: [`Full-Documentation-v2.md`](Full-Documentation-v2.md)** (architecture, every setting,
 the resolution rules, auto-merge, every website restyle, the database format, limitations).
 
 ### What they do
@@ -58,8 +58,8 @@ the resolution rules, auto-merge, every website restyle, the database format, li
 - **Database v2**: records blocked / skipped pairs keyed on the two contacts' **Spark IDs** (the review
   URL no longer changes per pair), stores names as 3-letter prefixes (`Jon...`), shows right-aligned department
   badges on the list page (matched through the list API's `identities[]`, falling back to names; the Firstname 2 / Lastname 2 columns are left blank when both contacts share a name, and a blank counts as "same as the first"), exports an
-  **password-protected `.xlsx` spreadsheet**, to share, or a personal `.elmdb` file locked to your Element451 login that only these scripts read (every download is protected: the spreadsheet with a password you set once and the browser remembers, the personal file with no password; see section 19 of the full documentation) (columns `Bolt Score, Firstname, Lastname, Firstname 2, Lastname 2, Spark ID 1, Spark ID 2, Dept., Scan Date, Merged, Script vs Bolt, Row Contents`;
-  preset column widths, frozen header row, filter buttons on Bolt Score, Dept. and Merged, the merged-away Spark ID and names struck through; Merged = Y/N, Script vs Bolt = what the script chose over Bolt)
+  **password-protected `.xlsx` spreadsheet**, to share, or a personal `.elmdb` file locked to your Element451 login that only these scripts read (every download is protected: the spreadsheet with a password you set once and the browser remembers, the personal file with no password; see section 19 of the full documentation) (columns `Bolt Score, Dedup Score, Firstname, Lastname, Firstname 2, Lastname 2, Spark ID 1, Spark ID 2, Dept., Scan Date, Merged, Script vs Bolt, Row Contents`;
+  preset column widths, frozen header row, filter buttons on Bolt Score, Dedup Score, Dept. and Merged, the merged-away Spark ID and names struck through; Merged = Y/N, Script vs Bolt = what the script chose over Bolt)
   and imports both protected forms and old plain `.xlsx` files (columns are read by header name), and has a **Show Database UI** toggle (under
   Display). Before every auto-skip the main script asks it to record the pair first.
 
@@ -115,7 +115,7 @@ The two scripts talk through the page, not through any shared code:
 
 | Channel | Direction | Mechanism |
 |---|---|---|
-| Department, Spark IDs, script-vs-Bolt line, Bolt score | UI Perfection -> Database | `document.body.dataset.csvDept`, `csvSpark1`, `csvSpark2`, `csvChoice`, `csvScore` |
+| Department, Spark IDs, script-vs-Bolt line, Bolt score, our points | UI Perfection -> Database | `document.body.dataset.csvDept`, `csvSpark1`, `csvSpark2`, `csvChoice`, `csvScore`, `csvPoints` (our points total) |
 | Record before skipping | UI Perfection -> Database | `elm2-record-pair` event on `document` (the Database script sets `detail.handled` / `.recorded`) |
 | Confirmed merge | UI Perfection -> Database | `elm2-pair-merged` event (`detail.a`, `.b`, `.choice`, `.lost`, `.names`) |
 | Blocked row text | UI Perfection -> Database | `.diff-row.elm2-blocked-row` elements |

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.266
+// @version      2.273
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.266'; // keep in sync with @version
+    const VERSION = '2.273'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -2298,6 +2298,9 @@
         if (choice) document.body.dataset.csvChoice = choice; else delete document.body.dataset.csvChoice;
         const score = getBoltChipLevel(); // Bolt's score for the database's first column (high / medium / low)
         if (score) document.body.dataset.csvScore = score; else delete document.body.dataset.csvScore;
+        // our own score (the points total of the Dedup analysis) for the database's Dedup Score column; absent until Bolt's overview has loaded
+        const rating = currentRating();
+        if (rating && isFinite(rating.res.points)) document.body.dataset.csvPoints = String(Math.round(rating.res.points)); else delete document.body.dataset.csvPoints;
         // A skipped pair (Auto-Skip on) gets no popup; one left for you does.
         if (appeal && !appealWarningShown && !CFG.AUTO_SKIP_BLOCKED) {
             appealWarningShown = true;
@@ -2309,12 +2312,12 @@
     // ---- SCORE ENGINE START (pure functions: no page access, so it can be tested on its own) ----
     // Points per field. Both sides must have the field for it to count; a missing field scores 0.
     const SCORE_W = {
-        coyote: [100, -100], cas: [80, -80], dob: [40, -60], dobTypo: [25, -20],
+        coyote: [120, -120], cas: [120, -120], dob: [40, -45], dobTypo: [25, -20],
         email: [40, 0], emailName: [15, 0], phone: [25, 0],
         first: [7, -12], firstRelated: [3, 0], last: [8, -8], lastPartial: [4, 0],
-        address: [15, -3], soft: [2, 0],
+        address: [25, -3], soft: [5, 0],
         boltHigh: 20, boltMedium: 8, boltLow: -5, boltDifferent: -25,
-        twins: -30, applicantVsCoyote: -25,
+        applicantVsCoyote: -40,
         emailNameFull: 6, emailNameInitial: 3, emailNameCap: 10, emailDobFull: 20, emailDobYear: 3, emailDobConflict: -8
     };
     const SCORE_CUT = { high: 70, medium: 45, low: 15 };
@@ -2409,7 +2412,7 @@
         if (da && db) {
             if (da === db) { add('dob', 'Date of birth', W.dob[0], 'for', 'the same date of birth (' + da + ')', { strong: true }); strong++; }
             else if (scDateTypo(da, db)) add('dob', 'Date of birth', W.dobTypo[1], 'against', 'dates of birth that are one typo apart (' + da + ' and ' + db + ')', { typo: true });
-            else { add('dob', 'Date of birth', W.dob[1], 'against', 'different dates of birth (' + da + ' and ' + db + ')', { hard: true }); hard = true; }
+            else { add('dob', 'Date of birth', W.dob[1], 'against', 'different dates of birth (' + da + ' and ' + db + ')', { clear: true }); }
         }
         // Email: exact, or the same name part on a different domain
         const ea = (A.emails || []).map(e => e.toLowerCase()), eb = (B.emails || []).map(e => e.toLowerCase());
@@ -2433,10 +2436,8 @@
         if (lastState === 'same') add('last', 'Last name', W.last[0], 'for', 'the same last name', { nameFor: 'last' });
         else if (lastState === 'partial') add('last', 'Last name', W.lastPartial[0], 'for', 'overlapping last names (' + A.last + ' and ' + B.last + ')', { nameFor: 'last' });
         else if (lastState === 'differ') add('last', 'Last name', W.last[1], 'against', 'different last names (' + A.last + ' and ' + B.last + ')');
-        // twins: same last name plus the same birth date or address, but a clearly different first name
-        if (firstState === 'differ' && lastState === 'same' && ((da && db && da === db) || ev.addrState === 'match')) add('twins', 'Twin pattern', W.twins, 'against', 'the first names differ (' + A.first + ' and ' + B.first + ') even though the last name and ' + (da && da === db ? 'birth date' : 'address') + ' are the same, which fits twins or family');
         // Address
-        if (ev.addrState === 'match') add('address', 'Address', W.address[0], 'for', 'the same address');
+        if (ev.addrState === 'match') { add('address', 'Address', W.address[0], 'for', 'the same address', { strong: true }); strong++; }
         else if (ev.addrState === 'mismatch') add('address', 'Address', W.address[1], 'against', 'different addresses (people move)');
         // Soft fields
         [['studentType', 'Student type'], ['level', 'Academic level'], ['school', 'School attended']].forEach(([k, label]) => {
@@ -2466,7 +2467,10 @@
         if (ev.bolt && ev.bolt.different) add('boltDifferent', 'Bolt "different people"', W.boltDifferent, 'against', 'Bolt flagged them as different people');
         // totals
         let pts = 0; items.forEach(i => { pts += i.pts; });
-        let level = pts >= SCORE_CUT.high && strong >= 2 ? 'high' : pts >= SCORE_CUT.medium ? 'medium' : 'low';
+        // A matching Coyote ID or CAS ID is an identifier no two people share, so on its own it is enough for High (with the
+        // points and no hard conflict); every other kind of evidence needs a second strong match to back it.
+        const idMatch = items.some(i => i.strong && (i.key === 'coyote' || i.key === 'cas'));
+        let level = pts >= SCORE_CUT.high && (strong >= 2 || idMatch) ? 'high' : pts >= SCORE_CUT.medium ? 'medium' : 'low';
         if (level === 'high' && hard) level = 'low';
         if (hard && level === 'medium') level = 'low';
         // (70 points on weak fields alone, with fewer than two strong matches, lands on Medium by the line above)
@@ -2489,7 +2493,7 @@
         const A = ev.A || {}, B = ev.B || {};
         const full = (s) => [s.first, s.last].filter(Boolean).join(' ');
         const out = { verdict: '', paragraphs: [] };
-        const conflict = res.hard || against.some(i => i.key === 'twins');
+        const conflict = res.hard || against.some(i => i.key === 'dob' && !i.typo);
         out.verdict = res.level === 'high' ? 'Almost certainly the same person.'
             : res.level === 'medium' ? (res.thin ? 'Probably the same person, but the evidence is thin.' : 'Probably the same person.')
             : res.different ? 'Probably different people.'
@@ -2504,10 +2508,9 @@
         if (matchPhrases.length) out.paragraphs.push('Both records have ' + list(matchPhrases) + '.');
         if (hints.length) out.paragraphs.push(cap(list(hints.map(h => h.phrase))) + '.');
         // what does not
-        const twinsHere = against.some(i => i.key === 'twins');
-        const aPhrases = against.filter(i => !(twinsHere && i.key === 'first')).map(i => i.phrase);
-        const clauses = aPhrases.filter(p => /^(one record|the first names differ)/.test(p));
-        const shows = aPhrases.filter(p => !/^(one record|the first names differ)/.test(p));
+        const aPhrases = against.map(i => i.phrase);
+        const clauses = aPhrases.filter(p => /^one record/.test(p));
+        const shows = aPhrases.filter(p => !/^one record/.test(p));
         const bad = (shows.length ? ['the records show ' + list(shows)] : []).concat(clauses);
         if (boltDiff) bad.push('Bolt flagged them as different people');
         if (bad.length) out.paragraphs.push((matchPhrases.length ? 'On the other hand, ' : 'Instead, ') + list(bad) + '.');
@@ -3935,6 +3938,7 @@
             delete document.body.dataset.csvSpark2;
             delete document.body.dataset.csvChoice;
             delete document.body.dataset.csvScore;
+            delete document.body.dataset.csvPoints;
         }
         const blockers = getAllBlockers();
         applyBlockStyling(blockers);
@@ -4138,6 +4142,13 @@
         mergeCheckQueued = true;
         setTimeout(() => { mergeCheckQueued = false; runStep(checkForMergeResult); }, 50);
     }).observe(document.body, { childList: true, subtree: true });
+    // Score chips are labelled before the first paint of a new row (a frame, not the next 750 ms tick: until then a row showed Bolt's
+    // own score for an instant) and again as soon as the Database script ties a row to its pair (data-csv-sparks).
+    let chipFrame = 0;
+    new MutationObserver(() => {
+        if (chipFrame) return;
+        chipFrame = requestAnimationFrame(() => { chipFrame = 0; runStep(syncScoreChips); });
+    }).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-csv-sparks'] });
 
     // =========================================================
     // MERGE COUNTER + SETTINGS PANE

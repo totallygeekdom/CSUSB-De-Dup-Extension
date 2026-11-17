@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - Database Merge v2
 // @namespace    http://tampermonkey.net/
-// @version      1.16
+// @version      1.17
 // @description  Adds a "Merge Databases" page to the Database script: combine several exported databases (and this browser's) into one, with a breakdown
 // @author       You
 // @match        https://*.element451.io/*
@@ -21,7 +21,7 @@
     'use strict';
     if (window.__elm451DbMergeLoaded) return;
     window.__elm451DbMergeLoaded = true;
-    const VERSION = '1.16'; // keep in sync with @version (the build checks it)
+    const VERSION = '1.17'; // keep in sync with @version (the build checks it)
 
     // =========================================================
     // STORED DATABASE AND FILE FORMATS
@@ -57,7 +57,7 @@
             first2: col('firstname 2', -1), last2: col('lastname 2', -1),
             dept: col('dept.', -1), rows: col('row contents', -1),
             s1: col('spark id 1', -1), s2: col('spark id 2', -1),
-            merged: col('merged', -1), choice: col('script vs bolt', -1), score: col('bolt score', -1), scanDate: col('scan date', -1)
+            merged: col('merged', -1), choice: col('script vs bolt', -1), score: col('bolt score', -1), points: col('dedup score', -1), scanDate: col('scan date', -1)
         };
         const get = (cols, i) => (i >= 0 && i < cols.length ? String(cols[i] == null ? '' : cols[i]) : '');
         const entries = [];
@@ -75,6 +75,7 @@
                 dept: get(cols, idx.dept), rowContents: get(cols, idx.rows),
                 sparkId1: get(cols, idx.s1), sparkId2: get(cols, idx.s2),
                 merged: m === 'Y' || m === 'N' ? m : '', choice: m === 'Y' ? get(cols, idx.choice) : '', score: get(cols, idx.score).trim().toLowerCase(), scanDate: parseDate(get(cols, idx.scanDate)),
+                ...(get(cols, idx.points).trim() !== '' && isFinite(Number(get(cols, idx.points))) ? { points: Math.round(Number(get(cols, idx.points))) } : {}),
                 ...(lost ? { lostSpark: lost } : {}),
                 ...(lostFirst ? { lostFirst } : {}), ...(lostLast ? { lostLast } : {})
             });
@@ -223,11 +224,18 @@
                         winner: win ? src.name : sources[cur.from].name
                     });
                 }
+                // Whichever copy wins, what the other copy knew is kept when the winner has no value of its own (the Bolt score, our points).
+                const fill = (w, other) => {
+                    if (!w.score && other.score) w.score = other.score;
+                    const blank = (v) => v === undefined || v === null || v === '';
+                    if (blank(w.points) && !blank(other.points)) w.points = other.points;
+                };
                 if (win) {
-                    const loser = cur.entry;
                     const w = { ...inc };
-                    if (!w.score && loser.score) w.score = loser.score; // keep what the other copy knew
+                    fill(w, cur.entry);
                     kept.set(key, { entry: w, from: si });
+                } else {
+                    fill(cur.entry, inc);
                 }
             });
         });

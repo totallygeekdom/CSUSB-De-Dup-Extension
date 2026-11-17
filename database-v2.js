@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - Database v2
 // @namespace    http://tampermonkey.net/
-// @version      2.69
+// @version      2.71
 // @description  Tracks duplicate entries in a database stored in browser localStorage (exports a password-protected .xlsx spreadsheet to share, or a personal .elmdb file locked to your Element451 login) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -15,7 +15,7 @@
     if (window.__elm451CsvDatabaseLoaded) return;
     window.__elm451CsvDatabaseLoaded = true;
 
-    const VERSION = '2.69'; // keep in sync with @version (the build checks it)
+    const VERSION = '2.71'; // keep in sync with @version (the build checks it)
     const STORAGE_KEY = 'elm_csv_database';
     const UI_KEY = 'elm_show_db_ui';
     function showDbUi() { try { return localStorage.getItem(UI_KEY) !== 'false'; } catch (e) { return true; } }
@@ -299,6 +299,12 @@
     }
     // Local date as YYYY-MM-DD, how Scan Date is stored (it sorts and compares correctly); the spreadsheet shows DD/MM/YYYY
     function todayStr() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+    // A points total as a whole number, or null when there is none ('' / missing / not a number). Zero and negative totals are real scores.
+    function parsePoints(v) {
+        if (v === null || v === undefined || (typeof v === 'string' && v.trim() === '')) return null;
+        const n = Number(v);
+        return isFinite(n) ? Math.round(n) : null;
+    }
     function recordEntry(dept) {
         const ok = recordEntryNow(dept);
         trackRecording(ok === true ? '' : ok);
@@ -332,9 +338,13 @@
         const choice = merged === 'Y' ? (old.choice || '') : '';
         // Bolt's score (high / medium / low) as read from the score chip by the main script; kept once seen
         const score = document.body.dataset.csvScore || (old && old.score) || '';
+        // Our own score (the Dedup analysis' points, e.g. 80, or -38): the latest one for the pair, kept when the analysis is not on screen
+        const seenPoints = parsePoints(document.body.dataset.csvPoints);
+        const points = seenPoints !== null ? seenPoints : parsePoints(old && old.points);
         // Scan Date: the day the pair was scanned; it moves to the merge day when the pair is merged
         const scanDate = (old && old.scanDate) || todayStr();
         const newEntry = { firstName, lastName, firstName2, lastName2, dept, rowContents, sparkId1: sparks.a, sparkId2: sparks.b, merged, choice, score, scanDate };
+        if (points !== null) newEntry.points = points;
         if (old && old.lostSpark) newEntry.lostSpark = old.lostSpark;
         if (old && old.lostFirst) newEntry.lostFirst = old.lostFirst;
         if (old && old.lostLast) newEntry.lostLast = old.lostLast;
@@ -342,7 +352,7 @@
             if (old.dept === dept && old.firstName === firstName && old.lastName === lastName
                 && old.firstName2 === firstName2 && old.lastName2 === lastName2 && old.rowContents === rowContents
                 && old.sparkId1 === sparks.a && old.sparkId2 === sparks.b
-                && (old.merged || '') === merged && (old.choice || '') === choice && (old.score || '') === score && (old.scanDate || '') === scanDate) return true;
+                && (old.merged || '') === merged && (old.choice || '') === choice && (old.score || '') === score && parsePoints(old.points) === points && (old.scanDate || '') === scanDate) return true;
             db[existingIdx] = newEntry;
             return saveDatabase(db) ? true : 'the browser would not save the database (storage full?)';
         }
@@ -685,6 +695,22 @@
         badge.textContent = labels[dept] || dept;
     }
 
+    // The row's Spark IDs, for the main script's score chips (it looks the pair's rating up by them). The list API's record is the
+    // exact source when it is known to belong to this row; otherwise the database entry the row was matched to (the same match the
+    // department chip is drawn from, so the two chips on a row always agree).
+    function setRowSparks(row, ids) {
+        const list = Array.from(new Set((ids || []).filter(Boolean)));
+        if (list.length < 2) { if (row.hasAttribute('data-csv-sparks')) row.removeAttribute('data-csv-sparks'); return; }
+        const v = list.join('|');
+        if (row.getAttribute('data-csv-sparks') !== v) row.setAttribute('data-csv-sparks', v);
+    }
+    // Does the row show this record's names? (A record with no usable name cannot be checked: it is taken as fitting.)
+    function rowHoldsNames(row, api) {
+        const text = row.textContent.trim().toLowerCase(), name = (api.name || '').trim().toLowerCase(), dup = (api.duplicateName || '').trim().toLowerCase();
+        if (name.length <= 3 && dup.length <= 3) return true;
+        return (name.length > 3 && text.includes(name)) || (dup.length > 3 && text.includes(dup));
+    }
+
     function annotateQueueTable() {
         if (isReviewDetailPage()) return;
         const currentPageKey = getPageKey();
@@ -717,15 +743,16 @@
         const rows = getQueueRows();
         if (rows.length === 0) return;
         const db = getDatabase();
-        if (db.length === 0) return;
 
         if (useDbFallback) {
+            if (db.length === 0) return;
             const usedDbIndices = new Set();
             let matched = 0;
             rows.forEach(row => {
                 const dbEntry = matchRowToDbEntry(row, db, usedDbIndices);
-                if (!dbEntry) return;
+                if (!dbEntry) { setRowSparks(row, null); return; }
                 applyBadge(row, dbEntry.dept);
+                setRowSparks(row, [dbEntry.sparkId1, dbEntry.sparkId2]); // no list data was captured (the page loaded it before this script ran): the database entry is the source
                 matched++;
             });
             if (matched > 0 && lastAnnotationSource !== 'db-fallback') {
@@ -741,23 +768,33 @@
         }
         const usedApiIndices = new Set();
         const usedDbIndices = new Set();
-        const indexFallbackSafe = apiDuplicatesList && rows.length === apiDuplicatesList.length;
+        // Each row is tied to its record by the names on it (a tie made earlier is checked again: Element451 reuses row elements, so
+        // a row can show a different pair than the one it was tied to). Position is only a last resort, and only when most rows
+        // matched by name, which shows that the captured data is the data of the page on screen, not of another page.
+        const bound = rows.map(row => {
+            const uid = row.getAttribute('data-csv-uid');
+            const at = uid ? apiDuplicatesList.findIndex(a => a.uniqueId === uid) : -1;
+            if (at >= 0 && !usedApiIndices.has(at) && rowHoldsNames(row, apiDuplicatesList[at])) { usedApiIndices.add(at); return apiDuplicatesList[at]; }
+            if (uid) row.removeAttribute('data-csv-uid');
+            return null;
+        });
+        rows.forEach((row, i) => {
+            if (bound[i]) return;
+            const api = matchRowToApiEntry(row, apiDuplicatesList, usedApiIndices);
+            if (api) { bound[i] = api; row.setAttribute('data-csv-uid', api.uniqueId); }
+        });
+        const byName = bound.filter(Boolean).length;
+        const positionOk = rows.length === apiDuplicatesList.length && byName * 2 >= rows.length;
         rows.forEach((row, rowIndex) => {
-            let uniqueId = row.getAttribute('data-csv-uid');
-            let api = uniqueId ? apiDuplicatesList.find(a => a.uniqueId === uniqueId) : null;
-            if (!api && apiDuplicatesList) {
-                api = matchRowToApiEntry(row, apiDuplicatesList, usedApiIndices);
-                if (!api && indexFallbackSafe && apiDuplicatesList[rowIndex] && !usedApiIndices.has(rowIndex)) {
-                    api = apiDuplicatesList[rowIndex];
-                    usedApiIndices.add(rowIndex);
-                }
-                if (api) row.setAttribute('data-csv-uid', api.uniqueId);
+            let api = bound[rowIndex];
+            if (!api && positionOk && apiDuplicatesList[rowIndex] && !usedApiIndices.has(rowIndex)) {
+                api = apiDuplicatesList[rowIndex];
+                usedApiIndices.add(rowIndex);
+                row.setAttribute('data-csv-uid', api.uniqueId);
             }
-            // the record's Spark IDs, for the main script's score chips (it matches them to the pair it rated)
-            if (api && api.sparks.length) row.setAttribute('data-csv-sparks', Array.from(new Set(api.sparks)).join('|'));
-            else row.removeAttribute('data-csv-sparks');
             // Spark ID found in the API record first; otherwise name/ID text on the row
-            const dbEntry = dbEntryForApi(api, db) || matchRowToDbEntry(row, db, usedDbIndices);
+            const dbEntry = db.length ? (dbEntryForApi(api, db) || matchRowToDbEntry(row, db, usedDbIndices)) : null;
+            setRowSparks(row, api && api.sparks.length ? api.sparks : dbEntry ? [dbEntry.sparkId1, dbEntry.sparkId2] : null);
             if (!dbEntry) {
                 const b = row.querySelector('.csv-dept-badge'); if (b) b.remove();
                 row.removeAttribute('data-csv-dept');
@@ -837,6 +874,7 @@
     // width is in cm, as the spreadsheet stores it (the columns can be resized there).
     const DB_COLUMNS = [
         { header: 'Bolt Score', key: 'score', width: 2.6 },
+        { header: 'Dedup Score', key: 'points', width: 2.6 },
         { header: 'Firstname', key: 'firstName', width: 2.6 },
         { header: 'Lastname', key: 'lastName', width: 2.6 },
         { header: 'Firstname 2', key: 'firstName2', width: 2.6 },
@@ -873,8 +911,10 @@
     function dbRows(db) {
         const rows = db.map(e => {
             // Script vs Bolt is only exported for a merged pair
-            const r = DB_COLUMNS.map(c => String((c.key === 'choice' && e.merged !== 'Y') ? '' : c.key === 'score' ? capFirst(e.score) : c.key === 'scanDate' ? (e.scanDate || '') : (e[c.key] || '')));
+            const r = DB_COLUMNS.map(c => c.key === 'points' ? (parsePoints(e.points) === null ? '' : String(parsePoints(e.points))) // 0 and negative totals are scores, not blanks
+                : String((c.key === 'choice' && e.merged !== 'Y') ? '' : c.key === 'score' ? capFirst(e.score) : c.key === 'scanDate' ? (e.scanDate || '') : (e[c.key] || '')));
             r.struck = new Set();
+            r.nums = new Set(); // columns written as real numbers (Dedup Score), so the spreadsheet can sort and filter them
             r.dates = new Set(); // columns written as real dates (Scan Date), so the spreadsheet can sort and filter them
             const lostCol = { firstName: 'a', firstName2: 'b', lastName: 'a', lastName2: 'b' };
             r.paint = new Map(); // column index -> a key of XL_PAINT: the cell's colour (Bolt Score, Dept., applicant pairs)
@@ -883,6 +923,7 @@
                 if (c.key === 'dept' && XL_PAINT.some(x => x[0] === 'dept:' + r[i])) r.paint.set(i, 'dept:' + r[i]);
                 if (c.key === 'choice' && /^Applicant/i.test(r[i])) r.paint.set(i, 'applicant');
                 if (c.key === 'scanDate' && /^\d{4}-\d{2}-\d{2}$/.test(r[i])) r.dates.add(i);
+                if (c.key === 'points' && r[i] !== '') r.nums.add(i);
                 if ((c.key === 'sparkId1' || c.key === 'sparkId2') && e.lostSpark && r[i] === e.lostSpark) r.struck.add(i);
                 if (r[i] && e.merged === 'Y' && (c.key === 'firstName' || c.key === 'firstName2') && e.lostFirst === lostCol[c.key]) r.struck.add(i);
                 if (r[i] && e.merged === 'Y' && (c.key === 'lastName' || c.key === 'lastName2') && e.lostLast === lostCol[c.key]) r.struck.add(i);
@@ -901,7 +942,7 @@
             first2: col('firstname 2', -1), last2: col('lastname 2', -1),
             dept: col('dept.', -1), rows: col('row contents', -1),
             s1: col('spark id 1', -1), s2: col('spark id 2', -1),
-            merged: col('merged', -1), choice: col('script vs bolt', -1), score: col('bolt score', -1), scanDate: col('scan date', -1)
+            merged: col('merged', -1), choice: col('script vs bolt', -1), score: col('bolt score', -1), points: col('dedup score', -1), scanDate: col('scan date', -1)
         };
         const get = (cols, i) => (i >= 0 && i < cols.length ? String(cols[i] == null ? '' : cols[i]) : '');
         const entries = [];
@@ -919,6 +960,7 @@
                 dept: get(cols, idx.dept), rowContents: get(cols, idx.rows),
                 sparkId1: get(cols, idx.s1), sparkId2: get(cols, idx.s2),
                 merged: m === 'Y' || m === 'N' ? m : '', choice: m === 'Y' ? get(cols, idx.choice) : '', score: get(cols, idx.score).trim().toLowerCase(), scanDate: parseDate(get(cols, idx.scanDate)),
+                ...(parsePoints(get(cols, idx.points)) !== null ? { points: parsePoints(get(cols, idx.points)) } : {}),
                 ...(lost ? { lostSpark: lost } : {}),
                 ...(lostFirst ? { lostFirst } : {}), ...(lostLast ? { lostLast } : {})
             });
@@ -999,9 +1041,10 @@
     const colLetter = (i) => String.fromCharCode(65 + i);
     // YYYY-MM-DD -> Excel's day number (days since 1899-12-30)
     const excelSerial = (iso) => { const [y, m, d] = iso.split('-').map(Number); return Math.round((Date.UTC(y, m - 1, d) - Date.UTC(1899, 11, 30)) / 86400000); };
-    function xlsxCell(value, ref, style, isDate) {
+    function xlsxCell(value, ref, style, isDate, isNum) {
         const attr = ' r="' + ref + '"' + (style ? ' s="' + style + '"' : '');
         if (value === '') return style ? '<c' + attr + '/>' : '';
+        if (isNum) return '<c' + attr + '><v>' + Number(value) + '</v></c>';
         if (isDate) return '<c' + attr + '><v>' + excelSerial(value) + '</v></c>';
         return '<c' + attr + ' t="inlineStr"><is><t xml:space="preserve">' + xmlEsc(value) + '</t></is></c>';
     }
@@ -1009,9 +1052,9 @@
         const nCols = DB_COLUMNS.length, nRows = rows.length;
         const cols = DB_COLUMNS.map((c, i) => '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + Math.round(c.width * 5.4 * 10) / 10 + '" customWidth="1"/>').join('');
         const sheetRows = rows.map((r, ri) => '<row r="' + (ri + 1) + '">' +
-            DB_COLUMNS.map((c, ci) => xlsxCell(r[ci] == null ? '' : String(r[ci]), colLetter(ci) + (ri + 1), ri === 0 ? 1 : (r.dates && r.dates.has(ci) ? 3 : r.struck && r.struck.has(ci) ? 2 : r.paint && r.paint.has(ci) ? 4 + XL_PAINT.findIndex(x => x[0] === r.paint.get(ci)) : 0), !!(r.dates && r.dates.has(ci)))).join('') + '</row>').join('');
+            DB_COLUMNS.map((c, ci) => xlsxCell(r[ci] == null ? '' : String(r[ci]), colLetter(ci) + (ri + 1), ri === 0 ? 1 : (r.dates && r.dates.has(ci) ? 3 : r.struck && r.struck.has(ci) ? 2 : r.paint && r.paint.has(ci) ? 4 + XL_PAINT.findIndex(x => x[0] === r.paint.get(ci)) : 0), !!(r.dates && r.dates.has(ci)), !!(r.nums && r.nums.has(ci)))).join('') + '</row>').join('');
         // One filter over the whole table, with the buttons hidden on every column except Bolt Score, Dept. and Merged.
-        const filterKeys = ['score', 'dept', 'scanDate', 'merged'];
+        const filterKeys = ['score', 'points', 'dept', 'scanDate', 'merged'];
         const filterRef = 'A1:' + colLetter(nCols - 1) + nRows;
         const hiddenButtons = DB_COLUMNS.map((c, i) => filterKeys.includes(c.key) ? '' : '<filterColumn colId="' + i + '" hiddenButton="1"/>').join('');
         const sheet = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
@@ -1583,6 +1626,7 @@
                 dept: str(e.dept), rowContents: str(e.rowContents), sparkId1: str(e.sparkId1), sparkId2: str(e.sparkId2),
                 merged: m === 'Y' || m === 'N' ? m : '', choice: m === 'Y' ? str(e.choice) : '', score: str(e.score).trim().toLowerCase(), scanDate: parseDate(str(e.scanDate))
             };
+            if (parsePoints(e.points) !== null) out.points = parsePoints(e.points);
             if (e.lostSpark) out.lostSpark = str(e.lostSpark);
             if (e.lostFirst === 'a' || e.lostFirst === 'b') out.lostFirst = e.lostFirst;
             if (e.lostLast === 'a' || e.lostLast === 'b') out.lostLast = e.lostLast;
@@ -1795,7 +1839,7 @@
             databaseScript: VERSION, entries: n, storedKB: Math.round(raw.length / 1024), storageWritable,
             onReviewPage: isReviewDetailPage(), mergePanelOpen: mergePanelOpen(),
             mainScriptLoaded: !!window.__elm451UiPerfectionLoaded, viaExtension: window.__elm451Extension || false,
-            signals: { dept: d.csvDept, spark1: d.csvSpark1, spark2: d.csvSpark2, choice: d.csvChoice, score: d.csvScore },
+            signals: { dept: d.csvDept, spark1: d.csvSpark1, spark2: d.csvSpark2, choice: d.csvChoice, score: d.csvScore, points: d.csvPoints },
             // for the personal file: whether the signed-in person was found, where, and a fingerprint that should read the same every time you are signed in
             login: (() => { const w = currentLogin(); return w ? { found: true, from: w.source, kind: w.kind, fingerprint: w.mark || '(working)', changedInLast30Days: loginChangedRecently() } : { found: false }; })(),
             sparksOnPage: sparks, pageNames: extractNames().full,

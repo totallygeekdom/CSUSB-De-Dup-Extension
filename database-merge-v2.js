@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - Database Merge v2
 // @namespace    http://tampermonkey.net/
-// @version      1.14
+// @version      1.16
 // @description  Adds a "Merge Databases" page to the Database script: combine several exported databases (and this browser's) into one, with a breakdown
 // @author       You
 // @match        https://*.element451.io/*
@@ -10,18 +10,18 @@
 // @downloadURL  https://raw.githubusercontent.com/totallygeekdom/csusb-de-dup-extension/main/database-merge-v2.js
 // ==/UserScript==
 //
-// Pairs with database-v2.js in only two ways: the "Merge Databases" button is added to the Database section that
-// script puts in the settings pane (so the button only exists while the Database script is active), and the current
-// database is read straight from localStorage (`elm_csv_database`), so it can be merged without downloading it first.
-// Everything else (reading .xlsx files, writing the merged .xlsx) is this script's own code, which is why
-// the file-format block below is a copy of the Database script's. The button opens a new tab; the tab is built from this page
+// Pairs with database-v2.js in three ways: the "Merge Databases" button is added to the Database section that
+// script puts in the settings pane (so the button only exists while the Database script is active), the current
+// database is read straight from localStorage (`elm_csv_database`), so it can be merged without downloading it first,
+// and database files are read and written through the Database script (`window.__elm451DbFiles`), because they are
+// password protected and that script holds the encryption and the saved password. The button opens a new tab; the tab is built from this page
 // with DOM calls (no inline scripts), so it works whatever the site's content-security policy says, and it needs this
 // Element451 tab to stay open while you use it.
 (function () {
     'use strict';
     if (window.__elm451DbMergeLoaded) return;
     window.__elm451DbMergeLoaded = true;
-    const VERSION = '1.14'; // keep in sync with @version
+    const VERSION = '1.16'; // keep in sync with @version (the build checks it)
 
     // =========================================================
     // STORED DATABASE AND FILE FORMATS
@@ -34,27 +34,9 @@
         return t.length > 3 ? t.slice(0, 3) + ELLIPSIS : t;
     }
     // =========================================================
-    // FILE FORMAT (a copy of the Database script's .xlsx writer and reader). The written .xlsx has
-    // preset column widths, a frozen header row and filter / sort buttons on Bolt Score, Dept., Scan Date and Merged.
+    // FILE FORMAT: a copy of the Database script's plain .xlsx reader, used only when that script is too old to lend its
+    // own (see `api` below). Protected files are read, and every file is written, by the Database script.
     // =========================================================
-    // Columns in file order. Merged and Script vs Bolt sit between Spark ID 2 and Row Contents.
-    // width is in cm, as the spreadsheet stores it (the columns can be resized there).
-    const DB_COLUMNS = [
-        { header: 'Bolt Score', key: 'score', width: 2.6 },
-        { header: 'Firstname', key: 'firstName', width: 2.6 },
-        { header: 'Lastname', key: 'lastName', width: 2.6 },
-        { header: 'Firstname 2', key: 'firstName2', width: 2.6 },
-        { header: 'Lastname 2', key: 'lastName2', width: 2.6 },
-        { header: 'Spark ID 1', key: 'sparkId1', width: 3.8 },
-        { header: 'Spark ID 2', key: 'sparkId2', width: 3.8 },
-        { header: 'Dept.', key: 'dept', width: 2.8 },
-        { header: 'Scan Date', key: 'scanDate', width: 3 },
-        { header: 'Merged', key: 'merged', width: 2.2 },
-        { header: 'Script vs Bolt', key: 'choice', width: 9 },
-        { header: 'Row Contents', key: 'rowContents', width: 15 }
-    ];
-    // Each data row carries .struck, the set of column indexes to strike through: the Spark ID that was merged
-    // away (lostSpark) when the pair was merged.
     // Scan Date in the spreadsheet is DD/MM/YYYY; stored as YYYY-MM-DD. Reading accepts both, and an Excel date
     // serial (what a cell becomes if it is retyped as a date).
     function parseDate(text) {
@@ -64,36 +46,6 @@
         if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
         if (/^\d{5}$/.test(t)) { const d = new Date(Date.UTC(1899, 11, 30) + parseInt(t, 10) * 86400000); return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0') + '-' + String(d.getUTCDate()).padStart(2, '0'); }
         return '';
-    }
-    const capFirst = (t) => { t = String(t || ''); return t.charAt(0).toUpperCase() + t.slice(1).toLowerCase(); };
-    // Cell colours in the spreadsheet: Bolt Score in soft versions of the list view's chip colours (green / orange / red),
-    // Dept. in the list view's chip colours, and Script vs Bolt in the light yellow of the applicant band (with dark yellow
-    // text) when the script found an applicant. [key, fill, text]; the cell style number is 4 + the position here.
-    const XL_PAINT = [
-        ['score:high', 'C8E6C9', '1B5E20'], ['score:medium', 'FFE0B2', 'BF360C'], ['score:low', 'FFCDD2', 'B71C1C'],
-        ['dept:Grad/IA', 'E3F2FD', '1565C0'], ['dept:UnderGrad', 'F3E5F5', '6A1B9A'], ['dept:Forbidden', 'FCE4EC', 'C2185B'], ['dept:Appeal', 'FFF8E1', 'F57F17'],
-        ['applicant', 'FFF9C4', '9A6700']
-    ];
-    function dbRows(db) {
-        const rows = db.map(e => {
-            // Script vs Bolt is only exported for a merged pair
-            const r = DB_COLUMNS.map(c => String((c.key === 'choice' && e.merged !== 'Y') ? '' : c.key === 'score' ? capFirst(e.score) : c.key === 'scanDate' ? (e.scanDate || '') : (e[c.key] || '')));
-            r.struck = new Set();
-            r.dates = new Set(); // columns written as real dates (Scan Date), so the spreadsheet can sort and filter them
-            const lostCol = { firstName: 'a', firstName2: 'b', lastName: 'a', lastName2: 'b' };
-            r.paint = new Map(); // column index -> a key of XL_PAINT: the cell's colour (Bolt Score, Dept., applicant pairs)
-            DB_COLUMNS.forEach((c, i) => {
-                if (c.key === 'score' && XL_PAINT.some(x => x[0] === 'score:' + r[i].toLowerCase())) r.paint.set(i, 'score:' + r[i].toLowerCase());
-                if (c.key === 'dept' && XL_PAINT.some(x => x[0] === 'dept:' + r[i])) r.paint.set(i, 'dept:' + r[i]);
-                if (c.key === 'choice' && /^Applicant/i.test(r[i])) r.paint.set(i, 'applicant');
-                if (c.key === 'scanDate' && /^\d{4}-\d{2}-\d{2}$/.test(r[i])) r.dates.add(i);
-                if ((c.key === 'sparkId1' || c.key === 'sparkId2') && e.lostSpark && r[i] === e.lostSpark) r.struck.add(i);
-                if (r[i] && e.merged === 'Y' && (c.key === 'firstName' || c.key === 'firstName2') && e.lostFirst === lostCol[c.key]) r.struck.add(i);
-                if (r[i] && e.merged === 'Y' && (c.key === 'lastName' || c.key === 'lastName2') && e.lostLast === lostCol[c.key]) r.struck.add(i);
-            });
-            return r;
-        });
-        return [DB_COLUMNS.map(c => c.header), ...rows];
     }
     // Rows (first = header) -> database entries. Columns are found by header name.
     function entriesFromRows(rows) {
@@ -130,46 +82,7 @@
         return entries;
     }
 
-    // ---- minimal ZIP (stored, no compression) writer and reader: an .xlsx is a zip of XML files
-    const CRC_TABLE = (() => {
-        const t = new Uint32Array(256);
-        for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; }
-        return t;
-    })();
-    function crc32(bytes) {
-        let c = 0xFFFFFFFF;
-        for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
-        return (c ^ 0xFFFFFFFF) >>> 0;
-    }
-    // files: [{ name, text }] in the order given (the ODF mimetype file must be first)
-    function zipStore(files, mime) {
-        const enc = new TextEncoder();
-        const now = new Date();
-        const dosTime = (now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1);
-        const dosDate = ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
-        const parts = [], central = [];
-        let offset = 0;
-        files.forEach(f => {
-            const name = enc.encode(f.name), data = enc.encode(f.text), crc = crc32(data);
-            const lh = new DataView(new ArrayBuffer(30));
-            lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true); lh.setUint16(8, 0, true);
-            lh.setUint16(10, dosTime, true); lh.setUint16(12, dosDate, true); lh.setUint32(14, crc, true);
-            lh.setUint32(18, data.length, true); lh.setUint32(22, data.length, true); lh.setUint16(26, name.length, true); lh.setUint16(28, 0, true);
-            parts.push(new Uint8Array(lh.buffer), name, data);
-            const ch = new DataView(new ArrayBuffer(46));
-            ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true); ch.setUint16(10, 0, true);
-            ch.setUint16(12, dosTime, true); ch.setUint16(14, dosDate, true); ch.setUint32(16, crc, true);
-            ch.setUint32(20, data.length, true); ch.setUint32(24, data.length, true); ch.setUint16(28, name.length, true);
-            ch.setUint32(42, offset, true);
-            central.push(new Uint8Array(ch.buffer), name);
-            offset += 30 + name.length + data.length;
-        });
-        const cdSize = central.reduce((n, a) => n + a.length, 0);
-        const end = new DataView(new ArrayBuffer(22));
-        end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true);
-        end.setUint32(12, cdSize, true); end.setUint32(16, offset, true);
-        return new Blob([...parts, ...central, new Uint8Array(end.buffer)], { type: mime });
-    }
+    // ---- minimal ZIP reader: an .xlsx is a zip of XML files
     // Reads one file out of a zip (stored or deflated) as text.
     async function zipReadText(buf, wanted) {
         const v = new DataView(buf), u8 = new Uint8Array(buf);
@@ -197,70 +110,6 @@
         throw new Error(wanted + ' not found in the file');
     }
 
-    // ---- the spreadsheet itself
-    const xmlEsc = (t) => String(t).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    // ---- .xlsx writer (what the Download button produces: Excel reads it natively)
-    const colLetter = (i) => String.fromCharCode(65 + i);
-    // YYYY-MM-DD -> Excel's day number (days since 1899-12-30)
-    const excelSerial = (iso) => { const [y, m, d] = iso.split('-').map(Number); return Math.round((Date.UTC(y, m - 1, d) - Date.UTC(1899, 11, 30)) / 86400000); };
-    function xlsxCell(value, ref, style, isDate) {
-        const attr = ' r="' + ref + '"' + (style ? ' s="' + style + '"' : '');
-        if (value === '') return style ? '<c' + attr + '/>' : '';
-        if (isDate) return '<c' + attr + '><v>' + excelSerial(value) + '</v></c>';
-        return '<c' + attr + ' t="inlineStr"><is><t xml:space="preserve">' + xmlEsc(value) + '</t></is></c>';
-    }
-    function buildXlsx(rows) {
-        const nCols = DB_COLUMNS.length, nRows = rows.length;
-        const cols = DB_COLUMNS.map((c, i) => '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + Math.round(c.width * 5.4 * 10) / 10 + '" customWidth="1"/>').join('');
-        const sheetRows = rows.map((r, ri) => '<row r="' + (ri + 1) + '">' +
-            DB_COLUMNS.map((c, ci) => xlsxCell(r[ci] == null ? '' : String(r[ci]), colLetter(ci) + (ri + 1), ri === 0 ? 1 : (r.dates && r.dates.has(ci) ? 3 : r.struck && r.struck.has(ci) ? 2 : r.paint && r.paint.has(ci) ? 4 + XL_PAINT.findIndex(x => x[0] === r.paint.get(ci)) : 0), !!(r.dates && r.dates.has(ci)))).join('') + '</row>').join('');
-        // One filter over the whole table, with the buttons hidden on every column except Bolt Score, Dept. and Merged.
-        const filterKeys = ['score', 'dept', 'scanDate', 'merged'];
-        const filterRef = 'A1:' + colLetter(nCols - 1) + nRows;
-        const hiddenButtons = DB_COLUMNS.map((c, i) => filterKeys.includes(c.key) ? '' : '<filterColumn colId="' + i + '" hiddenButton="1"/>').join('');
-        const sheet = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
-            '<dimension ref="A1:' + colLetter(nCols - 1) + nRows + '"/>' +
-            '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A2" sqref="A2"/></sheetView></sheetViews>' +
-            '<sheetFormatPr defaultRowHeight="15"/><cols>' + cols + '</cols><sheetData>' + sheetRows + '</sheetData>' +
-            '<autoFilter ref="' + filterRef + '">' + hiddenButtons + '</autoFilter></worksheet>';
-        const styles = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
-            '<numFmts count="1"><numFmt numFmtId="164" formatCode="dd/mm/yyyy"/></numFmts>' +
-            '<fonts count="' + (3 + XL_PAINT.length) + '"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font>' +
-            '<font><strike/><sz val="11"/><color rgb="FF8A8A8A"/><name val="Calibri"/></font>' +
-            XL_PAINT.map(x => x[2] ? '<font><sz val="11"/><color rgb="FF' + x[2] + '"/><name val="Calibri"/></font>' : '<font><sz val="11"/><name val="Calibri"/></font>').join('') + '</fonts>' +
-            '<fills count="' + (3 + XL_PAINT.length) + '"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>' +
-            '<fill><patternFill patternType="solid"><fgColor rgb="FFFDE3CC"/><bgColor indexed="64"/></patternFill></fill>' +
-            XL_PAINT.map(x => '<fill><patternFill patternType="solid"><fgColor rgb="FF' + x[1] + '"/><bgColor indexed="64"/></patternFill></fill>').join('') + '</fills>' +
-            '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
-            '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
-            '<cellXfs count="' + (4 + XL_PAINT.length) + '"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
-            '<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>' +
-            '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>' +
-            '<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>' +
-            XL_PAINT.map((x, i) => '<xf numFmtId="0" fontId="' + (3 + i) + '" fillId="' + (3 + i) + '" borderId="0" xfId="0" applyFont="1" applyFill="1"/>').join('') + '</cellXfs>' +
-            '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
-        const wb = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
-            '<sheets><sheet name="Database" sheetId="1" r:id="rId1"/></sheets>' +
-            '<definedNames><definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">Database!$A$1:$' + colLetter(nCols - 1) + '$' + nRows + '</definedName></definedNames></workbook>';
-        const wbRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
-            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>' +
-            '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>';
-        const rels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
-            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>';
-        const types = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
-            '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>' +
-            '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
-            '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
-            '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>';
-        return zipStore([
-            { name: '[Content_Types].xml', text: types },
-            { name: '_rels/.rels', text: rels },
-            { name: 'xl/workbook.xml', text: wb },
-            { name: 'xl/_rels/workbook.xml.rels', text: wbRels },
-            { name: 'xl/styles.xml', text: styles },
-            { name: 'xl/worksheets/sheet1.xml', text: sheet }
-        ], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    }
     // ---- .xlsx reader: shared or inline strings, and which cells have a strike-through font
     async function xlsxRows(buf) {
         const parse = (t) => { const d = new DOMParser().parseFromString(t, 'application/xml'); if (d.getElementsByTagName('parsererror').length) throw new Error('the spreadsheet could not be read'); return d; };
@@ -310,7 +159,11 @@
     async function parseDbFile(file) {
         const lower = file.name.toLowerCase();
         let rows;
-        if (lower.endsWith('.xlsx')) rows = await xlsxRows(await file.arrayBuffer());
+        if (lower.endsWith('.xlsx')) {
+            const buf = await file.arrayBuffer(), head = new Uint8Array(buf, 0, Math.min(2, buf.byteLength));
+            if (head[0] !== 0x50 || head[1] !== 0x4B) throw new Error('This file is password protected. Update the Database script to open it.');
+            rows = await xlsxRows(buf);
+        }
         else throw new Error('Please select an .xlsx file.');
         if (rows.length < 2) throw new Error('The file is empty or has no data rows.');
         const entries = entriesFromRows(rows);
@@ -320,9 +173,13 @@
     const api = {
         read: () => { try { const d = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); return Array.isArray(d) ? d : []; } catch (e) { return []; } },
         write: (entries) => localStorage.setItem(STORAGE_KEY, JSON.stringify(entries)), // the Database script re-reads it, and its header counter follows within a second
-        parseFile: parseDbFile,
-        exportBlob: (entries) => buildXlsx(dbRows(entries)),
-        fileName: () => `elm_database_${new Date().toISOString().slice(0, 10)}.xlsx`
+        // Database files are password protected (a protected .xlsx, or an encrypted .elmdb). The Database script holds that
+        // code and the saved password, and lends both through window.__elm451DbFiles: reading asks for a password in the
+        // given document when the saved one does not open the file, and downloading always writes a protected file.
+        // With an older Database script (no such object) plain .xlsx files can still be read, and nothing can be downloaded.
+        files: () => { const f = window.__elm451DbFiles; return f && typeof f.read === 'function' && typeof f.download === 'function' ? f : null; },
+        parseFile: (file, doc) => api.files() ? api.files().read(file, doc) : parseDbFile(file),
+        download: (entries, doc) => api.files() ? api.files().download(entries, doc) : Promise.reject(new Error('Update the Database script first: downloads are password protected now, and it does the protecting.'))
     };
 
     // =========================================================
@@ -497,11 +354,11 @@
         const main = h('main');
         body.appendChild(main);
 
-        const fileInput = h('input', { type: 'file', multiple: true, accept: '.xlsx', style: 'display:none' });
+        const fileInput = h('input', { type: 'file', multiple: true, accept: '.xlsx,.elmdb', style: 'display:none' });
         const dropZone = h('div', { class: 'drop' },
             h('div', { class: 'ico' }, icon('upload')),
             h('strong', null, 'Drop database files here'),
-            h('span', { class: 'note', style: 'color:inherit;opacity:.8' }, '.xlsx files, as many as you like'),
+            h('span', { class: 'note', style: 'color:inherit;opacity:.8' }, '.xlsx or .elmdb files, as many as you like'),
             h('button', { class: 'btn filled', type: 'button', style: 'margin-top:12px', onclick: () => fileInput.click() }, 'Choose files'));
         const sourceList = h('div', { class: 'list' });
         const sourceNote = h('p', { class: 'note', style: 'margin:10px 4px 0' });
@@ -550,7 +407,7 @@
         async function addFiles(list) {
             const problems = [];
             for (const f of Array.from(list)) {
-                try { files.push({ name: f.name, entries: await api.parseFile(f) }); }
+                try { files.push({ name: f.name, entries: await api.parseFile(f, doc) }); }
                 catch (e) { problems.push(f.name + ': ' + e.message); }
             }
             result = null; out.textContent = '';
@@ -587,7 +444,7 @@
                         h('span', { class: 'chip' }, s.count - s.kept ? fmt(s.count - s.kept) + ' dropped: a newer copy is elsewhere' : 'none dropped'))))),
                 conflictsBlock(),
                 h('div', { class: 'row', style: 'margin-top:28px' },
-                    h('button', { class: 'btn filled', type: 'button', onclick: download }, icon('download'), 'Download merged database (.xlsx)'),
+                    h('button', { class: 'btn filled', type: 'button', onclick: download }, icon('download'), 'Download merged database'),
                     h('button', { class: 'btn tonal', type: 'button', onclick: apply }, 'Replace my database with this')));
             out.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
@@ -603,16 +460,18 @@
                         h('span', { class: 'chip' + (x.winner === x.b.src ? ' kept' : '') }, x.winner === x.b.src ? icon('check') : null, x.b.src + ': ' + side(x.b))))),
                 c.length > 200 ? h('p', { class: 'note' }, '…and ' + fmt(c.length - 200) + ' more.') : null);
         }
-        function download() {
-            const a = h('a', { href: URL.createObjectURL(api.exportBlob(result.entries)), download: api.fileName() });
-            body.appendChild(a); a.click(); a.remove();
-            snack('Downloaded ' + plural(result.unique, 'entry', 'entries') + '.');
+        async function download() {
+            if (!result) return;
+            try { if (await api.download(result.entries, doc)) snack('Downloaded ' + plural(result.unique, 'entry', 'entries') + ', password protected.'); }
+            catch (e) { snack('Not downloaded: ' + (e && e.message || e)); }
         }
         async function apply() {
             if (!result) return;
             const ok = await ask('Replace your database?', 'This browser\'s database will become the merged one (' + plural(result.unique, 'entry', 'entries') + '). This cannot be undone, so download the merged file first if you want a backup.', 'Replace');
             if (!ok) return;
-            api.write(result.entries);
+            // the browser refuses the write when its storage is full (or blocked): say so instead of failing silently
+            try { api.write(result.entries); }
+            catch (e) { snack('Not saved: the browser storage is full or blocked. Your database is unchanged; download the merged file instead.'); return; }
             snack('Done: this browser\'s database now has ' + plural(result.unique, 'entry', 'entries') + '.');
             renderFiles();
         }

@@ -5,9 +5,9 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.264`, shown in the settings pane |
-| Element451 - Database v2 | `database-v2.js` | `@version 2.66` |
-| Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.12`, see [section 17](#17-database-merge) |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.266`, shown in the settings pane |
+| Element451 - Database v2 | `database-v2.js` | `@version 2.69` |
+| Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.16`, see [section 17](#17-database-merge) |
 
 
 The classic scripts (`Element451-UI-Perfection.user.js`, `csv-database.js`; see
@@ -361,7 +361,7 @@ Both scripts append toasts to one shared stack, **bottom-left**, newest at the b
 
 ### 10.6 Dedup analysis (our rating and write-up)
 
-Bolt's overview card is replaced by our own: a **rating chip** (High, Medium or Low), the point total, and a short plain-English write-up. The **View Bolt's write-up** button swaps Bolt's original header and text back (and **Back to our write-up** returns); Bolt's text is only hidden, never removed. Hovering the chip lists the points per field, and the console logs the same breakdown with the evidence read, for each pair.
+Bolt's overview card is replaced by our own: a **rating chip** (High, Medium or Low), the point total, and a short plain-English write-up. The **View Bolt's write-up** button swaps Bolt's original header and text back (and **Back to our write-up** returns); Bolt's text is only hidden, never removed. With Bolt's write-up showing, the chip and title show **Bolt's own score** instead of ours (no points). Hovering our chip lists the points per field, and the console logs the same breakdown with the evidence read, for each pair.
 
 **Where the data comes from.** The diff form only shows fields that differ, so differences are read from its rows, and the fields that *match* are read from Bolt's own bullet list (for example `date of birth: identical (2008-12-16)`), which names the field and its value. Names come from the contact cards when the form has no name rows. The rating needs Bolt's overview on screen; until then the Bolt chip is used.
 
@@ -386,7 +386,7 @@ Bolt's overview card is replaced by our own: a **rating chip** (High, Medium or 
 
 **Rating.** High needs 70+ points **and** at least two strong matches (an ID, birth date, exact email or phone) **and** no hard conflict. Medium is 45+; everything else is Low, and any hard conflict caps the pair at Low. A Low pair under 15 points is described as probably different people in the write-up. These are deliberately cautious: merging two people is the worse mistake. The weights, thresholds and nickname list are in `SCORE_W`, `SCORE_CUT` and `NICK` at the top of the score engine, which is a set of pure functions (no page access) between the `SCORE ENGINE START` / `END` comments.
 
-**Score chips.** The chips in the review sidebar and on the list show our rating too. A chip reads **Pending**, in Bolt's blue, until the pair has been analysed. The review page remembers each rating (localStorage `elm_pair_ratings`, keyed by the pair's two Spark IDs, the 4000 most recent) and a list row finds it through `data-csv-sparks`, the Spark IDs the Database script sets on a row from the list API. Without the Database script, or when the list API was not captured, list rows stay Pending. A chip that shows Bolt's own *Error* is left alone.
+**Score chips.** The chips in the review sidebar and on the list show our rating too. A chip reads **Pending**, in Bolt's blue, until the pair has been analysed. The review page remembers each rating (localStorage `elm_pair_ratings`, keyed by the pair's two Spark IDs, the 4000 most recent) and a list row finds it through `data-csv-sparks`, the Spark IDs the Database script sets on a row from the list API. Without the Database script, or when the list API was not captured, list rows stay Pending. A chip that shows Bolt's own *Error* is left alone. **Bolt's score is read only from the chip in the review sidebar**; a chip in a list row behind the sidebar belongs to another pair and is never used (no chip found means no Bolt score). A High chip beside Bolt text that says *different people* is treated as a misread and ignored; the console line `[elm2] analysis:` lists how many Bolt chips were read and their levels.
 
 The slider, the Auto-Apply range check and the merge brief use this rating; the database's Bolt Score column still records Bolt's own chip.
 
@@ -428,7 +428,7 @@ A badge is placed in `.cdk-column-flagged` (falling back to signals, then the ro
 
 ### 11.6 Import / export
 
-- **Download**: `elm_database_YYYY-MM-DD.xlsx` (opens in Excel, LibreOffice and Google Sheets). Columns, in order: `Bolt Score, Firstname, Lastname, Firstname 2, Lastname 2, Spark ID 1, Spark ID 2, Dept., Scan Date, Merged, Script vs Bolt, Row Contents`. **Bolt Score** (High / Medium / Low) is the score chip on the merge screen, read by the main script (`body.dataset.csvScore`) and stored the first time it is seen; blank if the chip never showed. The header row is bold, shaded and frozen, and the filter / sort buttons are on Bolt Score, Dept., Scan Date and Merged only. The workbook is written by the script itself (a small stored-zip writer; no libraries). It was an `.ods` before 2.32 (Excel had to repair it and ignored its frozen row); the `.ods` and `.csv` importers were removed in 2.50.
+- **Download** is always password protected and offers two forms (section 19): a password-protected `elm_database_YYYY-MM-DD.xlsx` (Excel asks for the password, then opens it as the spreadsheet described here) or a personal `elm_database_YYYY-MM-DD.elmdb`, locked to your Element451 login, that only these scripts read. The spreadsheet inside: Columns, in order: `Bolt Score, Firstname, Lastname, Firstname 2, Lastname 2, Spark ID 1, Spark ID 2, Dept., Scan Date, Merged, Script vs Bolt, Row Contents`. **Bolt Score** (High / Medium / Low) is the score chip on the merge screen, read by the main script (`body.dataset.csvScore`) and stored the first time it is seen; blank if the chip never showed. The header row is bold, shaded and frozen, and the filter / sort buttons are on Bolt Score, Dept., Scan Date and Merged only. The workbook is written by the script itself (a small stored-zip writer; no libraries). It was an `.ods` before 2.32 (Excel had to repair it and ignored its frozen row); the `.ods` and `.csv` importers were removed in 2.50.
 - **Cell colours** (the same in the Database Merge page's download): **Bolt Score** in soft versions of the list view's chip colours (High green `#C8E6C9`, Medium orange `#FFE0B2`, Low red `#FFCDD2`, each with a darker text colour); **Dept.** in the list view's chip colours (Grad/IA blue, UnderGrad purple, Forbidden pink, Appeal amber; any other department stays uncoloured); **Script vs Bolt** in the light yellow of the applicant band (`#FFF9C4`) with dark yellow text (`#9A6700`, no border) when the line starts with *Applicant*, i.e. the script found an applicant side. Colours are cell formatting only: they do not change the values, the filters or the sort order, and importing a file ignores them.
 - **Struck-through Spark ID**: on a merged pair the Spark ID that was merged away is struck through (grey, line through) in its Spark ID cell. The kept ID is the side selected on the `Spark Id:` row of the merge screen at the Merge click ('left' = Contact A); if that row has no selected side nothing is struck. The strike is stored as `lostSpark` on the entry, and a re-imported `.xlsx` keeps it (read back from the cell style).
 - **Struck-through names**: on a merged pair the first and last name that was **not kept** are struck through too (the side not selected on the First name / Last name row at the Merge click; Contact A = the Firstname / Lastname columns, Contact B = the "2" columns). Nothing is struck when the two names are the same, differ only in case, or one is blank. Stored as `lostFirst` / `lostLast` ('a' or 'b') and read back from the cell font / style on import. (The row labels are matched as `first name` and `last name` / `surname`; if Element labels them differently nothing is struck.)
@@ -436,7 +436,7 @@ A badge is placed in `.cdk-column-flagged` (falling back to signals, then the ro
 - **Merged** is `Y` once the Merge completed card confirms the merge, `N` for a recorded pair that was not merged (skipped, blocked or left for you), and blank for entries recorded before this column existed.
 - **Script vs Bolt** is only filled for a merged pair (Merged = Y); it is blank for every other row. It is the auto-merge brief in one line, e.g. `2/3 agree · script chose 1 over Bolt: Email, Address`, `Applicant · script chose 1 over Bolt: Address`, `3/3 agree`, or `Bolt's picks` when the script made no picks on a merged pair. (With *Use picks from = Bolt* the wording flips to `Bolt chose N over script`.) Field names only, no personal data.
 - How the data gets there: the main script keeps `body.dataset.csvChoice` up to date for the pair on screen; at the Merge Contacts click it remembers the pair's Spark IDs and the line, asks the database script to record the pair (`elm2-record-pair`), and when the Merge completed card appears sends `elm2-pair-merged` (`detail: { a, b, choice }`), which sets Merged = Y.
-- **Upload & Replace**: accepts `.xlsx` only (shared or inline strings, dates, strike-through read from the cell fonts). Columns are read **by header name**. Names are shortened to 3 letters on import.
+- **Upload & Replace**: accepts a password-protected `.xlsx`, an `.elmdb`, and an old unprotected `.xlsx` (shared or inline strings, dates, strike-through read from the cell fonts). The saved password is tried first; a file made with another password asks for it (section 19). Columns are read **by header name**. Names are shortened to 3 letters on import.
 - **Clear Database**: asks for confirmation.
 
 ### 11.7 UI
@@ -480,6 +480,8 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 | `elm_merge_count` | main | Merge counter value |
 | `elm_csv_database` | Database | Recorded pairs (JSON array) |
 | `elm_show_db_ui` | Database | Show Database UI |
+| `elm_db_password` | Database | the database password for the shared Excel file, as typed (section 19) |
+| `elm_db_login_mark` | Database | a short fingerprint of the signed-in person's ID and when it last changed (section 19); not the ID itself |
 | `elm2_bolt_picks` | main | Bolt's original pick per conflicting row (hashed ids, `l`/`r` + timestamp, capped at 2,500 entries). Element451 saves the selection on a pair, so on a second visit the screen shows the last selection rather than Bolt's pick; this keeps Bolt's real pick for the colours and *Use Bolt AI picks* |
 
 **Engagement table.** The dual-personal-email tiebreak reads `#duplicate-engagement-details`: one row per measure, one cell per contact. Real cells read `3 email opens, last open at Jan 11, 2026 - 6:00 AM` or `1 email click, last click at …`, so the measure name is only the label: whatever follows a comma is dropped and singular/plural is ignored (`email open(s)` → `email opens`, `email click(s)` → `email clicks`). Before this, only cells with a count of 0 (no trailing text) were recognised, so the tiebreak never saw the opens and clicks of a contact that had any.
@@ -494,6 +496,8 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 - `[elm2] script click on button: "…"` for script-generated clicks, and a warning with a stack trace if one is blocked by the click guard.
 - **Database script** (silent while recording works): if the pair on screen has not been recorded for 5 seconds, one warning says why: `[Database] the pair on screen is not being recorded: <reason>`. The reasons are: the main script has not reported the pair yet (no department signal), no Spark IDs on the page, the Spark IDs the main script reported do not match the page, the contact names have not loaded, or the browser would not save the database (storage full?). The warning prints again only if the reason changes, and a failed save logs its error once, not on every retry.
 - **`[elm2] No Spark IDs found on the pair on screen …`** (main script): printed once per pair when no Spark ID has been read for 4 seconds; it lists how many rows the page has and the rows that mention "spark", with every long word or number blanked out. Spark IDs are read tolerantly: `Spark Id: abc`, `Spark ID:abc`, `Spark Id abc`, or a row labelled "Spark Id" that holds only the value.
+- **No personal details in the console.** The lines above name fields, rules, counts and reasons, never a contact's values. The analysis line (`[elm2] analysis: … | read (values masked): {…}`) shows what was read with every letter turned into `x` and every digit into `9` (`"dob":"9999-99-99"`, `"emails":["xxxxx@xxxxx.xxx"]`), so it can be pasted into a bug report; `Needs review:` names the field only; `Merged 3/40` no longer repeats the card's sentence; the history record sample is masked the same way.
+- **`[elm2] <step> failed (logged once; the other steps keep running)`** / **`[Database] <step> failed (logged once)`**: one of the timer steps threw (usually Element451 changed a piece of markup). The step is tried again on every tick, the other steps are not affected, and the error is printed once per step and message instead of every tick.
 - **`elm451Debug()`** (type it in the console on the page): prints and returns the Database script's state: its version, the number of entries and their size in KB, whether the browser storage is writable, whether you are on the review page, the main script's signals (department, Spark IDs, choice, score), the Spark IDs and names read from the page, whether the main script is loaded and whether the scripts run through the extension, and the last recording problem.
 
 ---
@@ -550,6 +554,8 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 - **Chrome extension**: unpacked extension that runs both scripts and updates them from GitHub when Chrome starts, popup with switches, build + release workflow (section 16).
 - **Versions**: the settings pane lists Main script, Database script and Extension versions in one style.
 - **Our own rating**: a points-based rating and plain-English write-up replace Bolt's overview card; score chips show our rating, or Pending (section 10.6).
+- **Stability and security pass** (UI 2.266, Database 2.67, Database Merge 1.15, extension 1.0.4): section 18.
+- **Protected database files** (Database 2.69, Database Merge 1.16): every download is a password-protected `.xlsx` to share, or a personal `.elmdb` locked to your Element451 login; section 19.
 - **Fixes along the way**: stall on identical consecutive names / disabled Next button, twins warning signal count, cut-off date text in filters, clipped filters panel, selected-chip colour specificity.
 
 ## 16. Chrome extension
@@ -569,6 +575,10 @@ Chrome cannot update an unpacked extension by itself, so the chip downloads the 
 
 **Popup.** The title; an **Update available** chip (only while a newer extension release exists); one row per script (UI Perfection, Database, Database Merge) with a switch and its version (Database is greyed while UI Perfection is off, Database Merge while Database is off); a **Reload tab** prompt after a change; and a footer with the extension version. The extension asks only for the `storage` and `userScripts` permissions plus access to `*.element451.io`, the script source on GitHub and the releases API. It follows the system's light or dark setting.
 
+**What is accepted from GitHub.** The downloaded scripts run inside Element451 with the signed-in person's access, so a download is only used when it is one of this project's userscripts: it must start with the userscript header, carry `@name Element451 - …` and a plain numeric `@version`, and be of a plausible size. A sign-in page, an error page or a cut-off file is ignored (a console warning says so) and the copy already in use stays. The release check only accepts a numeric version and a link under this repository's GitHub releases (anything else opens the releases page); the popup writes the version as text. Requests give up after 20 seconds. The trust boundary is unchanged and worth knowing: **whoever can push to this repository's `main` branch can change what runs in Element451 for everyone using the extension or the Tampermonkey update links**, so protect the branch (required pull requests, two-factor sign-in on the accounts that can merge).
+
+**Self-repair.** Opening the popup registers any switched-on script that is not registered, which covers **Allow user scripts** being turned on after the install (Chrome does not tell the extension when that switch changes).
+
 **Extension storage** (`chrome.storage.local`, not the page's): `enabled` (per-script switches), `cache` (the scripts last downloaded from GitHub, with their versions), `shellUpdate` (a newer extension release, if any) and `dismissed` (the version whose update chip was dismissed).
 
 **Both installed.** Each script starts with a guard (`window.__elm451UiPerfectionLoaded`, `window.__elm451CsvDatabaseLoaded`, `window.__elm451DbMergeLoaded`) so a copy in Tampermonkey and the extension never run twice on a page.
@@ -576,7 +586,7 @@ Chrome cannot update an unpacked extension by itself, so the chip downloads the 
 **Build and release.** `.github/workflows/extension.yml`:
 - every pull request and every push to `main`: `node scripts/build-extension.js` (syntax-checks the scripts, writes `dist/extension/` and `dist/elm451-dedup-tools-v<version>.zip`), then `npm test` (`scripts/smoke-test.js`: loads the unpacked extension in Chromium, checks the popup, the update chip, then switches the API on and checks all three scripts register in the MAIN world and run on an `element451.io` page, that the settings pane lists the four versions, and that a toggle stops one; also that an older cached script does not replace the bundled one and a newer one does), and the zip is kept as a workflow artifact;
 - a **release** is published when the extension's version has no GitHub Release yet: on a push to `main`, the version in `extension/manifest.json` decides (`1.0.0` becomes the tag and release `v1.0.0`, created by `gh release create` on the pushed commit); on a pushed tag `vX.Y.Z` the version is taken from the tag. If that release already exists nothing happens. So **releasing = bump the version in `extension/manifest.json` and merge to `main`**; a merge that only changes the userscripts needs no release, since they update themselves from `main`.
-Locally: `npm install` once, `npm run build`, `npm test`; load `dist/extension` with **Load unpacked**. `npm run icons` re-renders the icons.
+`npm test` first runs `scripts/protected-files-test.js` (the database file protection of section 19, on its own in Node). Locally: `npm install` once, `npm run build`, `npm test`; load `dist/extension` with **Load unpacked**. `npm run icons` re-renders the icons.
 
 **Install.** Download the zip from Releases, unzip it, open `chrome://extensions`, turn on Developer mode, **Load unpacked** and pick the folder, then open the extension's **Details** and turn on **Allow user scripts**. Reload your Element451 tab.
 
@@ -589,9 +599,77 @@ Locally: `npm install` once, `npm run build`, `npm test`; load `dist/extension` 
 **Link to the Database script.** Only two things: the **Merge Databases** button is added inside the Database section of the settings pane, which the Database script creates (so the button only exists while the Database script is active), and the current database is read straight from `localStorage.elm_csv_database`, so it can be merged without downloading it first. Everything else, reading `.xlsx` and writing the merged `.xlsx`, is the script's own copy of the Database script's file code (keep the two in step when the file format changes). It is installed and updated like the others; in the Chrome extension it is a third switch in the popup (greyed while Database is off), and the settings pane lists `Database merge · vX.Y` under the database script's line.
 
 **The page.** The button opens a new tab, built from the Element451 page with DOM calls (no inline scripts, so the site's content-security policy cannot block it). It is a calm Material 3 page in the orange of the settings pane: a small title with a badge, a dashed drop zone, sources as list rows with leading icons, tonal stat cards, per-source chips, conflicts as cards with chips (the kept copy has a check), a Material dialog for the Replace confirmation and a snackbar for messages, with little motion; it follows the system's light or dark setting. The Element451 tab has to stay open while the merge page is in use. In dark mode it uses the same deep colours as the extension popup (page `#110e0c`, cards `#2a2420`, text `#f6ebe4`) so the cards stand out clearly.
-- **Sources**: drop or choose any number of `.xlsx` files; a table lists each source with its entry count, merged count and Scan Date range, and a **×** to remove a file. "This browser's database" is a source too, ticked by default; at least two sources are needed.
+- **Sources**: drop or choose any number of database files (password-protected `.xlsx`, `.elmdb`, or old plain `.xlsx`; a file the saved password does not open asks for its own, section 19); a table lists each source with its entry count, merged count and Scan Date range, and a **×** to remove a file. "This browser's database" is a source too, ticked by default; at least two sources are needed.
 - **Rules** (shown on the page): a pair is the same pair when both Spark IDs match, in either order (entries with no Spark IDs fall back to the two contacts' 3-letter names). If it appears more than once, **the most up to date copy wins**: the later Scan Date (a pair's Scan Date moves to the merge day when it is merged, and a dated entry beats an undated one). On the same date a merged copy beats an unmerged one, and after that the source higher in the list stays. The winner keeps its own fields, filling a blank Bolt score from the other copy.
 - **Breakdown** after **Merge**: a one-line summary ("7 entries from 2 sources became 4 pairs…"), then four tiles (pairs in the result, duplicates dropped, already merged, differences to check); a per-source list (entries, how many were kept in the result and how many were dropped because a newer copy is in another file, so kept + dropped always equals the source's entries); and a conflicts table (the same pair in a different department or merged state in two sources, with which copy was kept; first 200 shown).
 - **Result**: **Download merged database (.xlsx)** (same format as the Database script's export) and **Replace my database with this** (asks first, then writes `elm_csv_database`; the header counter follows within a second). Nothing in the browser changes until Replace is pressed.
 
 **Not verified live:** the new-tab page was tested in headless Chromium against mock databases; pop-up blockers can stop the new tab (the script says so).
+
+---
+
+## 18. Stability and security pass
+
+A review of all three scripts and the extension for efficiency, stability and unsafe shortcuts. What changed, and what was looked at and left alone.
+
+**Stability**
+- **A failing step no longer stops the rest.** The main script runs about twenty steps every 750 ms, the Database script five timers. One step throwing (Element451 changing a piece of markup is enough) used to skip every step after it, on every tick, and print the error each time. Each step now runs on its own and reports once (section 12.3).
+- **Full browser storage no longer stalls the queue.** The database, the settings and the merge counter share the site's few MB of `localStorage`. With it full, writing the merge counter threw inside the merge-completed handler, so **Next duplicate** was never pressed and the automation stopped. Every storage read and write in the main script now goes through guarded helpers (`lsGet` / `lsSet`).
+- **The database says when it is not saving.** A refused save was only a console line. It is now a toast on the page (the merge panel included), repeated once a minute while it lasts; the header pill's tooltip and a one-time toast warn when the database passes about 4 million characters (the browser allows about 5 million for the whole site). **Upload & Replace**, **Clear** and the Merge page's **Replace** report a failed save instead of announcing success.
+- **Page jumps** fall back to clicking First / Next when Angular's paginator object refuses the direct call (it is not a public interface and can change at any Element451 release).
+- **Stores stay in step across windows.** The remembered ratings and Bolt picks are re-read when another tab or the installed app changes them.
+- **The build fails** when a script's `const VERSION` (shown in the settings pane) differs from its `@version` (the Database script had drifted).
+
+**Efficiency**
+- The merge-completed check ran on every DOM change of the page (hundreds while a pair renders); it now runs once per burst.
+- The Database script watched the whole page for changes on every Element451 page whenever no queue table was on screen; it now watches the queue table only and looks for it twice a second.
+- The store of Bolt's picks (up to 3000 entries) was parsed again for every undecided row on every tick; it is parsed once.
+- Blocked-pair styling, the header colour and Bolt's blue are written only when they change (a blocked pair was restyled every tick), and the Database script's toast clean-up no longer forces a layout every 300 ms.
+- On a mock page with a DOM change every 4 ms, the scripts' own script time over 8 seconds fell from about 450 to 520 ms to about 180 to 200 ms. That is a mock, not Element451 itself.
+
+**Security and privacy**
+- The request hook kept a copy of the headers of **every** request the page made (they include the sign-in token). It now keeps them for the one history call it replays, in memory only, and its own bookkeeping can no longer make a page request fail.
+- Console lines no longer contain names, dates of birth, emails, phone numbers or IDs (section 12.3).
+- The extension checks what it downloads and what it shows (section 16).
+
+**Looked at and left as it is**
+- **Wrapping the page's `XMLHttpRequest` / `fetch`** is how a userscript reads the list and history data; there is no supported alternative from inside the page, and both wrappers pass every request through unchanged.
+- **`localStorage` as the database.** It is synchronous, shared with the site and limited to a few MB, but it is what lets the three scripts and Tampermonkey share one database with no extra permission. With the warnings above the limit is visible well before it is reached; moving to IndexedDB would be a rewrite of the Database and Merge scripts.
+- **Updates only when Chrome starts** (section 16) is by design; a browser left open for weeks keeps its scripts until it restarts or the extension is reloaded.
+- **Reading Angular's paginator** through the element's internal context is fragile by nature; it stays because the click fallback covers it.
+- **Selectors and label keywords** for Element451's markup remain the main source of breakage (section 13); nothing here can make them stable, but a broken one now fails one step instead of the loop.
+
+---
+
+## 19. Protected database files
+
+A downloaded database used to be a plain `.xlsx`: anyone who got the file could read it. Every download is now protected, from the Database section of the settings pane and from the Merge Databases page alike. There is no unprotected download. **Download** offers two forms, for two purposes:
+
+| | Excel file, to share (`.xlsx`) | Personal file (`.elmdb`) |
+|---|---|---|
+| For | sending to coworkers, opening in Excel | your own copy: a backup, or moving your database to another computer |
+| Opens with | the database password | your Element451 login. No password |
+| Opens in | Excel, after it asks for the password; also Upload and Merge Databases | Upload and Merge Databases only, while you are signed in as yourself |
+| Protection | Excel's own "Encrypt with Password" format (ECMA-376 agile encryption: AES-256, SHA-512, 100,000 password rounds, tamper check) | AES-256-GCM; the key is made from your Element451 user ID (PBKDF2-SHA256, 600,000 rounds); the entries are gzipped first, so the file is small |
+| Keeps | what the spreadsheet can carry (section 11.6) | every stored field exactly |
+
+**The password (Excel file).** One password per browser, set the first time you download an Excel file (or with **Database Password** in the Database section), at least 8 characters. It is kept in this browser (`localStorage`, key `elm_db_password`), so your own files download and upload without asking. Coworkers who set the same password open each other's files without being asked either; agree on one and pass it on some other way than with the file. **Database Password** shows the saved one (hidden until **Show** is ticked) and changes it; files made earlier keep the password they were made with. Opening a file tries the saved password first, then any that opened a file since the page loaded; if none fits, a dialog asks, and asks again after a wrong one. Cancelling changes nothing. An old unprotected `.xlsx` still opens, and so does a spreadsheet that was password-protected in Excel itself.
+
+**The login (personal file).** The page sends a sign-in token with its own calls to Element451's deduplication API. When that token is a JWT, its payload names the signed-in person (`sub`, `user_id` and similar); the script reads that ID from the page's own request (only the ID is kept, in memory; never the token) and locks the file to it. If no such call has been seen yet, it looks in the page's stored session for a token or a user object, and uses it only when everything found names one person. Then:
+- downloading and uploading a personal file asks for nothing;
+- signed in as someone else, the file is refused ("locked to a different Element451 login") and the database is left alone;
+- when the script cannot tell who is signed in, the personal option is shown as unavailable and says so (open the Deduplication list, so the page talks to Element451, and try again). The Excel file is always available.
+
+**How strong each is.**
+- **Excel file**: as strong as the password. Someone with the file and no password cannot read it; a short or guessable password can be tried offline.
+- **Personal file**: lighter. Your Element451 user ID is an identifier, not a secret, and how the key is made from it is public in this repository. To someone who only has the file and does not know your ID, it is closed. Someone who knows your ID (an administrator of your Element451 site, for instance) and is willing to write code could open it without your login. It keeps the file personal and out of casual reach; it is not the place for something that must stay secret from people inside Element451. If the ID the token carries turns out to be an email address rather than an internal ID (`elm451Debug()` shows `kind`), the lock is weaker still, because an email can be guessed.
+- **The password in the browser** is stored as typed. Anyone who can use this browser profile on Element451 can read it, and can read the database itself the same way. It protects files that leave the browser, not the browser.
+- **Lost access.** A forgotten password cannot be recovered from a file (while it is still saved in a browser, **Database Password → Show** reveals it). A personal file opens only for the login that made it: if that account is removed or replaced, the file cannot be opened. Keep an Excel copy of anything that must outlive the account.
+
+**Checking the login.** `elm451Debug()` in the console prints `login: { found, from: 'request' | 'storage', kind: 'id' | 'email', fingerprint, changedInLast30Days }`. The fingerprint is 8 characters derived from the ID (never the ID) and should read the same every time you are signed in, on any computer; it is also kept in `localStorage` (`elm_db_login_mark`) with the time it last changed. If a different login was seen in this browser in the last 30 days, the download dialog says so on the personal option: on a shared computer that is just another person; otherwise it means the ID is not a steady one, and a personal file should be checked (upload it back) before it is relied on.
+
+**Where the code is.** The Database script holds the encryption (between the `PROTECTED FILES START / END` markers), and after it the login reader, the dialogs and the saved password. The Merge script borrows them through `window.__elm451DbFiles` (`read(file, document)`, `download(entries, document)`); with a Database script too old to offer that, it can still read plain `.xlsx` files and refuses to download.
+
+**Checked how.** The encryption code is tested on its own (`scripts/protected-files-test.js`) and was checked against `msoffcrypto-tool`, an independent implementation of Office encryption, in both directions (it opens our files, we open its files), including a wrong password, a changed file and a non-English password. End to end on mock pages: both downloads, upload back, another password, cancel, an old plain file, the Merge page, a 15,000-entry database; and for the personal file: same login in a later session opens it, another login is refused, no login found is explained. **Not checked:**
+- opening the `.xlsx` in **Excel itself** (not available where this was built). If Excel refuses a file that the right password should open, report it.
+- **how Element451 really signs its requests.** That its token is a JWT naming the person was assumed, not seen. If the personal option stays unavailable on the real site, or the fingerprint changes between sign-ins, send the `login` line from `elm451Debug()`.

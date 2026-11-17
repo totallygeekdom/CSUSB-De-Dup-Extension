@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.264
+// @version      2.266
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,13 +14,18 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.264'; // keep in sync with @version
+    const VERSION = '2.266'; // keep in sync with @version
+    // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
+    // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
+    // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
+    const lsGet = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+    const lsSet = (k, v) => { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } };
     // Chrome's install prompt for the web app: held back until Install is clicked on the card at the top of the
     // settings pane. The card shows only while Chrome says the page is installable, and the X hides it for good.
     let installPrompt = null;
     function syncInstallCard() {
         const card = document.getElementById('elm-install-card');
-        if (card) card.hidden = !installPrompt || localStorage.getItem('elm_install_dismissed') === 'true';
+        if (card) card.hidden = !installPrompt || lsGet('elm_install_dismissed') === 'true';
     }
     window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; syncInstallCard(); console.log('[elm2] Chrome offered to install the page as an app (Settings, top)'); });
     window.addEventListener('appinstalled', () => { installPrompt = null; syncInstallCard(); });
@@ -33,7 +38,7 @@
     // installed app can offer it as a shortcut.
     function noteDedupPath() {
         if (!document.querySelector('elm-review-queue-table') || document.querySelector('elm-review-duplicates-sidebar') || document.querySelector('elm-duplicate-field-diff-form')) return;
-        try { if (localStorage.getItem('elm_dedup_path') !== location.pathname) localStorage.setItem('elm_dedup_path', location.pathname); } catch (e) { /* storage unavailable */ }
+        try { if (lsGet('elm_dedup_path') !== location.pathname) lsSet('elm_dedup_path', location.pathname); } catch (e) { /* storage unavailable */ }
     }
     let manifestAdded = false;
     function ensureManifest() {
@@ -76,7 +81,7 @@
         const manifest = { name: 'Element451', short_name: 'Element451', id: base, start_url: base, scope: base, display: 'standalone', background_color: hex, theme_color: hex,
             icons: [192, 512].map(n => ({ src: icon(n), sizes: n + 'x' + n, type: 'image/png', purpose: 'any' })) };
         // the item in the taskbar icon's right-click list (Windows) and the app icon's menu: the Deduplication page, once this browser has seen it
-        const dedupPath = (() => { try { return localStorage.getItem('elm_dedup_path') || ''; } catch (e) { return ''; } })();
+        const dedupPath = (() => { try { return lsGet('elm_dedup_path') || ''; } catch (e) { return ''; } })();
         if (dedupPath.startsWith('/')) manifest.shortcuts = [{ name: 'Deduplication', short_name: 'Dedup', description: 'Open the Deduplication page', url: location.origin + dedupPath, icons: [{ src: icon(96), sizes: '96x96', type: 'image/png' }] }];
         document.addEventListener('securitypolicyviolation', (e) => {
             if (e.violatedDirective.startsWith('manifest-src') || e.violatedDirective.startsWith('default-src')) console.log('[elm2] the page\'s security policy refuses an added web app manifest, so Chrome will not offer to install it');
@@ -91,13 +96,13 @@
     // carry over if both scripts are ever installed side by side)
     // =========================================================
     function getBoolSetting(key, defaultValue) {
-        const val = localStorage.getItem(key);
+        const val = lsGet(key);
         if (val === null) return defaultValue;
         return val === 'true';
     }
     const CONFLICT_ROW_THRESHOLD = 2;
     function rangeLevel() {
-        const v = parseInt(localStorage.getItem('elm_range_level2'), 10);
+        const v = parseInt(lsGet('elm_range_level2'), 10);
         return isNaN(v) ? 4 : Math.max(0, Math.min(4, v));
     }
     const CFG = Object.defineProperties({}, {
@@ -105,19 +110,19 @@
         RANGE_LEVEL:              { get() { return rangeLevel(); } },
         // Whose picks are used on pairs in range: 'ours' (our rules, incl. the applicant rule) or
         // 'bolt' (leave Bolt's picks; ours only fills rows Bolt left unselected).
-        USE_PICKS:                { get() { return localStorage.getItem('elm_use_picks') === 'bolt' ? 'bolt' : 'ours'; } },
+        USE_PICKS:                { get() { return lsGet('elm_use_picks') === 'bolt' ? 'bolt' : 'ours'; } },
         // What happens once a pair in range is decided: 'wait' for you, or 'merge'. Kept per browser
         // session only, so a new session always starts on 'wait'.
         // Seconds of the auto-merge cancel window (never below 2: the window is required).
         // The countdown drop-down also offers "race lights": a 4 second countdown drawn as a start signal.
-        COUNTDOWN_STYLE:          { get() { return localStorage.getItem('elm_merge_countdown') === 'race' ? 'race' : 'ring'; } },
-        MERGE_COUNTDOWN:          { get() { const raw = localStorage.getItem('elm_merge_countdown'); if (raw === 'race') return 4; const v = parseInt(raw, 10); return isNaN(v) ? 4 : Math.max(2, Math.min(15, v)); } },
+        COUNTDOWN_STYLE:          { get() { return lsGet('elm_merge_countdown') === 'race' ? 'race' : 'ring'; } },
+        MERGE_COUNTDOWN:          { get() { const raw = lsGet('elm_merge_countdown'); if (raw === 'race') return 4; const v = parseInt(raw, 10); return isNaN(v) ? 4 : Math.max(2, Math.min(15, v)); } },
         WHEN_DONE:                { get() { try { return sessionStorage.getItem('elm_when_done') === 'merge' ? 'merge' : 'wait'; } catch (e) { return 'wait'; } } },
         HIGHLIGHT_ROWS:           { get() { return getBoolSetting('elm_highlight_rows', true); } },
         SHOW_MERGE_COUNTER:       { get() { return getBoolSetting('elm_show_merge_counter', false); } },
         AUTO_SKIP_BLOCKED:        { get() { return getBoolSetting('elm_auto_skip_blocked', true); } },
         NEXT_AFTER_MERGE:         { get() { return getBoolSetting('elm_next_after_merge', true); } },
-        ALLOWED_DEPARTMENT:       { get() { return localStorage.getItem('elm_allowed_department') || 'UnderGrad'; } },
+        ALLOWED_DEPARTMENT:       { get() { return lsGet('elm_allowed_department') || 'UnderGrad'; } },
     });
     // =========================================================
     // CSS
@@ -217,7 +222,7 @@
         .elm2-an-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 6px; }
         .elm2-an-title { font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: #1a1c20; }
         .elm2-an-chip { display: inline-block; padding: 1px 10px; border-radius: 12px; font-size: 12px; line-height: 20px; font-weight: 600; color: #fff; cursor: help; }
-        .elm2-an-high { background: #2e7d32; } .elm2-an-medium { background: #ef6c00; } .elm2-an-low { background: #d32f2f; }
+        .elm2-an-high { background: #2e7d32; } .elm2-an-medium { background: #ef6c00; } .elm2-an-low { background: #d32f2f; } .elm2-an-pending { background: var(--elm2-bolt-blue, #1976d2); }
         .elm2-an-pts { font-size: 12px; color: #5f6368; }
         .elm2-an-toggle { margin-left: auto; padding: 2px 10px; border: 1px solid rgba(26, 28, 32, .24); border-radius: 12px; background: transparent; color: #434750; font: inherit; font-size: 12px; line-height: 18px; cursor: pointer; }
         .elm2-an-toggle:hover { background: rgba(26, 28, 32, .06); }
@@ -1319,7 +1324,8 @@
         const ref = document.querySelector('bolt-stackable-sidebar-header-actions button.bolt-button-outlined.bolt-button-color-accent');
         if (!ref) return;
         const c = getComputedStyle(ref).borderTopColor;
-        if (!c || c === 'rgba(0, 0, 0, 0)' || c === 'transparent') return;
+        if (!c || c === 'rgba(0, 0, 0, 0)' || c === 'transparent' || c === syncBoltBlue.last) return;
+        syncBoltBlue.last = c; // written only when it changes (this runs on every tick)
         document.documentElement.style.setProperty('--elm2-bolt-blue', c);
     }
     // =========================================================
@@ -1386,11 +1392,19 @@
         if (target === st.index) return;
         const inst = getPaginatorInstance(pag);
         if (inst) {
-            console.log('[elm2] page jump: direct (paginator component found)');
+            // This reaches into Angular's own paginator object, which Element451 can change at any release: if it refuses,
+            // the page is put back as it was and the real buttons are clicked instead (below).
             const prev = inst.pageIndex;
-            inst.pageIndex = target;
-            inst._emitPageEvent(prev);
-            return;
+            try {
+                inst.pageIndex = target;
+                inst._emitPageEvent(prev);
+                console.log('[elm2] page jump: direct (paginator component found)');
+                return;
+            } catch (e) {
+                try { inst.pageIndex = prev; } catch (e2) { /* ignore */ }
+                pag.__elm2Paginator = null;
+                console.log('[elm2] page jump: the paginator component refused (' + (e && e.message || e) + '), clicking instead');
+            }
         }
         console.log('[elm2] page jump: clicking First / Next (paginator component not found)');
         // Fallback: walk with the real buttons.
@@ -1459,13 +1473,24 @@
     }
     (function wrapHistoryRequests() {
         const open = XMLHttpRequest.prototype.open, setHeader = XMLHttpRequest.prototype.setRequestHeader, send = XMLHttpRequest.prototype.send;
-        XMLHttpRequest.prototype.open = function (m, url) { this._elm2Url = String(url); this._elm2Headers = {}; return open.apply(this, arguments); };
+        // Only the history call's headers are kept (they carry the sign-in token, which stays in this page's memory and is only
+        // ever sent back to that same address); every other request passes through untouched. Nothing here may get in the
+        // page's way, so our own bookkeeping can never make a request fail.
+        XMLHttpRequest.prototype.open = function (m, url) {
+            try { this._elm2Url = String(url); this._elm2Headers = HIST_URL.test(this._elm2Url) ? {} : null; } catch (e) { this._elm2Headers = null; }
+            return open.apply(this, arguments);
+        };
         XMLHttpRequest.prototype.setRequestHeader = function (k, v) { if (this._elm2Headers) this._elm2Headers[k] = v; return setHeader.apply(this, arguments); };
-        XMLHttpRequest.prototype.send = function () { noteHistoryRequest(this._elm2Url, this._elm2Headers); return send.apply(this, arguments); };
+        XMLHttpRequest.prototype.send = function () {
+            try { if (this._elm2Headers) noteHistoryRequest(this._elm2Url, this._elm2Headers); } catch (e) { /* ignore */ }
+            return send.apply(this, arguments);
+        };
         const nativeFetch = window.fetch;
         window.fetch = function (input, init) {
-            const url = typeof input === 'string' ? input : (input && input.url) || '';
-            noteHistoryRequest(url, headersToObject((init && init.headers) || (input && input.headers)));
+            try {
+                const url = typeof input === 'string' ? input : input instanceof URL ? input.href : (input && input.url) || '';
+                if (HIST_URL.test(url)) noteHistoryRequest(url, headersToObject((init && init.headers) || (input && input.headers)));
+            } catch (e) { /* ignore */ }
             return nativeFetch.apply(this, arguments);
         };
     })();
@@ -1659,7 +1684,7 @@
                     const key = rows.length ? JSON.stringify(rows[0]) : '';
                     if (!rows.length || key === h.prevKey) { h.end = true; break; } // empty or a repeat: past the last page
                     h.prevKey = key; h.rows = rows; h.i = 0; h.pagesDone = h.page;
-                    if (h.page === 1) console.log('[elm2] history record sample (strings shortened):', JSON.stringify(rows[0], (k, v) => typeof v === 'string' && v.length > 40 ? v.slice(0, 40) + '…' : v));
+                    if (h.page === 1) console.log('[elm2] history record sample (values masked):', JSON.stringify(rows[0], (k, v) => typeof v === 'string' ? scShape(v.length > 40 ? v.slice(0, 40) + '…' : v) : scShape(v)));
                     if (rows.length < h.limit) h.pages = h.page; // a short page is the last
                 }
                 while (h.i < h.rows.length) {
@@ -1838,7 +1863,7 @@
                 const [r, g, b, a = 1] = m[1].split(',').map(parseFloat);
                 // opaque and not white/near-white/grey: that is the header colour
                 if (a > 0.9 && Math.max(r, g, b) - Math.min(r, g, b) > 40) {
-                    document.documentElement.style.setProperty('--elm2-header-color', c);
+                    if (c !== syncHeaderColor.last) { syncHeaderColor.last = c; document.documentElement.style.setProperty('--elm2-header-color', c); }
                     setThemeColor(r, g, b);
                     return;
                 }
@@ -1875,9 +1900,16 @@
         return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
     }
     function boltStoreId(row) { return hashStr(getContactNames().join('|') + '||' + row.key); }
+    // Parsed once and kept: it is asked for every undecided row on every tick. Another tab or window changing it (the
+    // installed app, say) makes this one read it again.
+    let boltStoreCache = null;
     function boltStoreRead() {
-        try { return JSON.parse(localStorage.getItem(BOLT_STORE_KEY) || '{}') || {}; } catch (e) { return {}; }
+        if (boltStoreCache) return boltStoreCache;
+        try { boltStoreCache = JSON.parse(lsGet(BOLT_STORE_KEY) || '{}'); } catch (e) { boltStoreCache = null; }
+        if (!boltStoreCache || typeof boltStoreCache !== 'object' || Array.isArray(boltStoreCache)) boltStoreCache = {};
+        return boltStoreCache;
     }
+    window.addEventListener('storage', (e) => { if (!e.key || e.key === BOLT_STORE_KEY) boltStoreCache = null; });
     function captureBoltPick(row) {
         if (!row.isConflict) return row.nativeSide;
         const id = boltStoreId(row);
@@ -1888,7 +1920,7 @@
         store[id] = { s: row.nativeSide === 'left' ? 'l' : 'r', t: Date.now() };
         const ids = Object.keys(store);
         if (ids.length > 3000) ids.sort((x, y) => store[x].t - store[y].t).slice(0, ids.length - 2500).forEach(k => delete store[k]);
-        try { localStorage.setItem(BOLT_STORE_KEY, JSON.stringify(store)); } catch (e) { /* storage unavailable */ }
+        try { lsSet(BOLT_STORE_KEY, JSON.stringify(store)); } catch (e) { /* storage unavailable */ }
         return row.nativeSide;
     }
     // Selects a side AND records it as our script's pick, so the AI-vs-script
@@ -1954,7 +1986,9 @@
     }
     // The score chip of the pair on screen. The review queue list (behind the sidebar) has a chip on
     // every row, so a plain "first chip on the page" can belong to a different pair: look inside the
-    // sidebar that holds the diff form first, then ignore chips that sit in the list's table rows.
+    // sidebar that holds the diff form first, then ignore chips that sit in the list's table rows. A chip in a list row is
+    // never this pair's score, so when none is found the answer is "no chip" (not the first row's chip).
+    const LIST_ROW = 'elm-review-queue-table, bolt-table, cdk-table, table, tr, bolt-row, [role="row"], [role="cell"]';
     function getScoreChips() {
         const all = Array.from(document.querySelectorAll('elm-deduplication-score-chip .bolt-chip, elm-deduplication-score-chip bolt-chip'));
         const form = getDiffForm();
@@ -1963,8 +1997,8 @@
             const inScope = all.filter(c => scope.contains(c));
             if (inScope.length) return inScope;
         }
-        const outsideList = all.filter(c => !c.closest('elm-review-queue-table, bolt-table, cdk-table, table, tr, [role="row"]'));
-        return outsideList.length ? outsideList : all;
+        const outsideList = all.filter(c => !c.closest(LIST_ROW));
+        return outsideList.length || form ? outsideList : all;
     }
     function chipLevel(chip) {
         const cls = chip.className && chip.className.toString ? chip.className.toString() : '';
@@ -2238,15 +2272,15 @@
         return blockers.length ? blockers[0].type : '';
     }
     function applyBlockStyling(blockers) {
-        document.body.classList.remove('elm2-blocked');
-        document.querySelectorAll('.elm2-blocked-row').forEach(el => el.classList.remove('elm2-blocked-row'));
-        document.querySelectorAll('.elm2-blocked-card').forEach(el => el.classList.remove('elm2-blocked-card'));
-        if (blockers.length === 0) return;
-        document.body.classList.add('elm2-blocked');
-        blockers.forEach(b => { if (b.row && b.row.element) b.row.element.classList.add('elm2-blocked-row'); });
-        if (blockers.some(b => b.type === 'forbidden')) {
-            getContactCards().forEach(c => c.classList.add('elm2-blocked-card'));
-        }
+        // Runs on every tick, so only what differs is touched (taking every class off and putting it back made the page
+        // restyle a blocked pair every 750 ms).
+        const rows = new Set(blockers.map(b => b.row && b.row.element).filter(Boolean));
+        const cards = new Set(blockers.some(b => b.type === 'forbidden') ? getContactCards() : []);
+        document.body.classList.toggle('elm2-blocked', blockers.length > 0);
+        document.querySelectorAll('.elm2-blocked-row').forEach(el => { if (!rows.has(el)) el.classList.remove('elm2-blocked-row'); });
+        document.querySelectorAll('.elm2-blocked-card').forEach(el => { if (!cards.has(el)) el.classList.remove('elm2-blocked-card'); });
+        rows.forEach(el => { if (!el.classList.contains('elm2-blocked-row')) el.classList.add('elm2-blocked-row'); });
+        cards.forEach(el => { if (!el.classList.contains('elm2-blocked-card')) el.classList.add('elm2-blocked-card'); });
     }
     // Signals the current entry's department/block status to database-v2.js
     // via document.body.dataset, same contract as the classic script.
@@ -2553,8 +2587,15 @@
         else if (bolt.said.address && bolt.said.address.state === 'match') addrState = 'match';
         const app = findApplicantSide();
         sides[0].applicant = app === 'left'; sides[1].applicant = app === 'right';
-        return { A: sides[0], B: sides[1], addrState, bolt: { level: getBoltChipLevel(), different: bolt.different } };
+        let boltLevel = getBoltChipLevel();
+        if (boltLevel === 'high' && bolt.different) { console.log('[elm2] Bolt chip reads High but Bolt\'s text says different people: the chip is ignored'); boltLevel = null; }
+        const chips = getScoreChips();
+        return { A: sides[0], B: sides[1], addrState, bolt: { level: boltLevel, different: bolt.different }, chips: { found: chips.length, levels: chips.map(c => chipLevel(c) || '?').join('/') } };
     }
+    // For the console: what was read, without the values. Letters become x and digits 9, so a line shows which fields were
+    // found and their shape (a date, an email, a 9 digit ID) but no names, dates of birth, emails or IDs.
+    const scShape = (v) => typeof v === 'string' ? v.replace(/[A-Za-z\u00C0-\u024F]/g, 'x').replace(/\d/g, '9') : typeof v === 'number' ? 9 : v;
+    const scShapeSide = (side) => { const o = {}; Object.keys(side).forEach(k => { o[k] = Array.isArray(side[k]) ? side[k].map(scShape) : scShape(side[k]); }); return o; };
     let anCache = { t: 0, key: '', out: null };
     // The rating of the pair on screen: { res, ev, write }, or null until Bolt's overview has rendered.
     function currentRating() {
@@ -2577,7 +2618,8 @@
         if (anView.pair !== pk) { anView.pair = pk; anView.bolt = false; }
         const { res, ev, write } = rating;
         rememberRating(res.level);
-        const sig = JSON.stringify([pk, res.points, res.level, write.paragraphs, anView.bolt]);
+        const boltLevel = getBoltChipLevel();
+        const sig = JSON.stringify([pk, res.points, res.level, write.paragraphs, anView.bolt, boltLevel]);
         card.classList.toggle('elm2-an-bolt', anView.bolt);
         card.classList.toggle('elm2-an-ours', !anView.bolt);
         if (old && old.dataset.sig === sig) return;
@@ -2585,10 +2627,18 @@
         const el = document.createElement('div');
         el.className = 'elm2-an'; el.dataset.sig = sig;
         const bar = document.createElement('div'); bar.className = 'elm2-an-bar';
-        const title = document.createElement('span'); title.className = 'elm2-an-title'; title.textContent = 'Dedup analysis';
-        const chip = document.createElement('span'); chip.className = 'elm2-an-chip elm2-an-' + res.level; chip.textContent = WRITE_LEVEL[res.level];
-        chip.title = res.items.map(i => i.label + ' ' + (i.pts > 0 ? '+' : '') + i.pts).join('\n') + '\nTotal ' + res.points + ' points';
-        const pts = document.createElement('span'); pts.className = 'elm2-an-pts'; pts.textContent = res.points + ' pts';
+        const title = document.createElement('span'); title.className = 'elm2-an-title'; title.textContent = anView.bolt ? 'Bolt analysis' : 'Dedup analysis';
+        // our rating and points normally; with Bolt's write-up showing, Bolt's own score (its chip) instead
+        const chip = document.createElement('span'), pts = document.createElement('span'); pts.className = 'elm2-an-pts';
+        if (anView.bolt) {
+            chip.className = 'elm2-an-chip elm2-an-' + (boltLevel || 'low'); chip.textContent = boltLevel ? WRITE_LEVEL[boltLevel] : 'No score';
+            if (!boltLevel) chip.className = 'elm2-an-chip elm2-an-pending';
+            chip.title = "Bolt's own score for this pair";
+        } else {
+            chip.className = 'elm2-an-chip elm2-an-' + res.level; chip.textContent = WRITE_LEVEL[res.level];
+            chip.title = res.items.map(i => i.label + ' ' + (i.pts > 0 ? '+' : '') + i.pts).join('\n') + '\nTotal ' + res.points + ' points';
+            pts.textContent = res.points + ' pts';
+        }
         const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'elm2-an-toggle';
         btn.textContent = anView.bolt ? 'Back to our write-up' : 'View Bolt\'s write-up';
         btn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); anView.bolt = !anView.bolt; renderOurAnalysis(); });
@@ -2599,7 +2649,7 @@
         write.paragraphs.forEach(t => { const p = document.createElement('p'); p.textContent = t; text.appendChild(p); });
         el.appendChild(text);
         body.insertBefore(el, body.firstChild);
-        console.log('[elm2] analysis:', WRITE_LEVEL[res.level], res.points + ' pts |', res.items.map(i => i.key + ' ' + (i.pts > 0 ? '+' : '') + i.pts).join(', '), '| evidence:', JSON.stringify({ A: ev.A, B: ev.B, addr: ev.addrState }));
+        console.log('[elm2] analysis:', WRITE_LEVEL[res.level], res.points + ' pts |', res.items.map(i => i.key + ' ' + (i.pts > 0 ? '+' : '') + i.pts).join(', '), '| Bolt chips read:', ev.chips.found + ' (' + ev.chips.levels + ')', '| read (values masked):', JSON.stringify({ A: scShapeSide(ev.A), B: scShapeSide(ev.B), addr: ev.addrState }));
     }
     // ---- ANALYSIS CARD END ----
     // ---- SCORE CHIPS: the chips on the list and in the review sidebar show our rating, "Pending" (in Bolt's blue) until a pair has been analysed ----
@@ -2608,9 +2658,12 @@
     const RATINGS_KEY = 'elm_pair_ratings', RATINGS_MAX = 4000;
     const RATING_CODE = { high: 'h', medium: 'm', low: 'l' }, RATING_BY_CODE = { h: 'high', m: 'medium', l: 'low', n: 'low' }; // 'n' was a short-lived fourth level, now Low
     let ratingsCache = null;
+    // a pair rated in another tab or window (the installed app next to a browser tab) shows on this one's list too
+    window.addEventListener('storage', (e) => { if (!e.key || e.key === RATINGS_KEY) ratingsCache = null; });
     function loadRatings() {
         if (ratingsCache) return ratingsCache;
-        try { ratingsCache = JSON.parse(localStorage.getItem(RATINGS_KEY) || '{}') || {}; } catch (e) { ratingsCache = {}; }
+        try { ratingsCache = JSON.parse(lsGet(RATINGS_KEY) || '{}'); } catch (e) { ratingsCache = null; }
+        if (!ratingsCache || typeof ratingsCache !== 'object' || Array.isArray(ratingsCache)) ratingsCache = {};
         return ratingsCache;
     }
     const ratingKey = (a, b) => [a, b].sort().join('|');
@@ -2622,7 +2675,7 @@
         all[key] = [code, Date.now()];
         const keys = Object.keys(all);
         if (keys.length > RATINGS_MAX) keys.sort((x, y) => all[x][1] - all[y][1]).slice(0, keys.length - RATINGS_MAX).forEach(k => delete all[k]);
-        try { localStorage.setItem(RATINGS_KEY, JSON.stringify(all)); } catch (e) { /* storage full: the rating just is not kept */ }
+        try { lsSet(RATINGS_KEY, JSON.stringify(all)); } catch (e) { /* storage full: the rating just is not kept */ }
     }
     function ratingForRow(row) {
         const ids = (row.getAttribute('data-csv-sparks') || '').split('|').filter(Boolean);
@@ -3657,7 +3710,7 @@
         // decide) means a human has to look: the pair is not merged.
         const unresolved = getDiffRows().filter(r => r.isConflict && !r.nativeSide && !r.otherSelected);
         if (unresolved.length > 0) {
-            unresolved.forEach(r => console.log('[elm2] Needs review:', r.label || '(unnamed)', '| A:', r.values[0].textContent, '| B:', r.values[1].textContent));
+            unresolved.forEach(r => console.log('[elm2] Needs review:', r.label || '(unnamed)')); // the field only: its values stay out of the console
             const fields = Array.from(new Set(unresolved.map(r => r.label || '(unnamed)')));
             return { ok: false, reason: unresolved.length + ' field(s) need review (' + fields.join(', ') + ')', review: fields.slice(0, 3).join(', ') + (fields.length > 3 ? ' +' + (fields.length - 3) : '') };
         }
@@ -4024,9 +4077,8 @@
         if (pendingMergeToast && Date.now() - pendingMergeToast.at < 20000 && toastsEnabled()) showMergeNotice(pendingMergeToast.text, true);
         pendingMergeToast = null;
         sendMergedToDatabase();
-        const sentence = card.querySelector('.bolt-body-large');
         const qpm = getQueuePosition();
-        console.log('[elm2] Merged' + (qpm ? ' ' + qpm.current + '/' + qpm.total : '') + ' |', sentence ? sentence.textContent.trim() : (card.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 90));
+        console.log('[elm2] Merged' + (qpm ? ' ' + qpm.current + '/' + qpm.total : '')); // the card's sentence names the contacts, so it is not logged
 
         if (awaitingMergeResult) {
             awaitingMergeResult = false;
@@ -4055,31 +4107,36 @@
             return;
         }
     }
-    setInterval(() => {
-        attemptAutoResolve();
-        bindMergeButtonTracking();
-        checkForMergeResult();
-        injectMergeCounter();
-        colorScoreChips();
-        syncScoreChips();
-        syncHeaderColor(); // the header is on every page, not just the review page
-        noteDedupPath();
-        ensureManifest(); // after the header colour is known (the icon uses it)
-        injectPager();
-        injectHistorySearch();
-        stripFilterTooltips();
-        syncSkipToggles();
-        if (isDedupReviewPage()) {
-            syncBoltBlue();
-            annotateRowColors();
-            pinReviewQueueNav();
-            annotateApplicantSide();
-            injectPickComparisonBar();
-            renderOurAnalysis();
+    // Each step runs on its own: one that fails (Element451 changed a piece of markup, say) must not stop the steps
+    // after it, tick after tick. A failure is logged once per step and message, not every 750 ms.
+    const stepErrors = new Set();
+    function runStep(fn) {
+        try { fn(); }
+        catch (e) {
+            const key = (fn.name || 'step') + ': ' + (e && e.message || e);
+            if (stepErrors.has(key) || stepErrors.size >= 50) return;
+            stepErrors.add(key);
+            console.error('[elm2] ' + (fn.name || 'a step') + ' failed (logged once; the other steps keep running):', e);
         }
+    }
+    const EVERY_PAGE_STEPS = [
+        attemptAutoResolve, bindMergeButtonTracking, checkForMergeResult, injectMergeCounter, colorScoreChips, syncScoreChips,
+        syncHeaderColor, // the header is on every page, not just the review page
+        noteDedupPath,
+        ensureManifest, // after the header colour is known (the icon uses it)
+        injectPager, injectHistorySearch, stripFilterTooltips, syncSkipToggles
+    ];
+    const REVIEW_PAGE_STEPS = [syncBoltBlue, annotateRowColors, pinReviewQueueNav, annotateApplicantSide, injectPickComparisonBar, renderOurAnalysis];
+    setInterval(() => {
+        EVERY_PAGE_STEPS.forEach(runStep);
+        if (isDedupReviewPage()) REVIEW_PAGE_STEPS.forEach(runStep);
     }, 750);
+    // The page changes in bursts (hundreds of DOM changes while a pair renders): one check per burst, not one per change.
+    let mergeCheckQueued = false;
     new MutationObserver(() => {
-        checkForMergeResult();
+        if (mergeCheckQueued) return;
+        mergeCheckQueued = true;
+        setTimeout(() => { mergeCheckQueued = false; runStep(checkForMergeResult); }, 50);
     }).observe(document.body, { childList: true, subtree: true });
 
     // =========================================================
@@ -4095,8 +4152,8 @@
         el.appendChild(b);
     }
     function incrementMergeCount() {
-        const count = parseInt(localStorage.getItem('elm_merge_count') || '0', 10) + 1;
-        localStorage.setItem('elm_merge_count', String(count));
+        const count = parseInt(lsGet('elm_merge_count') || '0', 10) + 1;
+        lsSet('elm_merge_count', String(count));
         const counterEl = document.getElementById('elm-merge-counter');
         if (counterEl) {
             setMergeCounterText(counterEl, count);
@@ -4124,7 +4181,7 @@
             counterWrapper.id = 'elm-counter-wrapper';
             const counterEl = document.createElement('span');
             counterEl.id = 'elm-merge-counter';
-            setMergeCounterText(counterEl, localStorage.getItem('elm_merge_count') || '0');
+            setMergeCounterText(counterEl, lsGet('elm_merge_count') || '0');
             counterEl.style.transition = 'transform 0.15s ease-out';
             const resetBtn = document.createElement('button');
             resetBtn.id = 'elm-reset-btn';
@@ -4134,7 +4191,7 @@
             resetBtn.onclick = (e) => {
                 e.stopPropagation();
                 if (confirm('Reset merge counter to 0?')) {
-                    localStorage.setItem('elm_merge_count', '0');
+                    lsSet('elm_merge_count', '0');
                     setMergeCounterText(counterEl, 0);
                 }
             };
@@ -4261,7 +4318,7 @@
             syncInstallCard();
             try { await prompt.prompt(); } catch (e) { /* the dialog could not open; Chrome offers a new event later */ }
         };
-        document.getElementById('elm-install-x').onclick = () => { localStorage.setItem('elm_install_dismissed', 'true'); syncInstallCard(); };
+        document.getElementById('elm-install-x').onclick = () => { lsSet('elm_install_dismissed', 'true'); syncInstallCard(); };
         syncInstallCard();
         function toggleHtml(id) {
             return `<label class="elm-toggle-switch"><input type="checkbox" id="${id}"><span class="elm-toggle-slider"></span></label>`;
@@ -4297,7 +4354,7 @@
         };
         syncLevel();
         levelSlider.addEventListener('input', () => {
-            localStorage.setItem('elm_range_level2', levelSlider.value);
+            lsSet('elm_range_level2', levelSlider.value);
             syncLevel();
             if (CFG.RANGE_LEVEL === 0) cancelAutoMerge('Auto-merge cancelled');
             reapplyForLevel();
@@ -4318,7 +4375,7 @@
                 if (onChange) onChange();
             });
         }
-        setupSegmented('elm-use-picks', () => CFG.USE_PICKS, v => localStorage.setItem('elm_use_picks', v),
+        setupSegmented('elm-use-picks', () => CFG.USE_PICKS, v => lsSet('elm_use_picks', v),
             v => v === 'ours' ? 'Our rules are applied on pairs in range, including the applicant rule.' : "Bolt's picks are kept; ours only fills rows Bolt left blank.",
             reapplyForLevel);
         setupSegmented('elm-when-done', () => CFG.WHEN_DONE, v => { try { sessionStorage.setItem('elm_when_done', v); } catch (e) { /* ignore */ } },
@@ -4333,7 +4390,7 @@
             countdownRow.style.opacity = active ? '' : '.38';
         };
         countdownSelect.value = CFG.COUNTDOWN_STYLE === 'race' ? 'race' : String(CFG.MERGE_COUNTDOWN);
-        countdownSelect.addEventListener('change', () => localStorage.setItem('elm_merge_countdown', countdownSelect.value));
+        countdownSelect.addEventListener('change', () => lsSet('elm_merge_countdown', countdownSelect.value));
         document.getElementById('elm-when-done').addEventListener('click', syncCountdown);
         levelSlider.addEventListener('input', syncCountdown);
         syncLevel();
@@ -4346,7 +4403,7 @@
             toastsEl.disabled = off || on;
             toastsEl.closest('.setting-row').style.opacity = (off || on) ? '.38' : '';
         };
-        toastsEl.addEventListener('change', () => localStorage.setItem('elm_outcome_toasts', String(toastsEl.checked)));
+        toastsEl.addEventListener('change', () => lsSet('elm_outcome_toasts', String(toastsEl.checked)));
         document.getElementById('elm-when-done').addEventListener('click', syncToasts);
         levelSlider.addEventListener('input', syncToasts);
         setupToggle('elm-auto-skip-blocked', 'elm_auto_skip_blocked', syncToasts);
@@ -4358,7 +4415,7 @@
             if (!el) return;
             el.checked = getBoolSetting(storageKey, defaultValue);
             el.addEventListener('change', () => {
-                localStorage.setItem(storageKey, String(el.checked));
+                lsSet(storageKey, String(el.checked));
                 if (onChange) onChange();
             });
         }
@@ -4375,7 +4432,7 @@
         deptGrad.checked = deptNow === 'All' || deptNow === 'Grad/IA';
         showDeptDesc();
         [deptUnder, deptGrad].forEach(box => box.addEventListener('change', () => {
-            localStorage.setItem('elm_allowed_department', deptUnder.checked && deptGrad.checked ? 'All' : deptUnder.checked ? 'UnderGrad' : deptGrad.checked ? 'Grad/IA' : 'None');
+            lsSet('elm_allowed_department', deptUnder.checked && deptGrad.checked ? 'All' : deptUnder.checked ? 'UnderGrad' : deptGrad.checked ? 'Grad/IA' : 'None');
             showDeptDesc();
         }));
     }

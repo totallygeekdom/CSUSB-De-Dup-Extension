@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.267
+// @version      2.268
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.267'; // keep in sync with @version
+    const VERSION = '2.268'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -2298,6 +2298,9 @@
         if (choice) document.body.dataset.csvChoice = choice; else delete document.body.dataset.csvChoice;
         const score = getBoltChipLevel(); // Bolt's score for the database's first column (high / medium / low)
         if (score) document.body.dataset.csvScore = score; else delete document.body.dataset.csvScore;
+        // our own score (the points total of the Dedup analysis) for the database's Dedup Score column; absent until Bolt's overview has loaded
+        const rating = currentRating();
+        if (rating && isFinite(rating.res.points)) document.body.dataset.csvPoints = String(Math.round(rating.res.points)); else delete document.body.dataset.csvPoints;
         // A skipped pair (Auto-Skip on) gets no popup; one left for you does.
         if (appeal && !appealWarningShown && !CFG.AUTO_SKIP_BLOCKED) {
             appealWarningShown = true;
@@ -3935,6 +3938,7 @@
             delete document.body.dataset.csvSpark2;
             delete document.body.dataset.csvChoice;
             delete document.body.dataset.csvScore;
+            delete document.body.dataset.csvPoints;
         }
         const blockers = getAllBlockers();
         applyBlockStyling(blockers);

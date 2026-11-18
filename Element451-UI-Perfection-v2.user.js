@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.276
+// @version      2.278
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.276'; // keep in sync with @version
+    const VERSION = '2.278'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -217,15 +217,34 @@
         #elm2-merge-overlay #elm2-merge-summary .brief-score-low { color: #d32f2f; }
         /* Our write-up in Bolt's analysis card: ours shows by default, Bolt's own header and text come back with the button. */
         bolt-card.analysis-card.elm2-an-ours .analysis-header, bolt-card.analysis-card.elm2-an-ours .analysis-summary { display: none !important; }
-        bolt-card.analysis-card.elm2-an-bolt .elm2-an-text { display: none; }
+        bolt-card.analysis-card.elm2-an-bolt .elm2-an-text, bolt-card.analysis-card.elm2-an-bolt .elm2-an-table { display: none; }
+        .elm2-an[data-view="ours"] .elm2-an-table, .elm2-an[data-view="points"] .elm2-an-text { display: none; }
         .elm2-an { margin: 0 0 8px; }
         .elm2-an-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 6px; }
         .elm2-an-title { font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: #1a1c20; }
         .elm2-an-chip { display: inline-block; padding: 1px 10px; border-radius: 12px; font-size: 12px; line-height: 20px; font-weight: 600; color: #fff; cursor: help; }
         .elm2-an-high { background: #2e7d32; } .elm2-an-medium { background: #ef6c00; } .elm2-an-low { background: #d32f2f; } .elm2-an-pending { background: var(--elm2-bolt-blue, #1976d2); }
         .elm2-an-pts { font-size: 12px; color: #5f6368; }
-        .elm2-an-toggle { margin-left: auto; padding: 2px 10px; border: 1px solid rgba(26, 28, 32, .24); border-radius: 12px; background: transparent; color: #434750; font: inherit; font-size: 12px; line-height: 18px; cursor: pointer; }
+        /* chips beside our score: department and blockers (the same colours as the Database script's list badges), Bolt's own score */
+        .elm2-an-flag { display: inline-block; padding: 1px 10px; border-radius: 12px; font-size: 12px; line-height: 20px; font-weight: 600; cursor: help; background: #eceef4; color: #434750; }
+        .elm2-an-flag[data-dept="UnderGrad"] { background: #f3e5f5; color: #6a1b9a; } .elm2-an-flag[data-dept="Grad/IA"] { background: #e3f2fd; color: #1565c0; }
+        .elm2-an-flag[data-flag="appeal"] { background: #fff8e1; color: #f57f17; } .elm2-an-flag[data-flag="forbidden"], .elm2-an-flag[data-flag="test"] { background: #fce4ec; color: #c2185b; }
+        .elm2-an-flag[data-blocked="1"] { box-shadow: inset 0 0 0 1.5px currentColor; }
+        .elm2-an-flag[data-flag="bolt"] { background: transparent; box-shadow: inset 0 0 0 1px rgba(26, 28, 32, .24); color: #434750; font-weight: 500; }
+        .elm2-an-views { margin-left: auto; display: inline-flex; border: 1px solid rgba(26, 28, 32, .24); border-radius: 12px; overflow: hidden; }
+        .elm2-an-toggle { padding: 2px 10px; border: 0; border-left: 1px solid rgba(26, 28, 32, .24); background: transparent; color: #434750; font: inherit; font-size: 12px; line-height: 18px; cursor: pointer; }
+        .elm2-an-toggle:first-child { border-left: 0; }
         .elm2-an-toggle:hover { background: rgba(26, 28, 32, .06); }
+        .elm2-an-toggle[aria-pressed="true"] { background: #dbe1ff; color: #001849; font-weight: 600; }
+        /* the points view: one row per rule that applied, the total and why that total is the rating it is */
+        .elm2-an-table { width: 100%; border-collapse: collapse; font-size: 12.5px; line-height: 17px; color: #434750; margin: 0 0 6px; }
+        .elm2-an-table th { text-align: left; font-weight: 600; color: #1a1c20; padding: 3px 6px; border-bottom: 1px solid rgba(26, 28, 32, .24); }
+        .elm2-an-table td { padding: 3px 6px; border-bottom: 1px solid rgba(26, 28, 32, .08); vertical-align: top; }
+        .elm2-an-table .elm2-an-num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; font-weight: 600; }
+        .elm2-an-table .elm2-an-plus { color: #2e7d32; } .elm2-an-table .elm2-an-minus { color: #d32f2f; }
+        .elm2-an-strong { display: inline-block; margin-left: 2px; padding: 0 6px; border-radius: 8px; background: #e8f5e9; color: #2e7d32; font-size: 11px; line-height: 16px; font-weight: 600; white-space: nowrap; }
+        .elm2-an-table tfoot td { border-bottom: 0; font-weight: 600; color: #1a1c20; }
+        .elm2-an-table tfoot .elm2-an-why td { font-weight: 400; color: #434750; }
         /* Score chips (list and sidebar): the whole chip shows only our label (data-elm2-label), whatever Bolt put inside it (its own
            High / Medium / Low text, an info icon); drawing it from the chip's own ::after also keeps a re-render of Bolt's text from flickering it. */
         elm-deduplication-score-chip bolt-chip[data-elm2-label] { font-size: 0 !important; }
@@ -2170,7 +2189,6 @@
     let pairFirstSeenAt = 0;            // when the current pair was first seen
     let resolutionAttempted = false;    // resolution ran for the current pair
     let conflictWarningShown = false;
-    let appealWarningShown = false;
     let awaitingMergeResult = false;
     let lastMergeContactNamesKey = '';
 
@@ -2301,12 +2319,7 @@
         // our own score (the points total of the Dedup analysis) for the database's Dedup Score column; absent until Bolt's overview has loaded
         const rating = currentRating();
         if (rating && isFinite(rating.res.points)) document.body.dataset.csvPoints = String(Math.round(rating.res.points)); else delete document.body.dataset.csvPoints;
-        // A skipped pair (Auto-Skip on) gets no popup; one left for you does.
-        if (appeal && !appealWarningShown && !CFG.AUTO_SKIP_BLOCKED) {
-            appealWarningShown = true;
-            const sideLabel = appeal.side === 'left' ? 'left side' : 'right side';
-            alert('⚠️ Appeal keyword detected!\n\nReason: The word "appeal" was found on the ' + sideLabel + ' of this entry.\n\nThis merge is blocked and cannot be processed.');
-        }
+        // (An appeal used to raise a popup here. It is now a chip beside our score, with a sentence in the write-up.)
     }
 
     // ---- SCORE ENGINE START (pure functions: no page access, so it can be tested on its own) ----
@@ -2558,8 +2571,11 @@
         if (res.level === 'high' && !res.thin) { /* nothing to add */ }
         else if (miss.length >= 3) out.paragraphs.push('The records don\'t both have ' + list(miss.slice(0, 3)) + ', so there is little to confirm the match.');
         else if (miss.length) out.paragraphs.push('Not compared (missing on at least one record): ' + list(miss) + '.');
-        const bl = ev.bolt && ev.bolt.level;
-        if (bl) out.paragraphs.push('Bolt rated this pair ' + cap(bl) + '.');
+        // Bolt's own score, always said (our chips replace Bolt's on the page, so this is where it can still be read)
+        const bl = ev.bolt && ev.bolt.level, raw = ev.bolt && ev.bolt.raw;
+        if (bl) out.paragraphs.push('Bolt\'s original score: ' + cap(bl) + '.');
+        else if (raw) out.paragraphs.push('Bolt\'s original score: ' + cap(raw) + ', but Bolt\'s own text says they are different people, so the score was not counted.');
+        else out.paragraphs.push('Bolt\'s original score could not be read.');
         return out;
     }
     // ---- WRITE-UP END ----
@@ -2630,10 +2646,11 @@
         else if (bolt.said.address && bolt.said.address.state === 'match') addrState = 'match';
         const app = findApplicantSide();
         sides[0].applicant = app === 'left'; sides[1].applicant = app === 'right';
-        let boltLevel = getBoltChipLevel();
+        const boltRaw = getBoltChipLevel();
+        let boltLevel = boltRaw;
         if (boltLevel === 'high' && bolt.different) { console.log('[elm2] Bolt chip reads High but Bolt\'s text says different people: the chip is ignored'); boltLevel = null; }
         const chips = getScoreChips();
-        return { A: sides[0], B: sides[1], addrState, bolt: { level: boltLevel, different: bolt.different }, chips: { found: chips.length, levels: chips.map(c => chipLevel(c) || '?').join('/') } };
+        return { A: sides[0], B: sides[1], addrState, bolt: { level: boltLevel, raw: boltRaw, different: bolt.different }, chips: { found: chips.length, levels: chips.map(c => chipLevel(c) || '?').join('/') } };
     }
     // For the console: what was read, without the values. Letters become x and digits 9, so a line shows which fields were
     // found and their shape (a date, an email, a 9 digit ID) but no names, dates of birth, emails or IDs.
@@ -2651,7 +2668,73 @@
         if (out) rememberRating(out.res);
         return out;
     }
-    const anView = { pair: '', bolt: false };
+    // The card's view: 'ours' (the write-up), 'points' (the table) or 'bolt' (Bolt's own write-up). Write-up or points is kept from pair
+    // to pair (and across visits); Bolt's goes back to the one you were using when the pair changes.
+    const AN_VIEW_KEY = 'elm2_an_view';
+    const anView = { pair: '', mode: '', kept: (lsGet(AN_VIEW_KEY) === 'points' ? 'points' : 'ours') };
+    // Department and blockers for the chips beside our score and the write-up (the popups for an appeal used to say this).
+    function pairFlags() {
+        const flags = [], notes = [];
+        const blockers = getAllBlockers();
+        const has = (t) => blockers.find(b => b.type === t);
+        const dept = detectActualDepartment().dept, wrong = has('department');
+        const allowed = CFG.ALLOWED_DEPARTMENT;
+        flags.push({ flag: 'dept', dept, text: dept, blocked: !!wrong,
+            title: 'Department, read from the Workflows / Application rows' + (wrong ? '. Not one of your allowed departments (' + (allowed === 'none' ? 'none ticked' : allowed) + '), so this pair is blocked.' : '.') });
+        if (wrong) notes.push('Blocked: this is a ' + dept + ' pair, which is not one of your allowed departments.');
+        const side = (s) => s === 'left' ? 'Contact A (left)' : 'Contact B (right)';
+        const appeal = has('appeal');
+        if (appeal) {
+            const where = (appeal.row && appeal.row.label ? 'the ' + appeal.row.label.trim() + ' row of ' : '') + side(appeal.side);
+            flags.push({ flag: 'appeal', text: 'Appeal', blocked: true, title: 'The word "appeal" is in ' + where + '. This pair is blocked and cannot be merged.' });
+            notes.push('Blocked: the word "appeal" is in ' + where + ', so this pair cannot be merged.');
+        }
+        const forbidden = has('forbidden');
+        if (forbidden) {
+            // The list's badge says Forbidden for all of these (and for different School IDs); here they are told apart: a test record
+            // (a name with "test" in it) reads Test, a name on the forbidden list reads Forbidden name.
+            const test = forbidden.reason === 'test in name';
+            const why = test ? 'a contact\'s name contains "test" (a test record)' : 'a contact\'s name is on the forbidden list';
+            flags.push({ flag: test ? 'test' : 'forbidden', text: test ? 'Test' : 'Forbidden name', blocked: true, title: 'Blocked: ' + why + '. This pair cannot be merged.' });
+            notes.push('Blocked: ' + why + ', so this pair cannot be merged.');
+        }
+        // Different School IDs: no chip or line of its own, since the score already counts them (different Coyote IDs, -120, a hard
+        // conflict that caps the pair at Low) and the write-up says so. The pair is still blocked from merging.
+        return { flags, notes };
+    }
+    // Why the total is the rating it is, in one sentence (the rules of scoreSlots).
+    function ratingWhy(res) {
+        const id = !!(res.slots && (res.slots['coyote.0'] || res.slots['cas.0']));
+        const p = res.points, n = res.strong;
+        if (res.hard) return 'Different Coyote or CAS IDs are a hard conflict: the rating is Low whatever the points.';
+        if (res.level === 'high') return p + ' points (High is ' + SCORE_CUT.high + '+), with ' + (id ? 'a matching Coyote or CAS ID' : n + ' strong matches') + '.';
+        if (res.level === 'medium' && p >= SCORE_CUT.high) return p + ' points is enough for High, but High also needs a matching Coyote or CAS ID or 2 strong matches (birth date, exact email, phone, address). This pair has ' + n + '.';
+        if (res.level === 'medium') return p + ' points: Medium is ' + SCORE_CUT.medium + ' to ' + (SCORE_CUT.high - 1) + '.';
+        return p + ' points: under ' + SCORE_CUT.medium + ' is Low.';
+    }
+    function pointsTable(res) {
+        const t = document.createElement('table'); t.className = 'elm2-an-table';
+        const head = t.createTHead().insertRow();
+        // one sentence per rule (it names the field itself, so there is no separate field column), and a tag on the strong matches
+        ['What we found', 'Points'].forEach((h, i) => { const th = document.createElement('th'); th.textContent = h; if (i === 1) th.className = 'elm2-an-num'; head.appendChild(th); });
+        const body = t.createTBody();
+        res.items.forEach(i => {
+            const r = body.insertRow();
+            const what = r.insertCell();
+            what.textContent = i.phrase.charAt(0).toUpperCase() + i.phrase.slice(1);
+            if (i.slot && SLOT_STRONG.includes(i.slot)) { const tag = document.createElement('span'); tag.className = 'elm2-an-strong'; tag.textContent = 'strong match'; what.append(' ', tag); }
+            const c = r.insertCell(); c.className = 'elm2-an-num ' + (i.pts > 0 ? 'elm2-an-plus' : i.pts < 0 ? 'elm2-an-minus' : '');
+            c.textContent = (i.pts > 0 ? '+' : '') + i.pts;
+        });
+        if (!res.items.length) { const r = body.insertRow(), c = r.insertCell(); c.colSpan = 2; c.textContent = 'Nothing to compare yet.'; }
+        const foot = t.createTFoot();
+        const tot = foot.insertRow();
+        tot.insertCell().textContent = 'Total: ' + WRITE_LEVEL[res.level];
+        const n = tot.insertCell(); n.className = 'elm2-an-num'; n.textContent = res.points;
+        const why = foot.insertRow(); why.className = 'elm2-an-why';
+        const w = why.insertCell(); w.colSpan = 2; w.textContent = ratingWhy(res);
+        return t;
+    }
     function renderOurAnalysis() {
         const card = document.querySelector('bolt-card.analysis-card');
         const body = card && card.querySelector(':scope > bolt-card-body, :scope > .bolt-card-body');
@@ -2660,21 +2743,23 @@
         const old = body.querySelector(':scope > .elm2-an');
         if (!rating) { if (old) old.remove(); card.classList.remove('elm2-an-ours', 'elm2-an-bolt'); return; }
         const pk = getPairKey();
-        if (anView.pair !== pk) { anView.pair = pk; anView.bolt = false; }
+        if (anView.pair !== pk) { anView.pair = pk; anView.mode = anView.kept; }
+        const mode = anView.mode || anView.kept;
         const { res, ev, write } = rating;
         const boltLevel = getBoltChipLevel();
-        const sig = JSON.stringify([pk, res.points, res.level, write.paragraphs, anView.bolt, boltLevel]);
-        card.classList.toggle('elm2-an-bolt', anView.bolt);
-        card.classList.toggle('elm2-an-ours', !anView.bolt);
+        const { flags, notes } = pairFlags();
+        const sig = JSON.stringify([pk, res.points, res.level, write.paragraphs, mode, boltLevel, flags, notes]);
+        card.classList.toggle('elm2-an-bolt', mode === 'bolt');
+        card.classList.toggle('elm2-an-ours', mode !== 'bolt');
         if (old && old.dataset.sig === sig) return;
         if (old) old.remove();
         const el = document.createElement('div');
-        el.className = 'elm2-an'; el.dataset.sig = sig;
+        el.className = 'elm2-an'; el.dataset.sig = sig; el.dataset.view = mode;
         const bar = document.createElement('div'); bar.className = 'elm2-an-bar';
-        const title = document.createElement('span'); title.className = 'elm2-an-title'; title.textContent = anView.bolt ? 'Bolt analysis' : 'Dedup analysis';
+        const title = document.createElement('span'); title.className = 'elm2-an-title'; title.textContent = mode === 'bolt' ? 'Bolt analysis' : 'Dedup analysis';
         // our rating and points normally; with Bolt's write-up showing, Bolt's own score (its chip) instead
         const chip = document.createElement('span'), pts = document.createElement('span'); pts.className = 'elm2-an-pts';
-        if (anView.bolt) {
+        if (mode === 'bolt') {
             chip.className = 'elm2-an-chip elm2-an-' + (boltLevel || 'low'); chip.textContent = boltLevel ? WRITE_LEVEL[boltLevel] : 'No score';
             if (!boltLevel) chip.className = 'elm2-an-chip elm2-an-pending';
             chip.title = "Bolt's own score for this pair";
@@ -2683,15 +2768,39 @@
             chip.title = res.items.map(i => i.label + ' ' + (i.pts > 0 ? '+' : '') + i.pts).join('\n') + '\nTotal ' + res.points + ' points';
             pts.textContent = res.points + ' pts';
         }
-        const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'elm2-an-toggle';
-        btn.textContent = anView.bolt ? 'Back to our write-up' : 'View Bolt\'s write-up';
-        btn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); anView.bolt = !anView.bolt; renderOurAnalysis(); });
-        bar.append(title, chip, pts, btn);
+        bar.append(title, chip, pts);
+        // beside the score: the department, any blocker (appeal, forbidden, student ID) and, with ours showing, Bolt's original score
+        flags.forEach(f => {
+            const c = document.createElement('span'); c.className = 'elm2-an-flag'; c.dataset.flag = f.flag; c.textContent = f.text; c.title = f.title;
+            if (f.dept) c.dataset.dept = f.dept;
+            if (f.blocked) c.dataset.blocked = '1';
+            bar.appendChild(c);
+        });
+        if (mode !== 'bolt') {
+            const b = document.createElement('span'); b.className = 'elm2-an-flag'; b.dataset.flag = 'bolt';
+            b.textContent = 'Bolt: ' + (boltLevel ? WRITE_LEVEL[boltLevel] : '?'); b.title = "Bolt's original score for this pair";
+            bar.appendChild(b);
+        }
+        const views = document.createElement('span'); views.className = 'elm2-an-views'; views.setAttribute('role', 'group'); views.setAttribute('aria-label', 'Analysis view');
+        [['ours', 'Write-up'], ['points', 'Points'], ['bolt', "Bolt's"]].forEach(([m, label]) => {
+            const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'elm2-an-toggle'; btn.textContent = label;
+            btn.setAttribute('aria-pressed', String(m === mode));
+            btn.title = m === 'ours' ? 'Our write-up' : m === 'points' ? 'The points behind our score' : "Bolt's own write-up";
+            btn.addEventListener('click', (e) => {
+                e.preventDefault(); e.stopPropagation();
+                anView.mode = m;
+                if (m !== 'bolt') { anView.kept = m; lsSet(AN_VIEW_KEY, m); }
+                renderOurAnalysis();
+            });
+            views.appendChild(btn);
+        });
+        bar.appendChild(views);
         el.appendChild(bar);
         const text = document.createElement('div'); text.className = 'elm2-an-text';
         const v = document.createElement('p'); v.className = 'elm2-an-verdict'; v.textContent = write.verdict; text.appendChild(v);
-        write.paragraphs.forEach(t => { const p = document.createElement('p'); p.textContent = t; text.appendChild(p); });
+        notes.concat(write.paragraphs).forEach(t => { const p = document.createElement('p'); p.textContent = t; text.appendChild(p); });
         el.appendChild(text);
+        el.appendChild(pointsTable(res));
         body.insertBefore(el, body.firstChild);
         console.log('[elm2] analysis:', WRITE_LEVEL[res.level], res.points + ' pts |', res.items.map(i => i.key + ' ' + (i.pts > 0 ? '+' : '') + i.pts).join(', '), '| Bolt chips read:', ev.chips.found + ' (' + ev.chips.levels + ')', '| read (values masked):', JSON.stringify({ A: scShapeSide(ev.A), B: scShapeSide(ev.B), addr: ev.addrState }));
     }
@@ -2715,10 +2824,70 @@
         return ratingsCache;
     }
     const ratingKey = (a, b) => [a, b].sort().join('|');
+    // ---- The row you open: a second tie between a list row and its pair, which needs no Spark IDs on the list ----
+    // A click on a list row is remembered with the pair on screen at that moment. The first different pair rated after it is the one
+    // that row opened, and the tie is kept (by the row's text, so it outlives a reload and Element451 reusing row elements). Moving on
+    // to another pair without clicking a row ends it, so a "next" button never ties the wrong row.
+    const ROWPAIRS_KEY = 'elm_row_pairs', ROWPAIRS_MAX = 4000;
+    let rowPairsCache = null;
+    window.addEventListener('storage', (e) => { if (!e.key || e.key === ROWPAIRS_KEY) rowPairsCache = null; });
+    function loadRowPairs() {
+        if (rowPairsCache) return rowPairsCache;
+        try { rowPairsCache = JSON.parse(lsGet(ROWPAIRS_KEY) || '{}'); } catch (e) { rowPairsCache = null; }
+        if (!rowPairsCache || typeof rowPairsCache !== 'object' || Array.isArray(rowPairsCache)) rowPairsCache = {};
+        return rowPairsCache;
+    }
+    // The row's own words (names, emails): our chips and badges, numbers and time words ("2 days ago") left out, hashed.
+    const ROW_SKIP = 'elm-deduplication-score-chip, .csv-dept-badge, [class*="elm2-"], [class*="csv-"]';
+    const TIME_WORDS = /^(ago|just|now|today|yesterday|seconds?|minutes?|mins?|hours?|hrs?|days?|weeks?|months?|years?|am|pm)$/;
+    function rowPrint(row) {
+        const words = [];
+        // only our own things inside the row are skipped (the page around it carries elm2- classes too)
+        const skip = (n) => { const el = n.parentElement && n.parentElement.closest(ROW_SKIP); return !!el && el !== row && row.contains(el); };
+        const walk = document.createTreeWalker(row, NodeFilter.SHOW_TEXT, { acceptNode: (n) => skip(n) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
+        for (let n = walk.nextNode(); n; n = walk.nextNode()) (n.nodeValue.toLowerCase().match(/[a-zÀ-ɏ@._'-]{2,}/g) || []).forEach(w => { if (!TIME_WORDS.test(w)) words.push(w); });
+        if (words.length < 2) return '';
+        const s = words.join(' ');
+        let h1 = 5381, h2 = 52711;
+        for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); h1 = (h1 * 33) ^ c; h2 = (h2 * 31 + c) | 0; }
+        return 'r' + (h1 >>> 0).toString(36) + (h2 >>> 0).toString(36) + s.length.toString(36);
+    }
+    let openedRow = null; // { print, from: the pair on screen when the row was clicked, at, pair: the pair it opened }
+    document.addEventListener('click', (e) => {
+        const row = e.target && e.target.closest && e.target.closest('elm-review-queue-table bolt-row.cdk-row');
+        if (!row) return;
+        const print = rowPrint(row);
+        if (!print) return;
+        const { a, b } = getSparkIds();
+        openedRow = { print, from: a && b ? ratingKey(a, b) : '', at: Date.now(), pair: '' };
+    }, true);
+    function tieOpenedRow(key) {
+        if (!openedRow) return;
+        if (openedRow.pair) { if (openedRow.pair !== key) openedRow = null; return; } // moved on without clicking a row
+        if (key === openedRow.from) return; // the pair that was open before the click, still on screen while the new one loads
+        if (Date.now() - openedRow.at > 60000) { openedRow = null; return; }
+        openedRow.pair = key;
+        const all = loadRowPairs();
+        if (all[openedRow.print] && all[openedRow.print][0] === key) return;
+        all[openedRow.print] = [key, Date.now()];
+        const keys = Object.keys(all);
+        if (keys.length > ROWPAIRS_MAX) keys.sort((x, y) => all[x][1] - all[y][1]).slice(0, keys.length - ROWPAIRS_MAX).forEach(k => delete all[k]);
+        try { lsSet(ROWPAIRS_KEY, JSON.stringify(all)); } catch (e) { /* storage full */ }
+    }
+    const maskId = (id) => '…' + String(id).slice(-4);
+    const pairLogged = new Set();
     function rememberRating(res) {
         const { a, b } = getSparkIds();
         if (!a || !b || !res || !res.slots) return;
         const all = loadRatings(), key = ratingKey(a, b), text = slotsToString(res.slots), code = RATING_CODE[res.level];
+        tieOpenedRow(key);
+        if (!pairLogged.has(key) && code) {
+            pairLogged.add(key);
+            const rows = Array.from(document.querySelectorAll('elm-review-queue-table bolt-row.cdk-row'));
+            const bySparks = rows.some(r => { const ids = (r.getAttribute('data-csv-sparks') || '').split('|'); return ids.includes(a) && ids.includes(b); });
+            console.log('[elm2] chips: rated the pair on screen (Spark IDs ' + maskId(a) + ', ' + maskId(b) + '): ' + CHIP_STYLE[res.level][0] + '. List row with these Spark IDs: ' +
+                (rows.length ? (bySparks ? 'yes' : 'none of ' + rows.length + ' rows') : 'no list on the page') + '; row opened by a click: ' + (openedRow && openedRow.pair === key ? 'yes' : 'no') + '.');
+        }
         if (!code || (all[key] && all[key][2] === text)) return;
         all[key] = [code, Date.now(), text];
         const keys = Object.keys(all);
@@ -2726,18 +2895,29 @@
         try { lsSet(RATINGS_KEY, JSON.stringify(all)); } catch (e) { /* storage full: the rating just is not kept */ }
         requestAnimationFrame(() => runStep(syncScoreChips)); // the list's chip for this pair follows at once, while its profile is still open
     }
+    // 'none' (no rating under that key), 'old' (rated before slots were kept: reopen the pair) or the level
+    function levelOfKey(key) {
+        const hit = loadRatings()[key];
+        if (!hit) return 'none';
+        if (typeof hit[2] !== 'string') return 'old';
+        let level = levelOfSlots.get(hit[2]);
+        if (level === undefined) { const slots = slotsFromString(hit[2]), r = slots && scoreSlots(slots); level = r ? r.level : null; levelOfSlots.set(hit[2], level); }
+        return level || 'none';
+    }
+    // { level, via, why }: via 'sparks' or 'opened'; with no level, why says what is missing (shown by the console report)
     function ratingForRow(row) {
         const ids = (row.getAttribute('data-csv-sparks') || '').split('|').filter(Boolean);
-        if (ids.length < 2) return null;
-        const all = loadRatings();
+        let old = false;
         for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) {
-            const hit = all[ratingKey(ids[i], ids[j])];
-            if (!hit || typeof hit[2] !== 'string') continue; // not rated, or rated before slots were kept
-            let level = levelOfSlots.get(hit[2]);
-            if (level === undefined) { const slots = slotsFromString(hit[2]), r = slots && scoreSlots(slots); level = r ? r.level : null; levelOfSlots.set(hit[2], level); }
-            if (level) return level;
+            const l = levelOfKey(ratingKey(ids[i], ids[j]));
+            if (l === 'old') old = true; else if (l !== 'none') return { level: l, via: 'sparks' };
         }
-        return null;
+        const print = rowPrint(row), tie = print && loadRowPairs()[print];
+        if (tie) {
+            const l = levelOfKey(tie[0]);
+            if (l === 'old') old = true; else if (l !== 'none') return { level: l, via: 'opened' };
+        }
+        return { level: null, why: old ? 'old' : ids.length >= 2 ? 'unrated' : 'nosparks' };
     }
     const CHIP_STYLE = { high: ['High', '#2e7d32'], medium: ['Medium', '#ef6c00'], low: ['Low', '#d32f2f'], pending: ['Pending', 'var(--elm2-bolt-blue, #1976d2)'] };
     function setChip(chip, kind) {
@@ -2748,15 +2928,43 @@
         chip.style.setProperty('color', '#fff', 'important');
         chip.title = kind === 'pending' ? 'Open this pair to rate it' : 'Our rating of this pair';
     }
+    // The list's chips, one line in the console whenever the count changes, saying why the Pending ones are Pending.
+    let chipSummary = '';
+    function chipReport() {
+        return Array.from(document.querySelectorAll('elm-deduplication-score-chip bolt-chip')).map((chip, i) => {
+            const row = chip.closest('bolt-row, .cdk-row, [role="row"]');
+            const sidebar = !!chip.closest('elm-review-duplicates-sidebar, bolt-stackable-sidebar, bolt-stackable-sidebar-container');
+            const r = row && !sidebar ? ratingForRow(row) : null;
+            return { chip: i + 1, where: sidebar ? 'sidebar' : row ? (row.matches('elm-review-queue-table bolt-row.cdk-row') ? 'list row' : 'other row: <' + row.tagName.toLowerCase() + '>') : 'not in a row (rated as the pair on screen)',
+                sparkIds: row ? (row.getAttribute('data-csv-sparks') || '').split('|').filter(Boolean).map(maskId).join(' ') : '',
+                shows: chip.dataset.elm2Label || '', via: r && r.via || '', pendingBecause: r && !r.level ? r.why : '' };
+        });
+    }
+    window.elm2ChipReport = () => { const t = chipReport(); console.table(t); return t.length + ' chips'; };
+    function logChipSummary(rows) {
+        if (!rows.length) return;
+        const n = (f) => rows.filter(f).length;
+        const rated = rows.filter(r => r.level), pend = rows.filter(r => !r.level);
+        const all = loadRatings(), stored = Object.keys(all).length, old = Object.keys(all).filter(k => typeof all[k][2] !== 'string').length;
+        const line = rows.length + ' on the list: ' + rated.length + ' rated (' + n(r => r.via === 'sparks') + ' by Spark IDs, ' + n(r => r.via === 'opened') + ' by the row you opened), ' +
+            pend.length + ' Pending (' + n(r => r.why === 'nosparks') + ' with no Spark IDs from the Database script, ' + n(r => r.why === 'unrated') + ' not opened yet, ' + n(r => r.why === 'old') + ' rated before 2.270: reopen). ' +
+            stored + ' pairs rated in this browser' + (old ? ' (' + old + ' from before 2.270)' : '') + ', ' + Object.keys(loadRowPairs()).length + ' rows tied by a click.';
+        if (line === chipSummary) return;
+        chipSummary = line;
+        console.log('[elm2] chips: ' + line + ' Run elm2ChipReport() for each row.');
+    }
     function syncScoreChips() {
+        const listRows = [];
         document.querySelectorAll('elm-deduplication-score-chip bolt-chip').forEach(chip => {
             if (!chipLevel(chip) && /error/i.test(chip.textContent)) return; // Bolt's own error state is left as it is
-            const row = chip.closest('bolt-row.cdk-row');
-            let level;
-            if (row) level = ratingForRow(row);
-            else { const r = currentRating(); level = r ? r.res.level : null; }
-            setChip(chip, level || 'pending');
+            // the chip in the review sidebar (or anywhere outside a row) is the pair on screen; a chip in a row belongs to that row's pair
+            const row = chip.closest('elm-review-duplicates-sidebar, bolt-stackable-sidebar, bolt-stackable-sidebar-container') ? null : chip.closest('bolt-row, .cdk-row, [role="row"]');
+            if (!row) { const c = currentRating(); setChip(chip, c ? c.res.level : 'pending'); return; }
+            const r = ratingForRow(row);
+            listRows.push(r);
+            setChip(chip, r.level || 'pending');
         });
+        logChipSummary(listRows);
     }
     // ---- SCORE CHIPS END ----
 
@@ -3978,7 +4186,6 @@
             resolutionAttempted = false;
             engagementOpenedFor = '';
             conflictWarningShown = false;
-            appealWarningShown = false;
             errorStopShownFor = '';
             previewPicks(null);
             cancelAutoMerge();
@@ -4059,18 +4266,14 @@
                 skipToNext('outside the slider range', 'Range');
                 return;
             }
-            // Possible twins: with Auto-Skip on the pair is skipped with no popup; otherwise it is
-            // left for you with a warning popup. A twins pair is never auto-merged.
-            // (There is no separate "Low score" popup.)
+            // Possible twins: with Auto-Skip on the pair is skipped; otherwise it is left for you. A twins pair is never auto-merged.
+            // (It used to raise a popup too; our score already says when the names or birth dates disagree, so there is none now.)
             if (!conflictWarningShown && CONFLICT_ROW_THRESHOLD > 0) {
                 const { conflictCount, shouldWarn, conflicts } = checkForConflictingRecords();
                 if (shouldWarn) {
                     conflictWarningShown = true;
-                    if (CFG.AUTO_SKIP_BLOCKED) {
-                        skipToNext('possible twins: ' + conflicts.join(', '), 'Twins');
-                    } else {
-                        alert(`⚠️ Warning: ${conflictCount} conflicting signal${conflictCount === 1 ? '' : 's'} detected!\n\nConflicts found in: ${conflicts.join(', ')}\n\nThese entries might be twins or two different people. Please review carefully before merging.`);
-                    }
+                    if (CFG.AUTO_SKIP_BLOCKED) skipToNext('possible twins: ' + conflicts.join(', '), 'Twins');
+                    else console.log('[elm2] Possible twins (' + conflictCount + ' conflicting: ' + conflicts.join(', ') + '): left for you, not auto-merged');
                     return;
                 }
             }

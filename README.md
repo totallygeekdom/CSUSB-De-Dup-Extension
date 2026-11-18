@@ -17,8 +17,8 @@ chip). Two v2 scripts target it, plus an optional third that merges databases:
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.276` (shown in the settings pane) |
-| Element451 - Database v2 | `database-v2.js` | `@version 2.72` |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.278` (shown in the settings pane) |
+| Element451 - Database v2 | `database-v2.js` | `@version 2.74` |
 | Element451 - Database Merge v2 (optional, pairs with Database) | `database-merge-v2.js` | `@version 1.17` |
 
 
@@ -27,15 +27,15 @@ the resolution rules, auto-merge, every website restyle, the database format, li
 
 ### What they do
 
-- **Dedup analysis**: our own points-based rating and a plain-English write-up replace Bolt's overview card, with a button to view Bolt's write-up (Full-Documentation-v2.md, section 10.6).
+- **Dedup analysis**: our own points-based rating replaces Bolt's overview card, with department, Appeal and Bolt's-score chips beside it and a Write-up / Points / Bolt's switch (Full-Documentation-v2.md, section 10.6).
 - **Automation per pair**, controlled by four settings in the gear pane:
   - **Pairs in range** slider, by our rating (Bolt's score is one input): None, High, Medium, Low, All (each position adds to the one before; an applicant side does not put a pair in range).
   - **Use picks from**: Bolt's or Ours (Ours includes the applicant rule).
   - **When done**: Wait for me, or Merge after a cancel countdown (a centred dialog with a stepped ring,
     a short brief (names, Bolt score, how often the script agrees with Bolt, what it chose over Bolt) and a Cancel button; length set by **Merge countdown**, 2-15 s, or a 4 s "race lights" start signal). This setting
     resets every browser session. A final safety check runs before Merge Contacts is clicked.
-  - **Auto-Skip**: skips blocked, out-of-range and possible-twins pairs with no popup (Next duplicate
-    only, never Dismiss); off = stop on them and show the appeal / possible-twins popups.
+  - **Auto-Skip**: skips blocked, out-of-range and possible-twins pairs (Next duplicate
+    only, never Dismiss); off = stop on them. There are no popups: an appeal shows as a chip beside our score.
   - **Next after merge**: after a merge, presses "Next duplicate" on the "Merge completed" card (default on).
   - Slider **None** (or no Allowed department ticked) with Auto-Skip on is a **scan**: every pair is
     recorded in the database and skipped.
@@ -58,7 +58,7 @@ the resolution rules, auto-merge, every website restyle, the database format, li
 - **Database v2**: records blocked / skipped pairs keyed on the two contacts' **Spark IDs** (the review
   URL no longer changes per pair), stores names as 3-letter prefixes (`Jon...`), shows right-aligned department
   badges on the list page (matched through the list API's `identities[]`, falling back to names; the Firstname 2 / Lastname 2 columns are left blank when both contacts share a name, and a blank counts as "same as the first"), exports an
-  **password-protected `.xlsx` spreadsheet**, to share, or a personal `.elmdb` file locked to your Element451 login that only these scripts read (every download is protected: the spreadsheet with a password you set once and the browser remembers, the personal file with no password; see section 19 of the full documentation) (columns `Bolt Score, Dedup Score, Firstname, Lastname, Firstname 2, Lastname 2, Spark ID 1, Spark ID 2, Dept., Scan Date, Merged, Script vs Bolt, Row Contents`;
+  **password-protected `.xlsx` spreadsheet**, to share, or a personal `.elmdb` file locked to your Element451 login that only these scripts read (every download is protected: the spreadsheet with a password you set once and the browser remembers (type one, or generate a random password or a three-word passphrase), the personal file with no password; see section 19 of the full documentation) (columns `Bolt Score, Dedup Score, Firstname, Lastname, Firstname 2, Lastname 2, Spark ID 1, Spark ID 2, Dept., Scan Date, Merged, Script vs Bolt, Row Contents`;
   preset column widths, frozen header row, filter buttons on Bolt Score, Dedup Score, Dept. and Merged, the merged-away Spark ID and names struck through; Merged = Y/N, Script vs Bolt = what the script chose over Bolt)
   and imports both protected forms and old plain `.xlsx` files (columns are read by header name), and has a **Show Database UI** toggle (under
   Display). Before every auto-skip the main script asks it to record the pair first.
@@ -139,6 +139,8 @@ UI Perfection works without the Database script. The Database script needs UI Pe
 | `elm_allowed_department` | UI Perfection | Allowed departments (UnderGrad, Grad/IA checkboxes) |
 | `elm_show_merge_counter` | UI Perfection | Hidden: show the merge counter |
 | `elm_merge_count` | UI Perfection | Merge counter value |
+| `elm_pair_ratings` | UI Perfection | Our rating of each pair opened (keyed by the two Spark IDs), for the list's score chips |
+| `elm_row_pairs` | UI Perfection | List rows tied to their pair by the click that opened them (a hash of the row's words, no names) |
 | `elm2_bolt_picks` | UI Perfection | Bolt's original pick per conflicting row, hashed (no names or emails), so a revisited pair still shows what Bolt picked |
 | `elm_csv_database` | Database | Recorded pairs (JSON array, Spark-ID keyed) |
 | `elm_show_db_ui` | Database | Show Database UI |

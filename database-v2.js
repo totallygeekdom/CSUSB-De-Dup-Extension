@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - Database v2
 // @namespace    http://tampermonkey.net/
-// @version      2.72
+// @version      2.74
 // @description  Tracks duplicate entries in a database stored in browser localStorage (exports a password-protected .xlsx spreadsheet to share, or a personal .elmdb file locked to your Element451 login) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -15,7 +15,7 @@
     if (window.__elm451CsvDatabaseLoaded) return;
     window.__elm451CsvDatabaseLoaded = true;
 
-    const VERSION = '2.72'; // keep in sync with @version (the build checks it)
+    const VERSION = '2.74'; // keep in sync with @version (the build checks it)
     const STORAGE_KEY = 'elm_csv_database';
     const UI_KEY = 'elm_show_db_ui';
     function showDbUi() { try { return localStorage.getItem(UI_KEY) !== 'false'; } catch (e) { return true; } }
@@ -539,7 +539,7 @@
     // containing "spark" (e.g. master.spark_id), and "Spark Id: <id>" text inside any
     // string value.
     const SPARK_TEXT = /spark[\s_-]*id\W{0,3}([A-Za-z0-9-]{4,})/gi;
-    function collectSparkIds(obj, path, out) {
+    function collectSparkIds(obj, path, out, where) {
         if (obj === null || typeof obj !== 'object') return;
         for (const k of Object.keys(obj)) {
             if (!path && (k === 'ai_analysis' || k === 'feedback')) continue; // free text, not profile data
@@ -547,30 +547,31 @@
             const here = (path ? path + '.' + k : k).replace(/\.\d+/g, '[]');
             if (/spark/i.test(k)) {
                 (Array.isArray(v) ? v : [v]).forEach(x => {
-                    if (typeof x === 'string' || typeof x === 'number') { out.push(String(x).trim()); }
+                    if (typeof x === 'string' || typeof x === 'number') { out.push(String(x).trim()); if (where) where.add(here); }
                 });
             }
             // identities: [{ type: 'Spark_...', <value field>: '<id>' }] -> take the value from the siblings
             if (typeof v === 'string' && /^spark/i.test(v) && !Array.isArray(obj)) {
                 ['value', 'id', 'identifier', 'external_id', 'identity', 'key', 'number', 'code'].forEach(f => {
-                    if (f !== k && (typeof obj[f] === 'string' || typeof obj[f] === 'number')) out.push(String(obj[f]).trim());
+                    if (f !== k && (typeof obj[f] === 'string' || typeof obj[f] === 'number')) { out.push(String(obj[f]).trim()); if (where) where.add((path || '').replace(/\.\d+/g, '[]') + '.' + f); }
                 });
             }
             if (typeof v === 'string' && /spark/i.test(v)) {
                 let m;
                 SPARK_TEXT.lastIndex = 0;
-                while ((m = SPARK_TEXT.exec(v))) out.push(m[1]);
+                while ((m = SPARK_TEXT.exec(v))) { out.push(m[1]); if (where) where.add(here + ' (text)'); }
             }
-            if (v && typeof v === 'object') collectSparkIds(v, here, out);
+            if (v && typeof v === 'object') collectSparkIds(v, here, out, where);
         }
     }
     function parseApiEntries(entries) {
         const sample = entries[0];
         if (!sample || typeof sample !== 'object') return null;
         const idField = sample._id ? '_id' : sample.id ? 'id' : null;
+        const where = new Set();
         const parsed = entries.map((e, i) => {
             const sparks = [];
-            collectSparkIds(e, '', sparks);
+            collectSparkIds(e, '', sparks, where);
             return {
                 uniqueId: ((idField && e[idField]) || 'api-' + i).toString().toLowerCase(),
                 name: e.name || e.full_name || '',
@@ -579,8 +580,13 @@
                 raw: sparks.some(Boolean) ? '' : JSON.stringify(e) // only searched when the record gave no Spark IDs (a page of records is not small)
             };
         });
+        // what the list call carries, for the console (field names only, never values): where the score chips' Spark IDs come from
+        const withIds = parsed.filter(p => p.sparks.length >= 2).length;
+        const shape = 'records ' + parsed.length + ', with 2+ Spark IDs ' + withIds + (where.size ? ' (from ' + Array.from(where).slice(0, 8).join(', ') + ')' : '') + '; fields of a record: ' + Object.keys(sample).slice(0, 30).join(', ');
+        if (shape !== lastApiShape) { lastApiShape = shape; console.log('[elm-db] list API: ' + shape); }
         return parsed;
     }
+    let lastApiShape = '';
     // A list record matches a database entry when it carries all of the entry's
     // Spark IDs (both contacts of the pair; a contact can be in several pairs, so
     // one shared ID alone isn't enough when the entry has two).
@@ -750,7 +756,7 @@
         const db = getDatabase();
 
         if (useDbFallback) {
-            if (db.length === 0) return;
+            if (db.length === 0) { logListTally(rows.length + ' rows, no list data captured and the database is empty: no row has Spark IDs for the score chips'); return; }
             const usedDbIndices = new Set();
             let matched = 0;
             rows.forEach(row => {
@@ -760,6 +766,7 @@
                 setRowSparks(row, [dbEntry.sparkId1, dbEntry.sparkId2]); // no list data was captured (the page loaded it before this script ran): the database entry is the source
                 matched++;
             });
+            logListTally(rows.length + ' rows, no list data captured: ' + matched + ' matched to the database by name and given its Spark IDs');
             if (matched > 0 && lastAnnotationSource !== 'db-fallback') {
                 lastAnnotationSource = 'db-fallback';
                 showApiToast('API: unavailable, using database fallback', 'fallback');
@@ -789,6 +796,7 @@
             if (api) { bound[i] = api; row.setAttribute('data-csv-uid', api.uniqueId); }
         });
         const byName = bound.filter(Boolean).length;
+        const tally = { api: 0, apiIds: 0, db: 0, ids: 0 };
         const positionOk = rows.length === apiDuplicatesList.length && byName * 2 >= rows.length;
         rows.forEach((row, rowIndex) => {
             let api = bound[rowIndex];
@@ -799,7 +807,10 @@
             }
             // Spark ID found in the API record first; otherwise name/ID text on the row
             const dbEntry = db.length ? (dbEntryForApi(api, db) || matchRowToDbEntry(row, db, usedDbIndices)) : null;
-            setRowSparks(row, api && api.sparks.length ? api.sparks : dbEntry ? [dbEntry.sparkId1, dbEntry.sparkId2] : null);
+            // both sources: the list record's IDs and the database entry's (the score chip tries each pair of them against its ratings)
+            const ids = [].concat(api ? api.sparks.slice(0, 10) : [], dbEntry ? [dbEntry.sparkId1, dbEntry.sparkId2] : []);
+            setRowSparks(row, ids);
+            if (api) tally.api++; if (api && api.sparks.length >= 2) tally.apiIds++; if (dbEntry) tally.db++; if (new Set(ids.filter(Boolean)).size >= 2) tally.ids++;
             if (!dbEntry) {
                 const b = row.querySelector('.csv-dept-badge'); if (b) b.remove();
                 row.removeAttribute('data-csv-dept');
@@ -807,6 +818,13 @@
             }
             applyBadge(row, dbEntry.dept);
         });
+        logListTally(rows.length + ' rows: ' + tally.api + ' tied to a list record (' + byName + ' by name), ' + tally.apiIds + ' of those records with Spark IDs, ' + tally.db + ' matched to the database, ' + tally.ids + ' given Spark IDs for the score chips');
+    }
+    let lastListTally = '';
+    function logListTally(line) {
+        if (line === lastListTally) return;
+        lastListTally = line;
+        console.log('[elm-db] list: ' + line);
     }
 
     let listAnnotationTimer = null;
@@ -1500,6 +1518,45 @@
     function storePassword(p) { unsavedPassword = p; try { localStorage.setItem(PASSWORD_KEY, p); return true; } catch (e) { return false; } }
     const workedPasswords = []; // passwords that opened a file since the page loaded (a coworker's file can have another one)
 
+    // ---- Generated passwords (the Generate buttons in the password dialog). Everything comes from crypto.getRandomValues. ----
+    // A uniform random whole number 0 .. n-1 (draws past the last full multiple of n are thrown away, so no value is likelier).
+    function randomBelow(n) {
+        const a = new Uint32Array(1), limit = Math.floor(0x100000000 / n) * n;
+        do crypto.getRandomValues(a); while (a[0] >= limit);
+        return a[0] % n;
+    }
+    // Random password: 12 characters from 69 (about 73 bits), at least one of each kind. Characters easy to confuse when the password is
+    // read out or typed from a note (l 1 I O 0) are left out, and the symbols are ones every keyboard has.
+    const GEN_SETS = ['abcdefghijkmnopqrstuvwxyz', 'ABCDEFGHJKLMNPQRSTUVWXYZ', '23456789', '!@#$%&*?-_=+'], GEN_LENGTH = 12;
+    function randomPassword() {
+        const all = GEN_SETS.join('');
+        for (;;) {
+            let p = '';
+            for (let i = 0; i < GEN_LENGTH; i++) p += all[randomBelow(all.length)];
+            if (GEN_SETS.every(set => Array.from(p).some(c => set.includes(c)))) return p; // redrawn until every kind is in it
+        }
+    }
+    // Passphrase: three words from the EFF Large Wordlist for Passphrases and a number 100-999, e.g. "maple-orbit-tundra-482"
+    // (about 48 bits: weaker than the random password, but easy to say to a coworker and to type).
+    // Word list: Electronic Frontier Foundation, https://www.eff.org/dice, CC BY 3.0 US, without its four hyphenated words and without
+    // 680 words that could be awkward in a password people share at work (health, disability, bodies, sex, religion, death, violence,
+    // crime, politics, insults): 7,092 words.
+    // Stored front-coded to keep the script small: each word is a digit (how many letters it shares with the word before) and the rest.
+    const EFF_WORDS_FC = '0abacus2ide4ing3lity2laze3e2rasive3east3idge3oad3uptly2sence5tee6ly3inthe3olute5ve3tain4ract3urd1ccent3laim4imate3ompany4unt3uracy6te4stom2etone2id2orn2quaint4ire2re3obat4nym2ting4on4vate7or5e5ism7t6ty3ress3s2utely5ness1eration3obics4sol5pace1far2fair3ected6ing7on3idavit4liate4rm4x3luent3ord3ront2lame3oat3utter2oot2raid2terglow5math6ost5noon1ged3less3ncy4da4t2gregate2hast2ile4ity3ng2reeable8y5d5ing5ment3ound1head2oy1ide2m1jar1labaster3rm2batross3um2falfa2gebra3orithm2ias3bi3enable3ke3ve2kaline6ze2manac3ost2oe3ft3ha3ne4gside3of2phabet2right2though3itude3o2uminum4ni2ways1maretto3ze4ingly2ber3iance4guity6ous4tion7us2endable5ment5s4ity2iable3cably3d3go3no3ss2monia6um2nesty2ong3unt2perage3le4ifier6y4y2uck3let3sable4ed5ment5r4ing1naconda3erobic3gram2chor5vy3ient2droid2ew2gelfish5ic3led5r5s4ing3ular2imal5te6ing7on6or4e2kle2nex3otate4uncer4ying3ually4ity2other2swering2tacid4rctic3eater4lope4nnae3hem4ill4ology3ibody4cs4dote4hero4quely7s6ity4rust4toxic5rust4viral7us3ler3onym3sy2vil2ybody3how3more3one3place3thing4ime3way4here1ppealing5r5se6ing4tite6zer3laud6se4e4iance5cant5ed4y3ointee3raisal7er4ehend4oach5val6e2ricot4l3on2titude3ly1qua3educt1rbitrary7te2dently2ea3na2guable7y4e2ise2madillo3band3chair3ful3hole3oire4red3rest2oma3se3und2range4y3ival5e2t1scend5t4rtain2hen3y2ide2kew2leep2paragus3ect3irate5e5in2tonish4und3ride4ology5naut6omy3ute1tlantic4s2om3nable3p2rium2tach4in3empt4ndant6ee5tion7ve4st3ic4re4tude3ractor4ibute2ypical1uction2dacious6ty3ible6y4ence4o4tion2gmented3ust2thentic4or3ograph4maker6ted7ic4pilot1vailable3lanche3tar2enue3rage4sion4t2iation5or3d2oid1wait3ken3rd4e2hile2kward2ning2oke2ry1xis0babble5ing3ied3oon2ckboard6ned4drop4ed5r4field6re4hand4ing4lands6sh5ess5ight6t5og4pack5edal4rest5oom4shift5ide5lid5pace6in5tage4talk5rack4up4ward6sh6ter4yard3on2dge3land4y3ness2ffle5ing2gel3ful3gage4ed4ie5ness6g4y3pipe3uette2ked4ry4shop3ing2lance6ing3cony3my3samic2mboo2nana3ish5ter3jo3kable4book4ed5r4ing4note4roll3ner4ister3shee3ter2rbecue5d5ll5r3code3ge4raph3ista4tone3ley3n3ometer3rack6uda4el5tte4icade5er3stool3tender5rer2sh3ically5s4l4n4s3ket2tboy3ch3h3on3s3tery4ing2uble1labber3de3h3me4ing3nching4dness4k3st3tancy6tly3zer4ing2each4k3ep3mish3nd2imp3ng4ked6r5ing5s3p3ssful3tz3zzard2ob3g3oming4per3t3use2uff3ish3nderer4t3rb4red5y4t3sh4tery1oaster5ful5ing3t2bbed4ing4le3cat3sled3tail2dacious2gged4le3us2il2k2lster3t2nanza3ded4ing4less3eless5ike4y3fire3net3sai3us3y2ogeyman4ieman3k3ndocks3ted4h4ing4lace5eg4s2rax3ing3ough3rower6ing2ss2tanical6st5y3ch3h3tle5ing2unce5ing5y4ding5less4tiful2vine2xcar3er3ing3like3y1reach4th3eze5y3wery4ing2iar3ck3de4ged3gade4ht3lliant3m3ng4k3sket5ly5ness4tle3ttle2oadband5cast5en5ly5ness5side5ways3iler5ing3ken5r3nco4ze5ing3ok4m3ught3wbeat4se5ing2unch4ette4t3sh4sels1ubble5ing5y2ccaneer3ked5t4le4shot5kin4tooth4wheat2dding4y3get2ffalo4ed5r4ing2ggy2lb3ge4iness4ur3k3ldog6zer4frog4horn4ion5sh4pen4ring4seye2nch3dle3gee3kbed4house4mate3ny3t2sboy3h3ily3load2zz0cabana3bage4ie3driver3le3oose2che3kle3ti4us2ddie4y3et3illac3mium2ge2hoots2ke2lamari3cium4ulate6us3ibrate3m3oric6e3zone2mcorder3eo4ra3isole3per4fire4ing4site4us2nal4ry3cel3died4le4y3e3ine4ster3ned4ing4ot3ola4n4pener5y3teen3yon2pable6y4city3e3ital5ol3ped3ricorn3size4ule3tion5vate4ure2ramel4t4van3bon3dboard4ed4igan5nal4stock3efully4giver4less4ss4taker3go3ing3less4oad3maker3nation4ival6ore3ol3penter7ry4ool5rt3ried4ot5usel4y3tel4load4on5on4ridge4wheel3ve4ing3wash2scade3e3h3ing5o3sette3ually2talog5yst6ze4pult4ract3chable5er5ing5y3erer5ing3fish3like3nap4ip3sup3tail4le3walk2ucus3sal5tion4e4ing3terize4ion6us2valier5ry3iar4ty1edar2lery4stial2ment2nsus2ramics3emony3tainly7ty4ified6y1hafe4fing3in4r3lice4lenge3mber4omile4pion3nce4ge4nel4t3os3perone4ped4s4ter3racter4broil4coal4ger5ing4iot5ty4m4red4ter5ing3se4ing3troom4ter5ing5y2eddar3ek4r4se5y3f3micals5st3risher4ub3ss4t3vron4y3wable4er4ing4y2ief3huahua3ldcare5hood5ish5less6ike4i4l3mp3p3rping5y3tchat3valry4e2loride6ne2oice3mp3oser5ing5y3p3sen3wder4time2rome2uck3g3mmy3nk3rn3te1ider2lantro2nch3ema3namon2rcle5ing4ular7te5s2table4del4tion3izen3ric4us3y2vic4l1lad3im3mbake4my4or4p4shell3ng4king3pped6r5ing3rify5net5ty3sh4p4s3tter3use3vicle3w3y2ean4r4t4ver3ft3nch3rk3ver2icker3ent3mate6ic3ng4ic4king3p3que2oak3bber3ck3ne4ing3sable4ure3thes5ing3ud3ver2ubbed5ing4house3mp4sily5y3nky3stered3tch4ter1oach3stal5er5ing5land6ine3t3uthor2balt3bler3web2coa4nut2d2editor3rce3xist2ffee3ounder2gnition7ve3wheel2herence7t4sive2il2la3d3eslaw3iseum3lage5pse5r4ected7or4ide5e5sion3onial6st6ze5y4ssal3t2me3fort4y3ic4ng3ma4ence6d6t5rce4odity6ore5n5tion4ute6ing3pacted8r7ly7or5nion6y5re4el4ile4ly4onent5sed7r6ite6t6ure5und4ress5ised4uter6ing3rade2ncave4eal5ded5pt5rned6t4h4ierge5se4lude4rete4ur3dense4iment5tion4one4ucive6tor5it3e3fess5tti4idant6ent7r6ing5gure5ned6ing5rm4lict4orm5und4ront4used6ing7on3genial5sted4rats5ess3ical3joined4ure6or3nected7or3sensus6t4ole6ing5nant4table6nt5rain6ict6uct4ult5mer6ing3tact5iner4empt5nd6ted7ly7s5st5xt4ort5ur4rite5ol3vene2partner3e3ied5r4lot4ng4ous3per3y2ral3k3nball5read4cob4ea5d5r4field5lake4husk4meal4stalk4y3poral7te3ral4ect4idor4ode6ing5sive3sage2signer3metics4ic4os3ponsor3t2ttage4on2uch3gh3ld3ntable5down5ing5less5ry5y3rier2venant4r4ted5ing2yness2zily4ness3y1rabbing4grass4like4meat3dle5ing3fter5ily5sman5work5y3nberry4e4k3te3ve4ing3wfish4lers5ing3yfish4on2eamed6r5like4se5ing4table5e5ion6ve5ure3dible7y5t3me3ole3pe4t3scent4ted5ing5less3vice3wless4man6te2ib3cket3ed4r3mp4son3nging4kle6y3sped5ing5ly5ness5y3teria4ter2oak3ck3on3p3ss3uch4ton3wbar4d4n2ucial3dely5ness3mb4miest5y4pet5led3ncher6ing6y3shable5ed6r5ing4t3x2yptic3stal1ubbyhole3e3ical5le2cumber2ddle5y2fflink2linary3minate3pable3tivate4ural6e2pbearer3cake3id3ped4ing2rable4tor3dle3e3few3ing3led5r4iness6g4y3ry3sive4or3tain4ly4sy3vature4e4y2shy3p3tard4odian6y5mary6er6ize6s2t1ycle4ic5ng5st2linder2mbal2toplasm8t0dab2d2ffodil2ily3ntily5y3ry3sy2llying2nce4ing3delion5r4y3ger4le5ing2redevil4s3ingly3kened6ing4ish4ness4room3ling3n3t2sh3tardly2ta3ebook3ing2ughter3nting2wdler3n2ybed4reak3care3dream3light4ong3room3time2zzler5ing1ealer4ing4maker4t3n2batable5e5ing3it3rief3tless4or3ug4nk2cade4f4l4thlon3ember4ncy5t3ibel4dable4mal5eter4pher3k3lared4ine3ode4rated7or4y3rease5e2dicate7or3uce5t2ed3m3pen4ly4ness2face5ing4me4ult3eat4ction7ve4ndant6er5se6ive4rral6ed3iance6t4ne5ite3late6ion6or4ected7or3og4rest3raud4ost3tly3use3y2graded6ing4ease5e2hydrate2jected2lay3egate7or4te5ion3icacy6te5ious4ghted4verer7y3ta3uge4xe2manding3eanor3ote5ion3ystify2natured3iable5l4m3ote3se4ity3tal4ist3y2odorant6ize2parture3ict3lete6ion4ored5y3ose3recate4ive3th3utize5y2rail3by3ived2serve6ing3ignate6ed7r6ing3kbound4top4work3pise5te3tiny4ruct2tached4il3ection7ve6or4rgent4st3oxify3ract2uce2value3iate6ion6or4ce4ous3otedly6e5ion4urer6ing5tly2xterity6ous1iagram3l3meter3ry2ce3ing3tate6ion2fficult4used7r6ion7ve2g2lation3igence7t3l3ute2me3inish3ly3med5r3ness3ple2ner3ghy4iness4o4y3ing3ner2oxide2ploma3ped5r4ing2rected6ion7ve6ly6ory4ness3tiness2sagree4llow4rm5ray4ster3band4elief4urse3card4ern4harge4lose4olor5unt6rse5ver4uss3dain3engage3h3infect3join3k3like6ing4odge3mantle5y4iss4ount3obey4rder4wn3parate6ity5tch4ense5rsal7ed8r4lace6y5ease4osal6e4rove4ute3regard4upt3suade3tance6t5ste4ill5nct4ort4ract5ess5ict5ust2tch3to2vidable5ed6nd6rs5ing4ng4sible8y6on6ve2zzy1oable2cile3k3ument2dge4y2ily3ng2le3lar4house4op4y3phin2main3elike4stic3inion5oes2nated5ion5or3or3ut2odle3rbell4frame4knob4man6t4nail4post4step6op4way3zy2rmitory3sal2sage3e2tted2ubling2ve2wn2ze1rab3gging4onfly6ish4ster3inable6ge5ed6r5pipe3matic7ze3nk3pery3stic3w2eaded5ful5lock4mboat5ily5land6ess6ike5t5y4rily5y3nch3ss3w2ibble3ed4r3ft3ller5ing3nkable5ing3pping5y3vable4en5r5way4ing3zzle6y2one3ol4p3pbox4kick4let4out4per3ve3wsily2udge3m2y1ubbed3iously2chess3kbill4ing4ling4tail4y3t2de2ffel2gout2h2ke2ller4ness3y2mping4ling4ster2o2pe3lex4icate6ity2rable6y4tion3ess3ing2sk3t2tiful3y2vet1welled6r5ing2indle6ing1ynamic6te4sty0each2gle2rdrum3flap4ul3lobe4y3mark4uff3phone4iece4lugs3ring3shot3then5like7ng6y5worm5y3wig2seful4l3iest4ly4ness5g3tbound4coast4ward2table3en4ry3ing3s1bay2ony3ok1card2centric2ho2lair3ipse2ologist6y3nomic7st6y3sphere4ystem1dge3iness5g3y2ition4or2ucated6ion6or1el1ffective6s3icient3ort1ggbeater3ing3nog3plant3shell1ither1ject1laborate3stic3ted2bow2dest2ectable5ion6ve3phant3vate6ing7on6or4en2f2igible7y3minate3te4ism3xir2k2lipse5tic2m2ongated3pe3quence7t2sewhere2ude3sive2ves1mail2bargo5k4ssy4ttled3ellish4r3laze4em3ody4ss3roider2cee2erald4gency2ission3t2ote4icon5on2pathic6y3eror3hases6is7ze5tic3irical3loyed7e7r3orium4wer3tier5ness4y2u1nable3ctment3mel2chanted4ilada3ircle3lose6ure3ode4re4unter5rage3roach4ust4ypt2danger3eared6ing4d3ing3less3note3orphin5se4wment3point3urable6nce5ing2ergetic5ize5y2forced7r2gaged5ing3ine3raved7r6ing4oss3ulf2hance2igmatic2joyable8y5er5ing5ment2larged6ing3ighten4sted2quirer2rage3ich3oll2snare3ure2tail4ngled3ering5tain3icing4re4tle5y3ourage3rap4ee5nch4ust4yway3wine2unciate2velope3iable7y4ous4sion3oy3y2zyme1pic3logue3phany3sode1qual4te5ion5or3inox4pment4ty4vocal1radicate3sable4ed5r4ure2gonomic2rand5t4tic3or2upt1scalate7or4pable6de5ist4rgot2pionage3resso2quire2say3ence5tial2tablish4te3eemed3imate7or3ranged1tching2ernal5ity2hanol3er3ically5s1uphemism1vacuate5ee3de3luate7or3porate3sion5ve2en3rglade5reen4ybody5day5one2idence6t2oke3lution4ve1xact3lted3mple2cavate7or3eeding4ption4ss3hange3itable5ing3laim4ude6ing5sion7ve3ursion4sable8y5e2emplary6ify5tion3rciser4t2foliate2hale4ust2isting3t2odus3nerate2pand5se6ion7ve3ectant4dited8r4l4nd5ses6ive4rt3ire5ing3lain4icit4ode5it5re6ing3onent4rter4sable5e5ure3ress3ulsion2quisite2tended6ing5t5uate4rior5nal3inct3radite5s4overt4ude6ing2uberant0fable3ric3ulous2cebook4cloth4down4less5ift4plate4ted3ial4lity4ng3simile3tion4oid5r4sheet4ual3ulty2de3ing2iling2lcon3l3se4ify2me3iliar5y2ncied5ness4y3fare3g3ning3tasize6tic6y2stball4er4ing4ness2ucet2vorable8y5ed5ing6te2x1east2deral3ora2eble3d3l2isty2line2nce4ing3der2rment3nlike3ocious6ty3ret4is4y3vor2stival6e6ity2tch1iber2ction2ddle5ing3elity3geting6y2fteen4h4ieth4y2gment3ure5ine2ling3led5r4ing3m3ter4rate2nale5ist6ze5ly4nce6ial3ch3eness4r3icky4shed7r6ing4te3less4ike2scally2t2ve1lagman4pole4ship5tick6one3il3kily4y3me4mable3nked5ing4nels3p3ring3shback6ulb5card5ily6ng5y4k3tbed4foot4ly4ness4ten6red8r7y5op4ware5orm3vored6ful6ing3xseed2ed2ick3er3ght3nch4g4t3p2oat3ck3p3ral4ist3ss3under2yable4way3er3ing3over3paper1oam2e2g2il2lic3k3low2ndly4ness4ue3t2od3tage4ball6th5oard4er4gear4hill5old4ing4less4man4note4pad6th5rint4rest4sore4wear5ork2ssil3ter2under5ing4tain2x2yer1raction3gile6ity4ment4rance7t3me4ing3ntic3ternal3yed4ing4s2eckled7s3ebee5ie4dom4fall4hand4ing4load5y4ness4style4ware6y5ill4zable5ing3ight3nch4zied5y3quency7t3sh3tful4ted2iction3day4ge3ed4nd3ghten6ful3ll3nge3sbee4k3tter3volous2olic3m3nt3sted5ily6ng5like5y3th3wn3zen2uctose3gality6ly3it3strate2ying0gab2ffe2infully4ing4s2la3lantly4eria6y5y4on3ore3vanize2me3ing3ma2nder3gly4way2p2rage3bage3den3gle3land4ic3ment3net4ish2s2therer6ing3ing2uging3ntlet3ze2ve2wk2zing1ear2cko2ek2iger2m2neric5ous4tics3re3tleman5y4s2ography3logic7st6y3metric7y2ranium3bil3micide5nate4less4proof2sture2taway3ting3up1iant2bberish3let2ddily5ness4y2ft2gabyte4hertz4ntic3gle5ing5y2lled4s2mmick2veaway4n4r3ing2zmo3zard1lacial5er3de4iator4ly3morous5ur3nce5ing3re4ing3ss3zing2eaming3eful2ider4ing3mmer4pse3sten3tch4ter4zy2oater5ing3omily5y3rified8r6y5ous4y3ss3ve3wing4worm2ucose3e3ten4inous1narly3t1oal3tskin2es2ggles2ing2ldfish4mine4smith3f3iath2ndola3e3g2od3ey3fball4iness4y3gle2pher2rged5ous2sling3sip2thic3ten2wn1rab3ceful5less4ious3dation4ed5r4ient5ng4ually6te3ffiti4ted5ing3in3nddad5kid5ly5ma5pa5son4ite4ny4ola4t4ular3pe4h4ple6ing3sp4s3tified6y5ng5tude4uity3vel5ness4itate6y4y3y3zing2easily3edily5less5y4n4ter5ing3w3yhound2id3ll3mace6ing4e4iness4y3nch4ning3p3stle3t2oggily5y3om4ve5ing5y3und4ped4t3ve3wer4ing4l2ub3dge5ing3eling3ffly3mble6ing6y4pily3nge4t1uacamole2idable5nce4e4ing3leless3se2lf3lible4y3p2mball3drop3miness6g4y2rgle5ing3u2sh3to4y2ts3ter2y2zzler1yration0habitable6nt6t5ual2cked5r4ing4saw2d2ggler2iku2lf3ogen3t3ved5s2mburger3let3mock3per3ster5ring2ndbag6ll5ook5rake4cart5lap7sp5raft4ed4ful4grip4held4iness5work4lebar6d6r5ing4made4off4pick5rint4rail4saw5et5free5hake5tand4wash5ork6ven5rite4yman3gnail4out4up3kering4ie4y2phazard3pening4ier6st5ly5ness4y2rbor3dcopy6re6ver4disk4ened7r6ing4hat5ead4iness4ly4ness4ship4ware5ired5ood4y3mful4less4onica8s7ze6y3ness3pist3sh3vest2sh3sle3te4ily5ness4y2tbox3chback5ery6t5ing5ling3less2unt2ven2zard3elnut3ily4ness5g3y1eadache4band5oard4count4dress4ed5r4first4gear4ing4lamp5ock4phone5iece4rest5oom4scarf5et5tand4way5ear3p3t3ve4ily5ness6g2dge4ing2ftiness4y2lium3met3per4ful4ing4less5ine2mstitch2nce3na2rald3bal4icide4s3itage3mit3oics5sm3ring3self3tz2sitancy7t6te2xagon1ubcap2ddle5ing2ff2g2la3k3l2man3ble5ing5y3id4lity3ming4us3ongous4rist5less5ous3pback3vee2ndredth3ger4rily5y3k3ter4ing4ress4sman2rdle3led5r4ing3ray4icane5ed4y3t2sband3h3ked4iness2t1ybrid2drant5ted6ion4ogen5xide2perlink5text3hen3noses6is5tic7sm8t7ze0ibuprofen1ce2iness4g2ky2on2y1dealism7t6ze5ly5ness3ntical6fy6ty3ology2iom2ly1gloo2nition3ore2uana1llusion6ve1mage4inary6es6g2itate6ion2mature3erse6ion3inent3obile4rtal4vable8y3unity6ze2part4tient3each4ding4nding4rfect5ial3ish3lant4ement4icate6it4ode5sion7ve4y3olite4rtant6er4se5ing4und3recise4int4omptu5per5ve6ing7se4udent3ulse6ive1odine4ze2n1pad2hone2od1rate2k2on2regular3igate4table8y6nt6te1solated6ing7on3tope2sue4ing1talicize6s2em2inerary2unes1vory2y0jab2ckal4et4knife4pot2lapeno2m2nitor3uary2rgon3ring2smine2unt2va2wed3less4ine3s2ybird3walker2zz1eep3ringly2llied4y2rsey2ster2t1iffy2gsaw2mmy2ngle5ing3x2tters6y1ob2ckey2gger4ing2hn2ining2kester3ingly2lliness4y3t2t2vial2yfully3lessly3ous3ride3stick1ubilance7t2dge4ingly3icial7ry3o2ggle5ing2ice4iness4y2jitsu2kebox2ly2mble4o3p2nction5ure3e3ior4per3kman4yard2rist3or3y2stice5fier6y4ly4ness2venile0kabob2ngaroo2raoke4te1ebab2enly4ness3p2g2lp2nnel2pt2rchief3osene2ttle1ick2ln3obyte4gram4meter4watt3t2mono2ndle5ing5y4ness4red3etic3folk3g3ship4man4woman2tchen3e3ten4y2wi1leenex1napsack2ee3lt2oll1oala2oky1rypton1udos2ng0labored6r5ing6ous3rador2dder3ies3le3ybug4like2gged4ing3oon2ir2ke2nce3ded4fall5ill4ing4lady5ess5ine5ord4mark6ss4owner4scape5ide5lide3guage3kiness4y3tern2pdog3el3ped4ing3top2rd3ge3k2sh3so3t2tch3e3her3itude3rine3ter4iced2unch4der5ry3rel2vender3ish2zily4ness3y1ecturer2ft2gacy4l3end3ged4ings3ible6y4slate3o3room3ume3warmer4ork2mon2nd3gth3s3t2otard2sser2tdown3hargic7y3ter4uce2vel4rage5s3itate7or1iability4le2berty3rarian6y2cking3orice2d2fe3ter4ing4off2gament2kely4ness4wise3ing2lac3ly3y2mb3eade4light4s3it3pness2ne3go4uini6st3ing3ked3oleum3seed3t2on2p2quefy5ur4id2st2tigate7or3mus3ter4le2vable3ed4ly4r4stock3idly4ng2zard1ubricant7te2cid3kily5ness4less3rative2dicrous2gged2kewarm2llaby2mber3inance5ous3piness6g5sh2nar3chbox5eon5room5time3g2rch3e3idness3k2shly4ness3ter4rous2xurious5y1yrically5ism7t5s0macarena5oni4w3e3hine6ist2gazine3enta3ical5ian3ma3nesium5tic7sm7ze4ifier6y5tude4olia2hogany2jestic6y3orette5ity2keover4r4shift3ing2lt2ma3mal2nager5ing4tee3darin5te6ory4olin3ger4le4o4y3handle4ole3icotti5ure4festo4la3kind3like3made3ned3or3power3tis4ra3ual3y2p2rathon4uding3bled6s5ing3ch3di3garine7ta4in3igold4na5e4tal5ime3lin3malade3oon3ried4ow4y3shland5y4upial3velous2scot3hed4ing3sager4es4ive3tiff2tador3chbook7x5er5ing5less3erial5nal3h3riarch5mony5x4on3ted5r3urely5ing6ty2uve2verick2ximize5um2ybe3day3flower1obile5ity6ze2cha3ker4up2dified5y3ular6tor5e2isten5ness5ure2lar4sses3d3ecular7e4hill3lusk2m2nastery3day3etary5ize4ybags5less5wise3goose3itor3khood3ogram4logue4poly4rail4tone5ype4xide3sieur4oon4trous3thly3ument2ocher3diness4y3ing3nbeam4ed4light6ke6t4rise4scape5hine5tone4walk2p2rale5ity5ly3phing3se2saic3sy3t2thball4proof3ion4vate7or5e3ocross4r3to2untable6in5ed5ing3se4iness4tache4y3th2vable3e3ie4ng2wer3ing1uch3k2d2g2lberry3ch3e3led5ts3tiple7y5task6ude2mble5ing4o3my2nchkin3dane3icipal2ppet2ral3kiness4y3muring2scular3eum3hily5ness4room4y3ic3kiness4y3tang5rd4er4iness4y2table4te5ion3iny3t3ual2zzle1yself3pace3tified6y2th0nacho2g2il2me3ing2nny3ometer2pe3kin3ped4ing2rrow2stily5ness2tional4ve3ural5e5ist2utical2vigate7or3y1earby4est4ly4ness3tly4ness2bula5izer2ctar2gate5ion6ve3lector4igent3otiate2meses5is2on2phew2rvous4y2st2t2urology5n3tron2ver2xt1ibble2ckname2ece2fty2mble5y2neteen5ieth3ja3tendo4h1uclear5i5us2gget2llify2mber4ing4ly4ness3eral6te7or5ic5ous2rsery4ing3ture2tlike3meg3rient3shell2zzle1ylon0oak2sis2t1bedience7t2ject2ligate5ed4vion7us3ong2oe2scure6ity3ervant6er6ing4ssed6ion7ve3olete3tacle4inate4ruct2tain3rusive3use2vious1ccupancy7t5ier5y2ean3lot2tagon4ne3ober4pus1il2nk3tment1kay1ld2ive2ympics1mega3n2inous3ssion3t2nivore1nboard2coming2going2ion2line3ooker3y2screen3et3hore3laught3tage2to2ward2yx1ops2ze3y1pacity3l2en3rable5te6ing7on7ve6or2ossum2ponent4se5ing6te2t2ulently1smosis1ther2ter1uch2ght2nce2tage3back4id4oard5und4reak4urst3class4ome3dated4oors3er3field5t4lank3going4row3ing3last4et4ine4ook4ying3match4ost3number3played4ost5ur4ut3rage5nk4each4ight3score4ell4hine5oot4ider4kirts4mart4ource4poken3takes4hink3ward4eigh4it1val2en3ract5ll5rch4bid6ll6te5lown5oard6ok5uilt4cast5oat6me6ok5rowd4draft7wn6ess6ive5ue4eager5xert4fed6ed5ill5low5ull4grown4hand7g6ul5ead7r7t5ung4joyed4kill4labor6id6p6y5oad6ok6rd5ying4night4pass6y5lant7y5ower5rice4rate5each8t5ide6pe5ule6n4shoot7t5ight6zed5leep5old5pend5tate7y6ep6ock6uff5weet4take5hrow5ime5ly5one5ure7n4use4value5iew4write1wl1xford2idant5tion4ize6ing2ygen1yster1zone0paced3ific6er6sm7t5y2dded4ing4le5ing3lock2ger3ing2jamas2lace4table3m3pable4itate3try2mpered7r4hlet2nama3cake3da3g3handle3ic3ning3orama7ic3ther4omime4ry4s2parazzi4ya3er3rika3yrus2rabola4chute4de5ox4graph4keet4legal4medic6ter5ount4sail3cel4hed5ment3don3ish3ka4ing4way3lor3mesan3rot3sley4nip3take4ed4ing5tion4ly4ner4ridge4y2ssable7y5ge4code4enger5rby4ing5on5ve6ism4port4word3ta4ed5l4ime4rami4ure4y2tchwork5y3ernal3h3ience6t4o3riot4ol5nage6ize2uper2vement4r4stone3ilion4ng2wing2yable3back3check3day3ee4r3ing3ment3phone3roll1ebble5y2can3tin3uliar2ddling3iatric4cure4gree3ometer2gboard2lican3let3t2nalize5ty3cil3dant4ing3holder3knife3nant4y3pal3sion3tagon2p2rceive5nt4h4olate3ennial3fected7ly4ume3iscope3kiness4y3m3oxide3petual4lexed3severe4uaded8r2sky3o3simism8t3ter4icide2tal3ite5ion3ri4oleum3ted4icoat5ness4y3unia1hantom2oenix3nebook5y4ics5ness4y3sphate3to2rase5ing1lacard5te4idly3nk4ner4t3sma4ter5ic3ted4form4ing6um4onic4ter4ypus3usible8y3yable4back4er4ful4group4house4ing4list4maker6te4off4pen4room4set4thing5ime3za2eading4t3dge3ntiful5y3thora3xiglas2iable2od3p3t3w3y2uck3g3nder4ging3ral3s3tonium2ywood1oach2d2em3t2go2inted6r5ing5less5y3se4on2ker3ing2lar3ice5y4sh4tely3ka3o3yester4gon5raph4mer2ncho3d3y2pcorn3lar3per4y3sicle3ulace6r6te2rcupine3k3ous3ridge3table5l4folio4hole4ion4side2ser3h3ing3sible7y4um3tage5l4box4card4ed5r4ing4ure4war2uch3nce5ing4d3ring3t2wdered6ing6y3er1raising3nce5ing4ker5ish5ster2eamble3cinct5se6ion4ook4ut3dator4efine4ict3face4ix4light4ormed3game3heated3launch5w4ude3miere5ses5um3occupy4rder3paid5y4lan4py3school5ribe4eason5t4how4ident4oak4s4ume6ing3teen5nded8r6se5xt4ty4zel3vail5lent4ent4iew5ous3war5shed2ideful3ed3mal5rily6y5te4er4p3ncess4t3or3sm4sy4tine3vacy5te6ize3ze2oactive3bable7y4e4ing5otic4lem3cedure5ss4laim4urer3digal6y4uce6t3fessed7or4ile4ound4usely3gram5ess3jector3logue5nged3menade4inent4oter6ion4pter6ly3ne4g4ounce4to3ofing5read5s3peller5rly6ty4onent5sal6e4s3rate3tector5gee4on5type5zoan4ract5ude3ud3vable4ed5n4ided7r6ing5nce6g4oke6ing5lone3wess4ling3ximity4y2une4ing2y1ublic5sher2cker2eblo2g2ll3p3sate4e3verize2ma3ice3mel2nch4tual7te6red3gent3isher3k2pil3pet4y2rchase3ebred4ly4ness3ge4ing3ifier5y4st4ty3ple5ish4osely3r3se4uable6nt5it3veyor2shcart5hair4er4iness6g4over4pin4up4y2tdown3t2zzle5ing1yramid2thon0quack3drant3il4ntly3ke4ing3lified8r6y5ty4m3ntum3rrel5y4tered7ly7s6t2ench3ry2icken5ly5ness5sand6tep3et3ll4t3ntet5uple3rk3t3ver3zzical2otable5tion4e0race3ing3k3oon2dar3ial5nce6tly5ted6ion6or4o4sh2ffle3t2ge3ged3ing3weed2ider3lcar4ing4road4way3sin2ke3ing2lly2mble5ing3p3rod2nch4idity3dom3ged5r4ing3ked4ing3sack3ting4s2re3ity2scal3h3ping2vage3en3ine5g4oli4shing1eabsorb3ch4quire4tion6ve5or3ffirm3m3nalyze3ppear5ly5oint5rove3rrange4view3son4sign5ure3ttach3wake2balance4te3el3irth3oot4rn4und3uff4ild6t4rial4ttal2call4nt4pture4st3ede4nt4ss3harger3ipient4tal5e3kless3laim4iner6ing4use6ive3ognize4il4llect5or4ncile5firm5vene4py4rd4unt5p4very3reate3tal5ngle4ified6y3ycled7r6ing2emerge3nact4ter5ry3xamine2ferable5ee6nce3ill4nance5ed6ry5ing6sh3lected7or5x4ux3ocus4ld4rest5mat6ed7r6ist3ract5in4eeze5sh4ied3ueling4nd4rbish5nish4sal5e5ing4table5e2gain4lia5ly3gae3ime4on4ster6rar7y3ress5tful4oup3ular6te7or2heat3ire3ydrate2imburse3ssue3terate2joice6ing5n2kindle2latable5ed5ion6ve4x4y3earn5se4nting3iable7y5nce6t4c4eve6ing4ght4sh4ve3oad4cate5k3uctant3y2make4rk5ry4tch3edial5y4mber3inder6ful4x3nant3odeler4ld4rse4te4vable6l5ed6r5ing2name3derer6ing4ition3egade4wable8y6l5ed3ounce4vate7or3table5l4ed5r2occupy6r3pen3rder2package6ing4int5r4ve4ying5ment3eal5ted7r3hrase3lace5y4ica4y3orter4se5sess5t3ressed4imand5nt5se4oach5cess5duce5gram3s3tile6ian3ulsion4rpose4table8y2quest4ire5site2route3un2sale4mple3cuer3eal5rch4lect5ler4mble4nd5t4t3hape4oot4uffle3idence8y7t5ual6e4gned4lient4stant6ing4ze3olute5ved4nant6te4rt4urce3pect3ubmit4lt4me4pply4rface2tail5ner6ing4ke3ention3hink3inal4red6e5ing3old4ol4rted4uch3race6t5in4ead6t4ial5eval7er4y3urn3ying4pe2union5te3sable4e2veal4ler4nue4rb5ed6nce5sal6e6ing7on5t3isable5e5ion6t4vable6l5er5ing3ocable4ke4lt5ving2ward4sh3ind4re3ord5k3rap4ite1hyme1ibbon3cage2ce3hes4ly4ness3kety3otta2dden3e3ing2fling3t2gging3id3or2mless3med2nd3k3se4ing2pcord3eness5ing3ping4le5ing3tide2se3ing3k3otto2tzy2val3erbank6ed6oat5side4ter5ing1oamer4ing3st2bbing3e3in3otics3ust2ckband4er5t4fish4iness6g4like4slide5tar4y2gue2man3p2pe3ing2ster3y2tten3unda2ulette3nding6sh5ness5up3tine6g2ver3ing2yal1ubbed5r4ing4le3down3y2ckus2dder2g2ined2le2mble5ing3mage3or2naround3down3ner4ing4y3way2ral2se3h3t2t0sadden4lebag6d5ing3ly3ness2fari3eguard4house4ly4ness3fron2ga3e3ging4y2id2ke2lad4mi4ried5y3ine3on4on3sa3t3utary5e3vage6ing2me3ple5ing2nction5uary3dal4bag6nk6r5last5ox4ed4fish4ing4lot4paper5it4stone7rm4worm4y3itary5izer3k3ta2pling3piness4y2rcasm6tic3dine2sh3quatch3sy2tchel3iable4n4rical4sfied6y3urate5day2uciness4y3na2vanna3ed3ings3or2xophone2y1cale4ing4lion5op3m3ndal4ner5ing4t3rce5ity4ecrow5d4f4ily5ness4y3venger2enic2hedule4matic5e5ing3illing3napps3olar2ience5tist3on2off3lding3ne3op4ter3pe3rch4ebook5card5d5less5r4ing4pion3tch3ured5ing4ting5s3wling2rabble4ggly4mbled8r4p4tch3een3ibble5e5ing4mmage4pt3oll4oge4unger3ubbed7r4ffy4nch4tiny2uba3ff3lptor6ure3ttle1ecluded6ing5sion3ond3recy5t3tional4or3urely5ity2dan4te3iment2gment2ismic3zing2ldom3ected6ion7ve6or3f3tzer2mantic3ester3icolon4final4nar4soft5weet2nate5or3d3ior3orita3sation4itive7ze2pia3tember4um2quel5nce5ster2ries3otonin3pent3rated3ve4ice5ng2same3sions2tback3ting4le5ing3up2venfold5teen6h6y4rity1habby3ck3ded4ily5ness6g4ow4y3ft3kable4ily5ness6g4y3le4lot6w3mpoo4rock3nty3pe4ing3re4pener6r5ie5ly5ness3wl2eath3d3ep4t3lf4l4ter4ve5ing3rry2ield3fter5ing5less5y3mmer5y3ndig4e4gle4iness6g4y3p3rt3vering2ock3ne3pper5ing4talk3re4tage5cake6ut5en6r5hand5list6y5ness5s5wave5y3ut3ve3wbiz4case4down4er4ing4man4n4off4piece5lace4room4y2rank3edder6ing4wdly3iek4ll4mp4nk4vel3ouded3ubbery5s4g4nk2ucking3dder3ffle6ing3n3sh3t2y1iberian3ling2ding2erra3sta2ft2ghing2lenced7r5t3ica5on3k3liness4y3o3t3ver2milarly5e3mering3ple5ify5y2ncere6ity3ger4ing4le4ular3uous2p2ren2ster2tcom3ter4ing3uated6ion2xfold3teen4h4ies6th4yfold2zable6y3e3ing3zle5ing1kater4ing2edaddle3leton3ptic3tch3wed5r2id3ed4r4s3ing3lled6t5ful3mmed6r5ing4pily3ncare4less4ning3pper5ing3rmish4t3ttle2ydiver3light5ne3pe3rocket3ward1lab3cked6r5ing5ness5s3m3ng3pping4stick3shed5ing3te4her3w2ed3ek4p4t4ve3pt2iceable5d5r4ing4k3der5show4ing3ghted6ing6ly3mness4y3nging5shot4ky3p3t3ver2obbery3gan3ped4ing4pily5y3t3uching6y2udge3g3rp3sh2y1mall3rtly5ness3sher5ing5up2ell4ting2ile4ingly3rk3th4ten2ock3g3ked5less4iness6g4y3lder3oth2udge5y3gly4ness1nack3gged3king3p3re4l3zzy2eak3er4ze5ing2ide3ff3ppet5ing2ooper4ze3re4ing4kel4t3ut3wbird5oard6und4cap4drift6op4fall5ield5lake4iness4less4man4plow4shoe5torm5uit4y2ub3ff3ggle4ly4ness1peak4rfish5head5man6int3cies5men4ked5led5s4tacle6tor5rum4ulate3ech4d3llbind5er5ing3ndable5er5ing4t3w2here5ical3inx2ider3ed3ffy3ll4t3nach5l4dle4ner5ing4out4y3ral4ited2lashed6ing6y4tter3endid6or3ice5ing4nter3otchy3urge2oilage5ed6r5ing5s3ken5sman3nge5y4sor3of4kily5y4l4n3re4ting5s5y3tless5ight4ted6r5ing5y3usal5e4t2rang4wl4y3ee3ig4ng5kled8r5t4te3out3uce4ng3y2ud3r3tter2yglass1quabble4d4ll4nder4sh4tted7r6ing3eak5ler6ing5mish4egee5ze6ing3id4ggle7y4nt4re5t4shier6y1tability7ze4le3ck3dium3ff3ge4ing4nant6te3inable5ed5ing5less3lemate5ness4ling6on3mina4p3nd4k3ple5ing3rboard4ch4dom5ust4fish4gazer4ing4k4less6t5ight6t4ring5y4ship4ter5ing5le6ing5up3sh3te4ic5stic4ue5re5s5te6ory3unch3ys2eadfast5ier6ly5ying4m3ed4p4rable5ing5sman3gosaur3llar3m3ncil3p3reo4ling4nness3w2ick3ffen5ly5ness4le5ing3llness4t3mulate6i6us3nger5ily6ng5ray5y4king5y3pend4ulate3r3tch2ock3ic3ke3le3mp3newall7re6ork4y3od4l4p3plight4pable6ge5ed6r5ing4watch3rable5ge4eroom5wide4m3ut3ve3waway4ing2raddle4ggler4ined7r6ing4ngely7r4tegic7y5us4w4y3eak5m4et4ngth5uous4ss4tch4wn3ict4de4fe4ke5ing4ve5ing3obe4de4ller4ngbox6ly6man3uck5ture4del4ggle4m4ng4t2ubbed5le6y5orn3cco4k3dent4ied5o4y3ffed5ing5y3mble6ing4p3ng4ned6r5ing4t3rdily5y2yling5shly6t5zed4us1uave2barctic4tomic3divide4ued5ing3floor3group3header3ject3lease5t5vel4ime3marine4erge6sed4itter3panel5r4lot4rime3scribe7pt4ector4ide6ing7ze6y4oil5nic4tance4ystem3text4itle4ly4otal4ract4ype3urb3way4oofer3zero2cculent3h3tion2dden3oku3s2ffice5x4rage2gar3gest2ing3table7y4case4or2lfate4ide5te4ur3k3len3phate5uric2perbowl5glue5hero5ior5jet5man6om5nova5vise3per4lier5y4ort3reme2rcharge3ely4ness3face6ing4board4er3ging3name3pass4lus4rise3real5nder4ound3vey4ival6e6ing6or2shi3pect5nd6se3tained8r1wab3ddling3gger3mpland3n3pping3rm3y2eat3ep3ll3pt3rve2ifter5ly5ness3mmable5er5ing4suit4wear3nging3pe3rl3tch3vel3zzle2ooned4p4sh3re4n2ung1ycamore2mpathy4honic7y2napse3ergy3opses6is3thesis6tic2rup2stem0tabasco3by3leful5s5t5ware4oid2ckiness6g4le5ing4y3o3tful4ical6s5le4less2dpole2ekwondo2g2inted2ke3ing2lcum3isman3l3on2male3eness4r3per2nk3ned5ry4ing3trum2peless4red5ing4stry3ioca3ping3s2rantula3get3mac3nish3tar4ly4ness2sk3sel3te4iness6g4y2ttered4le5ing4oo2unt2vern1hank3t3w2eater5rics3me3orize3rmal5os3saurus4e4is4pian2icken6t5ness3mble3ng4k4ly4ner6ss5ing3rstily7ng6y4teen5y2orn3se3usand2rash3ead5ten4efold3ift4ll4ve5ing3oat4ng4ttle4waway5back5er5ing2ud3mb4ping3rsday3s2warting1iara2bia2dal3bit3iness5gs3y2ger3hten5ly5ness5rope5wad3ress2le3ing3l3t2mid4ng3othy2nderbox3foil3gle5ing5y3ker4ling3sel4mith3t3work3y2poff3ped5r4ing3toeing5p2ring2ssue1race4ing4k4tion5or3de4ing5tion3ffic3gedy3iling5side4n3nce4quil4sfer6orm5late5pire6ort7se3pdoor4eze6oid4ped6r5ing4s3sh3vel5rse5sty3y2eachery4ding5mill4t3ble3e3kker3mble6ing4or3nch4d3spass2iage4l4ngle3besman4unal6e5tary6e3ceps4kery5ily6ng5le5ster5y4olor4ycle3dent3ed3fle4ocals3llion4ogy3mmer5ing4ness3o3pod4ping3umph3vial2odden3lling3mbone3phy4ical6s3uble6ing4gh4sers4t3wel2uce4k3ffle3nks3stable5ee5ful5ing5less3th2y1ubeless3ular2cking2esday2g2ition2lip2mble5ing3my2rbine4ofan5jet4ulent3f3key3moil3ret3tle2sk2tor3u2x1weak3ed4t4zers3lve3ntieth5y2ice3ddle6ing3g3light3ne4s3rl3stable5ed6r5ing5y3tch4ter1ycoon2ing2ke0ultimate7um3ra1mbrella2pire1nabashed4le3dorned4vised3fraid3ired3ligned4tered3rmored3shamed3udited3wake5re2baked4lance3eaten4nd5t3iased4tten3lended4ock3olted4unded4xed3raided4idle4oken3uckled4ndle4rned4tton2canny4pped4ring3ertain3hain5nged5rted4eck3ivil3lad5imed5mped5sp4e4ip4oak5g3oated4iled4lored4mbed5mon4oked4rk5rupt4unted5ple5th4ver3ross5wn4ushed3ured5ious5led4t2damaged4ted4unted3ecided4fined4rcoat7ok6ut5dog7ne5fed7ed6oot5go6rad5hand5line8g5mine6ost5paid7ss7y5rate5take6one7ok7w5use5went4sired3iluted4vided3ocked4ing4ne3rafted4illed3usted3ying2earned5th4se5ily5y4table5en3dited3lected3nding4gaged4vied3qual3thical3ven3xpired5osed2failing5r4sten4zed3eeling3iled5led4tted6ing4xable5ed3lawed3ocused4ld4unded3ramed4eeze4osted5zen3unded2glazed4oved4ue3raded4eased3uarded4ided2happily6y4rmed3eard6ing5ted4lpful3idden4nge4tched3ook2icorn4ycle3fied6r4ormed7ly4y3mpeded3njured4stall4vited3on3quely3son4sued3t3versal7e2justly2kempt3ind3notted5wing6n2laced4tch3eaded5rned5sh4ss4veled3ighted4mited4ned5ked4sted4t4vable3oaded7r4cked6ing4vely5ing3uckily6y2made4naged5ned4pped4rked4sked6ing4tched3indful4xable5ed3olded4vable5ed5ing2namable5ed4tural3eeded4rve6ing3oticed2opened4posed2pack4dded4id5nted5red4ved3eeled3icked4loted4nned3lanned6ted4eased5dged4owed4ug3opular3roven2quote2ranked4ted4veled3eached5d5l4eling4fined4lated4nted4st4tired4vised3igged4pe4valed3oasted4ll3uffled4ly4shed2saddle4fe4id4lted4ved5ory3cathed4ented4rew3ealed5ted4cured4eing5mly5n4lect5fish4nt4ttled3hackle5ken5ved7n4eathe4ipped3ightly5ned3killed3liced3mooth3nap3ocial4iled4ld5ved4rted3poiled5ken3table5ffed5mped4eady5rile4irred5tch4opped4uck5ffed4ylish3ubtle7y4ited4re3worn2tagged4inted4ken4med4ngled4pped4xed3hawed4read3idy4e4l4med6ly4tled3oasted4ld4uched3racked5ined4eated4ied5mmed4ue5th3urned3wist3ying2usable4ed4ual2valued4ried5ying3eiled6ing4nted3iable4sited3ocal2wanted4rlike5y4shed4tched3eave4lcome3ieldy4lling4nd4red4tting3orldly5n5ried4und4ven3rapped4itten2zip1pbeat2coming4untry2date2front2grade2heaval4ld3ill3old2lifted6ing3oad2on2per2right4sing4ver3oar4ot2scale3ide3tage5irs5rt5te4ream5oke3wing2take3ight3own3urned2ward3ind1ranium2ban2chin2ethane2gency5t3ing1sable3ge2eable3d3lessly3r2her2ual1tensil2ility5ze2most2opia2ter0vacancy5t4te5ion2guely5ness2liant4d3ley3uables4e2nilla4sh4ty3quish3tage2porizer2riable7y4ed5ty4ous3mint3nish3sity3ying2scular3tly4ness1eal2gan3gie2hicular2lcro3ocity3vet2nding4or3eering3ture3ue4s2rbalize6ly4ose3dict3ify3se4ion4us3tical5go3y2ssel3t2teran3o2xingly1iability4le2bes2ce3inity3tory2deo2ewable4er4ing4less4point2gorous2llage5in2ndicate3eyard3tage2olet4in2per2ral3tual5ous3us2sa3cosity5us3elike3ible6y4on4ting5or3or3ta2tality6ze5ly4mins2vacious3idly5ness1ocalist6ze5ly4tion2ice4ing3d2latile3ley3tage3umes2ter3ing2ucher2wed4l2yage0wackiness2d2fer3fle2ged4r4s3gle3on2ke3ing2lk3mart3nut3rus3tz2nd3nabe3ted4ing2sabi3hable4basin5oard6wl4cloth4day4ed5r4house4ing4out4room4stand4tub3p3ting2tch3er2viness5g3y1hacking5y3m3rf2eat3never2iff3msical3nny4y3sking2oever3le3mever3opee5ing5s2y1ick2dely4n3get3th2eldable5er2fe3i2kipedia2ldcard6t4er4fire5owl4land5ife5y4ness3led4fully4ing4ow4power3t2nce4ing3d3g3king3ner4ings3ter2pe2red4less3ing3y2sdom3e3h3plike4y3tful2zard1obble5ing5y2k2lf3verine2of3ing3l3zy2rd3k3ried6r5some4y3sening4t2ven2w1rangle2eath3ckage5er5ing3nch2iggle6y3nkle6y3st3ting4ten2onged5ful5ly5ness3ught0xbox1erox0yahoo2m2nking2pping2rd3n1eah3rbook4ling5y4ning3st2lling3p2n2sterday1ield2n2ppee1odel2ga3urt2nder2yo1ummy0zap1ealous2bra2n2ppelin2ro2stfully4y1igzagged2pfile3ping4y3s1odiac2mbie2ne3ing2okeeper3logist6y3m';
+    let effWords = null;
+    function passphraseWords() {
+        if (effWords) return effWords;
+        const out = [], re = /(\d)([a-z]*)/g;
+        let m, prev = '';
+        while ((m = re.exec(EFF_WORDS_FC))) { prev = prev.slice(0, +m[1]) + m[2]; out.push(prev); }
+        if (out.length !== 7092) throw new Error('word list damaged (' + out.length + ' words)');
+        return (effWords = out);
+    }
+    function randomPassphrase() {
+        const w = passphraseWords();
+        return [0, 1, 2].map(() => w[randomBelow(w.length)]).concat(String(100 + randomBelow(900))).join('-');
+    }
+
     // A small dialog built with DOM calls in whichever document asks (this page, or the Merge Databases tab).
     // o: { title, text: [..], password: { value }, error, ok, options: [{ value, label, sub }] } -> { value } | { choice } | null (cancelled)
     const DIALOG_CSS = `
@@ -1511,6 +1568,16 @@
         .elm-dbd-field:focus-within { border: 2px solid var(--md-primary, #ef6c00); padding: 0 7px 0 15px; }
         .elm-dbd-field input[type="password"], .elm-dbd-field input[type="text"] { flex: 1; min-width: 0; border: none; outline: none; background: transparent; font: 400 16px/24px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #1a1c20; }
         .elm-dbd-show { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #43474e; cursor: pointer; user-select: none; }
+        .elm-dbd-gen { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 8px 0 2px; }
+        .elm-dbd-gen > span { font-size: 13px; color: #43474e; }
+        .elm-dbd-chip { height: 32px; padding: 0 14px; border: 1px solid #c3c7cf; border-radius: 8px; background: #fff; color: #1a1c20; font: 500 13px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; cursor: pointer; }
+        .elm-dbd-chip:hover { border-color: var(--md-primary, #ef6c00); background: #fff4ea; }
+        .elm-dbd-chip:focus-visible { outline: 2px solid var(--md-primary, #ef6c00); outline-offset: 2px; }
+        .elm-dbd-copy { flex: none; height: 28px; padding: 0 10px; border: none; border-radius: 14px; background: transparent; color: var(--md-primary-text, #b34e00); font: 500 13px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; cursor: pointer; }
+        .elm-dbd-copy:hover { background: rgba(239, 108, 0, .08); }
+        .elm-dbd-copy:focus-visible { outline: 2px solid var(--md-primary, #ef6c00); outline-offset: 1px; }
+        .elm-dbd-copy[hidden] { display: none; }
+        .elm-dbd-note { margin: 2px 0 0 4px; font-size: 13px; color: #43474e; min-height: 18px; }
         .elm-dbd-error { min-height: 20px; margin: 0 0 4px 16px; font-size: 13px; color: #b3261e; }
         .elm-dbd-option { display: block; width: 100%; box-sizing: border-box; margin: 0 0 8px; padding: 12px 16px; border: 1px solid #c3c7cf; border-radius: 16px; background: #fff; color: #1a1c20; text-align: left; cursor: pointer; font: inherit; }
         .elm-dbd-option.off { opacity: .6; cursor: default; background: #f4f0ec; }
@@ -1561,7 +1628,32 @@
                 show.append(box2, doc.createTextNode('Show'));
                 field.append(input, show);
                 error = el('div', 'elm-dbd-error', o.error || '');
-                box.append(field, error);
+                box.append(field);
+                // Generate buttons: fill the field with a generated password and show it, so it can be copied and passed on
+                if (o.generate && o.generate.length) {
+                    const row = el('div', 'elm-dbd-gen'), note = el('div', 'elm-dbd-note');
+                    row.appendChild(el('span', '', 'Generate:'));
+                    const copy = el('button', 'elm-dbd-copy', 'Copy'); copy.type = 'button'; copy.hidden = true; // in the field, beside Show
+                    field.insertBefore(copy, show);
+                    o.generate.forEach(g => {
+                        const b = el('button', 'elm-dbd-chip', g.label); b.type = 'button'; b.title = g.note;
+                        b.addEventListener('click', () => {
+                            try { input.value = g.make(); } catch (e) { error.textContent = 'Could not generate one: ' + (e && e.message || e); return; }
+                            input.type = 'text'; box2.checked = true; error.textContent = '';
+                            note.textContent = g.note + ' Copy it now: coworkers need it to open your files.';
+                            copy.hidden = false; copy.textContent = 'Copy';
+                            input.focus(); input.select();
+                        });
+                        row.appendChild(b);
+                    });
+                    copy.addEventListener('click', () => {
+                        const ok = () => { copy.textContent = 'Copied'; }, fail = () => { input.focus(); input.select(); copy.textContent = 'Press Ctrl+C'; };
+                        try { (doc.defaultView.navigator.clipboard ? doc.defaultView.navigator.clipboard.writeText(input.value) : Promise.reject()).then(ok, fail); } catch (e) { fail(); }
+                    });
+                    input.addEventListener('input', () => { copy.textContent = 'Copy'; });
+                    box.append(row, note);
+                }
+                box.append(error);
             }
             (o.options || []).forEach(opt => {
                 const b = el('button', 'elm-dbd-option'); b.type = 'button';
@@ -1597,9 +1689,13 @@
             title: current ? 'Database password' : 'Set a database password',
             text: [
 'The Excel file you download, the one for sharing, is always protected with this password. It is kept in this browser, so you type it once. Coworkers need the same password to open your files, so agree on one and give it to them some other way than with the file.',
-                current ? 'Changing it affects the files you download from now on. Files made earlier keep the password they were made with.' : 'Use at least ' + PASSWORD_MIN + ' characters.'
+                (current ? 'Changing it affects the files you download from now on. Files made earlier keep the password they were made with. ' : '') + 'Type one (at least ' + PASSWORD_MIN + ' characters) or generate one: a random password is the strongest, a passphrase is easier to say and type.'
             ],
             password: { value: current }, ok: 'Save',
+            generate: [
+                { label: 'Random password', make: randomPassword, note: GEN_LENGTH + ' random letters, numbers and symbols.' },
+                { label: 'Passphrase', make: randomPassphrase, note: 'Three random words and a number.' }
+            ],
             validate: (v) => v.length < PASSWORD_MIN ? 'Use at least ' + PASSWORD_MIN + ' characters.' : ''
         });
         if (!r) return null;

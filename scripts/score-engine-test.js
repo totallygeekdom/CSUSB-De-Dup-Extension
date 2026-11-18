@@ -29,6 +29,8 @@ check(casDiff.items.every(i => i.key !== 'cas'), 'a CAS ID on one side only is n
 check(pts(score({ ...person, gender: 'Female' }, { ...person, gender: 'female' }), 'gender') === 5 && pts(score({ ...person, gender: 'Female' }, { ...person, gender: 'Male' }), 'gender') === null && pts(score({ ...person, gender: 'Female' }, person), 'gender') === null, 'the same gender is +5; a different or missing one is 0');
 const viaMail = score({ ...person, coyote: '009000001' }, { ...person, coyote: '009000001', coyoteFrom: 'email' }), viaMailOff = score({ ...person, coyote: '009000001' }, { ...person, coyote: '009999999', coyoteFrom: 'email' });
 check(pts(viaMail, 'coyote') === 120 && viaMail.level === 'high' && pts(viaMailOff, 'coyote') === null && viaMailOff.hard === false, 'a Coyote ID read from a coyote.csusb.edu email confirms (+120) but never makes a hard conflict');
+const within = score({ ...person, first: 'Lan', last: 'Vo' }, { ...person, first: 'Tran Mai Lan', last: 'Vo' });
+check(pts(within, 'first') === 15 && pts(score({ ...person, first: 'Mai Lan' }, { ...person, first: 'Mai Linh' }), 'first') === -30, 'a first name inside the other word for word (Lan / Tran Mai Lan) is the same first name; Mai Lan / Mai Linh still differ');
 check(pts(score({ ...person, applicant: true }, { ...person, coyote: '009111222' }), 'appCoyote') === -40, 'an applicant against a contact with a Coyote ID is -40');
 
 // a different birth date is a heavy penalty, not a veto

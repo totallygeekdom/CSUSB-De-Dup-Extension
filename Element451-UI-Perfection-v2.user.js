@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.285
+// @version      2.286
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.285'; // keep in sync with @version
+    const VERSION = '2.286'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -100,7 +100,6 @@
         if (val === null) return defaultValue;
         return val === 'true';
     }
-    const CONFLICT_ROW_THRESHOLD = 2;
     function rangeLevel() {
         const v = parseInt(lsGet('elm_range_level2'), 10);
         return isNaN(v) ? 4 : Math.max(0, Math.min(4, v));
@@ -2188,7 +2187,6 @@
     let currentQueuePositionKey = '';   // "current/total" — used to detect navigation to a new pair
     let pairFirstSeenAt = 0;            // when the current pair was first seen
     let resolutionAttempted = false;    // resolution ran for the current pair
-    let conflictWarningShown = false;
     let awaitingMergeResult = false;
     let lastMergeContactNamesKey = '';
 
@@ -2277,7 +2275,7 @@
         return blockers;
     }
     // One reason per skipped pair, by priority: Range > Forbidden > Student ID > Grad/IA (wrong department)
-    // > Appeal. (Twins is only reached by pairs that passed all of these.)
+    // > Appeal.
     function blockerLabel(blockers) {
         computeAutoApplyForPair();
         if (!pairInRange) return 'Range';
@@ -2363,6 +2361,14 @@
     }
     const scPhone = (s) => { const d = String(s || '').replace(/\D/g, ''); return d.length >= 10 ? d.slice(-10) : ''; };
     const scDigits = (s) => String(s || '').replace(/\D/g, '').replace(/^0+/, '');
+    // One name inside the other, word for word: every word of the shorter (2+ letters) is a word of the longer, which has more.
+    // "Lan" within "Tran Mai Lan", "Lan Mai Vo" within "Tran Mai Lan Vo": a full name typed into one field, or a family name
+    // put first on one record.
+    function scNameWithin(x, y) {
+        const a = scFold(x).split(' ').filter(t => t.length >= 2), b = scFold(y).split(' ').filter(t => t.length >= 2);
+        const [s, l] = a.length <= b.length ? [a, b] : [b, a];
+        return s.length > 0 && l.length > s.length && s.every(t => l.includes(t));
+    }
     function scRelatedFirst(a, b) {
         if (!a || !b) return false;
         if (a[0] === b[0] && (a.length === 1 || b.length === 1)) return true; // an initial
@@ -2508,9 +2514,10 @@
         // Names
         const fa = scFold(A.first), fb = scFold(B.first), la = scFold(A.last), lb = scFold(B.last);
         let firstState = null, lastState = null;
-        if (fa && fb) firstState = fa === fb ? 'same' : scRelatedFirst(fa, fb) ? 'related' : 'differ';
+        if (fa && fb) firstState = fa === fb ? 'same' : scNameWithin(fa, fb) ? 'within' : scRelatedFirst(fa, fb) ? 'related' : 'differ';
         if (la && lb) lastState = la === lb ? 'same' : (la.split(' ').some(t => t.length > 2 && lb.split(' ').includes(t)) ? 'partial' : 'differ');
         if (firstState === 'same') add('first', 'First name', W.first[0], 'for', 'the same first name', { nameFor: 'first', slot: 'first.0' });
+        else if (firstState === 'within') add('first', 'First name', W.first[0], 'for', 'the same first name, one name inside the other (' + (A.first.length <= B.first.length ? A.first + ' in ' + B.first : B.first + ' in ' + A.first) + ')', { nameFor: 'first', within: true, slot: 'first.0' });
         else if (firstState === 'related') add('first', 'First name', W.firstRelated[0], 'for', 'similar first names (' + A.first + ' and ' + B.first + ')', { nameFor: 'first', slot: 'firstRelated.0' });
         else if (firstState === 'differ') add('first', 'First name', W.first[1], 'against', 'different first names (' + A.first + ' and ' + B.first + ')', { slot: 'first.1' });
         if (lastState === 'same') add('last', 'Last name', W.last[0], 'for', 'the same last name', { nameFor: 'last', slot: 'last.0' });
@@ -2575,7 +2582,7 @@
             : res.different ? 'Probably different people.'
             : conflict || boltDiff ? 'Possibly different people.' : 'Not enough to say.';
         // what lines up
-        const nameBoth = names.length === 2 && names.every(n => n.key === 'first' ? n.pts >= SCORE_W.first[0] : n.pts >= SCORE_W.last[0]);
+        const nameBoth = names.length === 2 && names.every(n => !n.within && (n.key === 'first' ? n.pts >= SCORE_W.first[0] : n.pts >= SCORE_W.last[0]));
         const matchPhrases = [];
         if (nameBoth) matchPhrases.push('the same name (' + full(A) + ')');
         else names.forEach(n => matchPhrases.push(n.phrase));
@@ -3004,57 +3011,8 @@
     }
     // ---- SCORE CHIPS END ----
 
-    // =========================================================
-    // POSSIBLE TWINS / DIFFERENT PEOPLE WARNING
-    // Reuses the same First/Last Name + DOB + Address heuristics as the
-    // classic script, but also folds in Bolt's own AI analysis summary,
-    // which explicitly states when it thinks two contacts are different
-    // people — a signal the old merge page never had.
-    // =========================================================
-    function checkForConflictingRecords() {
-        if (CONFLICT_ROW_THRESHOLD === 0) return { conflictCount: 0, shouldWarn: false, conflicts: [] };
-        const conflicts = [];
-        let conflictCount = 0;
-        let boltFlagged = false;
-        const names = getContactNames();
-        if (names.length === 2 && names[0] && names[1]) {
-            const norm = (n) => n.toLowerCase().replace(/[\s-]/g, '');
-            // Compare first tokens (first name) and remaining tokens (last name) independently
-            const [aFirst, ...aRest] = names[0].split(/\s+/);
-            const [bFirst, ...bRest] = names[1].split(/\s+/);
-            if (aFirst && bFirst && norm(aFirst) !== norm(bFirst)) { conflictCount++; conflicts.push('First Name'); }
-            const aLast = aRest.join(' '), bLast = bRest.join(' ');
-            if (aLast && bLast && norm(aLast) !== norm(bLast)) { conflictCount++; conflicts.push('Last Name'); }
-        }
-        const isValidYear = (yearStr) => !!yearStr && !yearStr.startsWith('0') && parseInt(yearStr) >= 1900;
-        for (const row of getDiffRowsByLabel('birth')) {
-            const leftText = row.values[0].textContent, rightText = row.values[1].textContent;
-            if (!leftText || !rightText) continue;
-            const leftYear = leftText.match(/\b(\d{4})\b/), rightYear = rightText.match(/\b(\d{4})\b/);
-            if (leftYear && rightYear && isValidYear(leftYear[1]) && isValidYear(rightYear[1])) {
-                if (leftText.replace(/\s+/g, '').toLowerCase() !== rightText.replace(/\s+/g, '').toLowerCase()) {
-                    conflictCount++; conflicts.push('Date of Birth');
-                }
-            }
-        }
-        for (const row of getDiffRowsByLabel('address')) {
-            const leftText = row.values[0].textContent, rightText = row.values[1].textContent;
-            if (leftText.length > 10 && rightText.length > 10) {
-                const cmp = AddressComparer.compareAddresses(leftText, rightText);
-                if (!cmp.areSame) { conflictCount++; conflicts.push('Address'); }
-            }
-        }
-        // AI analysis signal: Bolt's summary explicitly says when it thinks
-        // these are different people. Treat that as a strong extra conflict.
-        const summary = getAnalysisSummaryText().toLowerCase();
-        if (summary && /different (people|person|individuals?)/i.test(summary)) {
-            boltFlagged = true; // forces a warning regardless of the threshold, without inflating the count
-            conflictCount++;
-            conflicts.push('Bolt Analysis (flagged as different people)');
-        }
-        const shouldWarn = boltFlagged || conflictCount >= CONFLICT_ROW_THRESHOLD;
-        return { conflictCount, shouldWarn, conflicts };
-    }
+    // (The possible-twins check that stood here is gone: our score already counts different names, birth dates and addresses and
+    // Bolt's "different people", so it no longer skips pairs or keeps them from auto-merge.)
 
     // =========================================================
     // FIELD RESOLUTION ENGINE
@@ -3684,7 +3642,7 @@
     function hideMergeBar() {
         document.querySelectorAll('#elm2-toast-stack .elm2-notice').forEach(t => t.remove());
     }
-    // keep = true: a short outcome toast ("Skip: Twins", "Merge: 2/3") that must survive the pair change,
+    // keep = true: a short outcome toast ("Skip: Appeal", "Merge: 2/3") that must survive the pair change,
     // whereas ordinary notices are cleared by hideMergeBar() when the pair changes.
     function showMergeNotice(text, keep) {
         const st = toastStack();
@@ -4020,7 +3978,6 @@
             const fields = Array.from(new Set(unresolved.map(r => r.label || '(unnamed)')));
             return { ok: false, reason: unresolved.length + ' field(s) need review (' + fields.join(', ') + ')', review: fields.slice(0, 3).join(', ') + (fields.length > 3 ? ' +' + (fields.length - 3) : '') };
         }
-        if (CONFLICT_ROW_THRESHOLD > 0 && checkForConflictingRecords().shouldWarn) return { ok: false, reason: 'possible twins' };
         const btn = getSidebarActionButton('Merge Contacts');
         if (!btn || btn.disabled || btn.getAttribute('aria-disabled') === 'true') return { ok: false, reason: 'the Merge Contacts button is unavailable' };
         return { ok: true, btn };
@@ -4207,7 +4164,7 @@
     // MAIN AUTOMATION LOOP
     //
     // Each pair: blockers -> (skip or stop) -> apply picks per "Use picks from" if the pair is
-    // inside the slider range -> twins check -> optional auto-merge (cancel window above).
+    // inside the slider range -> optional auto-merge (cancel window above).
     // =========================================================
     // True while the review form was off screen (for example behind the "Merge completed" card). The
     // pair that shows up next is a new one even if its key (names + queue position) matches the last:
@@ -4231,7 +4188,6 @@
             pairFirstSeenAt = Date.now();
             resolutionAttempted = false;
             engagementOpenedFor = '';
-            conflictWarningShown = false;
             errorStopShownFor = '';
             previewPicks(null);
             cancelAutoMerge();
@@ -4311,17 +4267,6 @@
             if (!pairInRange && CFG.AUTO_SKIP_BLOCKED) {
                 skipToNext('outside the slider range', 'Range');
                 return;
-            }
-            // Possible twins: with Auto-Skip on the pair is skipped; otherwise it is left for you. A twins pair is never auto-merged.
-            // (It used to raise a popup too; our score already says when the names or birth dates disagree, so there is none now.)
-            if (!conflictWarningShown && CONFLICT_ROW_THRESHOLD > 0) {
-                const { conflictCount, shouldWarn, conflicts } = checkForConflictingRecords();
-                if (shouldWarn) {
-                    conflictWarningShown = true;
-                    if (CFG.AUTO_SKIP_BLOCKED) skipToNext('possible twins: ' + conflicts.join(', '), 'Twins');
-                    else console.log('[elm2] Possible twins (' + conflictCount + ' conflicting: ' + conflicts.join(', ') + '): left for you, not auto-merged');
-                    return;
-                }
             }
             // "When done" = Merge: start the cancel window (the merge itself is clicked there,
             // after a final safety re-check).
@@ -4595,7 +4540,7 @@
                 </div>
                 <div class="elm-item">
                 <div class="setting-row"><label>Auto-Skip</label>${toggleHtml('elm-auto-skip-blocked')}</div>
-                <div class="elm-level-desc elm-skip-desc">Skips blocked, out-of-range and possible-twins pairs with no popup. Off: stops on them instead.</div>
+                <div class="elm-level-desc elm-skip-desc">Skips blocked and out-of-range pairs with no popup. Off: stops on them instead.</div>
                 </div>
                 <div class="elm-item">
                 <div class="setting-row"><label>Next after merge</label>${toggleHtml('elm-next-after-merge')}</div>

@@ -58,6 +58,7 @@ Each row is run through the live engine (the Bolt score is not included unless t
 | Same name, email, phone and address, clearly different DOB | 75 | 3 | **High** |
 | Same name + DOB + email, applicant vs a contact with a Coyote ID | 70 | 2 | **High** |
 | Same name, address and soft fields, Bolt High (nothing else strong) | 90 | 1 | Medium |
+| Same name, a family name put first on one record (Lan Vo / Tran Mai Lan Vo), same DOB | 70 | 1 | Medium |
 | Same DOB + name only | 70 | 1 | Medium |
 | Same DOB + address, no names on either record | 65 | 2 | Medium |
 | Same name + email + address + soft fields, clearly different DOB | 65 | 2 | Medium |
@@ -101,8 +102,8 @@ points add up. Closest to Medium first.
 ## Known trade-offs
 
 - **Households.** Twins, siblings and parent/child pairs that share an address land on Medium (see the rows above). Medium is not High, but a slider that includes Medium
-  can still auto-apply or auto-merge it; the separate *possible twins* check only stops pairs with two or more conflicting rows. A larger first-name mismatch penalty would push
-  them down to Low.
+  auto-applies and, with When done = Merge, auto-merges them: there is no separate possible-twins check any more, the score alone decides. A larger first-name mismatch penalty
+  would push them down to Low.
 - **Address as a strong match.** It lets a pair with the same name, address and one family-shared email or phone (a Jr./Sr. with no birth date on file) reach High.
   Requiring a birth date or ID for High would stop that.
 - **Birth date and address alone.** With no names on either record the pair stays Medium; a last name is enough to reach High.

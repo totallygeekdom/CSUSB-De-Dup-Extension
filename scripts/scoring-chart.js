@@ -19,6 +19,7 @@ const ana = { first: 'Ana', last: 'Cruz' }, dob = { dob: '2004-01-02' };
 const soft = { studentType: 'ftf', level: 'ug', school: 'csusb' };
 const SAMPLES = [
   ['Same Coyote ID + same name', P({ ...ana, coyote: '009123456' }), P({ ...ana, coyote: '009123456' })],
+  ['Same name, a family name put first on one record (Lan Vo / Tran Mai Lan Vo), same DOB', P({ first: 'Lan', last: 'Vo', ...dob }), P({ first: 'Tran Mai Lan', last: 'Vo', ...dob })],
   ['Same CAS ID + same name', P({ ...ana, cas: '8812345' }), P({ ...ana, cas: '8812345' })],
   ['Same Coyote ID, different first name', P({ first: 'Andy', last: 'Rios', coyote: '009123456' }), P({ first: 'Andres', last: 'Rios', coyote: '009123456' })],
   ['Same Coyote ID + name, clearly different DOB', P({ ...ana, coyote: '009123456', dob: '2004-01-02' }), P({ ...ana, coyote: '009123456', dob: '1999-07-30' })],
@@ -133,8 +134,8 @@ ${low.map(x => `| ${x.name} | ${x.r.points} | ${adds(x.r)} |`).join('\n')}
 ## Known trade-offs
 
 - **Households.** Twins, siblings and parent/child pairs that share an address land on Medium (see the rows above). Medium is not High, but a slider that includes Medium
-  can still auto-apply or auto-merge it; the separate *possible twins* check only stops pairs with two or more conflicting rows. A larger first-name mismatch penalty would push
-  them down to Low.
+  auto-applies and, with When done = Merge, auto-merges them: there is no separate possible-twins check any more, the score alone decides. A larger first-name mismatch penalty
+  would push them down to Low.
 - **Address as a strong match.** It lets a pair with the same name, address and one family-shared email or phone (a Jr./Sr. with no birth date on file) reach High.
   Requiring a birth date or ID for High would stop that.
 - **Birth date and address alone.** With no names on either record the pair stays Medium; a last name is enough to reach High.

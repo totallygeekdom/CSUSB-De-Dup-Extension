@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.278`, shown in the settings pane |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.279`, shown in the settings pane |
 | Element451 - Database v2 | `database-v2.js` | `@version 2.74` |
 | Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.17`, see [section 17](#17-database-merge) |
 
@@ -252,7 +252,7 @@ Only rows where the two sides differ (conflicts) are considered. Rules run **in 
 | # | Rule | Behaviour |
 |---|---|---|
 | 0 | Blank side | If either value is empty, the row is skipped (no opinion) |
-| 1 | **Applicant side** (outranks everything) | If an applicant side exists, every conflict row follows it, **except** a row where the applicant side is blank ("-") and the other side has data: that row picks the side with data. Detection: a *Cal State Apply Application* entry on only one side wins; if on both, the later application date wins (left on a tie/no date); otherwise an `Application Start/Submit/Complete` or `Admit` type entry on one side; if both, the side with more such entries, then the later date. Only used for UnderGrad pairs |
+| 1 | **Applicant side** (outranks everything) | If an applicant side exists, every conflict row follows it, **except** a row where the applicant side is blank ("-") and the other side has data: that row picks the side with data. Detection: a *Cal State Apply Application* entry on only one side wins; if on both, the later application date wins (left on a tie/no date); otherwise an `Application Start/Submit/Complete` or `Admit` type entry on one side; if both, the side with more such entries, then the later date; failing both, a **CAS ID** (`Cas Id: 7000000002`) on one side only marks that side, since only someone who applied through Cal State Apply has one (UI 2.279). Only used for UnderGrad pairs |
 | 2 | Blank-vs-data | One side blank ("-") and the other has data (no applicant side): no rule pick; Bolt's pick stays, or the fallback below takes the side with data |
 | 4 | **Personal email preferred** | Email rows: the side with a personal-domain address (gmail, yahoo, icloud, hotmail, aol, me.com, outlook, live, msn, protonmail, proton.me) wins when only one side is personal. Both personal: flagged for the tiebreak below |
 | 5 | **csusb.major** | The side with `csusb.major.` wins; if both have it the rule cannot decide (see *Needs review* below) |
@@ -574,6 +574,7 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 - **ID weights ±120** (UI 2.272): a matching Coyote ID or CAS ID is +120 and different ones are -120 (were +100 / -100 and +80 / -80).
 - **Birth date mismatch -45** (UI 2.271): was -60.
 - **SCORING.md** (generated chart of the scoring system, kept in step by `npm test`; `npm run scoring` regenerates it).
+- **CAS ID marks the applicant** (UI 2.279): when the application rows name no applicant, a CAS ID on one side only makes that side the applicant (picks, the applicant band, and the -40 *Applicant vs Coyote ID* rule when the other side has a Coyote ID).
 - **Generated passwords** (Database 2.74): the password dialog's **Random password** (12 characters, about 73 bits) and **Passphrase** (three everyday words from the EFF list, with awkward ones taken out, and a number; about 48 bits) buttons, with **Copy** (section 19).
 - **Dedup analysis card: chips, a points view, no popups** (UI 2.278): department, Appeal, Test (a name with *test* in it) and Forbidden name chips and Bolt's original score beside our score; *Blocked: …* lines and *Bolt's original score* in the write-up; a Write-up / Points / Bolt's switch, the Points view being a table of the rules that applied and why the total is the rating it is. The Appeal and Possible-twins popups are gone (section 8); the twins check still skips (Auto-Skip on) or stops, and never auto-merges.
 - **Score chips: the row you open, and console lines** (UI 2.277, Database 2.73): a list row is tied to its pair a second way, by the click that opens it. The first different pair rated after a click on a row is that row's pair, and the tie is kept by the row's own words (names, emails), so it outlives a reload. Moving on with Next, without a click, ends the tie, so no other row is tied by mistake. Each row is also given both sets of Spark IDs, the list record's and the database entry's, and the chip tries each. New console lines say why a chip is Pending (section 12.3). Before, a row whose list record and database entry gave no usable Spark IDs stayed Pending with nothing in the console to say why. A chip outside a list row (the review sidebar's) is rated as the pair on screen; a chip in a row that is not a `bolt-row.cdk-row` is now rated as its row, never as the open pair.

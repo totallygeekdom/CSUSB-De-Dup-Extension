@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.278
+// @version      2.279
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.278'; // keep in sync with @version
+    const VERSION = '2.279'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -3082,8 +3082,18 @@
                 return 'right';
             }
         }
+        // Last: a CAS ID (Cal State Apply ID) on one side only. Only someone who applied through Cal State Apply has one, so it marks the
+        // applicant when the application rows say nothing (not loaded yet, or worded differently). The value reads "Cas Id: 7000000002";
+        // a blank side reads "-".
+        const cas = [false, false];
+        for (const row of getDiffRows()) {
+            const casRow = /\bcas\b|cal state apply id/i.test(row.label || '');
+            [0, 1].forEach(i => { const t = row.values[i].textContent; if (CAS_ID_RE.test(t) || (casRow && /\d{5,}/.test(t))) cas[i] = true; });
+        }
+        if (cas[0] !== cas[1]) return cas[0] ? 'left' : 'right';
         return null;
     }
+    const CAS_ID_RE = /\bcas[\s_-]*id\s*[:=]?\s*\d{5,}/i;
     // The profile that was created later, from the "Created <date>" line on each contact card (A = left,
     // B = right). Returns 'left' / 'right', or null if either date is missing or they are equal.
     function getMostRecentProfileSide() {

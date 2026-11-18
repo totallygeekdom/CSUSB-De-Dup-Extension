@@ -88,7 +88,7 @@ A field only counts when **both** records have it; a missing field scores 0 and 
 | Field | Match | Mismatch |
 |---|---|---|
 | Coyote ID | ${n(W.coyote[0])} | ${n(W.coyote[1])} (hard conflict) |
-| CAS ID | ${n(W.cas[0])} | ${n(W.cas[1])} (hard conflict) |
+| CAS ID | ${n(W.cas[0])} | ${n(W.cas[1])}, not a hard conflict (a student can have several applications) |
 | Date of birth | ${n(W.dob[0])} | ${n(W.dob[1])}, not a hard conflict (one typo or a day/month swap: ${n(W.dobTypo[1])}) |
 | Email | ${n(W.email[0])} exact; ${n(W.emailName[0])} same name part (another domain, or only the numbers differ: maria.soto444 / maria.soto1111) | ${n(0)} (people have several) |
 | Phone | ${n(W.phone[0])} | ${n(0)} |
@@ -96,7 +96,7 @@ A field only counts when **both** records have it; a missing field scores 0 and 
 | Last name | ${n(W.last[0])} same; ${n(W.lastPartial[0])} overlapping | ${n(W.last[1])} |
 | Address (the page's own comparer) | ${n(W.address[0])} | ${n(W.address[1])} (people move) |
 | Student type, academic level, school attended | ${n(W.soft[0])} each | ${n(0)} |
-| Name of the other record found in an email address | ${n(W.emailNameFull)} full name, ${n(W.emailNameInitial)} first initial + last name (capped at ${n(W.emailNameCap)}) | none |
+| Name of the other record found in an email address (counted whether or not the names match) | ${n(W.emailNameFull)} first + last name, ${n(W.emailNamePartial)} first 3+ letters + last name (mar.soto), ${n(W.emailNameInitial)} first initial + last name, ${n(W.emailNameOne)} first or last name alone (capped at ${n(W.emailNameCap)} for the pair) | none |
 | Birth date found in an email address | ${n(W.emailDobFull)} full date that matches, ${n(W.emailDobYear)} birth year | ${n(W.emailDobConflict)} (a full date that disagrees) |
 | Bolt's own score | High ${n(W.boltHigh)}, Medium ${n(W.boltMedium)} | Low ${n(W.boltLow)}; Bolt says "different people" ${n(W.boltDifferent)} |
 | Applicant with no Coyote ID vs a contact that has one | none | ${n(W.applicantVsCoyote)} |
@@ -109,7 +109,7 @@ There is no twin-pattern rule: first names that differ cost the first-name penal
 - **Medium**: ${CUT.medium}+ points.
 - **Low**: everything else. A Low pair under ${CUT.low} points is described as "probably different people" in the write-up.
 - **Strong matches** are: Coyote ID, CAS ID, date of birth, exact email, phone and a matching address.
-- **Hard conflict**: two different Coyote IDs or two different CAS IDs. It caps the pair at Low. A different birth date is a heavy penalty, not a hard conflict.
+- **Hard conflict**: two different Coyote IDs. It caps the pair at Low. Different CAS IDs are a small penalty, not a hard conflict: a student can have several applications. A different birth date is a heavy penalty, not a hard conflict.
 
 ## Sample pairs: High and Medium
 

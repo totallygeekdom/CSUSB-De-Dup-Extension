@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.281
+// @version      2.283
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.281'; // keep in sync with @version
+    const VERSION = '2.283'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -2325,13 +2325,13 @@
     // ---- SCORE ENGINE START (pure functions: no page access, so it can be tested on its own) ----
     // Points per field. Both sides must have the field for it to count; a missing field scores 0.
     const SCORE_W = {
-        coyote: [120, -120], cas: [120, -120], dob: [40, -45], dobTypo: [25, -20],
-        email: [40, 0], emailName: [15, 0], phone: [30, 0],
+        coyote: [120, -120], cas: [120, -25], dob: [40, -45], dobTypo: [25, -20],
+        email: [40, 0], emailName: [15, 0], phone: [25, 0],
         first: [15, -30], firstRelated: [7, 0], last: [15, -15], lastPartial: [7, 0],
         address: [25, -3], soft: [5, 0],
         boltHigh: 20, boltMedium: 8, boltLow: -5, boltDifferent: -25,
         applicantVsCoyote: -40,
-        emailNameFull: 6, emailNameInitial: 3, emailNameCap: 10, emailDobFull: 20, emailDobYear: 3, emailDobConflict: -8
+        emailNameFull: 6, emailNamePartial: 4, emailNameInitial: 3, emailNameOne: 2, emailNameCap: 10, emailDobFull: 20, emailDobYear: 3, emailDobConflict: -8
     };
     const SCORE_CUT = { high: 70, medium: 45, low: 15 };
     const NICK = [['robert', 'bob', 'rob', 'bobby', 'robbie'], ['william', 'bill', 'will', 'billy', 'willy'], ['richard', 'rick', 'dick', 'rich', 'ricky'], ['james', 'jim', 'jimmy', 'jamie'],
@@ -2389,21 +2389,35 @@
         return out;
     }
     // How well an email name fits a person's name: 'full' (first and last), 'initial' (first initial and last) or null.
+    // How much of a person's name is in an email's name part (the part before the @):
+    //   'full'    the first name and the last name (or one word of a last name of several: Soto of Del Rio Soto)  maria.soto
+    //   'partial' the first 3+ letters of the first name and the last name                                              mar.soto, marisoto
+    //   'initial' the first initial and the last name                                                                   msoto, sotom
+    //   'one'     only the first name or only the last name (4+ letters)                                                maria2008, soto.m... (no initial)
     function scEmailName(local, first, last) {
         const letters = String(local).toLowerCase().replace(/[^a-z]/g, '');
-        const f = scFold(first).replace(/ /g, ''), l = scFold(last).replace(/ /g, '');
-        if (l.length < 3 || !f || !letters.includes(l)) return null;
-        if (f.length >= 3 && letters.includes(f)) return 'full';
-        const toks = String(local).toLowerCase().split(/[^a-z0-9]+/).map(t => t.replace(/\d/g, '')).filter(Boolean);
-        if (toks.includes(f[0]) || letters.startsWith(f[0] + l) || letters.endsWith(l + f[0])) return 'initial';
-        return null;
+        const f = scFold(first).replace(/ /g, '');
+        const lastWords = scFold(last).split(' ').filter(t => t.length >= 3);
+        const whole = scFold(last).replace(/ /g, '');
+        if (whole.length >= 3 && !lastWords.includes(whole)) lastWords.push(whole);
+        const l = lastWords.filter(t => letters.includes(t)).sort((a, b) => b.length - a.length)[0] || '';
+        if (l) {
+            const rest = letters.replace(l, ' ');
+            if (f.length >= 3 && rest.includes(f)) return 'full';
+            if (f.length >= 3) for (let k = Math.min(f.length - 1, 6); k >= 3; k--) { if (rest.includes(f.slice(0, k))) return 'partial'; }
+            const toks = String(local).toLowerCase().split(/[^a-z0-9]+/).map(t => t.replace(/\d/g, '')).filter(Boolean);
+            if (f && (toks.includes(f[0]) || letters.startsWith(f[0] + l) || letters.endsWith(l + f[0]))) return 'initial';
+            return l.length >= 4 ? 'one' : null;
+        }
+        return f.length >= 4 && letters.includes(f) ? 'one' : null;
     }
+    const EMAIL_NAME_SLOT = { full: 'emailNameFull', partial: 'emailNamePartial', initial: 'emailNameInitial', one: 'emailNameOne' };
     // ---- the rating as data: which rules applied (never any names, dates or contact details) ----
     // A rated pair is remembered as the list of scoring rules ("slots") that applied to it, such as "dob.0,first.0,last.0,soft.0*2", not as the
     // rating it came to. The list's chips are then re-rated with the weights in force now: change a weight and every remembered pair follows,
     // without being opened again. A slot is a name in SCORE_W, plus .0 (the match weight) or .1 (the mismatch weight) for the paired ones.
     // scorePair builds the slots and scoreSlots turns them into points and a rating, so there is one place that decides what a rating is.
-    const SLOT_STRONG = ['coyote.0', 'cas.0', 'dob.0', 'email.0', 'phone.0', 'address.0'], SLOT_HARD = ['coyote.1', 'cas.1'];
+    const SLOT_STRONG = ['coyote.0', 'cas.0', 'dob.0', 'email.0', 'phone.0', 'address.0'], SLOT_HARD = ['coyote.1']; // different CAS IDs are not hard: a student can apply more than once
     function slotWeight(slot) {
         const m = /^(\w+)\.(\d)$/.exec(slot);
         const w = m ? SCORE_W[m[1]] : SCORE_W[slot];
@@ -2416,7 +2430,7 @@
         for (const slot of Object.keys(slots)) {
             const n = slots[slot], w = slotWeight(slot);
             if (w === null) return null;
-            if (slot === 'emailNameFull' || slot === 'emailNameInitial') { nameFit += n * w; continue; } // together they are capped (below)
+            if (slot === 'emailNameFull' || slot === 'emailNamePartial' || slot === 'emailNameInitial' || slot === 'emailNameOne') { nameFit += n * w; continue; } // together they are capped (below)
             pts += n * w;
             if (SLOT_STRONG.includes(slot)) strong += n;
             if (SLOT_HARD.includes(slot)) hard = true;
@@ -2456,7 +2470,8 @@
             const a = scDigits(A[k]), b = scDigits(B[k]);
             if (a && b) {
                 if (a === b) { add(k, label, W[k][0], 'for', 'the same ' + label + ' (' + A[k] + ')', { strong: true, slot: k + '.0' }); }
-                else { add(k, label, W[k][1], 'against', 'different ' + label + 's (' + A[k] + ' and ' + B[k] + ')', { hard: true, slot: k + '.1' }); }
+                // different Coyote IDs are a hard conflict; different CAS IDs are a small penalty, since a student can have several applications
+                else { add(k, label, W[k][1], 'against', 'different ' + label + 's (' + A[k] + ' and ' + B[k] + ')' + (k === 'cas' ? ', which can be two applications' : ''), { hard: k === 'coyote', slot: k + '.1' }); }
             }
         });
         // applicant with no Coyote ID against a contact that has one
@@ -2511,8 +2526,9 @@
         [[A, B, 'A'], [B, A, 'B']].forEach(([own, other]) => {
             (own.emails || []).forEach(e => {
                 const local = e.split('@')[0].replace(/\+.*/, '');
+                // the other record's name in this record's email, in full or in part (counted whether or not the names on the two records match)
                 const fit = scEmailName(local, other.first, other.last);
-                if (fit && scFold(own.first) !== scFold(other.first)) { const p = fit === 'full' ? W.emailNameFull : W.emailNameInitial; if (emFit < W.emailNameCap) { emFit = Math.min(W.emailNameCap, emFit + p); emNotes.push(local); const sl = fit === 'full' ? 'emailNameFull' : 'emailNameInitial'; slots[sl] = (slots[sl] || 0) + 1; } }
+                if (fit) { const sl = EMAIL_NAME_SLOT[fit]; if (emFit < W.emailNameCap) { emFit = Math.min(W.emailNameCap, emFit + W[sl]); emNotes.push(local); slots[sl] = (slots[sl] || 0) + 1; } }
                 const odob = scDate(other.dob), owndob = scDate(own.dob);
                 if (!owndob && odob) scEmailDigits(local).forEach(g => {
                     if (g.full && g.full === odob) { add('emailDob', 'DOB in email', W.emailDobFull, 'for', 'a birth date in the email address (' + local + ') that matches the other record', { slot: 'emailDobFull' }); }
@@ -2711,7 +2727,7 @@
     function ratingWhy(res) {
         const id = !!(res.slots && (res.slots['coyote.0'] || res.slots['cas.0']));
         const p = res.points, n = res.strong;
-        if (res.hard) return 'Different Coyote or CAS IDs are a hard conflict: the rating is Low whatever the points.';
+        if (res.hard) return 'Different Coyote IDs are a hard conflict: the rating is Low whatever the points.';
         if (res.level === 'high') return p + ' points (High is ' + SCORE_CUT.high + '+), with ' + (id ? 'a matching Coyote or CAS ID' : n + ' strong matches') + '.';
         if (res.level === 'medium' && p >= SCORE_CUT.high) return p + ' points is enough for High, but High also needs a matching Coyote or CAS ID or 2 strong matches (birth date, exact email, phone, address). This pair has ' + n + '.';
         if (res.level === 'medium') return p + ' points: Medium is ' + SCORE_CUT.medium + ' to ' + (SCORE_CUT.high - 1) + '.';

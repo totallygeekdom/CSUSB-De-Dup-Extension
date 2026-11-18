@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.274
+// @version      2.275
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.274'; // keep in sync with @version
+    const VERSION = '2.275'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -2314,7 +2314,7 @@
     const SCORE_W = {
         coyote: [120, -120], cas: [120, -120], dob: [40, -45], dobTypo: [25, -20],
         email: [40, 0], emailName: [15, 0], phone: [25, 0],
-        first: [7, -12], firstRelated: [3, 0], last: [8, -8], lastPartial: [4, 0],
+        first: [15, -30], firstRelated: [7, 0], last: [15, -15], lastPartial: [7, 0],
         address: [25, -3], soft: [5, 0],
         boltHigh: 20, boltMedium: 8, boltLow: -5, boltDifferent: -25,
         applicantVsCoyote: -40,

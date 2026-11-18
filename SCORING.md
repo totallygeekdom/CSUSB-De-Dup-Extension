@@ -16,8 +16,8 @@ A field only counts when **both** records have it; a missing field scores 0 and 
 | Date of birth | +40 | -45, not a hard conflict (one typo or a day/month swap: -20) |
 | Email | +40 exact; +15 same name part on another domain | 0 (people have several) |
 | Phone | +25 | 0 |
-| First name | +7 same; +3 nickname, initial or prefix | -12 |
-| Last name | +8 same; +4 overlapping | -8 |
+| First name | +15 same; +7 nickname, initial or prefix | -30 |
+| Last name | +15 same; +7 overlapping | -15 |
 | Address (the page's own comparer) | +25 | -3 (people move) |
 | Student type, academic level, school attended | +5 each | 0 |
 | Name of the other record found in an email address | +6 full name, +3 first initial + last name (capped at +10) | none |
@@ -41,32 +41,32 @@ Each row is run through the live engine (the Bolt score is not included unless t
 
 | Pair | Points | Strong matches | Rating |
 |---|---|---|---|
-| Same Coyote ID + same name | 135 | 1 | **High** |
-| Same CAS ID + same name | 135 | 1 | **High** |
-| Same name + DOB + email + address, different phones | 120 | 3 | **High** |
-| Same Coyote ID, different first name | 116 | 1 | **High** |
-| Same DOB + name + address, Bolt High | 100 | 2 | **High** |
-| Same name + email + address, Bolt High | 100 | 2 | **High** |
-| Same DOB + email + name | 95 | 2 | **High** |
-| Same Coyote ID + name, clearly different DOB | 90 | 1 | **High** |
-| Same name + phone + address, Bolt High | 85 | 2 | **High** |
-| Same DOB + name + address | 80 | 2 | **High** |
-| Same DOB + phone + name | 80 | 2 | **High** |
-| Jr./Sr. (same name, address, family email, no DOB on file) | 80 | 2 | **High** |
-| Same DOB + address, same last name only | 73 | 2 | **High** |
-| Same name, address and soft fields, Bolt High (nothing else strong) | 75 | 1 | Medium |
+| Same Coyote ID + same name | 150 | 1 | **High** |
+| Same CAS ID + same name | 150 | 1 | **High** |
+| Same name + DOB + email + address, different phones | 135 | 3 | **High** |
+| Same DOB + name + address, Bolt High | 115 | 2 | **High** |
+| Same name + email + address, Bolt High | 115 | 2 | **High** |
+| Same DOB + email + name | 110 | 2 | **High** |
+| Same Coyote ID, different first name | 105 | 1 | **High** |
+| Same Coyote ID + name, clearly different DOB | 105 | 1 | **High** |
+| Same name + phone + address, Bolt High | 100 | 2 | **High** |
+| Same DOB + name + address | 95 | 2 | **High** |
+| Same DOB + phone + name | 95 | 2 | **High** |
+| Jr./Sr. (same name, address, family email, no DOB on file) | 95 | 2 | **High** |
+| Same DOB + address, same last name only | 80 | 2 | **High** |
+| Same name, email, phone and address, clearly different DOB | 75 | 3 | **High** |
+| Same name + DOB + email, applicant vs a contact with a Coyote ID | 70 | 2 | **High** |
+| Same name, address and soft fields, Bolt High (nothing else strong) | 90 | 1 | Medium |
+| Same DOB + name only | 70 | 1 | Medium |
 | Same DOB + address, no names on either record | 65 | 2 | Medium |
-| Twins (same last name, DOB, address; different first name) | 61 | 2 | Medium |
-| Siblings (same last name, address, family email; different first name) | 61 | 2 | Medium |
-| Same name, email, phone and address, clearly different DOB | 60 | 3 | Medium |
-| Same DOB + name only | 55 | 1 | Medium |
-| Same name + DOB + email, applicant vs a contact with a Coyote ID | 55 | 2 | Medium |
-| Same name + email + address + soft fields, clearly different DOB | 50 | 2 | Medium |
-| Parent/child (same phone and address, different names) | 46 | 2 | Medium |
-| Same name + address + DOB, applicant vs a contact with a Coyote ID | 40 | 2 | Low |
-| Jr./Sr. with clearly different DOBs | 35 | 2 | Low |
-| Same name only, Bolt High | 35 | 0 | Low |
-| Different Coyote IDs, everything else the same | 0 | 3 | Low |
+| Same name + email + address + soft fields, clearly different DOB | 65 | 2 | Medium |
+| Same name + address + DOB, applicant vs a contact with a Coyote ID | 55 | 2 | Medium |
+| Twins (same last name, DOB, address; different first name) | 50 | 2 | Medium |
+| Siblings (same last name, address, family email; different first name) | 50 | 2 | Medium |
+| Jr./Sr. with clearly different DOBs | 50 | 2 | Medium |
+| Same name only, Bolt High | 50 | 0 | Medium |
+| Parent/child (same phone and address, different names) | 35 | 2 | Low |
+| Different Coyote IDs, everything else the same | 15 | 3 | Low |
 
 ## Known trade-offs
 

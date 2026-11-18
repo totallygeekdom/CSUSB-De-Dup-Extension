@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.277`, shown in the settings pane |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.278`, shown in the settings pane |
 | Element451 - Database v2 | `database-v2.js` | `@version 2.73` |
 | Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.17`, see [section 17](#17-database-merge) |
 
@@ -174,7 +174,7 @@ Skips pairs the script will not handle, with **no popup**, by clicking **Next du
 - pairs outside the slider range,
 - possible-twins pairs.
 
-Off: the script stops on those pairs and leaves them on screen, showing the popups that apply ([section 8](#8-warnings-and-popups)). A twins pair is never auto-merged either way. Before every skip the Database script is asked to record the pair first ([11.3](#113-recording)). Storage: `elm_auto_skip_blocked` (default on).
+Off: the script stops on those pairs and leaves them on screen (no popups: an appeal shows as a chip in the Dedup analysis card, [section 8](#8-warnings-and-popups)). A twins pair is never auto-merged either way. Before every skip the Database script is asked to record the pair first ([11.3](#113-recording)). Storage: `elm_auto_skip_blocked` (default on).
 
 ### 4.6 Display
 
@@ -201,13 +201,13 @@ The pane's **Info** section (last, in a single list container) lists the version
 
 ### 5.1 Order of checks
 
-1. **Blockers** ([section 6](#6-blockers-lockdowns)). If any apply: red lockdown styling; the pair is recorded; then **Auto-Skip on** → skip, **off** → stop (the appeal popup shows if it is an appeal pair).
+1. **Blockers** ([section 6](#6-blockers-lockdowns)). If any apply: red lockdown styling; the pair is recorded; then **Auto-Skip on** → skip, **off** → stop (an appeal shows as a chip and a line in the write-up).
 2. Wait for Bolt's defaults to be captured (up to 3 s) and, on Low/Medium/High, the score chip (up to 3 s).
 3. Compute whether the pair is **in range** (by our rating only).
 4. Run field resolution ([section 7](#7-field-resolution-rules)); apply per **Use picks from**.
 5. About 0.6 s later, re-check blockers (more rows may have loaded) and run resolution again.
 6. If out of range and Auto-Skip on → skip. (Otherwise continue.)
-7. **Possible twins** check ([section 8](#8-warnings-and-popups)): Auto-Skip on → skip; off → popup. A twins pair stops here (never merged).
+7. **Possible twins** check ([section 8](#8-warnings-and-popups)): Auto-Skip on → skip; off → left for you (no popup). A twins pair stops here (never merged).
 8. If in range and **When done = Merge** → cancel countdown, then merge ([section 9](#9-auto-merge-and-the-cancel-countdown)).
 9. Otherwise stop and wait for you.
 
@@ -278,14 +278,14 @@ The classic "email open count" tiebreaker is back, fed by the new layout's engag
 
 ## 8. Warnings and popups
 
-Popups are browser `alert()`s and only appear for pairs that are **left for you** (never for a pair that is being skipped):
+**There are no popups on the review page any more** (UI 2.278). The two there were, both browser `alert()`s for pairs left for you, have moved:
 
-- **Appeal keyword detected** — blocked pair, Auto-Skip off.
-- **Possible twins / different people** — a pair that passed the blockers and range check, Auto-Skip off.
+- **Appeal keyword detected** is now an **Appeal** chip beside our score in the Dedup analysis card, and a first line in the write-up saying where the word is (`Blocked: the word "appeal" is in the Notes row of Contact A (left), so this pair cannot be merged.`). The pair is still blocked and styled red as before.
+- **Possible twins / different people** has no popup: our score already counts a different first name, last name or birth date against the pair, and the write-up says so. The check itself still runs: with Auto-Skip on a twins pair is skipped, off it is left for you (a console line says so), and either way it is never auto-merged.
 
 **Possible-twins signals** (`checkForConflictingRecords`): first name differs, last name differs, date of birth differs (valid years only), address differs (by `AddressComparer`), and **Bolt's analysis summary says "different people/person/individual(s)"**. The warning fires when at least 2 of the first four signals hold, or when Bolt flags it on its own. The popup states the real number of signals and lists them (`1 conflicting signal detected … Bolt Analysis (flagged as different people)`).
 
-The classic "Bolt score is Low" popup no longer exists; the twins check covers it. With Auto-Skip on, twins pairs are skipped silently.
+The classic "Bolt score is Low" popup no longer exists; the twins check covers it. With Auto-Skip on, twins pairs are skipped silently. The only dialogs left are the merge counter's reset confirmation and the Database script's file and clear-database messages.
 
 ---
 
@@ -363,7 +363,13 @@ Both scripts append toasts to one shared stack, **bottom-left**, newest at the b
 
 **The current weights, the rating rules and a table of sample pairs are in [`SCORING.md`](SCORING.md)**, which is generated from the score engine and checked by `npm test`, so it always matches what runs.
 
-Bolt's overview card is replaced by our own: a **rating chip** (High, Medium or Low), the point total, and a short plain-English write-up. The **View Bolt's write-up** button swaps Bolt's original header and text back (and **Back to our write-up** returns); Bolt's text is only hidden, never removed. With Bolt's write-up showing, the chip and title show **Bolt's own score** instead of ours (no points). Hovering our chip lists the points per field, and the console logs the same breakdown with the evidence read, for each pair.
+Bolt's overview card is replaced by our own: a **rating chip** (High, Medium or Low), the point total, and beside them:
+
+- a **department chip** (UnderGrad purple, Grad/IA blue, the same colours as the Database script's list badges), outlined when the department is not one of your allowed ones (the pair is blocked);
+- an **Appeal** chip (amber) when the word *appeal* is on either record, and **Forbidden** or **Student ID** chips (pink) for those blockers; each blocker also opens the write-up with a *Blocked: …* line saying why;
+- **Bolt: High / Medium / Low**, Bolt's original score (our chips replace Bolt's on the page, so this is where it can still be seen). The write-up ends with it too: *Bolt's original score: High.*, or that it could not be read, or that Bolt's chip said High while its text said different people, so it was not counted.
+
+A three-way switch picks the view: **Write-up** (the plain-English write-up), **Points** (a table: one row per rule that applied, saying what was found, with its points and a *strong match* tag on the strong matches, the total, and one sentence on why that total is the rating it is, e.g. *75 points is enough for High, but High also needs a matching Coyote or CAS ID or 2 strong matches … This pair has 1.*) and **Bolt's** (Bolt's own header and text, which are only hidden, never removed; the chip and title then show Bolt's score instead of ours). Write-up or Points is remembered from pair to pair and across visits (`elm2_an_view`); Bolt's goes back to the one you use on the next pair. Hovering our chip lists the points per field, and the console logs the same breakdown with the evidence read, for each pair.
 
 **Where the data comes from.** The diff form only shows fields that differ, so differences are read from its rows, and the fields that *match* are read from Bolt's own bullet list (for example `date of birth: identical (2008-12-16)`), which names the field and its value. Names come from the contact cards when the form has no name rows. The rating needs Bolt's overview on screen; until then the Bolt chip is used.
 
@@ -477,6 +483,7 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 | `elm_dedup_path` | main | the path of the Deduplication page, learnt from the list page, for the installed app's shortcut |
 | `elm_install_dismissed` | main | the X on the Install as an app card was clicked |
 | `elm_pair_ratings` | main | per pair (keyed by the two Spark IDs): `[level code, time, the scoring rules that applied]`, for the score chips on the list (re-rated with the current weights) |
+| `elm2_an_view` | main | the Dedup analysis card's view: `ours` (write-up) or `points` |
 | `elm_row_pairs` | main | list rows tied to a pair by the click that opened them: a hash of the row's words (no names stored) → `[the pair's key, time]`, up to 4,000 |
 | `elm_outcome_toasts` | main | Toasts switch (default on; forced off with the slider on None, forced on while Auto-Skip or auto-merge is on) |
 | `elm_highlight_rows` | main | Highlight Rows |
@@ -567,6 +574,7 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 - **ID weights ±120** (UI 2.272): a matching Coyote ID or CAS ID is +120 and different ones are -120 (were +100 / -100 and +80 / -80).
 - **Birth date mismatch -45** (UI 2.271): was -60.
 - **SCORING.md** (generated chart of the scoring system, kept in step by `npm test`; `npm run scoring` regenerates it).
+- **Dedup analysis card: chips, a points view, no popups** (UI 2.278): department, Appeal (and Forbidden / Student ID) chips and Bolt's original score beside our score; *Blocked: …* lines and *Bolt's original score* in the write-up; a Write-up / Points / Bolt's switch, the Points view being a table of the rules that applied and why the total is the rating it is. The Appeal and Possible-twins popups are gone (section 8); the twins check still skips (Auto-Skip on) or stops, and never auto-merges.
 - **Score chips: the row you open, and console lines** (UI 2.277, Database 2.73): a list row is tied to its pair a second way, by the click that opens it. The first different pair rated after a click on a row is that row's pair, and the tie is kept by the row's own words (names, emails), so it outlives a reload. Moving on with Next, without a click, ends the tie, so no other row is tied by mistake. Each row is also given both sets of Spark IDs, the list record's and the database entry's, and the chip tries each. New console lines say why a chip is Pending (section 12.3). Before, a row whose list record and database entry gave no usable Spark IDs stayed Pending with nothing in the console to say why. A chip outside a list row (the review sidebar's) is rated as the pair on screen; a chip in a row that is not a `bolt-row.cdk-row` is now rated as its row, never as the open pair.
 - **The list follows the profile you are viewing** (UI 2.276, Database 2.72): the list is annotated while a profile is open (it was skipped, so on a first load a row was only tied to its pair after the profile was closed), is annotated again about 150 ms after a pair is recorded, and the list's chips are updated in the frame a pair is rated. The chip of the profile on screen turns from Pending to its rating within about a second, and the next profile's follows.
 - **Names weigh more** (UI 2.275): a same first name is +15 (was +7), a nickname or initial +7 (was +3), a different first name -30 (was -12); a same last name is +15 (was +8), overlapping +7 (was +4), a different last name -15 (was -8).

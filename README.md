@@ -17,7 +17,7 @@ chip). Two v2 scripts target it, plus an optional third that merges databases:
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.277` (shown in the settings pane) |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.278` (shown in the settings pane) |
 | Element451 - Database v2 | `database-v2.js` | `@version 2.73` |
 | Element451 - Database Merge v2 (optional, pairs with Database) | `database-merge-v2.js` | `@version 1.17` |
 
@@ -27,15 +27,15 @@ the resolution rules, auto-merge, every website restyle, the database format, li
 
 ### What they do
 
-- **Dedup analysis**: our own points-based rating and a plain-English write-up replace Bolt's overview card, with a button to view Bolt's write-up (Full-Documentation-v2.md, section 10.6).
+- **Dedup analysis**: our own points-based rating replaces Bolt's overview card, with department, Appeal and Bolt's-score chips beside it and a Write-up / Points / Bolt's switch (Full-Documentation-v2.md, section 10.6).
 - **Automation per pair**, controlled by four settings in the gear pane:
   - **Pairs in range** slider, by our rating (Bolt's score is one input): None, High, Medium, Low, All (each position adds to the one before; an applicant side does not put a pair in range).
   - **Use picks from**: Bolt's or Ours (Ours includes the applicant rule).
   - **When done**: Wait for me, or Merge after a cancel countdown (a centred dialog with a stepped ring,
     a short brief (names, Bolt score, how often the script agrees with Bolt, what it chose over Bolt) and a Cancel button; length set by **Merge countdown**, 2-15 s, or a 4 s "race lights" start signal). This setting
     resets every browser session. A final safety check runs before Merge Contacts is clicked.
-  - **Auto-Skip**: skips blocked, out-of-range and possible-twins pairs with no popup (Next duplicate
-    only, never Dismiss); off = stop on them and show the appeal / possible-twins popups.
+  - **Auto-Skip**: skips blocked, out-of-range and possible-twins pairs (Next duplicate
+    only, never Dismiss); off = stop on them. There are no popups: an appeal shows as a chip beside our score.
   - **Next after merge**: after a merge, presses "Next duplicate" on the "Merge completed" card (default on).
   - Slider **None** (or no Allowed department ticked) with Auto-Skip on is a **scan**: every pair is
     recorded in the database and skipped.

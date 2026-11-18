@@ -35,7 +35,7 @@ There is no twin-pattern rule: first names that differ cost the first-name penal
 - **Strong matches** are: Coyote ID, CAS ID, date of birth, exact email, phone and a matching address.
 - **Hard conflict**: two different Coyote IDs or two different CAS IDs. It caps the pair at Low. A different birth date is a heavy penalty, not a hard conflict.
 
-## Sample pairs
+## Sample pairs: High and Medium
 
 Each row is run through the live engine (the Bolt score is not included unless the pair says so). Sorted by rating, then points.
 
@@ -65,8 +65,36 @@ Each row is run through the live engine (the Bolt score is not included unless t
 | Siblings (same last name, address, family email; different first name) | 50 | 2 | Medium |
 | Jr./Sr. with clearly different DOBs | 50 | 2 | Medium |
 | Same name only, Bolt High | 50 | 0 | Medium |
-| Parent/child (same phone and address, different names) | 35 | 2 | Low |
-| Different Coyote IDs, everything else the same | 15 | 3 | Low |
+| Bolt flags "different people", same name + birth date | 45 | 1 | Medium |
+
+## Examples of Low scores
+
+A pair is Low under 45 points, or when two IDs disagree. In practice that is a pair with little in common, or with evidence pointing the other way: different names, a different
+birth date, a different ID. A single shared fact (the same email, phone, address or birth date) is not enough on its own, because families and roommates share them. The last column shows how the
+points add up. Closest to Medium first.
+
+| Pair | Points | How it adds up |
+|---|---|---|
+| Parent/child (same phone and address, different names) | 35 | Phone +25, First name -30, Last name +15, Address +25 |
+| Same name, nothing else known | 30 | First name +15, Last name +15 |
+| Same name, different address | 27 | First name +15, Last name +15, Address -3 |
+| Same name, Bolt says Low | 25 | First name +15, Last name +15, Bolt -5 |
+| Siblings: same last name and family email, no shared address | 25 | Email +40, First name -30, Last name +15 |
+| Different Coyote IDs, everything else the same | 15 | Coyote ID -120, Date of birth +40, Email +40, First name +15, Last name +15, Address +25 (hard conflict: capped at Low) |
+| Same name + address, applicant vs a contact with a Coyote ID | 15 | Applicant vs Coyote ID -40, First name +15, Last name +15, Address +25 |
+| Same name, birth date one typo apart | 10 | Date of birth -20, First name +15, Last name +15 |
+| Same name, different birth date, same address | 10 | Date of birth -45, First name +15, Last name +15, Address +25 |
+| Relatives: same last name and address, different first names | 10 | First name -30, Last name +15, Address +25 |
+| Same first name only, different last name | 0 | First name +15, Last name -15 |
+| Same email only (a shared family email), different names | -5 | Email +40, First name -30, Last name -15 |
+| Same birth date only (a coincidence), different names | -5 | Date of birth +40, First name -30, Last name -15 |
+| Same last name only, different first name | -15 | First name -30, Last name +15 |
+| Same name, clearly different birth date | -15 | Date of birth -45, First name +15, Last name +15 |
+| Same phone only (a family line), different names | -20 | Phone +25, First name -30, Last name -15 |
+| Same address only (roommates), different names | -20 | First name -30, Last name -15, Address +25 |
+| Same email, different names and different birth dates | -50 | Date of birth -45, Email +40, First name -30, Last name -15 |
+| Different CAS IDs, same name and birth date | -50 | CAS ID -120, Date of birth +40, First name +15, Last name +15 (hard conflict: capped at Low) |
+| Completely different people | -93 | Date of birth -45, First name -30, Last name -15, Address -3 |
 
 ## Known trade-offs
 
@@ -76,4 +104,5 @@ Each row is run through the live engine (the Bolt score is not included unless t
 - **Address as a strong match.** It lets a pair with the same name, address and one family-shared email or phone (a Jr./Sr. with no birth date on file) reach High.
   Requiring a birth date or ID for High would stop that.
 - **Birth date and address alone.** With no names on either record the pair stays Medium; a last name is enough to reach High.
+- **Bolt's "different people" flag.** It costs -25, which a same name and birth date outweigh: that pair is Medium (see the sample rows), not Low.
 - **An ID match outweighs a disagreeing birth date.** A matching Coyote ID or CAS ID with the same name is High even when the birth dates are clearly different.

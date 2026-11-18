@@ -228,7 +228,7 @@
         /* chips beside our score: department and blockers (the same colours as the Database script's list badges), Bolt's own score */
         .elm2-an-flag { display: inline-block; padding: 1px 10px; border-radius: 12px; font-size: 12px; line-height: 20px; font-weight: 600; cursor: help; background: #eceef4; color: #434750; }
         .elm2-an-flag[data-dept="UnderGrad"] { background: #f3e5f5; color: #6a1b9a; } .elm2-an-flag[data-dept="Grad/IA"] { background: #e3f2fd; color: #1565c0; }
-        .elm2-an-flag[data-flag="appeal"] { background: #fff8e1; color: #f57f17; } .elm2-an-flag[data-flag="forbidden"], .elm2-an-flag[data-flag="test"], .elm2-an-flag[data-flag="student-id"] { background: #fce4ec; color: #c2185b; }
+        .elm2-an-flag[data-flag="appeal"] { background: #fff8e1; color: #f57f17; } .elm2-an-flag[data-flag="forbidden"], .elm2-an-flag[data-flag="test"] { background: #fce4ec; color: #c2185b; }
         .elm2-an-flag[data-blocked="1"] { box-shadow: inset 0 0 0 1.5px currentColor; }
         .elm2-an-flag[data-flag="bolt"] { background: transparent; box-shadow: inset 0 0 0 1px rgba(26, 28, 32, .24); color: #434750; font-weight: 500; }
         .elm2-an-views { margin-left: auto; display: inline-flex; border: 1px solid rgba(26, 28, 32, .24); border-radius: 12px; overflow: hidden; }
@@ -2691,16 +2691,15 @@
         }
         const forbidden = has('forbidden');
         if (forbidden) {
-            // a test record (a name with "test" in it) gets its own chip; a name on the forbidden list reads Forbidden
+            // The list's badge says Forbidden for all of these (and for different School IDs); here they are told apart: a test record
+            // (a name with "test" in it) reads Test, a name on the forbidden list reads Forbidden name.
             const test = forbidden.reason === 'test in name';
             const why = test ? 'a contact\'s name contains "test", so it is a test record' : 'a contact\'s name is on the forbidden list';
-            flags.push({ flag: test ? 'test' : 'forbidden', text: test ? 'Test' : 'Forbidden', blocked: true, title: 'Blocked: ' + why + '. This pair cannot be merged.' });
+            flags.push({ flag: test ? 'test' : 'forbidden', text: test ? 'Test' : 'Forbidden name', blocked: true, title: 'Blocked: ' + why + '. This pair cannot be merged.' });
             notes.push('Blocked: ' + why + ', so this pair cannot be merged.');
         }
-        if (has('student-id-mismatch')) {
-            flags.push({ flag: 'student-id', text: 'Student ID', blocked: true, title: 'Blocked: the two contacts have different School IDs.' });
-            notes.push('Blocked: the two contacts have different School IDs.');
-        }
+        // Different School IDs: no chip or line of its own, since the score already counts them (different Coyote IDs, -120, a hard
+        // conflict that caps the pair at Low) and the write-up says so. The pair is still blocked from merging.
         return { flags, notes };
     }
     // Why the total is the rating it is, in one sentence (the rules of scoreSlots).

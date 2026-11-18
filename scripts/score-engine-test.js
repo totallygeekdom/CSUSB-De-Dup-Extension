@@ -7,7 +7,8 @@ const path = require('path');
 const src = fs.readFileSync(path.join(__dirname, '..', 'Element451-UI-Perfection-v2.user.js'), 'utf8');
 const a = src.indexOf('// ---- SCORE ENGINE START'), b = src.indexOf('// ---- SCORE ENGINE END');
 if (a < 0 || b < a) { console.error('SCORE ENGINE markers not found in the userscript'); process.exit(1); }
-const { scorePair, SCORE_W } = new Function(src.slice(a, b) + '\nreturn { scorePair, SCORE_W };')();
+const load = (text) => new Function(text + '\nreturn { scorePair, SCORE_W, scoreSlots, slotsToString, slotsFromString };')();
+const { scorePair, SCORE_W, scoreSlots, slotsToString, slotsFromString } = load(src.slice(a, b));
 
 let failures = 0;
 const check = (ok, label) => { console.log((ok ? 'ok   ' : 'FAIL ') + label); if (!ok) failures++; };
@@ -62,5 +63,29 @@ check(strong2.level === 'high', 'same birth date, phone and name is High (' + st
 const weak = score({ ...person, ...soft, emails: ['ana.cruz@y.com'] }, { ...person, ...soft, emails: ['cruz.ana@z.com'] }, { addrState: 'match', bolt: { level: 'high' } });
 check(weak.strong === 1 && weak.level !== 'high', 'name, address, soft fields and Bolt High has only one strong match (the address): never High (' + weak.points + ' pts)');
 check(score({ ...person, ...soft }, { ...person, ...soft }, { bolt: { level: 'high' } }).strong === 0 && score({ ...person, ...soft }, { ...person, ...soft }, { bolt: { level: 'high' } }).level !== 'high', 'name, soft fields and Bolt High with no strong match at all is never High');
+
+// the rating as data: the slots that applied are remembered and re-rated with whatever weights are in force
+const pairs = [
+  ['same DOB + name + address', score({ ...person, dob: '2004-01-02' }, { ...person, dob: '2004-01-02' }, { addrState: 'match' })],
+  ['Coyote ID + name', score({ ...person, coyote: '009123456' }, { ...person, coyote: '009123456' })],
+  ['different Coyote IDs', score({ ...person, coyote: '1' }, { ...person, coyote: '2' })],
+  ['different DOB, nickname, soft fields, Bolt Low', score({ first: 'Mike', last: 'Lee', dob: '2004-01-02', ...soft }, { first: 'Michael', last: 'Lee', dob: '1999-07-30', ...soft }, { bolt: { level: 'low' } })],
+  ['name hidden in two emails (capped) and a birth date in an email', score({ first: 'Ann', last: 'Lee', emails: ['eva.cruz@x.com', 'evacruz1@x.com', 'x010204@x.com'] }, { first: 'Eva', last: 'Cruz', dob: '2004-01-02', emails: ['q@y.com'] })],
+  ['phone + email + Bolt "different people"', score({ ...person, phone: '3105550101', emails: ['ana@x.com'] }, { ...person, phone: '3105550101', emails: ['ana@x.com'] }, { bolt: { level: 'high', different: true } })],
+  ['nothing to compare', score({}, {})]
+];
+pairs.forEach(([name, r]) => {
+  const again = scoreSlots(slotsFromString(slotsToString(r.slots)));
+  const itemSum = r.items.reduce((t, i) => t + i.pts, 0);
+  check(again && again.points === r.points && again.level === r.level && again.hard === r.hard && again.strong === r.strong && itemSum === r.points,
+    'slots round trip and agree with the items: ' + name + ' (' + r.points + ' pts, ' + r.level + ', "' + slotsToString(r.slots) + '")');
+});
+// a remembered pair follows a weight change: the same slots, rated by an engine whose address weight is lower
+const remembered = slotsToString(pairs[0][1].slots);
+const other = load(src.slice(a, b).replace('address: [25, -3]', 'address: [10, -3]'));
+check(pairs[0][1].level === 'high' && other.scoreSlots(slotsFromString(remembered)).level === 'medium', 'the same remembered slots re-rate under changed weights (address +25 -> +10: High -> Medium)');
+const slotText = slotsToString(pairs[0][1].slots);
+check(!/[A-Za-z]{6,}\.?\d?/.test(slotText.replace(/[a-z]+\.\d|[A-Za-z]+(?=,|$|\*)/g, '')) && !/ana|cruz|2004|@/i.test(slotText), 'the remembered text holds no names, dates or contact details: "' + slotText + '"');
+check(scoreSlots({ 'dob.0': 1, 'retiredRule.0': 1 }) === null && slotsFromString('dob.0,,x') === null && slotsFromString(undefined) === null, 'an unknown slot or a malformed text is not rated (so the chip reads Pending)');
 console.log(failures ? failures + ' check(s) failed' : 'all checks passed');
 process.exit(failures ? 1 : 0);

@@ -5,8 +5,8 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.276`, shown in the settings pane |
-| Element451 - Database v2 | `database-v2.js` | `@version 2.72` |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.277`, shown in the settings pane |
+| Element451 - Database v2 | `database-v2.js` | `@version 2.73` |
 | Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.17`, see [section 17](#17-database-merge) |
 
 
@@ -477,6 +477,7 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 | `elm_dedup_path` | main | the path of the Deduplication page, learnt from the list page, for the installed app's shortcut |
 | `elm_install_dismissed` | main | the X on the Install as an app card was clicked |
 | `elm_pair_ratings` | main | per pair (keyed by the two Spark IDs): `[level code, time, the scoring rules that applied]`, for the score chips on the list (re-rated with the current weights) |
+| `elm_row_pairs` | main | list rows tied to a pair by the click that opened them: a hash of the row's words (no names stored) → `[the pair's key, time]`, up to 4,000 |
 | `elm_outcome_toasts` | main | Toasts switch (default on; forced off with the slider on None, forced on while Auto-Skip or auto-merge is on) |
 | `elm_highlight_rows` | main | Highlight Rows |
 | `elm_allowed_department` | main | Allowed departments (the two checkboxes) |
@@ -502,6 +503,8 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 - **`[elm2] No Spark IDs found on the pair on screen …`** (main script): printed once per pair when no Spark ID has been read for 4 seconds; it lists how many rows the page has and the rows that mention "spark", with every long word or number blanked out. Spark IDs are read tolerantly: `Spark Id: abc`, `Spark ID:abc`, `Spark Id abc`, or a row labelled "Spark Id" that holds only the value.
 - **No personal details in the console.** The lines above name fields, rules, counts and reasons, never a contact's values. The analysis line (`[elm2] analysis: … | read (values masked): {…}`) shows what was read with every letter turned into `x` and every digit into `9` (`"dob":"9999-99-99"`, `"emails":["xxxxx@xxxxx.xxx"]`), so it can be pasted into a bug report; `Needs review:` names the field only; `Merged 3/40` no longer repeats the card's sentence; the history record sample is masked the same way.
 - **`[elm2] <step> failed (logged once; the other steps keep running)`** / **`[Database] <step> failed (logged once)`**: one of the timer steps threw (usually Element451 changed a piece of markup). The step is tried again on every tick, the other steps are not affected, and the error is printed once per step and message instead of every tick.
+- **Score chips** (main script): `[elm2] chips: 25 on the list: 3 rated (2 by Spark IDs, 1 by the row you opened), 22 Pending (20 with no Spark IDs from the Database script, 2 not opened yet, 0 rated before 2.270: reopen). …` is printed whenever those counts change. When a pair is rated: `[elm2] chips: rated the pair on screen (Spark IDs …1234, …5678): High. List row with these Spark IDs: yes / none of 25 rows; row opened by a click: yes / no.` Spark IDs show only their last 4 characters. Type **`elm2ChipReport()`** for a table of every chip: where it is (list row, sidebar, another kind of row), the row's Spark IDs (last 4 characters), what it shows, how it was rated and why it is Pending (`nosparks`, `unrated`, `old`).
+- **Database script, list**: `[elm-db] list API: records 25, with 2+ Spark IDs 25 (from identities[].value); fields of a record: _id, name, …` when list data is captured (field names only, never values), and `[elm-db] list: 25 rows: 25 tied to a list record (25 by name), 25 of those records with Spark IDs, 12 matched to the database, 25 given Spark IDs for the score chips` whenever the counts change.
 - **`elm451Debug()`** (type it in the console on the page): prints and returns the Database script's state: its version, the number of entries and their size in KB, whether the browser storage is writable, whether you are on the review page, the main script's signals (department, Spark IDs, choice, score), the Spark IDs and names read from the page, whether the main script is loaded and whether the scripts run through the extension, and the last recording problem.
 
 ---
@@ -537,6 +540,7 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 | Skips lose database entries | Make sure both scripts are the latest builds (the record-before-skip handshake) |
 | Scan stalls after a few pairs | Fixed in build 81 (queue position in the pair key, retrying Next); update the main script |
 | A selected filter chip is blue | Element's own style won; send the chip's HTML so the selector can be added |
+| List score chips stay Pending | Filter the console on `chips`. *with no Spark IDs from the Database script*: the list API's records carry no Spark IDs (see the `[elm-db] list API:` line) and the pair is not in the database yet; open the row by clicking it, and its chip follows. *not opened yet*: the row has Spark IDs but no pair with those IDs has been rated; compare the last 4 characters in `elm2ChipReport()` with the `rated the pair on screen` line. *rated before 2.270*: reopen the pair |
 | API toast inconsistent | Fixed in Database script v2.18+ (toast on every fresh capture) |
 
 ---
@@ -563,6 +567,7 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 - **ID weights ±120** (UI 2.272): a matching Coyote ID or CAS ID is +120 and different ones are -120 (were +100 / -100 and +80 / -80).
 - **Birth date mismatch -45** (UI 2.271): was -60.
 - **SCORING.md** (generated chart of the scoring system, kept in step by `npm test`; `npm run scoring` regenerates it).
+- **Score chips: the row you open, and console lines** (UI 2.277, Database 2.73): a list row is tied to its pair a second way, by the click that opens it. The first different pair rated after a click on a row is that row's pair, and the tie is kept by the row's own words (names, emails), so it outlives a reload. Moving on with Next, without a click, ends the tie, so no other row is tied by mistake. Each row is also given both sets of Spark IDs, the list record's and the database entry's, and the chip tries each. New console lines say why a chip is Pending (section 12.3). Before, a row whose list record and database entry gave no usable Spark IDs stayed Pending with nothing in the console to say why. A chip outside a list row (the review sidebar's) is rated as the pair on screen; a chip in a row that is not a `bolt-row.cdk-row` is now rated as its row, never as the open pair.
 - **The list follows the profile you are viewing** (UI 2.276, Database 2.72): the list is annotated while a profile is open (it was skipped, so on a first load a row was only tied to its pair after the profile was closed), is annotated again about 150 ms after a pair is recorded, and the list's chips are updated in the frame a pair is rated. The chip of the profile on screen turns from Pending to its rating within about a second, and the next profile's follows.
 - **Names weigh more** (UI 2.275): a same first name is +15 (was +7), a nickname or initial +7 (was +3), a different first name -30 (was -12); a same last name is +15 (was +8), overlapping +7 (was +4), a different last name -15 (was -8).
 - **List chips follow the weights** (UI 2.274): pairs are remembered as the scoring rules that applied and re-rated with the current weights, so a weight change updates the list without reopening pairs (it used to keep each pair's old rating until it was opened again). Bolt's bullet *address: match when accounting for formatting differences* is now read as a match (the word *differences* made it read as a mismatch).

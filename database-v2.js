@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - Database v2
 // @namespace    http://tampermonkey.net/
-// @version      2.72
+// @version      2.73
 // @description  Tracks duplicate entries in a database stored in browser localStorage (exports a password-protected .xlsx spreadsheet to share, or a personal .elmdb file locked to your Element451 login) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -15,7 +15,7 @@
     if (window.__elm451CsvDatabaseLoaded) return;
     window.__elm451CsvDatabaseLoaded = true;
 
-    const VERSION = '2.72'; // keep in sync with @version (the build checks it)
+    const VERSION = '2.73'; // keep in sync with @version (the build checks it)
     const STORAGE_KEY = 'elm_csv_database';
     const UI_KEY = 'elm_show_db_ui';
     function showDbUi() { try { return localStorage.getItem(UI_KEY) !== 'false'; } catch (e) { return true; } }
@@ -539,7 +539,7 @@
     // containing "spark" (e.g. master.spark_id), and "Spark Id: <id>" text inside any
     // string value.
     const SPARK_TEXT = /spark[\s_-]*id\W{0,3}([A-Za-z0-9-]{4,})/gi;
-    function collectSparkIds(obj, path, out) {
+    function collectSparkIds(obj, path, out, where) {
         if (obj === null || typeof obj !== 'object') return;
         for (const k of Object.keys(obj)) {
             if (!path && (k === 'ai_analysis' || k === 'feedback')) continue; // free text, not profile data
@@ -547,30 +547,31 @@
             const here = (path ? path + '.' + k : k).replace(/\.\d+/g, '[]');
             if (/spark/i.test(k)) {
                 (Array.isArray(v) ? v : [v]).forEach(x => {
-                    if (typeof x === 'string' || typeof x === 'number') { out.push(String(x).trim()); }
+                    if (typeof x === 'string' || typeof x === 'number') { out.push(String(x).trim()); if (where) where.add(here); }
                 });
             }
             // identities: [{ type: 'Spark_...', <value field>: '<id>' }] -> take the value from the siblings
             if (typeof v === 'string' && /^spark/i.test(v) && !Array.isArray(obj)) {
                 ['value', 'id', 'identifier', 'external_id', 'identity', 'key', 'number', 'code'].forEach(f => {
-                    if (f !== k && (typeof obj[f] === 'string' || typeof obj[f] === 'number')) out.push(String(obj[f]).trim());
+                    if (f !== k && (typeof obj[f] === 'string' || typeof obj[f] === 'number')) { out.push(String(obj[f]).trim()); if (where) where.add((path || '').replace(/\.\d+/g, '[]') + '.' + f); }
                 });
             }
             if (typeof v === 'string' && /spark/i.test(v)) {
                 let m;
                 SPARK_TEXT.lastIndex = 0;
-                while ((m = SPARK_TEXT.exec(v))) out.push(m[1]);
+                while ((m = SPARK_TEXT.exec(v))) { out.push(m[1]); if (where) where.add(here + ' (text)'); }
             }
-            if (v && typeof v === 'object') collectSparkIds(v, here, out);
+            if (v && typeof v === 'object') collectSparkIds(v, here, out, where);
         }
     }
     function parseApiEntries(entries) {
         const sample = entries[0];
         if (!sample || typeof sample !== 'object') return null;
         const idField = sample._id ? '_id' : sample.id ? 'id' : null;
+        const where = new Set();
         const parsed = entries.map((e, i) => {
             const sparks = [];
-            collectSparkIds(e, '', sparks);
+            collectSparkIds(e, '', sparks, where);
             return {
                 uniqueId: ((idField && e[idField]) || 'api-' + i).toString().toLowerCase(),
                 name: e.name || e.full_name || '',
@@ -579,8 +580,13 @@
                 raw: sparks.some(Boolean) ? '' : JSON.stringify(e) // only searched when the record gave no Spark IDs (a page of records is not small)
             };
         });
+        // what the list call carries, for the console (field names only, never values): where the score chips' Spark IDs come from
+        const withIds = parsed.filter(p => p.sparks.length >= 2).length;
+        const shape = 'records ' + parsed.length + ', with 2+ Spark IDs ' + withIds + (where.size ? ' (from ' + Array.from(where).slice(0, 8).join(', ') + ')' : '') + '; fields of a record: ' + Object.keys(sample).slice(0, 30).join(', ');
+        if (shape !== lastApiShape) { lastApiShape = shape; console.log('[elm-db] list API: ' + shape); }
         return parsed;
     }
+    let lastApiShape = '';
     // A list record matches a database entry when it carries all of the entry's
     // Spark IDs (both contacts of the pair; a contact can be in several pairs, so
     // one shared ID alone isn't enough when the entry has two).
@@ -750,7 +756,7 @@
         const db = getDatabase();
 
         if (useDbFallback) {
-            if (db.length === 0) return;
+            if (db.length === 0) { logListTally(rows.length + ' rows, no list data captured and the database is empty: no row has Spark IDs for the score chips'); return; }
             const usedDbIndices = new Set();
             let matched = 0;
             rows.forEach(row => {
@@ -760,6 +766,7 @@
                 setRowSparks(row, [dbEntry.sparkId1, dbEntry.sparkId2]); // no list data was captured (the page loaded it before this script ran): the database entry is the source
                 matched++;
             });
+            logListTally(rows.length + ' rows, no list data captured: ' + matched + ' matched to the database by name and given its Spark IDs');
             if (matched > 0 && lastAnnotationSource !== 'db-fallback') {
                 lastAnnotationSource = 'db-fallback';
                 showApiToast('API: unavailable, using database fallback', 'fallback');
@@ -789,6 +796,7 @@
             if (api) { bound[i] = api; row.setAttribute('data-csv-uid', api.uniqueId); }
         });
         const byName = bound.filter(Boolean).length;
+        const tally = { api: 0, apiIds: 0, db: 0, ids: 0 };
         const positionOk = rows.length === apiDuplicatesList.length && byName * 2 >= rows.length;
         rows.forEach((row, rowIndex) => {
             let api = bound[rowIndex];
@@ -799,7 +807,10 @@
             }
             // Spark ID found in the API record first; otherwise name/ID text on the row
             const dbEntry = db.length ? (dbEntryForApi(api, db) || matchRowToDbEntry(row, db, usedDbIndices)) : null;
-            setRowSparks(row, api && api.sparks.length ? api.sparks : dbEntry ? [dbEntry.sparkId1, dbEntry.sparkId2] : null);
+            // both sources: the list record's IDs and the database entry's (the score chip tries each pair of them against its ratings)
+            const ids = [].concat(api ? api.sparks.slice(0, 10) : [], dbEntry ? [dbEntry.sparkId1, dbEntry.sparkId2] : []);
+            setRowSparks(row, ids);
+            if (api) tally.api++; if (api && api.sparks.length >= 2) tally.apiIds++; if (dbEntry) tally.db++; if (new Set(ids.filter(Boolean)).size >= 2) tally.ids++;
             if (!dbEntry) {
                 const b = row.querySelector('.csv-dept-badge'); if (b) b.remove();
                 row.removeAttribute('data-csv-dept');
@@ -807,6 +818,13 @@
             }
             applyBadge(row, dbEntry.dept);
         });
+        logListTally(rows.length + ' rows: ' + tally.api + ' tied to a list record (' + byName + ' by name), ' + tally.apiIds + ' of those records with Spark IDs, ' + tally.db + ' matched to the database, ' + tally.ids + ' given Spark IDs for the score chips');
+    }
+    let lastListTally = '';
+    function logListTally(line) {
+        if (line === lastListTally) return;
+        lastListTally = line;
+        console.log('[elm-db] list: ' + line);
     }
 
     let listAnnotationTimer = null;

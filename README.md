@@ -17,8 +17,8 @@ chip). Two v2 scripts target it, plus an optional third that merges databases:
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.276` (shown in the settings pane) |
-| Element451 - Database v2 | `database-v2.js` | `@version 2.72` |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.277` (shown in the settings pane) |
+| Element451 - Database v2 | `database-v2.js` | `@version 2.73` |
 | Element451 - Database Merge v2 (optional, pairs with Database) | `database-merge-v2.js` | `@version 1.17` |
 
 
@@ -139,6 +139,8 @@ UI Perfection works without the Database script. The Database script needs UI Pe
 | `elm_allowed_department` | UI Perfection | Allowed departments (UnderGrad, Grad/IA checkboxes) |
 | `elm_show_merge_counter` | UI Perfection | Hidden: show the merge counter |
 | `elm_merge_count` | UI Perfection | Merge counter value |
+| `elm_pair_ratings` | UI Perfection | Our rating of each pair opened (keyed by the two Spark IDs), for the list's score chips |
+| `elm_row_pairs` | UI Perfection | List rows tied to their pair by the click that opened them (a hash of the row's words, no names) |
 | `elm2_bolt_picks` | UI Perfection | Bolt's original pick per conflicting row, hashed (no names or emails), so a revisited pair still shows what Bolt picked |
 | `elm_csv_database` | Database | Recorded pairs (JSON array, Spark-ID keyed) |
 | `elm_show_db_ui` | Database | Show Database UI |

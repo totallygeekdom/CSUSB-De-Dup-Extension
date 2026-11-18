@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.276
+// @version      2.277
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.276'; // keep in sync with @version
+    const VERSION = '2.277'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -2715,10 +2715,70 @@
         return ratingsCache;
     }
     const ratingKey = (a, b) => [a, b].sort().join('|');
+    // ---- The row you open: a second tie between a list row and its pair, which needs no Spark IDs on the list ----
+    // A click on a list row is remembered with the pair on screen at that moment. The first different pair rated after it is the one
+    // that row opened, and the tie is kept (by the row's text, so it outlives a reload and Element451 reusing row elements). Moving on
+    // to another pair without clicking a row ends it, so a "next" button never ties the wrong row.
+    const ROWPAIRS_KEY = 'elm_row_pairs', ROWPAIRS_MAX = 4000;
+    let rowPairsCache = null;
+    window.addEventListener('storage', (e) => { if (!e.key || e.key === ROWPAIRS_KEY) rowPairsCache = null; });
+    function loadRowPairs() {
+        if (rowPairsCache) return rowPairsCache;
+        try { rowPairsCache = JSON.parse(lsGet(ROWPAIRS_KEY) || '{}'); } catch (e) { rowPairsCache = null; }
+        if (!rowPairsCache || typeof rowPairsCache !== 'object' || Array.isArray(rowPairsCache)) rowPairsCache = {};
+        return rowPairsCache;
+    }
+    // The row's own words (names, emails): our chips and badges, numbers and time words ("2 days ago") left out, hashed.
+    const ROW_SKIP = 'elm-deduplication-score-chip, .csv-dept-badge, [class*="elm2-"], [class*="csv-"]';
+    const TIME_WORDS = /^(ago|just|now|today|yesterday|seconds?|minutes?|mins?|hours?|hrs?|days?|weeks?|months?|years?|am|pm)$/;
+    function rowPrint(row) {
+        const words = [];
+        // only our own things inside the row are skipped (the page around it carries elm2- classes too)
+        const skip = (n) => { const el = n.parentElement && n.parentElement.closest(ROW_SKIP); return !!el && el !== row && row.contains(el); };
+        const walk = document.createTreeWalker(row, NodeFilter.SHOW_TEXT, { acceptNode: (n) => skip(n) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
+        for (let n = walk.nextNode(); n; n = walk.nextNode()) (n.nodeValue.toLowerCase().match(/[a-zÀ-ɏ@._'-]{2,}/g) || []).forEach(w => { if (!TIME_WORDS.test(w)) words.push(w); });
+        if (words.length < 2) return '';
+        const s = words.join(' ');
+        let h1 = 5381, h2 = 52711;
+        for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); h1 = (h1 * 33) ^ c; h2 = (h2 * 31 + c) | 0; }
+        return 'r' + (h1 >>> 0).toString(36) + (h2 >>> 0).toString(36) + s.length.toString(36);
+    }
+    let openedRow = null; // { print, from: the pair on screen when the row was clicked, at, pair: the pair it opened }
+    document.addEventListener('click', (e) => {
+        const row = e.target && e.target.closest && e.target.closest('elm-review-queue-table bolt-row.cdk-row');
+        if (!row) return;
+        const print = rowPrint(row);
+        if (!print) return;
+        const { a, b } = getSparkIds();
+        openedRow = { print, from: a && b ? ratingKey(a, b) : '', at: Date.now(), pair: '' };
+    }, true);
+    function tieOpenedRow(key) {
+        if (!openedRow) return;
+        if (openedRow.pair) { if (openedRow.pair !== key) openedRow = null; return; } // moved on without clicking a row
+        if (key === openedRow.from) return; // the pair that was open before the click, still on screen while the new one loads
+        if (Date.now() - openedRow.at > 60000) { openedRow = null; return; }
+        openedRow.pair = key;
+        const all = loadRowPairs();
+        if (all[openedRow.print] && all[openedRow.print][0] === key) return;
+        all[openedRow.print] = [key, Date.now()];
+        const keys = Object.keys(all);
+        if (keys.length > ROWPAIRS_MAX) keys.sort((x, y) => all[x][1] - all[y][1]).slice(0, keys.length - ROWPAIRS_MAX).forEach(k => delete all[k]);
+        try { lsSet(ROWPAIRS_KEY, JSON.stringify(all)); } catch (e) { /* storage full */ }
+    }
+    const maskId = (id) => '…' + String(id).slice(-4);
+    const pairLogged = new Set();
     function rememberRating(res) {
         const { a, b } = getSparkIds();
         if (!a || !b || !res || !res.slots) return;
         const all = loadRatings(), key = ratingKey(a, b), text = slotsToString(res.slots), code = RATING_CODE[res.level];
+        tieOpenedRow(key);
+        if (!pairLogged.has(key) && code) {
+            pairLogged.add(key);
+            const rows = Array.from(document.querySelectorAll('elm-review-queue-table bolt-row.cdk-row'));
+            const bySparks = rows.some(r => { const ids = (r.getAttribute('data-csv-sparks') || '').split('|'); return ids.includes(a) && ids.includes(b); });
+            console.log('[elm2] chips: rated the pair on screen (Spark IDs ' + maskId(a) + ', ' + maskId(b) + '): ' + CHIP_STYLE[res.level][0] + '. List row with these Spark IDs: ' +
+                (rows.length ? (bySparks ? 'yes' : 'none of ' + rows.length + ' rows') : 'no list on the page') + '; row opened by a click: ' + (openedRow && openedRow.pair === key ? 'yes' : 'no') + '.');
+        }
         if (!code || (all[key] && all[key][2] === text)) return;
         all[key] = [code, Date.now(), text];
         const keys = Object.keys(all);
@@ -2726,18 +2786,29 @@
         try { lsSet(RATINGS_KEY, JSON.stringify(all)); } catch (e) { /* storage full: the rating just is not kept */ }
         requestAnimationFrame(() => runStep(syncScoreChips)); // the list's chip for this pair follows at once, while its profile is still open
     }
+    // 'none' (no rating under that key), 'old' (rated before slots were kept: reopen the pair) or the level
+    function levelOfKey(key) {
+        const hit = loadRatings()[key];
+        if (!hit) return 'none';
+        if (typeof hit[2] !== 'string') return 'old';
+        let level = levelOfSlots.get(hit[2]);
+        if (level === undefined) { const slots = slotsFromString(hit[2]), r = slots && scoreSlots(slots); level = r ? r.level : null; levelOfSlots.set(hit[2], level); }
+        return level || 'none';
+    }
+    // { level, via, why }: via 'sparks' or 'opened'; with no level, why says what is missing (shown by the console report)
     function ratingForRow(row) {
         const ids = (row.getAttribute('data-csv-sparks') || '').split('|').filter(Boolean);
-        if (ids.length < 2) return null;
-        const all = loadRatings();
+        let old = false;
         for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) {
-            const hit = all[ratingKey(ids[i], ids[j])];
-            if (!hit || typeof hit[2] !== 'string') continue; // not rated, or rated before slots were kept
-            let level = levelOfSlots.get(hit[2]);
-            if (level === undefined) { const slots = slotsFromString(hit[2]), r = slots && scoreSlots(slots); level = r ? r.level : null; levelOfSlots.set(hit[2], level); }
-            if (level) return level;
+            const l = levelOfKey(ratingKey(ids[i], ids[j]));
+            if (l === 'old') old = true; else if (l !== 'none') return { level: l, via: 'sparks' };
         }
-        return null;
+        const print = rowPrint(row), tie = print && loadRowPairs()[print];
+        if (tie) {
+            const l = levelOfKey(tie[0]);
+            if (l === 'old') old = true; else if (l !== 'none') return { level: l, via: 'opened' };
+        }
+        return { level: null, why: old ? 'old' : ids.length >= 2 ? 'unrated' : 'nosparks' };
     }
     const CHIP_STYLE = { high: ['High', '#2e7d32'], medium: ['Medium', '#ef6c00'], low: ['Low', '#d32f2f'], pending: ['Pending', 'var(--elm2-bolt-blue, #1976d2)'] };
     function setChip(chip, kind) {
@@ -2748,15 +2819,43 @@
         chip.style.setProperty('color', '#fff', 'important');
         chip.title = kind === 'pending' ? 'Open this pair to rate it' : 'Our rating of this pair';
     }
+    // The list's chips, one line in the console whenever the count changes, saying why the Pending ones are Pending.
+    let chipSummary = '';
+    function chipReport() {
+        return Array.from(document.querySelectorAll('elm-deduplication-score-chip bolt-chip')).map((chip, i) => {
+            const row = chip.closest('bolt-row, .cdk-row, [role="row"]');
+            const sidebar = !!chip.closest('elm-review-duplicates-sidebar, bolt-stackable-sidebar, bolt-stackable-sidebar-container');
+            const r = row && !sidebar ? ratingForRow(row) : null;
+            return { chip: i + 1, where: sidebar ? 'sidebar' : row ? (row.matches('elm-review-queue-table bolt-row.cdk-row') ? 'list row' : 'other row: <' + row.tagName.toLowerCase() + '>') : 'not in a row (rated as the pair on screen)',
+                sparkIds: row ? (row.getAttribute('data-csv-sparks') || '').split('|').filter(Boolean).map(maskId).join(' ') : '',
+                shows: chip.dataset.elm2Label || '', via: r && r.via || '', pendingBecause: r && !r.level ? r.why : '' };
+        });
+    }
+    window.elm2ChipReport = () => { const t = chipReport(); console.table(t); return t.length + ' chips'; };
+    function logChipSummary(rows) {
+        if (!rows.length) return;
+        const n = (f) => rows.filter(f).length;
+        const rated = rows.filter(r => r.level), pend = rows.filter(r => !r.level);
+        const all = loadRatings(), stored = Object.keys(all).length, old = Object.keys(all).filter(k => typeof all[k][2] !== 'string').length;
+        const line = rows.length + ' on the list: ' + rated.length + ' rated (' + n(r => r.via === 'sparks') + ' by Spark IDs, ' + n(r => r.via === 'opened') + ' by the row you opened), ' +
+            pend.length + ' Pending (' + n(r => r.why === 'nosparks') + ' with no Spark IDs from the Database script, ' + n(r => r.why === 'unrated') + ' not opened yet, ' + n(r => r.why === 'old') + ' rated before 2.270: reopen). ' +
+            stored + ' pairs rated in this browser' + (old ? ' (' + old + ' from before 2.270)' : '') + ', ' + Object.keys(loadRowPairs()).length + ' rows tied by a click.';
+        if (line === chipSummary) return;
+        chipSummary = line;
+        console.log('[elm2] chips: ' + line + ' Run elm2ChipReport() for each row.');
+    }
     function syncScoreChips() {
+        const listRows = [];
         document.querySelectorAll('elm-deduplication-score-chip bolt-chip').forEach(chip => {
             if (!chipLevel(chip) && /error/i.test(chip.textContent)) return; // Bolt's own error state is left as it is
-            const row = chip.closest('bolt-row.cdk-row');
-            let level;
-            if (row) level = ratingForRow(row);
-            else { const r = currentRating(); level = r ? r.res.level : null; }
-            setChip(chip, level || 'pending');
+            // the chip in the review sidebar (or anywhere outside a row) is the pair on screen; a chip in a row belongs to that row's pair
+            const row = chip.closest('elm-review-duplicates-sidebar, bolt-stackable-sidebar, bolt-stackable-sidebar-container') ? null : chip.closest('bolt-row, .cdk-row, [role="row"]');
+            if (!row) { const c = currentRating(); setChip(chip, c ? c.res.level : 'pending'); return; }
+            const r = ratingForRow(row);
+            listRows.push(r);
+            setChip(chip, r.level || 'pending');
         });
+        logChipSummary(listRows);
     }
     // ---- SCORE CHIPS END ----
 

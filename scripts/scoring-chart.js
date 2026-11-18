@@ -43,12 +43,35 @@ const SAMPLES = [
   ['Same name + address + DOB, applicant vs a contact with a Coyote ID', P({ ...ana, ...dob, applicant: true }), P({ ...ana, ...dob, coyote: '009111222' }), { addrState: 'match' }],
   ['Jr./Sr. with clearly different DOBs', P({ first: 'Luis', last: 'Soto', dob: '1970-05-05', emails: ['soto@x.com'] }), P({ first: 'Luis', last: 'Soto', dob: '2004-02-02', emails: ['soto@x.com'] }), { addrState: 'match' }],
   ['Same name only, Bolt High', P({ ...ana }), P({ ...ana }), { bolt: { level: 'high' } }],
-  ['Different Coyote IDs, everything else the same', P({ ...ana, ...dob, coyote: '009111222', emails: ['ana@x.com'] }), P({ ...ana, ...dob, coyote: '009333444', emails: ['ana@x.com'] }), { addrState: 'match' }]
+  ['Different Coyote IDs, everything else the same', P({ ...ana, ...dob, coyote: '009111222', emails: ['ana@x.com'] }), P({ ...ana, ...dob, coyote: '009333444', emails: ['ana@x.com'] }), { addrState: 'match' }],
+  // pairs that score Low: little in common, or evidence that points the other way
+  ['Completely different people', P({ ...ana, ...dob, emails: ['ana@x.com'], phone: '3105550101' }), P({ first: 'Marco', last: 'Diaz', dob: '1999-07-30', emails: ['marco@y.com'], phone: '9515550199' }), { addrState: 'mismatch' }],
+  ['Same email, different names and different birth dates', P({ ...ana, ...dob, emails: ['cruz@x.com'] }), P({ first: 'Eva', last: 'Diaz', dob: '1999-07-30', emails: ['cruz@x.com'] })],
+  ['Different CAS IDs, same name and birth date', P({ ...ana, ...dob, cas: '8812345' }), P({ ...ana, ...dob, cas: '8899999' })],
+  ['Same phone only (a family line), different names', P({ ...ana, phone: '3105550101' }), P({ first: 'Eva', last: 'Diaz', phone: '3105550101' })],
+  ['Same address only (roommates), different names', P({ ...ana }), P({ first: 'Eva', last: 'Diaz' }), { addrState: 'match' }],
+  ['Same last name only, different first name', P({ first: 'Ana', last: 'Cruz' }), P({ first: 'Eva', last: 'Cruz' })],
+  ['Same first name only, different last name', P({ first: 'Ana', last: 'Cruz' }), P({ first: 'Ana', last: 'Diaz' })],
+  ['Same name, clearly different birth date', P({ ...ana, dob: '2004-01-02' }), P({ ...ana, dob: '1999-07-30' })],
+  ['Same email only (a shared family email), different names', P({ ...ana, emails: ['cruz@x.com'] }), P({ first: 'Eva', last: 'Diaz', emails: ['cruz@x.com'] })],
+  ['Same birth date only (a coincidence), different names', P({ ...ana, ...dob }), P({ first: 'Eva', last: 'Diaz', ...dob })],
+  ['Same name, birth date one typo apart', P({ ...ana, dob: '2004-01-02' }), P({ ...ana, dob: '2004-01-12' })],
+  ['Same name, different birth date, same address', P({ ...ana, dob: '2004-01-02' }), P({ ...ana, dob: '1999-07-30' }), { addrState: 'match' }],
+  ['Relatives: same last name and address, different first names', P({ first: 'Ana', last: 'Cruz' }), P({ first: 'Eva', last: 'Cruz' }), { addrState: 'match' }],
+  ['Same name + address, applicant vs a contact with a Coyote ID', P({ ...ana, applicant: true }), P({ ...ana, coyote: '009111222' }), { addrState: 'match' }],
+  ['Same name, Bolt says Low', P({ ...ana }), P({ ...ana }), { bolt: { level: 'low' } }],
+  ['Siblings: same last name and family email, no shared address', P({ first: 'Ana', last: 'Cruz', emails: ['cruz@x.com'] }), P({ first: 'Eva', last: 'Cruz', emails: ['cruz@x.com'] })],
+  ['Same name, different address', P({ ...ana }), P({ ...ana }), { addrState: 'mismatch' }],
+  ['Same name, nothing else known', P({ ...ana }), P({ ...ana })],
+  ['Bolt flags "different people", same name + birth date', P({ ...ana, ...dob }), P({ ...ana, ...dob }), { bolt: { different: true } }]
 ];
 const ORDER = { high: 0, medium: 1, low: 2 };
 const rows = SAMPLES.map(([name, A, B, ev]) => ({ name, r: scorePair(Object.assign({ A, B, bolt: {} }, ev || {})) }))
   .sort((x, y) => ORDER[x.r.level] - ORDER[y.r.level] || y.r.points - x.r.points);
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+const top = rows.filter(x => x.r.level !== 'low'), low = rows.filter(x => x.r.level === 'low');
+// how the points add up, from the engine's own reasons (information-only reasons that score 0 are left out)
+const adds = (r) => r.items.filter(i => i.pts !== 0).map(i => i.label + ' ' + n(i.pts)).join(', ') + (r.hard ? ' (hard conflict: capped at Low)' : '');
 
 const md = `# Dedup scoring
 
@@ -87,13 +110,23 @@ There is no twin-pattern rule: first names that differ cost the first-name penal
 - **Strong matches** are: Coyote ID, CAS ID, date of birth, exact email, phone and a matching address.
 - **Hard conflict**: two different Coyote IDs or two different CAS IDs. It caps the pair at Low. A different birth date is a heavy penalty, not a hard conflict.
 
-## Sample pairs
+## Sample pairs: High and Medium
 
 Each row is run through the live engine (the Bolt score is not included unless the pair says so). Sorted by rating, then points.
 
 | Pair | Points | Strong matches | Rating |
 |---|---|---|---|
-${rows.map(x => `| ${x.name} | ${x.r.points} | ${x.r.strong} | ${x.r.level === 'high' ? '**High**' : cap(x.r.level)} |`).join('\n')}
+${top.map(x => `| ${x.name} | ${x.r.points} | ${x.r.strong} | ${x.r.level === 'high' ? '**High**' : cap(x.r.level)} |`).join('\n')}
+
+## Examples of Low scores
+
+A pair is Low under ${CUT.medium} points, or when two IDs disagree. In practice that is a pair with little in common, or with evidence pointing the other way: different names, a different
+birth date, a different ID. A single shared fact (the same email, phone, address or birth date) is not enough on its own, because families and roommates share them. The last column shows how the
+points add up. Closest to Medium first.
+
+| Pair | Points | How it adds up |
+|---|---|---|
+${low.map(x => `| ${x.name} | ${x.r.points} | ${adds(x.r)} |`).join('\n')}
 
 ## Known trade-offs
 
@@ -103,6 +136,7 @@ ${rows.map(x => `| ${x.name} | ${x.r.points} | ${x.r.strong} | ${x.r.level === '
 - **Address as a strong match.** It lets a pair with the same name, address and one family-shared email or phone (a Jr./Sr. with no birth date on file) reach High.
   Requiring a birth date or ID for High would stop that.
 - **Birth date and address alone.** With no names on either record the pair stays Medium; a last name is enough to reach High.
+- **Bolt's "different people" flag.** It costs ${n(W.boltDifferent)}, which a same name and birth date outweigh: that pair is Medium (see the sample rows), not Low.
 - **An ID match outweighs a disagreeing birth date.** A matching Coyote ID or CAS ID with the same name is High even when the birth dates are clearly different.
 `;
 const file = path.join(ROOT, 'SCORING.md');

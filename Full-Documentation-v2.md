@@ -6,7 +6,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 | Script | File | Current version |
 |---|---|---|
 | Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.278`, shown in the settings pane |
-| Element451 - Database v2 | `database-v2.js` | `@version 2.73` |
+| Element451 - Database v2 | `database-v2.js` | `@version 2.74` |
 | Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.17`, see [section 17](#17-database-merge) |
 
 
@@ -574,6 +574,7 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 - **ID weights ±120** (UI 2.272): a matching Coyote ID or CAS ID is +120 and different ones are -120 (were +100 / -100 and +80 / -80).
 - **Birth date mismatch -45** (UI 2.271): was -60.
 - **SCORING.md** (generated chart of the scoring system, kept in step by `npm test`; `npm run scoring` regenerates it).
+- **Generated passwords** (Database 2.74): the password dialog's **Random password** (12 characters, about 73 bits) and **Passphrase** (three everyday words from the EFF list, with awkward ones taken out, and a number; about 48 bits) buttons, with **Copy** (section 19).
 - **Dedup analysis card: chips, a points view, no popups** (UI 2.278): department, Appeal, Test (a name with *test* in it) and Forbidden name chips and Bolt's original score beside our score; *Blocked: …* lines and *Bolt's original score* in the write-up; a Write-up / Points / Bolt's switch, the Points view being a table of the rules that applied and why the total is the rating it is. The Appeal and Possible-twins popups are gone (section 8); the twins check still skips (Auto-Skip on) or stops, and never auto-merges.
 - **Score chips: the row you open, and console lines** (UI 2.277, Database 2.73): a list row is tied to its pair a second way, by the click that opens it. The first different pair rated after a click on a row is that row's pair, and the tie is kept by the row's own words (names, emails), so it outlives a reload. Moving on with Next, without a click, ends the tie, so no other row is tied by mistake. Each row is also given both sets of Spark IDs, the list record's and the database entry's, and the chip tries each. New console lines say why a chip is Pending (section 12.3). Before, a row whose list record and database entry gave no usable Spark IDs stayed Pending with nothing in the console to say why. A chip outside a list row (the review sidebar's) is rated as the pair on screen; a chip in a row that is not a `bolt-row.cdk-row` is now rated as its row, never as the open pair.
 - **The list follows the profile you are viewing** (UI 2.276, Database 2.72): the list is annotated while a profile is open (it was skipped, so on a first load a row was only tied to its pair after the profile was closed), is annotated again about 150 ms after a pair is recorded, and the list's chips are updated in the frame a pair is rated. The chip of the profile on screen turns from Pending to its rating within about a second, and the next profile's follows.
@@ -682,6 +683,15 @@ A downloaded database used to be a plain `.xlsx`: anyone who got the file could 
 | Keeps | what the spreadsheet can carry (section 11.6) | every stored field exactly |
 
 **The password (Excel file).** One password per browser, set the first time you download an Excel file (or with **Database Password** in the Database section), at least 8 characters. It is kept in this browser (`localStorage`, key `elm_db_password`), so your own files download and upload without asking. Coworkers who set the same password open each other's files without being asked either; agree on one and pass it on some other way than with the file. **Database Password** shows the saved one (hidden until **Show** is ticked) and changes it; files made earlier keep the password they were made with. Opening a file tries the saved password first, then any that opened a file since the page loaded; if none fits, a dialog asks, and asks again after a wrong one. Cancelling changes nothing. An old unprotected `.xlsx` still opens, and so does a spreadsheet that was password-protected in Excel itself.
+
+**Generating a password.** The password dialog has two **Generate** buttons; either fills the field and shows what it made, with a **Copy** button beside **Show**:
+
+| Button | What it makes | Example | Strength |
+|---|---|---|---|
+| **Random password** | 12 characters with at least one lowercase letter, capital, digit and symbol. Characters that are easy to mix up when read out or copied from a note (`l 1 I O 0`) are left out, and the symbols are `! @ # $ % & * ? - _ = +` | `WsGwJg=%+p9a` | about 73 bits: 12 is the length password managers and current guidance treat as the floor for a strong random password |
+| **Passphrase** | three random words and a number from 100 to 999, joined with hyphens | `maple-orbit-tundra-482` | about 48 bits: weaker than the random password, but easy to say to a coworker and to type |
+
+Both come from the browser's cryptographic random generator (`crypto.getRandomValues`), with every character, word and number equally likely. The words are the EFF Large Wordlist for Passphrases (Electronic Frontier Foundation, [eff.org/dice](https://www.eff.org/dice), CC BY 3.0 US) without its four hyphenated words and without 680 words that could be awkward in a password people share at work (health, disability, bodies, sex, religion, death, violence, crime, politics, insults; *autism*, *diabetic*, *prison* and *pregnant* are examples): 7,092 everyday words, stored in the script in a compact form (about 31 KB). A typed password is still accepted at 8 characters or more. Each check of an Excel password takes 100,000 rounds of SHA-512, which slows guessing, but the random password is the one to use if the file may travel far.
 
 **The login (personal file).** The page sends a sign-in token with its own calls to Element451's deduplication API. When that token is a JWT, its payload names the signed-in person (`sub`, `user_id` and similar); the script reads that ID from the page's own request (only the ID is kept, in memory; never the token) and locks the file to it. If no such call has been seen yet, it looks in the page's stored session for a token or a user object, and uses it only when everything found names one person. Then:
 - downloading and uploading a personal file asks for nothing;

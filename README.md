@@ -18,7 +18,7 @@ chip). Two v2 scripts target it, plus an optional third that merges databases:
 | Script | File | Current version |
 |---|---|---|
 | Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.278` (shown in the settings pane) |
-| Element451 - Database v2 | `database-v2.js` | `@version 2.73` |
+| Element451 - Database v2 | `database-v2.js` | `@version 2.74` |
 | Element451 - Database Merge v2 (optional, pairs with Database) | `database-merge-v2.js` | `@version 1.17` |
 
 
@@ -58,7 +58,7 @@ the resolution rules, auto-merge, every website restyle, the database format, li
 - **Database v2**: records blocked / skipped pairs keyed on the two contacts' **Spark IDs** (the review
   URL no longer changes per pair), stores names as 3-letter prefixes (`Jon...`), shows right-aligned department
   badges on the list page (matched through the list API's `identities[]`, falling back to names; the Firstname 2 / Lastname 2 columns are left blank when both contacts share a name, and a blank counts as "same as the first"), exports an
-  **password-protected `.xlsx` spreadsheet**, to share, or a personal `.elmdb` file locked to your Element451 login that only these scripts read (every download is protected: the spreadsheet with a password you set once and the browser remembers, the personal file with no password; see section 19 of the full documentation) (columns `Bolt Score, Dedup Score, Firstname, Lastname, Firstname 2, Lastname 2, Spark ID 1, Spark ID 2, Dept., Scan Date, Merged, Script vs Bolt, Row Contents`;
+  **password-protected `.xlsx` spreadsheet**, to share, or a personal `.elmdb` file locked to your Element451 login that only these scripts read (every download is protected: the spreadsheet with a password you set once and the browser remembers (type one, or generate a random password or a three-word passphrase), the personal file with no password; see section 19 of the full documentation) (columns `Bolt Score, Dedup Score, Firstname, Lastname, Firstname 2, Lastname 2, Spark ID 1, Spark ID 2, Dept., Scan Date, Merged, Script vs Bolt, Row Contents`;
   preset column widths, frozen header row, filter buttons on Bolt Score, Dedup Score, Dept. and Merged, the merged-away Spark ID and names struck through; Merged = Y/N, Script vs Bolt = what the script chose over Bolt)
   and imports both protected forms and old plain `.xlsx` files (columns are read by header name), and has a **Show Database UI** toggle (under
   Display). Before every auto-skip the main script asks it to record the pair first.

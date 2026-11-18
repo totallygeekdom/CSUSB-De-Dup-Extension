@@ -20,6 +20,7 @@ A field only counts when **both** records have it; a missing field scores 0 and 
 | Last name | +15 same; +7 overlapping | -15 |
 | Address (the page's own comparer) | +25 | -3 (people move) |
 | Student type, academic level, school attended | +5 each | 0 |
+| Gender | +5 | 0 (it can be missing, updated or entered wrong) |
 | Name of the other record found in an email address (counted whether or not the names match) | +6 first + last name, +4 first 3+ letters + last name (mar.soto), +3 first initial + last name, +2 first or last name alone (capped at +10 for the pair) | none |
 | Birth date found in an email address | +20 full date that matches, +3 birth year | -8 (a full date that disagrees) |
 | Bolt's own score | High +20, Medium +8 | Low -5; Bolt says "different people" -25 |

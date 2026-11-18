@@ -96,6 +96,7 @@ A field only counts when **both** records have it; a missing field scores 0 and 
 | Last name | ${n(W.last[0])} same; ${n(W.lastPartial[0])} overlapping | ${n(W.last[1])} |
 | Address (the page's own comparer) | ${n(W.address[0])} | ${n(W.address[1])} (people move) |
 | Student type, academic level, school attended | ${n(W.soft[0])} each | ${n(0)} |
+| Gender | ${n(W.gender[0])} | ${n(W.gender[1])} (it can be missing, updated or entered wrong) |
 | Name of the other record found in an email address (counted whether or not the names match) | ${n(W.emailNameFull)} first + last name, ${n(W.emailNamePartial)} first 3+ letters + last name (mar.soto), ${n(W.emailNameInitial)} first initial + last name, ${n(W.emailNameOne)} first or last name alone (capped at ${n(W.emailNameCap)} for the pair) | none |
 | Birth date found in an email address | ${n(W.emailDobFull)} full date that matches, ${n(W.emailDobYear)} birth year | ${n(W.emailDobConflict)} (a full date that disagrees) |
 | Bolt's own score | High ${n(W.boltHigh)}, Medium ${n(W.boltMedium)} | Low ${n(W.boltLow)}; Bolt says "different people" ${n(W.boltDifferent)} |

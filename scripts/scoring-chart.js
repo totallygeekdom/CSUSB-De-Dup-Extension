@@ -24,6 +24,7 @@ const SAMPLES = [
   ['Same Coyote ID + name, clearly different DOB', P({ ...ana, coyote: '009123456', dob: '2004-01-02' }), P({ ...ana, coyote: '009123456', dob: '1999-07-30' })],
   ['Same name + DOB + email + address, different phones', P({ ...ana, ...dob, emails: ['ana@x.com'], phone: '3105550101' }), P({ ...ana, ...dob, emails: ['ana@x.com'], phone: '9515550199' }), { addrState: 'match' }],
   ['Same DOB + email + name', P({ ...ana, ...dob, emails: ['ana@x.com'] }), P({ ...ana, ...dob, emails: ['ana@x.com'] })],
+  ['Same first name, overlapping last names, emails differing only in the numbers (maria.soto444 / maria.soto1111)', P({ first: 'Maria', last: 'Del Rio Soto', emails: ['maria.soto444@gmail.com'] }), P({ first: 'Maria', last: 'Soto', emails: ['maria.soto1111@gmail.com'] })],
   ['Same DOB + name + address, Bolt High', P({ ...ana, ...dob }), P({ ...ana, ...dob }), { addrState: 'match', bolt: { level: 'high' } }],
   ['Same name + email + address, Bolt High', P({ ...ana, emails: ['ana@x.com'] }), P({ ...ana, emails: ['ana@x.com'] }), { addrState: 'match', bolt: { level: 'high' } }],
   ['Same name + phone + address, Bolt High', P({ ...ana, phone: '3105550101' }), P({ ...ana, phone: '3105550101' }), { addrState: 'match', bolt: { level: 'high' } }],
@@ -89,7 +90,7 @@ A field only counts when **both** records have it; a missing field scores 0 and 
 | Coyote ID | ${n(W.coyote[0])} | ${n(W.coyote[1])} (hard conflict) |
 | CAS ID | ${n(W.cas[0])} | ${n(W.cas[1])} (hard conflict) |
 | Date of birth | ${n(W.dob[0])} | ${n(W.dob[1])}, not a hard conflict (one typo or a day/month swap: ${n(W.dobTypo[1])}) |
-| Email | ${n(W.email[0])} exact; ${n(W.emailName[0])} same name part on another domain | ${n(0)} (people have several) |
+| Email | ${n(W.email[0])} exact; ${n(W.emailName[0])} same name part (another domain, or only the numbers differ: maria.soto444 / maria.soto1111) | ${n(0)} (people have several) |
 | Phone | ${n(W.phone[0])} | ${n(0)} |
 | First name | ${n(W.first[0])} same; ${n(W.firstRelated[0])} nickname, initial or prefix | ${n(W.first[1])} |
 | Last name | ${n(W.last[0])} same; ${n(W.lastPartial[0])} overlapping | ${n(W.last[1])} |

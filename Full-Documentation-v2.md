@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.280`, shown in the settings pane |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.281`, shown in the settings pane |
 | Element451 - Database v2 | `database-v2.js` | `@version 2.74` |
 | Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.17`, see [section 17](#17-database-merge) |
 
@@ -380,7 +380,7 @@ A three-way switch picks the view: **Write-up** (the plain-English write-up), **
 | Coyote ID | +120 | -120, hard conflict |
 | CAS ID | +120 | -120, hard conflict |
 | Date of birth | +40 | -45 (one typo or day/month swap: -20). Heavy, but **not** a hard conflict: it does not cap the rating |
-| Email, exact / same name part | +40 / +15 | 0 (people have several) |
+| Email, exact / same name part (another domain, or only the numbers, dots, dashes or underscores differ, with at least 5 letters left: `maria.soto444` / `maria.soto1111`) | +40 / +15 | 0 (people have several) |
 | Phone | +30 | 0 |
 | First name (same / nickname or initial) | +15 / +7 | -30 |
 | Last name (same / overlapping) | +15 / +7 | -15 |
@@ -574,6 +574,7 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 - **ID weights ±120** (UI 2.272): a matching Coyote ID or CAS ID is +120 and different ones are -120 (were +100 / -100 and +80 / -80).
 - **Birth date mismatch -45** (UI 2.271): was -60.
 - **SCORING.md** (generated chart of the scoring system, kept in step by `npm test`; `npm run scoring` regenerates it).
+- **Emails that differ only in the numbers** (UI 2.281): `maria.soto444` and `maria.soto1111` count as the same name part (+15), like the same name part on another domain. Numbers, dots, dashes and underscores are left out of the comparison and at least 5 letters must remain, so initials such as `jd1` / `jd2` do not count. *Name in email* still counts only when the first names differ, so a name the records already share is not counted twice.
 - **Phone +30** (UI 2.280): a matching phone number is +30 (was +25). Three pairs move from Low to Medium, each landing on 45: same phone and last name only; same phone and first name only; parent and child (same phone, address and last name, different first name) that Bolt rates Medium.
 - **CAS ID marks the applicant** (UI 2.279): when the application rows name no applicant, a CAS ID on one side only makes that side the applicant (picks, the applicant band, and the -40 *Applicant vs Coyote ID* rule when the other side has a Coyote ID).
 - **Generated passwords** (Database 2.74): the password dialog's **Random password** (12 characters, about 73 bits) and **Passphrase** (three everyday words from the EFF list, with awkward ones taken out, and a number; about 48 bits) buttons, with **Copy** (section 19).

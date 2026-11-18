@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.280
+// @version      2.281
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.280'; // keep in sync with @version
+    const VERSION = '2.281'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -2472,12 +2472,17 @@
             else if (scDateTypo(da, db)) add('dob', 'Date of birth', W.dobTypo[1], 'against', 'dates of birth that are one typo apart (' + da + ' and ' + db + ')', { typo: true, slot: 'dobTypo.1' });
             else { add('dob', 'Date of birth', W.dob[1], 'against', 'different dates of birth (' + da + ' and ' + db + ')', { clear: true, slot: 'dob.1' }); }
         }
-        // Email: exact, or the same name part on a different domain
+        // Email: exact, or the same name part (on a different domain, or with different numbers: maria.soto444 and maria.soto1111,
+        // a person making a new address). Numbers, dots, dashes and underscores are left out of that comparison; at least 5 letters
+        // must remain, so short initials (jd1, jd2) do not count.
         const ea = (A.emails || []).map(e => e.toLowerCase()), eb = (B.emails || []).map(e => e.toLowerCase());
+        const emailCore = (e) => e.split('@')[0].replace(/\+.*/, '').replace(/[^a-z]/g, '');
         if (ea.length && eb.length) {
             const exact = ea.find(e => eb.includes(e));
+            let core = null;
+            if (!exact) ea.forEach(x => eb.forEach(y => { if (!core && emailCore(x).length >= 5 && emailCore(x) === emailCore(y)) core = [x.split('@')[0], y.split('@')[0]]; }));
             if (exact) { add('email', 'Email', W.email[0], 'for', 'the same email address (' + exact + ')', { strong: true, slot: 'email.0' }); }
-            else if (ea.some(x => eb.some(y => x.split('@')[0] === y.split('@')[0]))) add('email', 'Email', W.emailName[0], 'for', 'email addresses with the same name part', { slot: 'emailName.0' });
+            else if (core) add('email', 'Email', W.emailName[0], 'for', core[0] === core[1] ? 'email addresses with the same name part (' + core[0] + ')' : 'email addresses with the same name part, apart from the numbers (' + core[0] + ' and ' + core[1] + ')', { slot: 'emailName.0' });
             else add('email', 'Email', 0, 'info', 'different email addresses (people often have several)');
         }
         // Phone

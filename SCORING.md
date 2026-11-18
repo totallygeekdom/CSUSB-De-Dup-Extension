@@ -14,7 +14,7 @@ A field only counts when **both** records have it; a missing field scores 0 and 
 | Coyote ID | +120 | -120 (hard conflict) |
 | CAS ID | +120 | -120 (hard conflict) |
 | Date of birth | +40 | -45, not a hard conflict (one typo or a day/month swap: -20) |
-| Email | +40 exact; +15 same name part on another domain | 0 (people have several) |
+| Email | +40 exact; +15 same name part (another domain, or only the numbers differ: maria.soto444 / maria.soto1111) | 0 (people have several) |
 | Phone | +30 | 0 |
 | First name | +15 same; +7 nickname, initial or prefix | -30 |
 | Last name | +15 same; +7 overlapping | -15 |
@@ -76,6 +76,7 @@ points add up. Closest to Medium first.
 | Pair | Points | How it adds up |
 |---|---|---|
 | Parent/child (same phone and address, different names) | 40 | Phone +30, First name -30, Last name +15, Address +25 |
+| Same first name, overlapping last names, emails differing only in the numbers (maria.soto444 / maria.soto1111) | 37 | Email +15, First name +15, Last name +7 |
 | Same name, nothing else known | 30 | First name +15, Last name +15 |
 | Same name, different address | 27 | First name +15, Last name +15, Address -3 |
 | Same name, Bolt says Low | 25 | First name +15, Last name +15, Bolt -5 |

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.273
+// @version      2.275
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.273'; // keep in sync with @version
+    const VERSION = '2.275'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -2314,7 +2314,7 @@
     const SCORE_W = {
         coyote: [120, -120], cas: [120, -120], dob: [40, -45], dobTypo: [25, -20],
         email: [40, 0], emailName: [15, 0], phone: [25, 0],
-        first: [7, -12], firstRelated: [3, 0], last: [8, -8], lastPartial: [4, 0],
+        first: [15, -30], firstRelated: [7, 0], last: [15, -15], lastPartial: [7, 0],
         address: [25, -3], soft: [5, 0],
         boltHigh: 20, boltMedium: 8, boltLow: -5, boltDifferent: -25,
         applicantVsCoyote: -40,
@@ -2385,63 +2385,108 @@
         if (toks.includes(f[0]) || letters.startsWith(f[0] + l) || letters.endsWith(l + f[0])) return 'initial';
         return null;
     }
+    // ---- the rating as data: which rules applied (never any names, dates or contact details) ----
+    // A rated pair is remembered as the list of scoring rules ("slots") that applied to it, such as "dob.0,first.0,last.0,soft.0*2", not as the
+    // rating it came to. The list's chips are then re-rated with the weights in force now: change a weight and every remembered pair follows,
+    // without being opened again. A slot is a name in SCORE_W, plus .0 (the match weight) or .1 (the mismatch weight) for the paired ones.
+    // scorePair builds the slots and scoreSlots turns them into points and a rating, so there is one place that decides what a rating is.
+    const SLOT_STRONG = ['coyote.0', 'cas.0', 'dob.0', 'email.0', 'phone.0', 'address.0'], SLOT_HARD = ['coyote.1', 'cas.1'];
+    function slotWeight(slot) {
+        const m = /^(\w+)\.(\d)$/.exec(slot);
+        const w = m ? SCORE_W[m[1]] : SCORE_W[slot];
+        const v = m ? (Array.isArray(w) ? w[+m[2]] : undefined) : w;
+        return typeof v === 'number' ? v : null; // null: not a slot of this engine
+    }
+    // slots: { slot: how many times it applied } -> { points, level, hard, strong }, or null when a slot is not one of this engine's
+    function scoreSlots(slots) {
+        let pts = 0, nameFit = 0, strong = 0, hard = false, id = false;
+        for (const slot of Object.keys(slots)) {
+            const n = slots[slot], w = slotWeight(slot);
+            if (w === null) return null;
+            if (slot === 'emailNameFull' || slot === 'emailNameInitial') { nameFit += n * w; continue; } // together they are capped (below)
+            pts += n * w;
+            if (SLOT_STRONG.includes(slot)) strong += n;
+            if (SLOT_HARD.includes(slot)) hard = true;
+            if (slot === 'coyote.0' || slot === 'cas.0') id = true;
+        }
+        pts += Math.min(SCORE_W.emailNameCap, nameFit);
+        // A matching Coyote ID or CAS ID is an identifier no two people share, so on its own it is enough for High (with the
+        // points and no hard conflict); every other kind of evidence needs a second strong match to back it.
+        let level = pts >= SCORE_CUT.high && (strong >= 2 || id) ? 'high' : pts >= SCORE_CUT.medium ? 'medium' : 'low';
+        if (level === 'high' && hard) level = 'low';
+        if (hard && level === 'medium') level = 'low';
+        return { points: pts, level, hard, strong };
+    }
+    const slotsToString = (slots) => Object.keys(slots).sort().map(k => slots[k] > 1 ? k + '*' + slots[k] : k).join(',');
+    function slotsFromString(str) {
+        if (typeof str !== 'string') return null;
+        const out = {};
+        for (const part of (str === '' ? [] : str.split(','))) {
+            const m = /^([A-Za-z0-9.]+)(?:\*(\d{1,2}))?$/.exec(part);
+            if (!m) return null;
+            out[m[1]] = m[2] ? +m[2] : 1;
+        }
+        return out;
+    }
     // ev = { A: {...}, B: {...}, bolt: {level, different} }; a side has first, last, dob, emails[], phone, coyote, cas, studentType, level, school, applicant.
     // ev.addrState: 'match' | 'mismatch' | null (the page's own address comparer decides). Returns the points, the rating and the reasons.
     function scorePair(ev) {
-        const A = ev.A || {}, B = ev.B || {}, items = [];
-        let hard = false, strong = 0;
+        const A = ev.A || {}, B = ev.B || {}, items = [], slots = {};
         const W = SCORE_W;
-        const add = (key, label, pts, kind, phrase, extra) => { items.push(Object.assign({ key, label, pts, kind, phrase }, extra || {})); };
+        const add = (key, label, pts, kind, phrase, extra) => {
+            items.push(Object.assign({ key, label, pts, kind, phrase }, extra || {}));
+            if (extra && extra.slot) slots[extra.slot] = (slots[extra.slot] || 0) + 1;
+        };
         const both = (a, b) => !scBlank(a) && !scBlank(b);
         // IDs
         [['coyote', 'Coyote ID'], ['cas', 'CAS ID']].forEach(([k, label]) => {
             const a = scDigits(A[k]), b = scDigits(B[k]);
             if (a && b) {
-                if (a === b) { add(k, label, W[k][0], 'for', 'the same ' + label + ' (' + A[k] + ')', { strong: true }); strong++; }
-                else { add(k, label, W[k][1], 'against', 'different ' + label + 's (' + A[k] + ' and ' + B[k] + ')', { hard: true }); hard = true; }
+                if (a === b) { add(k, label, W[k][0], 'for', 'the same ' + label + ' (' + A[k] + ')', { strong: true, slot: k + '.0' }); }
+                else { add(k, label, W[k][1], 'against', 'different ' + label + 's (' + A[k] + ' and ' + B[k] + ')', { hard: true, slot: k + '.1' }); }
             }
         });
         // applicant with no Coyote ID against a contact that has one
         const appSide = A.applicant ? 'A' : B.applicant ? 'B' : null;
         if (appSide) {
             const app = appSide === 'A' ? A : B, other = appSide === 'A' ? B : A;
-            if (!scDigits(app.coyote) && scDigits(other.coyote)) add('appCoyote', 'Applicant vs Coyote ID', W.applicantVsCoyote, 'against', 'one record is an applicant with no Coyote ID, while the other already has one (' + other.coyote + ')');
+            if (!scDigits(app.coyote) && scDigits(other.coyote)) add('appCoyote', 'Applicant vs Coyote ID', W.applicantVsCoyote, 'against', 'one record is an applicant with no Coyote ID, while the other already has one (' + other.coyote + ')', { slot: 'applicantVsCoyote' });
         }
         // DOB
         const da = scDate(A.dob), db = scDate(B.dob);
         if (da && db) {
-            if (da === db) { add('dob', 'Date of birth', W.dob[0], 'for', 'the same date of birth (' + da + ')', { strong: true }); strong++; }
-            else if (scDateTypo(da, db)) add('dob', 'Date of birth', W.dobTypo[1], 'against', 'dates of birth that are one typo apart (' + da + ' and ' + db + ')', { typo: true });
-            else { add('dob', 'Date of birth', W.dob[1], 'against', 'different dates of birth (' + da + ' and ' + db + ')', { clear: true }); }
+            if (da === db) { add('dob', 'Date of birth', W.dob[0], 'for', 'the same date of birth (' + da + ')', { strong: true, slot: 'dob.0' }); }
+            else if (scDateTypo(da, db)) add('dob', 'Date of birth', W.dobTypo[1], 'against', 'dates of birth that are one typo apart (' + da + ' and ' + db + ')', { typo: true, slot: 'dobTypo.1' });
+            else { add('dob', 'Date of birth', W.dob[1], 'against', 'different dates of birth (' + da + ' and ' + db + ')', { clear: true, slot: 'dob.1' }); }
         }
         // Email: exact, or the same name part on a different domain
         const ea = (A.emails || []).map(e => e.toLowerCase()), eb = (B.emails || []).map(e => e.toLowerCase());
         if (ea.length && eb.length) {
             const exact = ea.find(e => eb.includes(e));
-            if (exact) { add('email', 'Email', W.email[0], 'for', 'the same email address (' + exact + ')', { strong: true }); strong++; }
-            else if (ea.some(x => eb.some(y => x.split('@')[0] === y.split('@')[0]))) add('email', 'Email', W.emailName[0], 'for', 'email addresses with the same name part');
+            if (exact) { add('email', 'Email', W.email[0], 'for', 'the same email address (' + exact + ')', { strong: true, slot: 'email.0' }); }
+            else if (ea.some(x => eb.some(y => x.split('@')[0] === y.split('@')[0]))) add('email', 'Email', W.emailName[0], 'for', 'email addresses with the same name part', { slot: 'emailName.0' });
             else add('email', 'Email', 0, 'info', 'different email addresses (people often have several)');
         }
         // Phone
         const pa = scPhone(A.phone), pb = scPhone(B.phone);
-        if (pa && pb) { if (pa === pb) { add('phone', 'Phone', W.phone[0], 'for', 'the same phone number (' + A.phone + ')', { strong: true }); strong++; } else add('phone', 'Phone', 0, 'info', 'different phone numbers'); }
+        if (pa && pb) { if (pa === pb) { add('phone', 'Phone', W.phone[0], 'for', 'the same phone number (' + A.phone + ')', { strong: true, slot: 'phone.0' }); } else add('phone', 'Phone', 0, 'info', 'different phone numbers'); }
         // Names
         const fa = scFold(A.first), fb = scFold(B.first), la = scFold(A.last), lb = scFold(B.last);
         let firstState = null, lastState = null;
         if (fa && fb) firstState = fa === fb ? 'same' : scRelatedFirst(fa, fb) ? 'related' : 'differ';
         if (la && lb) lastState = la === lb ? 'same' : (la.split(' ').some(t => t.length > 2 && lb.split(' ').includes(t)) ? 'partial' : 'differ');
-        if (firstState === 'same') add('first', 'First name', W.first[0], 'for', 'the same first name', { nameFor: 'first' });
-        else if (firstState === 'related') add('first', 'First name', W.firstRelated[0], 'for', 'similar first names (' + A.first + ' and ' + B.first + ')', { nameFor: 'first' });
-        else if (firstState === 'differ') add('first', 'First name', W.first[1], 'against', 'different first names (' + A.first + ' and ' + B.first + ')');
-        if (lastState === 'same') add('last', 'Last name', W.last[0], 'for', 'the same last name', { nameFor: 'last' });
-        else if (lastState === 'partial') add('last', 'Last name', W.lastPartial[0], 'for', 'overlapping last names (' + A.last + ' and ' + B.last + ')', { nameFor: 'last' });
-        else if (lastState === 'differ') add('last', 'Last name', W.last[1], 'against', 'different last names (' + A.last + ' and ' + B.last + ')');
+        if (firstState === 'same') add('first', 'First name', W.first[0], 'for', 'the same first name', { nameFor: 'first', slot: 'first.0' });
+        else if (firstState === 'related') add('first', 'First name', W.firstRelated[0], 'for', 'similar first names (' + A.first + ' and ' + B.first + ')', { nameFor: 'first', slot: 'firstRelated.0' });
+        else if (firstState === 'differ') add('first', 'First name', W.first[1], 'against', 'different first names (' + A.first + ' and ' + B.first + ')', { slot: 'first.1' });
+        if (lastState === 'same') add('last', 'Last name', W.last[0], 'for', 'the same last name', { nameFor: 'last', slot: 'last.0' });
+        else if (lastState === 'partial') add('last', 'Last name', W.lastPartial[0], 'for', 'overlapping last names (' + A.last + ' and ' + B.last + ')', { nameFor: 'last', slot: 'lastPartial.0' });
+        else if (lastState === 'differ') add('last', 'Last name', W.last[1], 'against', 'different last names (' + A.last + ' and ' + B.last + ')', { slot: 'last.1' });
         // Address
-        if (ev.addrState === 'match') { add('address', 'Address', W.address[0], 'for', 'the same address', { strong: true }); strong++; }
-        else if (ev.addrState === 'mismatch') add('address', 'Address', W.address[1], 'against', 'different addresses (people move)');
+        if (ev.addrState === 'match') { add('address', 'Address', W.address[0], 'for', 'the same address', { strong: true, slot: 'address.0' }); }
+        else if (ev.addrState === 'mismatch') add('address', 'Address', W.address[1], 'against', 'different addresses (people move)', { slot: 'address.1' });
         // Soft fields
         [['studentType', 'Student type'], ['level', 'Academic level'], ['school', 'School attended']].forEach(([k, label]) => {
-            if (both(A[k], B[k]) && scFold(A[k]) === scFold(B[k])) add(k, label, W.soft[0], 'for', 'the same ' + label.toLowerCase());
+            if (both(A[k], B[k]) && scFold(A[k]) === scFold(B[k])) add(k, label, W.soft[0], 'for', 'the same ' + label.toLowerCase(), { slot: 'soft.0' });
         });
         // Name and birth date hidden in the email addresses
         let emFit = 0; const emNotes = [];
@@ -2449,36 +2494,29 @@
             (own.emails || []).forEach(e => {
                 const local = e.split('@')[0].replace(/\+.*/, '');
                 const fit = scEmailName(local, other.first, other.last);
-                if (fit && scFold(own.first) !== scFold(other.first)) { const p = fit === 'full' ? W.emailNameFull : W.emailNameInitial; if (emFit < W.emailNameCap) { emFit = Math.min(W.emailNameCap, emFit + p); emNotes.push(local); } }
+                if (fit && scFold(own.first) !== scFold(other.first)) { const p = fit === 'full' ? W.emailNameFull : W.emailNameInitial; if (emFit < W.emailNameCap) { emFit = Math.min(W.emailNameCap, emFit + p); emNotes.push(local); const sl = fit === 'full' ? 'emailNameFull' : 'emailNameInitial'; slots[sl] = (slots[sl] || 0) + 1; } }
                 const odob = scDate(other.dob), owndob = scDate(own.dob);
                 if (!owndob && odob) scEmailDigits(local).forEach(g => {
-                    if (g.full && g.full === odob) { add('emailDob', 'DOB in email', W.emailDobFull, 'for', 'a birth date in the email address (' + local + ') that matches the other record'); }
-                    else if (g.full) add('emailDob', 'DOB in email', W.emailDobConflict, 'against', 'a birth date in the email address (' + local + ') that does not match the other record');
-                    else if (g.year && odob.slice(0, 4) === String(g.year)) add('emailDob', 'DOB in email', W.emailDobYear, 'for', 'the birth year in the email address (' + local + ')');
+                    if (g.full && g.full === odob) { add('emailDob', 'DOB in email', W.emailDobFull, 'for', 'a birth date in the email address (' + local + ') that matches the other record', { slot: 'emailDobFull' }); }
+                    else if (g.full) add('emailDob', 'DOB in email', W.emailDobConflict, 'against', 'a birth date in the email address (' + local + ') that does not match the other record', { slot: 'emailDobConflict' });
+                    else if (g.year && odob.slice(0, 4) === String(g.year)) add('emailDob', 'DOB in email', W.emailDobYear, 'for', 'the birth year in the email address (' + local + ')', { slot: 'emailDobYear' });
                 });
             });
         });
         if (emFit) add('emailNameHint', 'Name in email', emFit, 'for', 'an email address that contains the other record\'s name (' + emNotes.join(', ') + ')');
         // Bolt's own view
         const bl = ev.bolt && ev.bolt.level;
-        if (bl === 'high') add('bolt', 'Bolt', W.boltHigh, 'for', 'Bolt rated the pair High');
-        else if (bl === 'medium') add('bolt', 'Bolt', W.boltMedium, 'for', 'Bolt rated the pair Medium');
-        else if (bl === 'low') add('bolt', 'Bolt', W.boltLow, 'against', 'Bolt rated the pair Low');
-        if (ev.bolt && ev.bolt.different) add('boltDifferent', 'Bolt "different people"', W.boltDifferent, 'against', 'Bolt flagged them as different people');
-        // totals
-        let pts = 0; items.forEach(i => { pts += i.pts; });
-        // A matching Coyote ID or CAS ID is an identifier no two people share, so on its own it is enough for High (with the
-        // points and no hard conflict); every other kind of evidence needs a second strong match to back it.
-        const idMatch = items.some(i => i.strong && (i.key === 'coyote' || i.key === 'cas'));
-        let level = pts >= SCORE_CUT.high && (strong >= 2 || idMatch) ? 'high' : pts >= SCORE_CUT.medium ? 'medium' : 'low';
-        if (level === 'high' && hard) level = 'low';
-        if (hard && level === 'medium') level = 'low';
-        // (70 points on weak fields alone, with fewer than two strong matches, lands on Medium by the line above)
+        if (bl === 'high') add('bolt', 'Bolt', W.boltHigh, 'for', 'Bolt rated the pair High', { slot: 'boltHigh' });
+        else if (bl === 'medium') add('bolt', 'Bolt', W.boltMedium, 'for', 'Bolt rated the pair Medium', { slot: 'boltMedium' });
+        else if (bl === 'low') add('bolt', 'Bolt', W.boltLow, 'against', 'Bolt rated the pair Low', { slot: 'boltLow' });
+        if (ev.bolt && ev.bolt.different) add('boltDifferent', 'Bolt "different people"', W.boltDifferent, 'against', 'Bolt flagged them as different people', { slot: 'boltDifferent' });
+        // totals: the points and the rating come from the slots (shared with the list's re-rating); the items are the reasons in words
+        const rated = scoreSlots(slots);
         const keyFields = ['coyote', 'cas', 'dob', 'email', 'phone'];
         const present = keyFields.filter(k => k === 'dob' ? (da && db) : k === 'email' ? (ea.length && eb.length) : k === 'phone' ? (pa && pb) : (scDigits(A[k]) && scDigits(B[k])));
         const missing = keyFields.filter(k => !present.includes(k));
         const thin = !present.some(k => k === 'coyote' || k === 'cas') && present.length < 2;
-        return { points: pts, level, hard, strong, items, missing, thin, different: pts < SCORE_CUT.low };
+        return { points: rated.points, level: rated.level, hard: rated.hard, strong: rated.strong, slots, items, missing, thin, different: rated.points < SCORE_CUT.low };
     }
     // ---- SCORE ENGINE END ----
     // ---- WRITE-UP START: the score turned into plain sentences (templates, no AI, so it always agrees with the points) ----
@@ -2543,7 +2581,9 @@
             const key = boltFieldKey(label);
             if (!key) return;
             const rest = li.textContent.replace(label, '').replace(/^\s*[:\-–]\s*/, '');
-            const differs = /\b(differ\w*|different|mismatch\w*|conflict\w*|do(es)? not match|not match)\b/i.test(rest);
+            // "match when accounting for formatting differences" says they match: the word differences there is not a mismatch
+            const restClean = rest.replace(/\b(accounting for|allowing for|despite|ignoring|apart from|aside from|other than|with)\s+(?:[\w-]+\s+){0,3}?differences?\b/gi, ' ');
+            const differs = /\b(differ\w*|different|mismatch\w*|conflict\w*|do(es)? not match|not match)\b/i.test(restClean);
             const matches = !differs && /\b(identical|match(es|ed|ing)?|same|equivalent|consistent)\b/i.test(rest);
             const v = rest.match(/\(([^()]+)\)/);
             if (matches) out.said[key] = { state: 'match', value: v ? v[1].trim() : '' };
@@ -2607,6 +2647,8 @@
         let out = null;
         try { const ev = gatherEvidence(); if (ev) { const res = scorePair(ev); out = { ev, res, write: writeUp(res, ev) }; } } catch (e) { console.log('[elm2] analysis failed:', e); }
         anCache = { t: now, key, out };
+        // remembered as soon as it exists (not only when the analysis card is drawn), so a pair that is skipped in a second still gets its chip
+        if (out) rememberRating(out.res);
         return out;
     }
     const anView = { pair: '', bolt: false };
@@ -2620,7 +2662,6 @@
         const pk = getPairKey();
         if (anView.pair !== pk) { anView.pair = pk; anView.bolt = false; }
         const { res, ev, write } = rating;
-        rememberRating(res.level);
         const boltLevel = getBoltChipLevel();
         const sig = JSON.stringify([pk, res.points, res.level, write.paragraphs, anView.bolt, boltLevel]);
         card.classList.toggle('elm2-an-bolt', anView.bolt);
@@ -2659,7 +2700,11 @@
     // The review page remembers each rating it computes, keyed by the pair's two Spark IDs; a list row is matched to it through the
     // Spark IDs the Database script reads from the list API (data-csv-sparks). Without those, a row stays Pending.
     const RATINGS_KEY = 'elm_pair_ratings', RATINGS_MAX = 4000;
-    const RATING_CODE = { high: 'h', medium: 'm', low: 'l' }, RATING_BY_CODE = { h: 'high', m: 'medium', l: 'low', n: 'low' }; // 'n' was a short-lived fourth level, now Low
+    // Each entry is [level code, time, the slots that applied] (see the rating as data, above). The slots are what is used; the level code is
+    // kept for a person reading the store. An older entry has no slots (it was saved as a finished rating under whatever weights were in
+    // force then, so it cannot be re-rated): its chip reads Pending until the pair is opened again.
+    const RATING_CODE = { high: 'h', medium: 'm', low: 'l' };
+    const levelOfSlots = new Map(); // slots text -> level under the current weights (the weights do not change while the page is open)
     let ratingsCache = null;
     // a pair rated in another tab or window (the installed app next to a browser tab) shows on this one's list too
     window.addEventListener('storage', (e) => { if (!e.key || e.key === RATINGS_KEY) ratingsCache = null; });
@@ -2670,12 +2715,12 @@
         return ratingsCache;
     }
     const ratingKey = (a, b) => [a, b].sort().join('|');
-    function rememberRating(level) {
+    function rememberRating(res) {
         const { a, b } = getSparkIds();
-        if (!a || !b) return;
-        const all = loadRatings(), key = ratingKey(a, b), code = RATING_CODE[level];
-        if (!code || (all[key] && all[key][0] === code)) return;
-        all[key] = [code, Date.now()];
+        if (!a || !b || !res || !res.slots) return;
+        const all = loadRatings(), key = ratingKey(a, b), text = slotsToString(res.slots), code = RATING_CODE[res.level];
+        if (!code || (all[key] && all[key][2] === text)) return;
+        all[key] = [code, Date.now(), text];
         const keys = Object.keys(all);
         if (keys.length > RATINGS_MAX) keys.sort((x, y) => all[x][1] - all[y][1]).slice(0, keys.length - RATINGS_MAX).forEach(k => delete all[k]);
         try { lsSet(RATINGS_KEY, JSON.stringify(all)); } catch (e) { /* storage full: the rating just is not kept */ }
@@ -2686,7 +2731,10 @@
         const all = loadRatings();
         for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) {
             const hit = all[ratingKey(ids[i], ids[j])];
-            if (hit) return RATING_BY_CODE[hit[0]] || null;
+            if (!hit || typeof hit[2] !== 'string') continue; // not rated, or rated before slots were kept
+            let level = levelOfSlots.get(hit[2]);
+            if (level === undefined) { const slots = slotsFromString(hit[2]), r = slots && scoreSlots(slots); level = r ? r.level : null; levelOfSlots.set(hit[2], level); }
+            if (level) return level;
         }
         return null;
     }

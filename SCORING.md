@@ -11,7 +11,7 @@ A field only counts when **both** records have it; a missing field scores 0 and 
 
 | Field | Match | Mismatch |
 |---|---|---|
-| Coyote ID | +120 | -120 (hard conflict) |
+| Coyote ID (School Id, or the number of a coyote.csusb.edu email) | +120 | -120 (hard conflict; not when one ID comes from an email) |
 | CAS ID | +120 | -25, not a hard conflict (a student can have several applications) |
 | Date of birth | +40 | -45, not a hard conflict (one typo or a day/month swap: -20) |
 | Email | +40 exact; +15 same name part (another domain, or only the numbers differ: maria.soto444 / maria.soto1111) | 0 (people have several) |

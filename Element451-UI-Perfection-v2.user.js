@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.284
+// @version      2.285
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.284'; // keep in sync with @version
+    const VERSION = '2.285'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -2469,7 +2469,9 @@
         [['coyote', 'Coyote ID'], ['cas', 'CAS ID']].forEach(([k, label]) => {
             const a = scDigits(A[k]), b = scDigits(B[k]);
             if (a && b) {
-                if (a === b) { add(k, label, W[k][0], 'for', 'the same ' + label + ' (' + A[k] + ')', { strong: true, slot: k + '.0' }); }
+                const viaMail = k === 'coyote' && (A.coyoteFrom === 'email' || B.coyoteFrom === 'email') ? ', one read from a coyote.csusb.edu email' : '';
+                if (a === b) { add(k, label, W[k][0], 'for', 'the same ' + label + ' (' + A[k] + viaMail + ')', { strong: true, slot: k + '.0' }); }
+                else if (viaMail) { /* an ID read from an email only confirms: a mistyped email must not make a hard conflict */ }
                 // different Coyote IDs are a hard conflict; different CAS IDs are a small penalty, since a student can have several applications
                 else { add(k, label, W[k][1], 'against', 'different ' + label + 's (' + A[k] + ' and ' + B[k] + ')' + (k === 'cas' ? ', which can be two applications' : ''), { hard: k === 'coyote', slot: k + '.1' }); }
             }
@@ -2636,7 +2638,15 @@
         const addr = [null, null];
         getDiffRows().forEach(row => {
             const label = row.label, vals = [row.values[0].textContent, row.values[1].textContent];
-            vals.forEach((v, i) => { const m = v.match(/School Id:\s*(\d+)/i); if (m) sides[i].coyote = m[1]; });
+            // Values that name themselves, wherever they are (the Identities section's rows are labelled "Identities" or nothing):
+            // "School Id: 009000001", "Cas Id: 7000000001", "Email: …" / "School Email: …", and a coyote.csusb.edu address, which is
+            // the student's Coyote ID (009000001@coyote.csusb.edu).
+            vals.forEach((v, i) => {
+                const m = v.match(/School Id:\s*(\d+)/i); if (m) sides[i].coyote = m[1];
+                const c = v.match(/\bcas[\s_-]*id\s*[:=]?\s*(\d{5,})/i); if (c && !sides[i].cas) sides[i].cas = c[1];
+                if (/\be-?mail\s*:/i.test(v)) (v.match(/[^\s,;<>()]+@[^\s,;<>()]+/g) || []).forEach(e => { if (!sides[i].emails.includes(e)) sides[i].emails.push(e); });
+                const ce = v.match(/\b(\d{6,10})@coyote\.csusb\.edu\b/i); if (ce && !sides[i].coyoteMail) sides[i].coyoteMail = ce[1];
+            });
             if (/preferred/i.test(label)) return;
             const key = boltFieldKey(label);
             if (!key) return;
@@ -2648,6 +2658,8 @@
                 else if (!sides[i][key]) sides[i][key] = v.trim();
             });
         });
+        // a side with no School Id takes its Coyote ID from its coyote.csusb.edu email
+        sides.forEach(s => { if (!s.coyote && s.coyoteMail) { s.coyote = s.coyoteMail; s.coyoteFrom = 'email'; } delete s.coyoteMail; });
         const bolt = readBoltSummary();
         if (!bolt.present) return null; // Bolt's overview has not rendered yet: nothing to read the matching fields from
         // names from the contact cards when the form has no name rows (they match, or the form would show them)

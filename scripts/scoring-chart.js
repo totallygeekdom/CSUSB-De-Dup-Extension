@@ -87,7 +87,7 @@ A field only counts when **both** records have it; a missing field scores 0 and 
 
 | Field | Match | Mismatch |
 |---|---|---|
-| Coyote ID | ${n(W.coyote[0])} | ${n(W.coyote[1])} (hard conflict) |
+| Coyote ID (School Id, or the number of a coyote.csusb.edu email) | ${n(W.coyote[0])} | ${n(W.coyote[1])} (hard conflict; not when one ID comes from an email) |
 | CAS ID | ${n(W.cas[0])} | ${n(W.cas[1])}, not a hard conflict (a student can have several applications) |
 | Date of birth | ${n(W.dob[0])} | ${n(W.dob[1])}, not a hard conflict (one typo or a day/month swap: ${n(W.dobTypo[1])}) |
 | Email | ${n(W.email[0])} exact; ${n(W.emailName[0])} same name part (another domain, or only the numbers differ: maria.soto444 / maria.soto1111) | ${n(0)} (people have several) |

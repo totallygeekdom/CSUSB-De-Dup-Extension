@@ -27,6 +27,8 @@ const casDiff = score({ ...person, dob: '2004-01-02' }, { ...person, dob: '2004-
 check(casDiff2.hard === false && casDiff2.level === 'medium', 'different CAS IDs are not a hard conflict (a student can have several applications): same name and birth date stays Medium (' + casDiff2.points + ')');
 check(casDiff.items.every(i => i.key !== 'cas'), 'a CAS ID on one side only is not compared');
 check(pts(score({ ...person, gender: 'Female' }, { ...person, gender: 'female' }), 'gender') === 5 && pts(score({ ...person, gender: 'Female' }, { ...person, gender: 'Male' }), 'gender') === null && pts(score({ ...person, gender: 'Female' }, person), 'gender') === null, 'the same gender is +5; a different or missing one is 0');
+const viaMail = score({ ...person, coyote: '009000001' }, { ...person, coyote: '009000001', coyoteFrom: 'email' }), viaMailOff = score({ ...person, coyote: '009000001' }, { ...person, coyote: '009999999', coyoteFrom: 'email' });
+check(pts(viaMail, 'coyote') === 120 && viaMail.level === 'high' && pts(viaMailOff, 'coyote') === null && viaMailOff.hard === false, 'a Coyote ID read from a coyote.csusb.edu email confirms (+120) but never makes a hard conflict');
 check(pts(score({ ...person, applicant: true }, { ...person, coyote: '009111222' }), 'appCoyote') === -40, 'an applicant against a contact with a Coyote ID is -40');
 
 // a different birth date is a heavy penalty, not a veto

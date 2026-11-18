@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.284`, shown in the settings pane |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.285`, shown in the settings pane |
 | Element451 - Database v2 | `database-v2.js` | `@version 2.74` |
 | Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.17`, see [section 17](#17-database-merge) |
 
@@ -377,7 +377,7 @@ A three-way switch picks the view: **Write-up** (the plain-English write-up), **
 
 | Field | Match | Mismatch |
 |---|---|---|
-| Coyote ID | +120 | -120, hard conflict |
+| Coyote ID (a School Id, or the number of a `coyote.csusb.edu` email) | +120 | -120, hard conflict (scores nothing when one ID comes from an email) |
 | CAS ID | +120 | -25, not a hard conflict (a student can have several applications) |
 | Date of birth | +40 | -45 (one typo or day/month swap: -20). Heavy, but **not** a hard conflict: it does not cap the rating |
 | Email, exact / same name part (another domain, or only the numbers, dots, dashes or underscores differ, with at least 5 letters left: `maria.soto444` / `maria.soto1111`) | +40 / +15 | 0 (people have several) |
@@ -575,6 +575,7 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 - **ID weights ±120** (UI 2.272): a matching Coyote ID or CAS ID is +120 and different ones are -120 (were +100 / -100 and +80 / -80).
 - **Birth date mismatch -45** (UI 2.271): was -60.
 - **SCORING.md** (generated chart of the scoring system, kept in step by `npm test`; `npm run scoring` regenerates it).
+- **The Identities section is read** (UI 2.285): values that name themselves are read wherever they are, so the Identities rows (labelled *Identities* or nothing) count: `School Id: …`, `Cas Id: …`, `Email: …` and `School Email: …`. A **coyote.csusb.edu address is the student's Coyote ID** (`009000001@coyote.csusb.edu`): a side with no School Id takes its Coyote ID from it, so a School Id on one record and the same number in the other's coyote email is the same Coyote ID (+120, enough for High). An ID read from an email only confirms: if it differs from the other record's, it scores nothing (a mistyped email never makes a hard conflict). The Maria Soto pair (School Id 009000001 on one side, 009000001@coyote.csusb.edu on the other) goes to High.
 - **Matching gender +5** (UI 2.284): the same gender on both records is +5, like student type, level and school; a different or missing one is 0. A gender that matches is hidden in the diff form, so it is read from Bolt's bullet list when Bolt mentions it.
 - **Different CAS IDs -25, not a hard conflict** (UI 2.283): a student can have several applications, so two CAS IDs no longer cap a pair at Low (they were -120 and hard). A matching CAS ID is unchanged: +120, a strong match, enough on its own for High. *Different CAS IDs, same name and birth date* goes from Low (-50) to Medium (45). Only different Coyote IDs are a hard conflict now.
 - **Name in email, in part too** (UI 2.282): an email that holds the other record's name scores whether or not the two records' names match (it used to count only when the first names differed). Partial names count: the first 3+ letters of the first name with the last name (`mar.soto`, `juli_soto`) +4, besides first + last +6 and initial + last +3; the first or the last name alone +2. One word of a last name of several is enough (*Soto* of *Del Rio Soto*). Still capped at +10 for the pair. The Maria Soto pair (`maria.soto444` / `maria.soto1111`) goes from 37 (Low) to 47 (Medium). Combinations that move from Low to Medium: the same name with Bolt Medium and name-based emails; the same first name and an overlapping last name with Bolt High; and that same first / overlapping last pair with emails that differ only in the numbers. None reaches High.

@@ -53,9 +53,10 @@ check(score({ first: 'Andy', last: 'Rios', coyote: '009123456' }, { first: 'Andr
 const idDob = score({ ...person, coyote: '009123456', dob: '2004-01-02' }, { ...person, coyote: '009123456', dob: '1999-07-30' });
 check(idDob.points === 105 && idDob.level === 'high', 'the same Coyote ID and name with a clearly different birth date is High (120 + 15 + 15 - 45 = ' + idDob.points + ' pts): an ID match outweighs a birth date that disagrees; change it on purpose');
 check(score({ ...person, coyote: '009123456' }, { ...person, coyote: '009999999' }).level === 'low', 'different Coyote IDs are still Low');
-// other evidence still needs two strong matches for High
+// the rating is the points alone: 70+ is High whatever the evidence
 const dobBolt = score({ ...person, dob: '2004-01-02' }, { ...person, dob: '2004-01-02' }, { bolt: { level: 'high' } });
-check(dobBolt.level === 'medium', 'a single strong match that is not an ID (birth date) is still Medium, even at ' + dobBolt.points + ' points');
+check(dobBolt.level === 'high', 'the same birth date and name with Bolt High is High (' + dobBolt.points + ' points; no second strong match needed)');
+check(score({ ...person, dob: '2004-01-02' }, { ...person, dob: '2004-01-02' }).level === 'high', 'the same birth date and name is High (70 points)');
 // a matching address is a strong match, so with one other strong match and 70 points the pair is High
 check(score({ ...person, dob: '2004-01-02' }, { ...person, dob: '2004-01-02' }, { addrState: 'match' }).level === 'high', 'the same birth date, name and address is High (80 pts)');
 check(score({ ...person, dob: '2004-01-02' }, { ...person, dob: '2004-01-02' }, { addrState: 'match', bolt: { level: 'high' } }).level === 'high', 'the same birth date, name and address with Bolt High is High (100 pts)');
@@ -65,12 +66,14 @@ check(score({ ...person, phone: '3105550101' }, { ...person, phone: '3105550101'
 check(score({ first: 'Ana', last: 'Cruz', dob: '2004-01-02' }, { first: 'Eva', last: 'Cruz', dob: '2004-01-02' }, { addrState: 'match' }).level === 'medium', 'twins (same last name, birth date and address, different first name) stay Medium (61 pts)');
 check(score({ first: 'Ana', last: 'Cruz', emails: ['cruz@x.com'] }, { first: 'Eva', last: 'Cruz', emails: ['cruz@x.com'] }, { addrState: 'match' }).level === 'medium', 'siblings (same last name, address and family email) stay Medium (61 pts)');
 check(score({ first: 'Rosa', last: 'Diaz', phone: '3105550101' }, { first: 'Marco', last: 'Diaz', phone: '3105550101' }, { addrState: 'match' }).level === 'low', 'parent and child (same phone and address, different names) are Low (35 pts)');
-// High still needs 70 points and two strong matches; weak fields alone never reach it
+// points only: 70+ is High, 45-69 Medium
 const strong2 = score({ ...person, dob: '2004-01-02', phone: '3105550101' }, { ...person, dob: '2004-01-02', phone: '3105550101' });
 check(strong2.level === 'high', 'same birth date, phone and name is High (' + strong2.points + ' pts)');
 const weak = score({ ...person, ...soft, emails: ['ana.cruz@y.com'] }, { ...person, ...soft, emails: ['cruz.ana@z.com'] }, { addrState: 'match', bolt: { level: 'high' } });
-check(weak.strong === 1 && weak.level !== 'high', 'name, address, soft fields and Bolt High has only one strong match (the address): never High (' + weak.points + ' pts)');
-check(score({ ...person, ...soft }, { ...person, ...soft }, { bolt: { level: 'high' } }).strong === 0 && score({ ...person, ...soft }, { ...person, ...soft }, { bolt: { level: 'high' } }).level !== 'high', 'name, soft fields and Bolt High with no strong match at all is never High');
+check(weak.points >= 70 && weak.level === 'high', 'name, address, soft fields and Bolt High is High on its points (' + weak.points + ')');
+const softBolt = score({ ...person, ...soft }, { ...person, ...soft }, { bolt: { level: 'high' } });
+check(softBolt.points >= 45 && softBolt.points < 70 && softBolt.level === 'medium', 'name, soft fields and Bolt High (' + softBolt.points + ' points) is Medium');
+check(SCORE_W.boltHigh === 10 && SCORE_W.boltMedium === 5 && SCORE_W.boltLow === -10, "Bolt's own score: High +10, Medium +5, Low -10");
 
 // the rating as data: the slots that applied are remembered and re-rated with whatever weights are in force
 const pairs = [

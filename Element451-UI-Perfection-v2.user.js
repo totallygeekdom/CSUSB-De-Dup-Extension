@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.286
+// @version      2.288
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.286'; // keep in sync with @version
+    const VERSION = '2.288'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -2327,7 +2327,7 @@
         email: [40, 0], emailName: [15, 0], phone: [25, 0],
         first: [15, -30], firstRelated: [7, 0], last: [15, -15], lastPartial: [7, 0],
         address: [25, -3], soft: [5, 0], gender: [5, 0],
-        boltHigh: 20, boltMedium: 8, boltLow: -5, boltDifferent: -25,
+        boltHigh: 10, boltMedium: 5, boltLow: -10, boltDifferent: -25,
         applicantVsCoyote: -40,
         emailNameFull: 6, emailNamePartial: 4, emailNameInitial: 3, emailNameOne: 2, emailNameCap: 10, emailDobFull: 20, emailDobYear: 3, emailDobConflict: -8
     };
@@ -2432,7 +2432,7 @@
     }
     // slots: { slot: how many times it applied } -> { points, level, hard, strong }, or null when a slot is not one of this engine's
     function scoreSlots(slots) {
-        let pts = 0, nameFit = 0, strong = 0, hard = false, id = false;
+        let pts = 0, nameFit = 0, strong = 0, hard = false;
         for (const slot of Object.keys(slots)) {
             const n = slots[slot], w = slotWeight(slot);
             if (w === null) return null;
@@ -2440,14 +2440,12 @@
             pts += n * w;
             if (SLOT_STRONG.includes(slot)) strong += n;
             if (SLOT_HARD.includes(slot)) hard = true;
-            if (slot === 'coyote.0' || slot === 'cas.0') id = true;
         }
         pts += Math.min(SCORE_W.emailNameCap, nameFit);
-        // A matching Coyote ID or CAS ID is an identifier no two people share, so on its own it is enough for High (with the
-        // points and no hard conflict); every other kind of evidence needs a second strong match to back it.
-        let level = pts >= SCORE_CUT.high && (strong >= 2 || id) ? 'high' : pts >= SCORE_CUT.medium ? 'medium' : 'low';
-        if (level === 'high' && hard) level = 'low';
-        if (hard && level === 'medium') level = 'low';
+        // The rating is the points alone (70+ High, 45+ Medium), except that a hard conflict (different Coyote IDs) is always Low.
+        // (strong, the count of strong matches, is kept for the console and the remembered ratings; it no longer decides anything.)
+        let level = pts >= SCORE_CUT.high ? 'high' : pts >= SCORE_CUT.medium ? 'medium' : 'low';
+        if (hard) level = 'low';
         return { points: pts, level, hard, strong };
     }
     const slotsToString = (slots) => Object.keys(slots).sort().map(k => slots[k] > 1 ? k + '*' + slots[k] : k).join(',');
@@ -2747,25 +2745,22 @@
     }
     // Why the total is the rating it is, in one sentence (the rules of scoreSlots).
     function ratingWhy(res) {
-        const id = !!(res.slots && (res.slots['coyote.0'] || res.slots['cas.0']));
-        const p = res.points, n = res.strong;
+        const p = res.points;
         if (res.hard) return 'Different Coyote IDs are a hard conflict: the rating is Low whatever the points.';
-        if (res.level === 'high') return p + ' points (High is ' + SCORE_CUT.high + '+), with ' + (id ? 'a matching Coyote or CAS ID' : n + ' strong matches') + '.';
-        if (res.level === 'medium' && p >= SCORE_CUT.high) return p + ' points is enough for High, but High also needs a matching Coyote or CAS ID or 2 strong matches (birth date, exact email, phone, address). This pair has ' + n + '.';
+        if (res.level === 'high') return p + ' points: High is ' + SCORE_CUT.high + '+.';
         if (res.level === 'medium') return p + ' points: Medium is ' + SCORE_CUT.medium + ' to ' + (SCORE_CUT.high - 1) + '.';
         return p + ' points: under ' + SCORE_CUT.medium + ' is Low.';
     }
     function pointsTable(res) {
         const t = document.createElement('table'); t.className = 'elm2-an-table';
         const head = t.createTHead().insertRow();
-        // one sentence per rule (it names the field itself, so there is no separate field column), and a tag on the strong matches
+        // one sentence per rule (it names the field itself, so there is no separate field column)
         ['What we found', 'Points'].forEach((h, i) => { const th = document.createElement('th'); th.textContent = h; if (i === 1) th.className = 'elm2-an-num'; head.appendChild(th); });
         const body = t.createTBody();
         res.items.forEach(i => {
             const r = body.insertRow();
             const what = r.insertCell();
             what.textContent = i.phrase.charAt(0).toUpperCase() + i.phrase.slice(1);
-            if (i.slot && SLOT_STRONG.includes(i.slot)) { const tag = document.createElement('span'); tag.className = 'elm2-an-strong'; tag.textContent = 'strong match'; what.append(' ', tag); }
             const c = r.insertCell(); c.className = 'elm2-an-num ' + (i.pts > 0 ? 'elm2-an-plus' : i.pts < 0 ? 'elm2-an-minus' : '');
             c.textContent = (i.pts > 0 ? '+' : '') + i.pts;
         });

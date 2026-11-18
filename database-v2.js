@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - Database v2
 // @namespace    http://tampermonkey.net/
-// @version      2.71
+// @version      2.72
 // @description  Tracks duplicate entries in a database stored in browser localStorage (exports a password-protected .xlsx spreadsheet to share, or a personal .elmdb file locked to your Element451 login) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -15,7 +15,7 @@
     if (window.__elm451CsvDatabaseLoaded) return;
     window.__elm451CsvDatabaseLoaded = true;
 
-    const VERSION = '2.71'; // keep in sync with @version (the build checks it)
+    const VERSION = '2.72'; // keep in sync with @version (the build checks it)
     const STORAGE_KEY = 'elm_csv_database';
     const UI_KEY = 'elm_show_db_ui';
     function showDbUi() { try { return localStorage.getItem(UI_KEY) !== 'false'; } catch (e) { return true; } }
@@ -354,10 +354,14 @@
                 && old.sparkId1 === sparks.a && old.sparkId2 === sparks.b
                 && (old.merged || '') === merged && (old.choice || '') === choice && (old.score || '') === score && parsePoints(old.points) === points && (old.scanDate || '') === scanDate) return true;
             db[existingIdx] = newEntry;
-            return saveDatabase(db) ? true : 'the browser would not save the database (storage full?)';
+            if (!saveDatabase(db)) return 'the browser would not save the database (storage full?)';
+            scheduleListAnnotation();
+            return true;
         }
         db.push(newEntry);
-        return saveDatabase(db) ? true : 'the browser would not save the database (storage full?)';
+        if (!saveDatabase(db)) return 'the browser would not save the database (storage full?)';
+        scheduleListAnnotation();
+        return true;
     }
     // The main script asks for the current pair to be recorded right before it skips it, so a
     // fast skip can't beat the 1-second poll. It keeps asking until this reports success.
@@ -711,8 +715,9 @@
         return (name.length > 3 && text.includes(name)) || (dup.length > 3 && text.includes(dup));
     }
 
+    // The list stays in the page behind the review sidebar, and its chips follow the profile being viewed, so it is annotated while a
+    // profile is open too (it used to be skipped, which left a row without its Spark IDs until the profile was closed).
     function annotateQueueTable() {
-        if (isReviewDetailPage()) return;
         const currentPageKey = getPageKey();
         let useDbFallback = false;
         if (!apiDuplicatesList) {
@@ -805,6 +810,12 @@
     }
 
     let listAnnotationTimer = null;
+    // The rows are annotated again shortly after a pair is recorded: the row of the profile being viewed can only be tied to its pair
+    // (through the database entry) once the pair is in the database.
+    function scheduleListAnnotation() {
+        if (listAnnotationTimer) clearTimeout(listAnnotationTimer);
+        listAnnotationTimer = setTimeout(annotateQueueTable, 150);
+    }
     const listObserver = new MutationObserver((mutations) => {
         let rowsChanged = false;
         for (const m of mutations) {
@@ -818,7 +829,6 @@
     // Watches the queue table only. (It used to fall back to the whole page, so on every Element451 page, the ones with no
     // queue included, each change anywhere re-ran the annotation.) The table is looked for twice a second instead.
     function startListObserver() {
-        if (isReviewDetailPage()) return;
         const container = getQueueTable();
         if (container === currentObserverTarget) return;
         listObserver.disconnect();

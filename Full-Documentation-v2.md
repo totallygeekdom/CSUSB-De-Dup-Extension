@@ -5,8 +5,8 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.275`, shown in the settings pane |
-| Element451 - Database v2 | `database-v2.js` | `@version 2.71` |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.276`, shown in the settings pane |
+| Element451 - Database v2 | `database-v2.js` | `@version 2.72` |
 | Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.17`, see [section 17](#17-database-merge) |
 
 
@@ -563,6 +563,7 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 - **ID weights ±120** (UI 2.272): a matching Coyote ID or CAS ID is +120 and different ones are -120 (were +100 / -100 and +80 / -80).
 - **Birth date mismatch -45** (UI 2.271): was -60.
 - **SCORING.md** (generated chart of the scoring system, kept in step by `npm test`; `npm run scoring` regenerates it).
+- **The list follows the profile you are viewing** (UI 2.276, Database 2.72): the list is annotated while a profile is open (it was skipped, so on a first load a row was only tied to its pair after the profile was closed), is annotated again about 150 ms after a pair is recorded, and the list's chips are updated in the frame a pair is rated. The chip of the profile on screen turns from Pending to its rating within about a second, and the next profile's follows.
 - **Names weigh more** (UI 2.275): a same first name is +15 (was +7), a nickname or initial +7 (was +3), a different first name -30 (was -12); a same last name is +15 (was +8), overlapping +7 (was +4), a different last name -15 (was -8).
 - **List chips follow the weights** (UI 2.274): pairs are remembered as the scoring rules that applied and re-rated with the current weights, so a weight change updates the list without reopening pairs (it used to keep each pair's old rating until it was opened again). Bolt's bullet *address: match when accounting for formatting differences* is now read as a match (the word *differences* made it read as a mismatch).
 - **A matching address is a strong match** (UI 2.273): with one other strong match (birth date, exact email or phone) and 70+ points the pair is High, so *same birth date + name + address*, *same name + email + address* and *same name + phone + address* (with Bolt High) are High. Pairs that share an address but not a first name (twins, siblings, parent and child) stay Medium, because a different first name costs points. Name, address and soft fields alone are still never High: that is one strong match.

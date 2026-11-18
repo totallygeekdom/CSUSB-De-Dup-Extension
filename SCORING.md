@@ -11,16 +11,17 @@ A field only counts when **both** records have it; a missing field scores 0 and 
 
 | Field | Match | Mismatch |
 |---|---|---|
-| Coyote ID | +120 | -120 (hard conflict) |
-| CAS ID | +120 | -120 (hard conflict) |
+| Coyote ID (School Id, or the number of a coyote.csusb.edu email) | +120 | -120 (hard conflict; not when one ID comes from an email) |
+| CAS ID | +120 | -25, not a hard conflict (a student can have several applications) |
 | Date of birth | +40 | -45, not a hard conflict (one typo or a day/month swap: -20) |
-| Email | +40 exact; +15 same name part on another domain | 0 (people have several) |
+| Email | +40 exact; +15 same name part (another domain, or only the numbers differ: maria.soto444 / maria.soto1111) | 0 (people have several) |
 | Phone | +25 | 0 |
 | First name | +15 same; +7 nickname, initial or prefix | -30 |
 | Last name | +15 same; +7 overlapping | -15 |
 | Address (the page's own comparer) | +25 | -3 (people move) |
 | Student type, academic level, school attended | +5 each | 0 |
-| Name of the other record found in an email address | +6 full name, +3 first initial + last name (capped at +10) | none |
+| Gender | +5 | 0 (it can be missing, updated or entered wrong) |
+| Name of the other record found in an email address (counted whether or not the names match) | +6 first + last name, +4 first 3+ letters + last name (mar.soto), +3 first initial + last name, +2 first or last name alone (capped at +10 for the pair) | none |
 | Birth date found in an email address | +20 full date that matches, +3 birth year | -8 (a full date that disagrees) |
 | Bolt's own score | High +20, Medium +8 | Low -5; Bolt says "different people" -25 |
 | Applicant with no Coyote ID vs a contact that has one | none | -40 |
@@ -33,7 +34,7 @@ There is no twin-pattern rule: first names that differ cost the first-name penal
 - **Medium**: 45+ points.
 - **Low**: everything else. A Low pair under 15 points is described as "probably different people" in the write-up.
 - **Strong matches** are: Coyote ID, CAS ID, date of birth, exact email, phone and a matching address.
-- **Hard conflict**: two different Coyote IDs or two different CAS IDs. It caps the pair at Low. A different birth date is a heavy penalty, not a hard conflict.
+- **Hard conflict**: two different Coyote IDs. It caps the pair at Low. Different CAS IDs are a small penalty, not a hard conflict: a student can have several applications. A different birth date is a heavy penalty, not a hard conflict.
 
 ## Sample pairs: High and Medium
 
@@ -50,9 +51,9 @@ Each row is run through the live engine (the Bolt score is not included unless t
 | Same Coyote ID, different first name | 105 | 1 | **High** |
 | Same Coyote ID + name, clearly different DOB | 105 | 1 | **High** |
 | Same name + phone + address, Bolt High | 100 | 2 | **High** |
+| Jr./Sr. (same name, address, family email, no DOB on file) | 99 | 2 | **High** |
 | Same DOB + name + address | 95 | 2 | **High** |
 | Same DOB + phone + name | 95 | 2 | **High** |
-| Jr./Sr. (same name, address, family email, no DOB on file) | 95 | 2 | **High** |
 | Same DOB + address, same last name only | 80 | 2 | **High** |
 | Same name, email, phone and address, clearly different DOB | 75 | 3 | **High** |
 | Same name + DOB + email, applicant vs a contact with a Coyote ID | 70 | 2 | **High** |
@@ -61,10 +62,12 @@ Each row is run through the live engine (the Bolt score is not included unless t
 | Same DOB + address, no names on either record | 65 | 2 | Medium |
 | Same name + email + address + soft fields, clearly different DOB | 65 | 2 | Medium |
 | Same name + address + DOB, applicant vs a contact with a Coyote ID | 55 | 2 | Medium |
+| Siblings (same last name, address, family email; different first name) | 54 | 2 | Medium |
+| Jr./Sr. with clearly different DOBs | 54 | 2 | Medium |
 | Twins (same last name, DOB, address; different first name) | 50 | 2 | Medium |
-| Siblings (same last name, address, family email; different first name) | 50 | 2 | Medium |
-| Jr./Sr. with clearly different DOBs | 50 | 2 | Medium |
 | Same name only, Bolt High | 50 | 0 | Medium |
+| Same first name, overlapping last names, emails differing only in the numbers (maria.soto444 / maria.soto1111) | 47 | 0 | Medium |
+| Different CAS IDs, same name and birth date | 45 | 1 | Medium |
 | Bolt flags "different people", same name + birth date | 45 | 1 | Medium |
 
 ## Examples of Low scores
@@ -77,23 +80,22 @@ points add up. Closest to Medium first.
 |---|---|---|
 | Parent/child (same phone and address, different names) | 35 | Phone +25, First name -30, Last name +15, Address +25 |
 | Same name, nothing else known | 30 | First name +15, Last name +15 |
+| Siblings: same last name and family email, no shared address | 29 | Email +40, First name -30, Last name +15, Name in email +4 |
 | Same name, different address | 27 | First name +15, Last name +15, Address -3 |
 | Same name, Bolt says Low | 25 | First name +15, Last name +15, Bolt -5 |
-| Siblings: same last name and family email, no shared address | 25 | Email +40, First name -30, Last name +15 |
 | Different Coyote IDs, everything else the same | 15 | Coyote ID -120, Date of birth +40, Email +40, First name +15, Last name +15, Address +25 (hard conflict: capped at Low) |
 | Same name + address, applicant vs a contact with a Coyote ID | 15 | Applicant vs Coyote ID -40, First name +15, Last name +15, Address +25 |
 | Same name, birth date one typo apart | 10 | Date of birth -20, First name +15, Last name +15 |
 | Same name, different birth date, same address | 10 | Date of birth -45, First name +15, Last name +15, Address +25 |
 | Relatives: same last name and address, different first names | 10 | First name -30, Last name +15, Address +25 |
 | Same first name only, different last name | 0 | First name +15, Last name -15 |
-| Same email only (a shared family email), different names | -5 | Email +40, First name -30, Last name -15 |
+| Same email only (a shared family email), different names | -3 | Email +40, First name -30, Last name -15, Name in email +2 |
 | Same birth date only (a coincidence), different names | -5 | Date of birth +40, First name -30, Last name -15 |
 | Same last name only, different first name | -15 | First name -30, Last name +15 |
 | Same name, clearly different birth date | -15 | Date of birth -45, First name +15, Last name +15 |
 | Same phone only (a family line), different names | -20 | Phone +25, First name -30, Last name -15 |
 | Same address only (roommates), different names | -20 | First name -30, Last name -15, Address +25 |
-| Same email, different names and different birth dates | -50 | Date of birth -45, Email +40, First name -30, Last name -15 |
-| Different CAS IDs, same name and birth date | -50 | CAS ID -120, Date of birth +40, First name +15, Last name +15 (hard conflict: capped at Low) |
+| Same email, different names and different birth dates | -48 | Date of birth -45, Email +40, First name -30, Last name -15, Name in email +2 |
 | Completely different people | -93 | Date of birth -45, First name -30, Last name -15, Address -3 |
 
 ## Known trade-offs

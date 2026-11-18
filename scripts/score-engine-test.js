@@ -22,7 +22,13 @@ check(SCORE_W.address[0] === 25 && pts(score(person, person, { addrState: 'match
 check(SCORE_W.address[1] === -3, 'a different address is still -3 (people move)');
 const soft = { studentType: 'ftf', level: 'ug', school: 'csusb' };
 check(['studentType', 'level', 'school'].every(k => pts(score({ ...person, ...soft }, { ...person, ...soft }), k) === 5), 'student type, academic level and school attended are +5 each');
-check(pts(score({ ...person, coyote: '009123456' }, { ...person, coyote: '009123456' }), 'coyote') === 120 && pts(score({ ...person, cas: '8812345' }, { ...person, cas: '8812345' }), 'cas') === 120 && pts(score({ ...person, coyote: '1' + '23456' }, { ...person, coyote: '654321' }), 'coyote') === -120 && pts(score({ ...person, cas: '123456' }, { ...person, cas: '654321' }), 'cas') === -120, 'a matching Coyote ID or CAS ID is +120 and different ones are -120');
+check(pts(score({ ...person, coyote: '009123456' }, { ...person, coyote: '009123456' }), 'coyote') === 120 && pts(score({ ...person, cas: '8812345' }, { ...person, cas: '8812345' }), 'cas') === 120 && pts(score({ ...person, coyote: '1' + '23456' }, { ...person, coyote: '654321' }), 'coyote') === -120 && pts(score({ ...person, cas: '123456' }, { ...person, cas: '654321' }), 'cas') === -25, 'a matching Coyote ID or CAS ID is +120; different Coyote IDs are -120, different CAS IDs -25');
+const casDiff = score({ ...person, dob: '2004-01-02' }, { ...person, dob: '2004-01-02', cas: '654321' }), casDiff2 = score({ ...person, dob: '2004-01-02', cas: '123456' }, { ...person, dob: '2004-01-02', cas: '654321' });
+check(casDiff2.hard === false && casDiff2.level === 'medium', 'different CAS IDs are not a hard conflict (a student can have several applications): same name and birth date stays Medium (' + casDiff2.points + ')');
+check(casDiff.items.every(i => i.key !== 'cas'), 'a CAS ID on one side only is not compared');
+check(pts(score({ ...person, gender: 'Female' }, { ...person, gender: 'female' }), 'gender') === 5 && pts(score({ ...person, gender: 'Female' }, { ...person, gender: 'Male' }), 'gender') === null && pts(score({ ...person, gender: 'Female' }, person), 'gender') === null, 'the same gender is +5; a different or missing one is 0');
+const viaMail = score({ ...person, coyote: '009000001' }, { ...person, coyote: '009000001', coyoteFrom: 'email' }), viaMailOff = score({ ...person, coyote: '009000001' }, { ...person, coyote: '009999999', coyoteFrom: 'email' });
+check(pts(viaMail, 'coyote') === 120 && viaMail.level === 'high' && pts(viaMailOff, 'coyote') === null && viaMailOff.hard === false, 'a Coyote ID read from a coyote.csusb.edu email confirms (+120) but never makes a hard conflict');
 check(pts(score({ ...person, applicant: true }, { ...person, coyote: '009111222' }), 'appCoyote') === -40, 'an applicant against a contact with a Coyote ID is -40');
 
 // a different birth date is a heavy penalty, not a veto

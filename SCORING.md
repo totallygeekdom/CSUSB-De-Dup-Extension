@@ -15,7 +15,7 @@ A field only counts when **both** records have it; a missing field scores 0 and 
 | CAS ID | +120 | -120 (hard conflict) |
 | Date of birth | +40 | -45, not a hard conflict (one typo or a day/month swap: -20) |
 | Email | +40 exact; +15 same name part on another domain | 0 (people have several) |
-| Phone | +25 | 0 |
+| Phone | +30 | 0 |
 | First name | +15 same; +7 nickname, initial or prefix | -30 |
 | Last name | +15 same; +7 overlapping | -15 |
 | Address (the page's own comparer) | +25 | -3 (people move) |
@@ -49,12 +49,12 @@ Each row is run through the live engine (the Bolt score is not included unless t
 | Same DOB + email + name | 110 | 2 | **High** |
 | Same Coyote ID, different first name | 105 | 1 | **High** |
 | Same Coyote ID + name, clearly different DOB | 105 | 1 | **High** |
-| Same name + phone + address, Bolt High | 100 | 2 | **High** |
+| Same name + phone + address, Bolt High | 105 | 2 | **High** |
+| Same DOB + phone + name | 100 | 2 | **High** |
 | Same DOB + name + address | 95 | 2 | **High** |
-| Same DOB + phone + name | 95 | 2 | **High** |
 | Jr./Sr. (same name, address, family email, no DOB on file) | 95 | 2 | **High** |
 | Same DOB + address, same last name only | 80 | 2 | **High** |
-| Same name, email, phone and address, clearly different DOB | 75 | 3 | **High** |
+| Same name, email, phone and address, clearly different DOB | 80 | 3 | **High** |
 | Same name + DOB + email, applicant vs a contact with a Coyote ID | 70 | 2 | **High** |
 | Same name, address and soft fields, Bolt High (nothing else strong) | 90 | 1 | Medium |
 | Same DOB + name only | 70 | 1 | Medium |
@@ -75,7 +75,7 @@ points add up. Closest to Medium first.
 
 | Pair | Points | How it adds up |
 |---|---|---|
-| Parent/child (same phone and address, different names) | 35 | Phone +25, First name -30, Last name +15, Address +25 |
+| Parent/child (same phone and address, different names) | 40 | Phone +30, First name -30, Last name +15, Address +25 |
 | Same name, nothing else known | 30 | First name +15, Last name +15 |
 | Same name, different address | 27 | First name +15, Last name +15, Address -3 |
 | Same name, Bolt says Low | 25 | First name +15, Last name +15, Bolt -5 |
@@ -88,9 +88,9 @@ points add up. Closest to Medium first.
 | Same first name only, different last name | 0 | First name +15, Last name -15 |
 | Same email only (a shared family email), different names | -5 | Email +40, First name -30, Last name -15 |
 | Same birth date only (a coincidence), different names | -5 | Date of birth +40, First name -30, Last name -15 |
+| Same phone only (a family line), different names | -15 | Phone +30, First name -30, Last name -15 |
 | Same last name only, different first name | -15 | First name -30, Last name +15 |
 | Same name, clearly different birth date | -15 | Date of birth -45, First name +15, Last name +15 |
-| Same phone only (a family line), different names | -20 | Phone +25, First name -30, Last name -15 |
 | Same address only (roommates), different names | -20 | First name -30, Last name -15, Address +25 |
 | Same email, different names and different birth dates | -50 | Date of birth -45, Email +40, First name -30, Last name -15 |
 | Different CAS IDs, same name and birth date | -50 | CAS ID -120, Date of birth +40, First name +15, Last name +15 (hard conflict: capped at Low) |

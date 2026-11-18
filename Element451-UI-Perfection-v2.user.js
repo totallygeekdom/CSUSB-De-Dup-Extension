@@ -2694,7 +2694,7 @@
             // The list's badge says Forbidden for all of these (and for different School IDs); here they are told apart: a test record
             // (a name with "test" in it) reads Test, a name on the forbidden list reads Forbidden name.
             const test = forbidden.reason === 'test in name';
-            const why = test ? 'a contact\'s name contains "test", so it is a test record' : 'a contact\'s name is on the forbidden list';
+            const why = test ? 'a contact\'s name contains "test" (a test record)' : 'a contact\'s name is on the forbidden list';
             flags.push({ flag: test ? 'test' : 'forbidden', text: test ? 'Test' : 'Forbidden name', blocked: true, title: 'Blocked: ' + why + '. This pair cannot be merged.' });
             notes.push('Blocked: ' + why + ', so this pair cannot be merged.');
         }

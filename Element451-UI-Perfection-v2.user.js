@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.299
+// @version      2.301
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.299'; // keep in sync with @version
+    const VERSION = '2.301'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -122,7 +122,6 @@
         AUTO_SKIP_BLOCKED:        { get() { return getBoolSetting('elm_auto_skip_blocked', true); } },
         NEXT_AFTER_MERGE:         { get() { return getBoolSetting('elm_next_after_merge', true); } },
         ALLOWED_DEPARTMENT:       { get() { return lsGet('elm_allowed_department') || 'UnderGrad'; } },
-        READ_MATCHING_ROWS:       { get() { return getBoolSetting('elm_read_matching_rows', true); } },
         ALLOW_APPEAL:             { get() { return getBoolSetting('elm_allow_appeal', false); } },
         ALLOW_FORBIDDEN:          { get() { return getBoolSetting('elm_allow_forbidden', false); } },
     });
@@ -2266,14 +2265,14 @@
         return { forbidden: false };
     }
     function isAppealKeyword() {
-        for (const row of getDiffRows()) {
+        for (const row of getCheckRows()) {
             if (row.values[0].textContent.toLowerCase().includes('appeal')) return { appeal: true, row, side: 'left' };
             if (row.values[1].textContent.toLowerCase().includes('appeal')) return { appeal: true, row, side: 'right' };
         }
         return { appeal: false };
     }
     function detectActualDepartment() {
-        const rows = getDiffRows();
+        const rows = getCheckRows();
         const isGradText = (t) => t.includes('GRAD_') || /grad student/i.test(t);
         const isIAText = (t) => t.includes('IA_') || t.includes('_IA_') || t.includes('_IA ');
         for (const row of rows) {
@@ -2298,7 +2297,7 @@
         return { wrongDept: true, row: result.row, reason: result.dept };
     }
     function isStudentIdMismatch() {
-        for (const row of getDiffRows()) {
+        for (const row of getCheckRows()) {
             const text = row.textContent;
             if (!text.includes('School Id:')) continue;
             const leftMatch = row.values[0].textContent.match(/School Id:\s*(\d+)/i);
@@ -2675,29 +2674,15 @@
     function boltFieldKey(label) { const f = BOLT_FIELDS.find(([, re]) => re.test(label)); return f ? f[0] : null; }
     function readBoltSummary() {
         const el = document.querySelector('.analysis-summary');
-        const out = { text: el ? el.textContent.trim() : '', said: {}, different: false, present: !!(el && el.textContent.trim()) };
+        const out = { text: el ? el.textContent.trim() : '', different: false, present: !!(el && el.textContent.trim()) };
         if (!el) return out;
         out.different = /different (people|person|individuals?)|not (appear to be|the same)\s*(the same )?(person|people)/i.test(out.text);
-        el.querySelectorAll('li').forEach(li => {
-            const strong = li.querySelector('strong, b');
-            const label = strong ? strong.textContent.trim() : '';
-            const key = boltFieldKey(label);
-            if (!key) return;
-            const rest = li.textContent.replace(label, '').replace(/^\s*[:\-–]\s*/, '');
-            // "match when accounting for formatting differences" says they match: the word differences there is not a mismatch
-            const restClean = rest.replace(/\b(accounting for|allowing for|despite|ignoring|apart from|aside from|other than|with)\s+(?:[\w-]+\s+){0,3}?differences?\b/gi, ' ');
-            const differs = /\b(differ\w*|different|mismatch\w*|conflict\w*|do(es)? not match|not match)\b/i.test(restClean);
-            const matches = !differs && /\b(identical|match(es|ed|ing)?|same|equivalent|consistent)\b/i.test(rest);
-            const v = rest.match(/\(([^()]+)\)/);
-            if (matches) out.said[key] = { state: 'match', value: v ? v[1].trim() : '' };
-            else if (differs) out.said[key] = { state: 'differ' };
-        });
         return out;
     }
     function gatherEvidence() {
         const sides = [{ emails: [] }, { emails: [] }];
         const addr = [null, null];
-        getDiffRows().forEach(row => {
+        getCheckRows().forEach(row => {
             const label = row.label, vals = [row.values[0].textContent, row.values[1].textContent];
             // Values that name themselves, wherever they are (the Identities section's rows are labelled "Identities" or nothing):
             // "School Id: 009000001", "Cas Id: 7000000001", "Email: …" / "School Email: …", and a coyote.csusb.edu address, which is
@@ -2722,25 +2707,14 @@
         // a side with no School Id takes its Coyote ID from its coyote.csusb.edu email
         sides.forEach(s => { if (!s.coyote && s.coyoteMail) { s.coyote = s.coyoteMail; s.coyoteFrom = 'email'; } delete s.coyoteMail; });
         const bolt = readBoltSummary();
-        if (!bolt.present) return null; // Bolt's overview has not rendered yet: nothing to read the matching fields from
-        // names from the contact cards when the form has no name rows (they match, or the form would show them)
+        if (!bolt.present) return null; // Bolt's overview has not rendered yet: its score and its "different people" are part of the rating
+        // names from the contact cards when the form has no name rows
         const names = getContactNames();
         [0, 1].forEach(i => {
             if (!sides[i].first && !sides[i].last && names[i]) { const parts = names[i].split(/\s+/); sides[i].first = parts[0]; sides[i].last = parts.slice(1).join(' '); }
         });
-        // a field that matched is hidden in the form: take its value from Bolt's bullet
-        Object.keys(bolt.said).forEach(k => {
-            const s = bolt.said[k];
-            if (s.state !== 'match' || k === 'address') return;
-            [0, 1].forEach(i => {
-                if (k === 'email') { if (!sides[i].emails.length) { const e = (s.value.match(/[^\s,;<>()]+@[^\s,;<>()]+/) || [])[0]; if (e) sides[i].emails.push(e); } }
-                else if (!sides[i][k] && s.value) sides[i][k] = s.value;
-                else if (!sides[i][k] && (k === 'first' || k === 'last')) { /* from the card names above */ }
-            });
-        });
         let addrState = null;
         if (addr[0] && addr[1]) { try { addrState = AddressComparer.compareAddresses(addr[0], addr[1]).areSame ? 'match' : 'mismatch'; } catch (e) { addrState = null; } }
-        else if (bolt.said.address && bolt.said.address.state === 'match') addrState = 'match';
         const app = findApplicantSide();
         sides[0].applicant = app === 'left'; sides[1].applicant = app === 'right';
         const boltRaw = getBoltChipLevel();
@@ -3101,7 +3075,7 @@
     function findApplicantSide() {
         const isUndergrad = detectActualDepartment().dept === 'UnderGrad';
         if (!isUndergrad) return null;
-        for (const row of getDiffRows()) {
+        for (const row of getCheckRows()) {
             const text = row.textContent;
             const leftText = row.values[0].textContent, rightText = row.values[1].textContent;
             if (text.includes('Cal State Apply Application')) {
@@ -3135,7 +3109,7 @@
         // applicant when the application rows say nothing (not loaded yet, or worded differently). The value reads "Cas Id: 7000000002";
         // a blank side reads "-".
         const cas = [false, false];
-        for (const row of getDiffRows()) {
+        for (const row of getCheckRows()) {
             const casRow = /\bcas\b|cal state apply id/i.test(row.label || '');
             [0, 1].forEach(i => { const t = row.values[i].textContent; if (CAS_ID_RE.test(t) || (casRow && /\d{5,}/.test(t))) cas[i] = true; });
         }
@@ -4272,21 +4246,57 @@
     // a merge removes a pair from the queue, so the next pair can land on the same position, and
     // duplicates usually share their names.
     let formWasAbsent = false;
-    // Element451's "Hide matching items" switch leaves only the rows that differ on the page, so a keyword (appeal, test), a School ID
-    // or a department marker in a row both contacts share would go unseen. With "Read matching rows" on, the switch is kept off,
-    // so every row is there for the blocker and department checks.
-    let matchSwitchClickedAt = 0;
-    function showMatchingRows() {
-        if (!CFG.READ_MATCHING_ROWS) return;
-        const btn = document.querySelector('bolt-slide-toggle.hide-matching-items-toggle button[role="switch"], bolt-slide-toggle.hide-matching-items-toggle button.mdc-switch');
-        if (!btn || !(btn.getAttribute('aria-checked') === 'true' || btn.classList.contains('mdc-switch--selected'))) return;
-        if (Date.now() - matchSwitchClickedAt < 3000) return; // one click at a time; the page needs a moment to show the rows
-        matchSwitchClickedAt = Date.now();
-        btn.click();
+    // Element451's "Hide matching items" switch leaves only the rows that differ on the page, so a keyword (appeal, test), a School ID,
+    // a department marker or any field that matches would go unseen. For each new pair the script turns the rows on, reads every row
+    // into a snapshot, and puts the switch back the way it was. The score, the blocker checks and the department check read the
+    // snapshot together with the rows on screen (getCheckRows). Nothing is decided about a pair until its rows have been read.
+    const hideMatchingBtn = () => document.querySelector('bolt-slide-toggle.hide-matching-items-toggle button[role="switch"], bolt-slide-toggle.hide-matching-items-toggle button.mdc-switch');
+    const isHidingMatches = (btn) => btn.getAttribute('aria-checked') === 'true' || btn.classList.contains('mdc-switch--selected');
+    const rowRecord = (r) => ({ key: r.key, label: r.label, values: r.values.map(v => ({ textContent: v.textContent })), textContent: r.textContent, isConflict: r.isConflict, element: null });
+    let rowSnapshot = { pair: '', rows: [] };
+    const peek = { pair: '', phase: 'done', wasHiding: false, since: 0, before: 0, clicked: 0, tries: 0, warned: false };
+    // The rows on screen plus the ones the snapshot holds that are hidden right now (same order: the live rows first)
+    function getCheckRows() {
+        const live = getDiffRows();
+        if (rowSnapshot.pair !== getPairKey() || !rowSnapshot.rows.length) return live;
+        const seen = new Set(live.map(r => r.key));
+        return live.concat(rowSnapshot.rows.filter(r => !seen.has(r.key)));
+    }
+    // True once the pair's rows have been read (and the switch is back); false while that is still going on
+    function readMatchingRows() {
+        const pk = getPairKey();
+        if (!pk) return true;
+        if (peek.pair !== pk) { Object.assign(peek, { pair: pk, phase: 'start', wasHiding: false, since: 0, before: 0, clicked: 0, tries: 0 }); rowSnapshot = { pair: pk, rows: [] }; }
+        const btn = hideMatchingBtn();
+        if (!btn) {
+            if (!peek.warned) { peek.warned = true; console.log('[elm2] No "Hide matching items" switch found: only the rows on screen are checked'); }
+            return true;
+        }
+        const now = Date.now();
+        if (peek.phase === 'start') {
+            if (!isHidingMatches(btn)) { peek.phase = 'done'; return true; } // already showing every row: nothing to open
+            peek.wasHiding = true; peek.before = getDiffRows().length; peek.since = now; peek.clicked = now; peek.phase = 'opening';
+            btn.click();
+            return false;
+        }
+        if (peek.phase === 'opening') {
+            if (getDiffRows().length <= peek.before && now - peek.since < 1500) return false; // the rows have not shown up yet
+            rowSnapshot = { pair: pk, rows: getDiffRows().map(rowRecord) };
+            peek.phase = 'closing'; peek.tries = 0; peek.since = now;
+            if (!isHidingMatches(btn)) { peek.clicked = now; btn.click(); }
+            return false;
+        }
+        if (peek.phase === 'closing') {
+            if (isHidingMatches(btn)) { peek.phase = 'done'; return true; }
+            if (now - peek.clicked > 800) { if (++peek.tries > 3) { peek.phase = 'done'; return true; } peek.clicked = now; btn.click(); }
+            return false;
+        }
+        // done: while the rows are showing (the switch was already off), keep the snapshot up to date
+        if (!isHidingMatches(btn)) rowSnapshot = { pair: pk, rows: getDiffRows().map(rowRecord) };
+        return true;
     }
     function attemptAutoResolve() {
         if (!isDedupReviewPage() || completionCardVisible()) { formWasAbsent = true; return; }
-        showMatchingRows();
         if (!getContactNames().filter(Boolean).length) return; // page still loading
         if (formWasAbsent) {
             formWasAbsent = false;
@@ -4311,6 +4321,7 @@
             delete document.body.dataset.csvScore;
             delete document.body.dataset.csvPoints;
         }
+        if (!readMatchingRows()) return; // the pair's rows are being read: decide nothing yet
         const blockers = getAllBlockers();
         applyBlockStyling(blockers);
         updateCsvSignal();
@@ -4657,10 +4668,6 @@
                 <div class="elm-level-desc elm-skip-desc">Skips blocked and out-of-range pairs with no popup. Off: stops on them instead.</div>
                 </div>
                 <div class="elm-item">
-                <div class="setting-row"><label>Read matching rows</label>${toggleHtml('elm-read-matching')}</div>
-                <div class="elm-level-desc">Keeps Element's "Hide matching items" switch off, so every row is on the page. Appeal and test keywords, School IDs and the department are then checked in rows both contacts share, too.</div>
-                </div>
-                <div class="elm-item">
                 <div class="setting-row"><label>Next after merge</label>${toggleHtml('elm-next-after-merge')}</div>
                 <div class="elm-level-desc elm-next-desc">After a merge (yours or an auto-merge), presses "Next duplicate" on the "Merge completed" card, and hides Element\'s own "Skip merge completion screen" switches (which would remove that card).</div>
                 </div>
@@ -4781,7 +4788,6 @@
         setupToggle('elm-auto-skip-blocked', 'elm_auto_skip_blocked', syncToasts);
         syncToasts();
         setupToggle('elm-next-after-merge', 'elm_next_after_merge');
-        setupToggle('elm-read-matching', 'elm_read_matching_rows', showMatchingRows);
         setupToggle('elm-highlight-rows', 'elm_highlight_rows');
         function setupToggle(elementId, storageKey, onChange, defaultValue = true) {
             const el = document.getElementById(elementId);

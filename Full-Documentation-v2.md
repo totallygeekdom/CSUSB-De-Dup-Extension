@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.301`, shown in the settings pane |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.302`, shown in the settings pane |
 | Element451 - Database v2 | `database-v2.js` | `@version 2.74` |
 | Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.17`, see [section 17](#17-database-merge) |
 
@@ -575,7 +575,7 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 - **Birth date mismatch -45** (UI 2.271): was -60.
 - **SCORING.md** (generated chart of the scoring system, kept in step by `npm test`; `npm run scoring` regenerates it).
 - **Applicant row highlight** (UI 2.298, 2.299): the row that identifies the applicant gets its own amber frame and tint on the applicant's side, over the band and outline.
-- **Matching rows are read (UI 2.297, 2.301)**: Element's "Hide matching items" switch leaves only the differing rows on the page, so an Appeal or test keyword, a School ID or a department marker in a row both contacts share went unseen, and the score had to take matching fields from Bolt's bullet list. For each new pair the script now turns the switch off, reads every row into a snapshot, and puts the switch back to the state it was in. The score, the blocker checks and the department check read the rows themselves; scoring no longer uses Bolt's bullet list. (2.297 kept the switch off with a setting in the pane; 2.300 kept it off with no setting; 2.301 restores it after the check.)
+- **Matching rows are read (UI 2.297, 2.301)**: Element's "Hide matching items" switch leaves only the differing rows on the page, so an Appeal or test keyword, a School ID or a department marker in a row both contacts share went unseen, and the score had to take matching fields from Bolt's bullet list. For each new pair the script now turns the switch off, reads every row into a snapshot, and puts the switch back to the state it was in. The score, the blocker checks and the department check read the rows themselves; scoring no longer uses Bolt's bullet list. (2.297 kept the switch off with a setting in the pane; 2.300 kept it off with no setting; 2.301 restores it after the check; 2.302 confirms each click by the switch changing state, and logs `[elm2] Matching rows:` lines to the console.)
 - **Bolt "different people" is -10, and takes back Bolt's bonus** (UI 2.295, 2.296): was -25. It now costs the same as Bolt's Low score, and when Bolt says different people the +10 (High) or +5 (Medium) it would have added is not given.
 - **Appeal and Forbidden checkboxes** (UI 2.294): two new checkboxes next to the departments under Allowed departments. Ticked, an Appeal or Forbidden pair is worked on instead of blocked (both default off, so nothing changes unless you tick them); the chip stays as a note and the Database script still records the pair as Appeal or Forbidden. Section 4.7.
 - **Forbidden names kept as hashes** (UI 2.293, and the v1 script): the hard-coded forbidden-name list is stored as SHA-256 hashes of the lower-case full name, so the names are no longer readable in the code or the docs. Blocking works as before (spaces inside a name are now collapsed before comparing).

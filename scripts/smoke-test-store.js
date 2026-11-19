@@ -68,7 +68,7 @@ const check = (ok, label) => { console.log((ok ? 'ok   ' : 'FAIL ') + label); if
 
     
     // A review page: UnderGrad, one side applied through Cal State Apply, Element's "Hide matching items" switch ON (so the matching rows,
-    // last name and birth date, are not in the page). The script turns the rows on, reads them, and puts the switch back.
+    // last name and birth date, are not in the page); like Element's, it changes state a moment after the click. The script turns the rows on, reads them, and puts the switch back.
     const row = (title, a, b) => '<div class="diff-row" style="display:flex;height:40px"><div class="diff-title">' + title + '</div><button type="button" class="diff-value-button" style="width:300px">' + a + '</button><div class="diff-actions"><button type="button" class="diff-action-button" title="Keep Contact A">A</button><button type="button" class="diff-action-button" title="Keep Contact B">B</button></div><button type="button" class="diff-value-button" style="width:300px">' + b + '</button></div>';
     const appPage = await context.newPage();
     const makeFixture = (matchingRows) => '<html><body><div class="bolt-navigation-right"><elm-universal-search>s</elm-universal-search></div><elm-duplicate-field-diff-form><div class="contact-card"><div class="contact-card-name">Ana Cruz</div></div><div class="contact-card"><div class="contact-card-name">Ana Cruz</div></div>'
@@ -76,7 +76,7 @@ const check = (ok, label) => { console.log((ok ? 'ok   ' : 'FAIL ') + label); if
         + '<bolt-card class="analysis-card"><bolt-card-body><div class="analysis-summary">Bolt thinks these are probably the same person.</div></bolt-card-body></bolt-card>'
         + '<bolt-slide-toggle class="hide-matching-items-toggle"><button class="mdc-switch mdc-switch--selected" role="switch" aria-checked="true"></button></bolt-slide-toggle>'
         + '<script>(function () { const b = document.querySelector(".hide-matching-items-toggle button"), rows = document.getElementById("rows"); window.__clicks = 0; const matching = ' + JSON.stringify(matchingRows) + ';'
-        + ' b.addEventListener("click", function () { window.__clicks++; const on = b.getAttribute("aria-checked") !== "true"; b.setAttribute("aria-checked", String(on)); b.classList.toggle("mdc-switch--selected", on); rows.querySelectorAll(".m").forEach(function (e) { e.remove(); }); if (!on) { const t = document.createElement("div"); t.innerHTML = matching; Array.from(t.children).forEach(function (c) { c.classList.add("m"); rows.appendChild(c); }); } }); })();</script></body></html>';
+        + ' b.addEventListener("click", function () { window.__clicks++; const on = b.getAttribute("aria-checked") !== "true"; setTimeout(function () { b.setAttribute("aria-checked", String(on)); b.classList.toggle("mdc-switch--selected", on); rows.querySelectorAll(".m").forEach(function (e) { e.remove(); }); if (!on) { const t = document.createElement("div"); t.innerHTML = matching; Array.from(t.children).forEach(function (c) { c.classList.add("m"); rows.appendChild(c); }); } }, 400); }); })();</script></body></html>';
     const fixture = makeFixture(row('Last name', 'Cruz', 'Cruz') + row('Date of birth', '2008-12-16', '2008-12-16'));
     await appPage.route('https://test.element451.io/applicant', r => r.fulfill({ contentType: 'text/html', body: fixture }));
     await appPage.goto('https://test.element451.io/applicant');

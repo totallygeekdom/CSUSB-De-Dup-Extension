@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.301
+// @version      2.302
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.301'; // keep in sync with @version
+    const VERSION = '2.302'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -4254,7 +4254,7 @@
     const isHidingMatches = (btn) => btn.getAttribute('aria-checked') === 'true' || btn.classList.contains('mdc-switch--selected');
     const rowRecord = (r) => ({ key: r.key, label: r.label, values: r.values.map(v => ({ textContent: v.textContent })), textContent: r.textContent, isConflict: r.isConflict, element: null });
     let rowSnapshot = { pair: '', rows: [] };
-    const peek = { pair: '', phase: 'done', wasHiding: false, since: 0, before: 0, clicked: 0, tries: 0, warned: false };
+    const peek = { pair: '', phase: 'done', wasHiding: false, since: 0, before: 0, clicked: 0, tries: 0, opened: 0, warned: false };
     // The rows on screen plus the ones the snapshot holds that are hidden right now (same order: the live rows first)
     function getCheckRows() {
         const live = getDiffRows();
@@ -4262,7 +4262,8 @@
         const seen = new Set(live.map(r => r.key));
         return live.concat(rowSnapshot.rows.filter(r => !seen.has(r.key)));
     }
-    // True once the pair's rows have been read (and the switch is back); false while that is still going on
+    // True once the pair's rows have been read (and the switch is back); false while that is still going on.
+    // Each click is confirmed by the switch changing state (Element updates it a moment after the click) and repeated if it did not.
     function readMatchingRows() {
         const pk = getPairKey();
         if (!pk) return true;
@@ -4273,22 +4274,34 @@
             return true;
         }
         const now = Date.now();
+        const giveUp = (why) => { console.log('[elm2] Matching rows: ' + why + ' (switch now ' + (isHidingMatches(btn) ? 'on' : 'off') + ')'); peek.phase = 'done'; return true; };
         if (peek.phase === 'start') {
             if (!isHidingMatches(btn)) { peek.phase = 'done'; return true; } // already showing every row: nothing to open
-            peek.wasHiding = true; peek.before = getDiffRows().length; peek.since = now; peek.clicked = now; peek.phase = 'opening';
+            peek.wasHiding = true; peek.before = getDiffRows().length; peek.since = now; peek.clicked = now; peek.tries = 0; peek.phase = 'opening';
+            console.log('[elm2] Matching rows: switch on, turning it off to read every row');
             btn.click();
             return false;
         }
         if (peek.phase === 'opening') {
-            if (getDiffRows().length <= peek.before && now - peek.since < 1500) return false; // the rows have not shown up yet
+            if (isHidingMatches(btn)) { // the switch has not changed yet
+                if (now - peek.clicked < 800) return false;
+                if (++peek.tries > 3) return giveUp('the switch did not turn off');
+                peek.clicked = now; btn.click();
+                return false;
+            }
+            if (!peek.opened) peek.opened = now;
+            if (getDiffRows().length <= peek.before && now - peek.opened < 1500) return false; // the rows have not shown up yet
             rowSnapshot = { pair: pk, rows: getDiffRows().map(rowRecord) };
-            peek.phase = 'closing'; peek.tries = 0; peek.since = now;
-            if (!isHidingMatches(btn)) { peek.clicked = now; btn.click(); }
+            console.log('[elm2] Matching rows: read ' + rowSnapshot.rows.length + ' rows (' + (rowSnapshot.rows.length - peek.before) + ' were hidden), putting the switch back on');
+            peek.opened = 0; peek.phase = 'closing'; peek.tries = 0; peek.clicked = now;
+            btn.click();
             return false;
         }
         if (peek.phase === 'closing') {
-            if (isHidingMatches(btn)) { peek.phase = 'done'; return true; }
-            if (now - peek.clicked > 800) { if (++peek.tries > 3) { peek.phase = 'done'; return true; } peek.clicked = now; btn.click(); }
+            if (isHidingMatches(btn)) { console.log('[elm2] Matching rows: switch is back on'); peek.phase = 'done'; return true; }
+            if (now - peek.clicked < 800) return false;
+            if (++peek.tries > 3) return giveUp('the switch did not turn back on');
+            peek.clicked = now; btn.click();
             return false;
         }
         // done: while the rows are showing (the switch was already off), keep the snapshot up to date

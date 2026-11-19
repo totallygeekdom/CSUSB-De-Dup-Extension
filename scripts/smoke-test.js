@@ -35,18 +35,23 @@ const check = (ok, label) => { console.log((ok ? 'ok   ' : 'FAIL ') + label); if
 
     check((await page.locator('#foot').innerText()).includes('Extension v'), 'footer shows the extension version');
 
-    // update chip: feed a fake newer release through storage and reopen
-    await sw.evaluate(() => chrome.storage.local.set({ shellUpdate: { version: '9.9.9', url: 'https://example.com/x.zip' } }));
-    await page.reload();
-    await page.waitForSelector('.chip', { timeout: 10000 });
+    // update chip: feed a fake newer release through storage and reopen.
+    // The install-time checks go to GitHub; on a machine with network they clear shellUpdate when no newer release exists, which
+    // can land just after the fake one is set. Let a full check run finish first, and set the fake one again if it was cleared.
+    await sw.evaluate(() => runChecks()).catch(() => {});
+    const setUpdate = async (version) => {
+        for (let i = 0; i < 5; i++) {
+            await sw.evaluate((v) => chrome.storage.local.set({ shellUpdate: { version: v, url: 'https://example.com/x.zip' } }), version);
+            await page.reload();
+            try { await page.waitForSelector('.chip', { timeout: 4000 }); return; } catch (e) { /* cleared by a check: set it again */ }
+        }
+        await page.waitForSelector('.chip', { timeout: 4000 });
+    };
+    await setUpdate('9.9.9');
     check((await page.locator('.chip').innerText()).includes('9.9.9'), 'update chip shows the new version');
-    await sw.evaluate(() => chrome.storage.local.set({ shellUpdate: { version: '9.9.9<img src=x onerror=window.__x=1>', url: 'https://example.com/x.zip' } }));
-    await page.reload();
-    await page.waitForSelector('.chip', { timeout: 10000 });
+    await setUpdate('9.9.9<img src=x onerror=window.__x=1>');
     check((await page.locator('.chip img').count()) === 0 && (await page.locator('.chip').innerText()).includes('<img'), 'the release version is shown as text, never as markup');
-    await sw.evaluate(() => chrome.storage.local.set({ shellUpdate: { version: '9.9.9', url: 'https://example.com/x.zip' } }));
-    await page.reload();
-    await page.waitForSelector('.chip', { timeout: 10000 });
+    await setUpdate('9.9.9');
     check((await page.locator('.stats, .stat').count()) === 0, 'the popup has no counter row');
     await page.click('.chip .x');
     await page.waitForSelector('.chip', { state: 'detached', timeout: 5000 });

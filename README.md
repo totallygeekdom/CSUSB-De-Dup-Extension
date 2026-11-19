@@ -85,7 +85,7 @@ the resolution rules, auto-merge, every website restyle, the database format, li
 
 ## Chrome Web Store edition
 
-A second build of the extension, made for the Chrome Web Store (`extension-store/`): no `userScripts` permission, nothing downloaded from GitHub, and the three scripts are bundled in the package, so the code that runs is the code the store reviewed and the **store delivers updates**. Access is only `*.element451.io`. It has its own version and its own releases (`store-vX.Y.Z`); see [STORE.md](STORE.md) for the listing text, the permission justifications and the release steps. The extension below stays as it is for people who load it unpacked.
+A second build of the extension, made for the Chrome Web Store (`extension-store/`): no `userScripts` permission, nothing downloaded from GitHub, and the three scripts are bundled in the package, so the code that runs is the code the store reviewed and the **store delivers updates**. Access is only `*.element451.io`. It has its own version and its own releases (`store-vX.Y.Z`); see [STORE.md](STORE.md) for the listing text, the permission justifications and the release steps, and [PRIVACY.md](PRIVACY.md) for the privacy policy (nothing is collected or sent anywhere). The extension below stays as it is for people who load it unpacked.
 
 ---
 

@@ -92,6 +92,8 @@ if (STORE) {
   if (perms !== 'scripting,storage') throw new Error('unexpected permissions: ' + perms);
   if ((manifest.host_permissions || []).join(',') !== 'https://*.element451.io/*') throw new Error('unexpected host permissions: ' + (manifest.host_permissions || []).join(','));
 }
+// the Chrome Web Store rejects a manifest description over 132 characters
+if (String(manifest.description || '').length > 132) throw new Error('manifest description is ' + manifest.description.length + ' characters; the Chrome Web Store allows 132');
 for (const f of [manifest.background.service_worker, manifest.action.default_popup, ...Object.values(manifest.icons)]) {
   if (!fs.existsSync(path.join(UNPACKED, f))) throw new Error('manifest points at a missing file: ' + f);
 }

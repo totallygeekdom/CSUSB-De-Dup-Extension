@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.297
+// @version      2.298
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.297'; // keep in sync with @version
+    const VERSION = '2.298'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -616,6 +616,15 @@
             background-color: #fff9c4 !important;
             outline: 3px solid #f9a825;
             outline-offset: -3px;
+        }
+        #elm2-applicant-row-mark {
+            position: absolute;
+            box-sizing: border-box;
+            border: 3px solid #e65100;
+            border-radius: 4px;
+            background: rgba(249, 168, 37, 0.30);
+            pointer-events: none;
+            z-index: 3;
         }
         #elm2-applicant-outline {
             position: absolute;
@@ -3134,6 +3143,17 @@
         return null;
     }
     const CAS_ID_RE = /\bcas[\s_-]*id\s*[:=]?\s*\d{5,}/i;
+    // The row that shows the applicant: the first Cal State Apply / application row the applicant side has (the same rows
+    // findApplicantSide reads), else the row with its CAS ID. It gets an extra highlight on top of the applicant band.
+    function findApplicantRow(side) {
+        if (!side) return null;
+        const i = side === 'left' ? 0 : 1;
+        const rows = getDiffRows();
+        const appRe = /type:\s*(Application Start|Application Submit|Application Complete|Admit)/i;
+        const byApplication = rows.find(r => r.values[i].textContent.includes('Cal State Apply Application') || appRe.test(r.values[i].textContent));
+        if (byApplication) return byApplication;
+        return rows.find(r => CAS_ID_RE.test(r.values[i].textContent) || (/\bcas\b|cal state apply id/i.test(r.label || '') && /\d{5,}/.test(r.values[i].textContent))) || null;
+    }
     // The profile that was created later, from the "Created <date>" line on each contact card (A = left,
     // B = right). Returns 'left' / 'right', or null if either date is missing or they are equal.
     function getMostRecentProfileSide() {
@@ -3437,6 +3457,8 @@
         });
         const o = document.getElementById('elm2-applicant-outline');
         if (o) o.remove();
+        const m = document.getElementById('elm2-applicant-row-mark');
+        if (m) m.remove();
     }
     // Medium and Low score chips get a solid orange / red fill with white text, like High.
     // Applied as inline !important on the chip because Element451's own per-level fill
@@ -3525,6 +3547,19 @@
         outline.style.top = (top - formRect.top + formEl.scrollTop) + 'px';
         outline.style.width = (right - left) + 'px';
         outline.style.height = (bottom - top) + 'px';
+
+        // The applicant row gets an extra highlight over the band and the outline (a darker amber frame and a tint across the whole
+        // row, so the two overlap instead of one hiding the other).
+        const appRow = findApplicantRow(side);
+        let mark = document.getElementById('elm2-applicant-row-mark');
+        const rowRect = appRow && appRow.element.getBoundingClientRect();
+        if (!rowRect || !rowRect.width) { if (mark) mark.remove(); return; }
+        if (!mark) { mark = document.createElement('div'); mark.id = 'elm2-applicant-row-mark'; }
+        if (mark.parentElement !== formEl) formEl.appendChild(mark);
+        mark.style.left = (rowRect.left - formRect.left + formEl.scrollLeft) + 'px';
+        mark.style.top = (rowRect.top - formRect.top + formEl.scrollTop) + 'px';
+        mark.style.width = rowRect.width + 'px';
+        mark.style.height = rowRect.height + 'px';
     }
     function annotateRowColors() {
         resetStaleRows();

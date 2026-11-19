@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.297`, shown in the settings pane |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.298`, shown in the settings pane |
 | Element451 - Database v2 | `database-v2.js` | `@version 2.74` |
 | Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.17`, see [section 17](#17-database-merge) |
 
@@ -319,7 +319,7 @@ All of these are CSS/DOM additions made by the main script. Colours use a Materi
 ### 10.1 Review pair
 
 - **Pick colours** (Highlight Rows): on a row where Bolt and we agree, the chosen value is **green**; on a row where we differ, Bolt's pick is **blue** and ours is **orange**; rows where our rules have no opinion keep Element's default styling. There are no legends or text badges, and arrows are never restyled.
-- **Applicant band**: with an applicant side, that contact's card is outlined and a yellow band marks that side's column of values (disabled on blocked pairs).
+- **Applicant band**: with an applicant side, that contact's card is outlined and a yellow band marks that side's column of values (disabled on blocked pairs). The row that shows the applicant (the first Cal State Apply / application row that side has, else its CAS ID row) gets an extra highlight on top: a darker amber frame and a tint across the whole row, layered over the band and the outline so they overlap.
 - **Comparison bar** under the contact header: a one-line status ("Our N suggestion(s) match Bolt's picks (x conflicting of y fields)" / "⚠ n of N suggestions differ from Bolt's picks" / "automation is off", etc.) plus two buttons: **Use Bolt AI picks** and **Use our picks**. It is **pinned**: while the field list scrolls it stays just under the Previous / position / Next bar (sticky; the form's `overflow: hidden` is swapped for `overflow: clip` so it can stick), The bar is a white card with a thin outline; while it is pinned it also gets a stronger shadow and a white strip above it, so it stands out from the grey navigation bar.
 - **Hover preview**: hovering (or focusing) either button highlights in blue exactly what it would select on the rows it would change, with the other values neutral; the green/blue/orange pick colours are hidden meanwhile. Disabled on blocked pairs.
 - **Score chips** (High / Medium / Low): High stays green; Medium is orange and Low is red, applied inline with `!important` because Element's per-level rules override stylesheets.
@@ -574,6 +574,7 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 - **ID weights ±120** (UI 2.272): a matching Coyote ID or CAS ID is +120 and different ones are -120 (were +100 / -100 and +80 / -80).
 - **Birth date mismatch -45** (UI 2.271): was -60.
 - **SCORING.md** (generated chart of the scoring system, kept in step by `npm test`; `npm run scoring` regenerates it).
+- **Applicant row highlight** (UI 2.298): the row that identifies the applicant gets its own amber frame and tint, over the band and outline.
 - **Read matching rows** (UI 2.297): Element's "Hide matching items" switch leaves only the differing rows on the page, so an Appeal or test keyword, a School ID or a department marker in a row both contacts share went unseen. A new switch in the settings pane (*Read matching rows*, `elm_read_matching_rows`, on by default) keeps Element's switch off so every row is on the page for the blocker and department checks. Turn it off to keep Element's own setting.
 - **Bolt "different people" is -10, and takes back Bolt's bonus** (UI 2.295, 2.296): was -25. It now costs the same as Bolt's Low score, and when Bolt says different people the +10 (High) or +5 (Medium) it would have added is not given.
 - **Appeal and Forbidden checkboxes** (UI 2.294): two new checkboxes next to the departments under Allowed departments. Ticked, an Appeal or Forbidden pair is worked on instead of blocked (both default off, so nothing changes unless you tick them); the chip stays as a note and the Database script still records the pair as Appeal or Forbidden. Section 4.7.

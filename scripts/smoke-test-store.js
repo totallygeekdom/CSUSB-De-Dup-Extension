@@ -70,6 +70,21 @@ const check = (ok, label) => { console.log((ok ? 'ok   ' : 'FAIL ') + label); if
     await site.waitForFunction(() => document.querySelector('.hide-matching-items-toggle button').getAttribute('aria-checked') === 'false', null, { timeout: 15000 }).catch(() => {});
     check(await site.evaluate(() => document.querySelector('.hide-matching-items-toggle button').getAttribute('aria-checked')) === 'false', 'the "Hide matching items" switch is turned off so matching rows are on the page');
 
+    // The applicant row gets an extra highlight over the applicant band (a page with a diff form: UnderGrad, one side applied through Cal State Apply)
+    const row = (title, a, b) => '<div class="diff-row" style="display:flex;height:40px"><div class="diff-title">' + title + '</div><button class="diff-value-button" style="width:300px">' + a + '</button><div class="diff-actions"><button class="diff-action-button" title="Keep Contact A">A</button><button class="diff-action-button" title="Keep Contact B">B</button></div><button class="diff-value-button" style="width:300px">' + b + '</button></div>';
+    const appPage = await context.newPage();
+    await appPage.route('https://test.element451.io/applicant', r => r.fulfill({ contentType: 'text/html', body: '<html><body><div class="bolt-navigation-right"><elm-universal-search>s</elm-universal-search></div><elm-duplicate-field-diff-form><form class="diff-form" style="width:900px"><div class="diff-header" style="height:30px">header</div>' + row('First name', 'Ana', 'Anna') + row('Workflows', '-', 'Cal State Apply Application, type: Application Submit') + row('Phone', '3105550101', '9515550101') + '</form></elm-duplicate-field-diff-form></body></html>' }));
+    await appPage.goto('https://test.element451.io/applicant');
+    await appPage.waitForSelector('#elm2-applicant-row-mark', { timeout: 15000 }).catch(() => {});
+    await appPage.waitForTimeout(2500); // the script adds its comparison bar above the form; the highlight follows on the next tick
+    const marks = await appPage.evaluate(() => {
+        const m = document.getElementById('elm2-applicant-row-mark'), o = document.getElementById('elm2-applicant-outline'), rows = Array.from(document.querySelectorAll('.diff-row'));
+        const r = rows[1].getBoundingClientRect(), f = document.querySelector('form.diff-form').getBoundingClientRect(), mr = m && m.getBoundingClientRect();
+        return { mark: !!m, outline: !!o, bands: rows.filter(x => x.dataset.elm2Band).length, onRow: !!mr && Math.abs(mr.top - r.top) < 2 && Math.abs(mr.height - r.height) < 2, over: !!mr && !!o && mr.right > o.getBoundingClientRect().left && mr.left < o.getBoundingClientRect().right && mr.top >= o.getBoundingClientRect().top && mr.bottom <= o.getBoundingClientRect().bottom && parseInt(getComputedStyle(m).zIndex, 10) > parseInt(getComputedStyle(o).zIndex, 10) };
+    });
+    check(marks.mark && marks.outline && marks.bands === 3 && marks.onRow && marks.over, 'the applicant row gets an extra highlight over the band and the outline (' + JSON.stringify(marks) + ')');
+    await appPage.close();
+
     await site.click('#elm-settings-btn');
     await site.waitForFunction(() => document.querySelectorAll('#elm-settings-pane .settings-build').length >= 4, null, { timeout: 15000 }).catch(() => {});
     const lines = await site.$$eval('#elm-settings-pane .settings-build', els => els.map(e => e.textContent));

@@ -104,6 +104,7 @@ const check = (ok, label) => { console.log((ok ? 'ok   ' : 'FAIL ') + label); if
     await site.waitForFunction(() => window.__elm451UiPerfectionLoaded && window.__elm451CsvDatabaseLoaded && window.__elm451DbMergeLoaded, null, { timeout: 15000 }).catch(() => {});
 
     // the in-page settings pane lists main script, database script and extension versions
+    
     await site.click('#elm-settings-btn');
     await site.waitForFunction(() => document.querySelectorAll('#elm-settings-pane .settings-build').length >= 4, null, { timeout: 15000 }).catch(() => {});
     const lines = await site.$$eval('#elm-settings-pane .settings-build', els => els.map(e => e.textContent));

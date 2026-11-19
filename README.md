@@ -83,6 +83,12 @@ the resolution rules, auto-merge, every website restyle, the database format, li
 
 ---
 
+## Chrome Web Store edition
+
+A second build of the extension, made for the Chrome Web Store (`extension-store/`): no `userScripts` permission, nothing downloaded from GitHub, and the three scripts are bundled in the package, so the code that runs is the code the store reviewed and the **store delivers updates**. Access is only `*.element451.io`. It has its own version and its own releases (`store-vX.Y.Z`); see [STORE.md](STORE.md) for the listing text, the permission justifications and the release steps. The extension below stays as it is for people who load it unpacked.
+
+---
+
 ## Chrome extension (optional)
 
 The v2 scripts can also run as an unpacked Chrome / Edge extension that updates them from GitHub every time Chrome starts, with a popup to switch each script on or off.

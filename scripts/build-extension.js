@@ -1,6 +1,11 @@
 // Builds the Chrome extension: copies extension/ and the two userscripts into dist/extension/ (load that folder
 // unpacked) and zips it to dist/elm451-dedup-tools-v<version>.zip. No dependencies; plain Node.
 // The version comes from EXT_VERSION (the release workflow sets it from the tag) or extension/manifest.json.
+//
+// `--store` builds the Chrome Web Store edition instead: extension-store/ (its own manifest, service worker and popup;
+// icons and popup.css are shared with extension/) into dist-store/. It has no userScripts permission and downloads
+// nothing: the scripts are the bundled files, registered as content scripts, and the Web Store delivers updates. It has
+// its own version (extension-store/manifest.json) and its zip is named elm451-dedup-tools-store-v<version>.zip.
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -8,8 +13,9 @@ const zlib = require('zlib');
 const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
-const SRC = path.join(ROOT, 'extension');
-const OUT = path.join(ROOT, 'dist');
+const STORE = process.argv.includes('--store');
+const SRC = path.join(ROOT, STORE ? 'extension-store' : 'extension');
+const OUT = path.join(ROOT, STORE ? 'dist-store' : 'dist');
 const UNPACKED = path.join(OUT, 'extension');
 const SCRIPTS = ['Element451-UI-Perfection-v2.user.js', 'database-v2.js', 'database-merge-v2.js'];
 
@@ -54,6 +60,7 @@ function zip(dir, files, outFile) {
 }
 
 fs.rmSync(OUT, { recursive: true, force: true });
+if (STORE) { copyDir(path.join(ROOT, 'extension', 'icons'), path.join(UNPACKED, 'icons')); fs.copyFileSync(path.join(ROOT, 'extension', 'popup.css'), path.join(UNPACKED, 'popup.css')); }
 copyDir(SRC, UNPACKED);
 fs.mkdirSync(path.join(UNPACKED, 'scripts'), { recursive: true });
 const versions = {};
@@ -66,22 +73,31 @@ for (const s of SCRIPTS) {
   const shown = code.match(/const VERSION = '([^']+)'/);
   if (shown && shown[1] !== m[1]) throw new Error(s + ': const VERSION is ' + shown[1] + ' but @version is ' + m[1]);
   versions[s] = m[1];
-  fs.writeFileSync(path.join(UNPACKED, 'scripts', s), code);
+  // Tampermonkey's update lines mean nothing here, and the store edition downloads nothing: they are left out of the package
+  fs.writeFileSync(path.join(UNPACKED, 'scripts', s), STORE ? code.replace(/^\/\/ @(updateURL|downloadURL)\s.*\n/gm, '') : code);
 }
 for (const f of ['background.js', 'popup.js']) new vm.Script(fs.readFileSync(path.join(UNPACKED, f), 'utf8'), { filename: f });
 
 const manifestPath = path.join(UNPACKED, 'manifest.json');
 const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-const version = (process.env.EXT_VERSION || manifest.version).replace(/^v/, '');
+const version = ((STORE ? '' : process.env.EXT_VERSION) || manifest.version).replace(/^v/, '');
 if (!/^\d+(\.\d+){0,3}$/.test(version)) throw new Error('bad version: ' + version);
 manifest.version = version;
 fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
+if (STORE) {
+  // tells the page which extension version is running (the scripts show it in their settings pane); runs before each script
+  fs.writeFileSync(path.join(UNPACKED, 'scripts', 'ext-version.js'), 'window.__elm451Extension = ' + JSON.stringify(version) + ';\n');
+  // the store edition asks for no more than it needs: no userScripts, no GitHub, nothing but the Element451 host
+  const perms = (manifest.permissions || []).slice().sort().join(',');
+  if (perms !== 'scripting,storage') throw new Error('unexpected permissions: ' + perms);
+  if ((manifest.host_permissions || []).join(',') !== 'https://*.element451.io/*') throw new Error('unexpected host permissions: ' + (manifest.host_permissions || []).join(','));
+}
 for (const f of [manifest.background.service_worker, manifest.action.default_popup, ...Object.values(manifest.icons)]) {
   if (!fs.existsSync(path.join(UNPACKED, f))) throw new Error('manifest points at a missing file: ' + f);
 }
 
-const zipName = 'elm451-dedup-tools-v' + version + '.zip';
+const zipName = 'elm451-dedup-tools-' + (STORE ? 'store-' : '') + 'v' + version + '.zip';
 zip(UNPACKED, listFiles(UNPACKED), path.join(OUT, zipName));
 console.log('Built ' + zipName + ' (' + listFiles(UNPACKED).length + ' files)');
 console.log('Scripts: ' + Object.entries(versions).map(([k, v]) => k + ' ' + v).join(', '));
-console.log('Unpacked folder: dist/extension');
+console.log('Unpacked folder: ' + path.relative(ROOT, UNPACKED));

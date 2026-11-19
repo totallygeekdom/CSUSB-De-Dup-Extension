@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.307
+// @version      2.308
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.307'; // keep in sync with @version
+    const VERSION = '2.308'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -235,8 +235,8 @@
         .elm2-an-views { margin-left: auto; display: inline-flex; border: 1px solid rgba(26, 28, 32, .24); border-radius: 12px; overflow: hidden; }
         .elm2-an-toggle { padding: 2px 10px; border: 0; border-left: 1px solid rgba(26, 28, 32, .24); background: transparent; color: #434750; font: inherit; font-size: 12px; line-height: 18px; cursor: pointer; }
         .elm2-an-toggle:first-child { border-left: 0; }
-        .elm2-an-toggle:hover { background: rgba(26, 28, 32, .06); }
-        .elm2-an-toggle[aria-pressed="true"] { background: #dbe1ff; color: #001849; font-weight: 600; }
+        .elm2-an-toggle:hover { background: color-mix(in srgb, var(--md-primary) 10%, transparent); }
+        .elm2-an-toggle[aria-pressed="true"] { background: var(--md-primary-container); color: var(--md-on-primary-container); font-weight: 600; }
         /* the points view: one row per rule that applied, the total and why that total is the rating it is */
         .elm2-an-table { width: 100%; border-collapse: collapse; font-size: 12.5px; line-height: 17px; color: #434750; margin: 0 0 6px; }
         .elm2-an-table th { text-align: left; font-weight: 600; color: #1a1c20; padding: 3px 6px; border-bottom: 1px solid rgba(26, 28, 32, .24); }

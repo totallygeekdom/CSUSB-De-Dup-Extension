@@ -102,6 +102,15 @@ const check = (ok, label) => { console.log((ok ? 'ok   ' : 'FAIL ') + label); if
     const appealInfo = await appealPage.evaluate(() => ({ blocked: document.body.classList.contains('elm2-blocked'), switch: document.querySelector('.hide-matching-items-toggle button').getAttribute('aria-checked'), flag: !!document.querySelector('.elm2-an-flag[data-flag="appeal"]') }));
     check(appealInfo.blocked && appealInfo.flag && appealInfo.switch === 'true', 'an "appeal" in a matching (hidden) row blocks the pair, and the switch is back on (' + JSON.stringify(appealInfo) + ')');
     await appealPage.close();
+    // different School IDs: the pair is blocked, and the Forbidden chip shows (the list's badge says Forbidden for them too)
+    const idPage = await context.newPage();
+    await idPage.route('https://test.element451.io/ids', r => r.fulfill({ contentType: 'text/html', body: makeFixture(row('Identities', 'School Id: 009000001', 'School Id: 009000002')) }));
+    await idPage.goto('https://test.element451.io/ids');
+    await idPage.waitForSelector('.elm2-an-flag[data-flag="forbidden"]', { timeout: 15000 }).catch(() => {});
+    await idPage.waitForFunction(() => document.body.classList.contains('elm2-blocked'), null, { timeout: 15000 }).catch(() => {});
+    const idInfo = await idPage.evaluate(() => { const f = document.querySelector('.elm2-an-flag[data-flag="forbidden"]'); return { chip: f ? f.textContent : null, blocked: document.body.classList.contains('elm2-blocked') }; });
+    check(idInfo.chip === 'Forbidden' && idInfo.blocked, 'different School IDs: the pair is blocked and shows a Forbidden chip (' + JSON.stringify(idInfo) + ')');
+    await idPage.close();
 
     await site.click('#elm-settings-btn');
     await site.waitForFunction(() => document.querySelectorAll('#elm-settings-pane .settings-build').length >= 4, null, { timeout: 15000 }).catch(() => {});

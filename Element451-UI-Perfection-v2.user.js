@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.302
+// @version      2.303
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.302'; // keep in sync with @version
+    const VERSION = '2.303'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -2771,8 +2771,12 @@
             flags.push({ flag: test ? 'test' : 'forbidden', text: test ? 'Test' : 'Forbidden name', blocked: !ok, title: (ok ? 'Note: ' : 'Blocked: ') + why + (ok ? '. Forbidden pairs are allowed in your settings, so this pair is not blocked.' : '. This pair cannot be merged.') });
             notes.push(ok ? 'Note: ' + why + '. Forbidden pairs are allowed in your settings, so this pair is not blocked.' : 'Blocked: ' + why + ', so this pair cannot be merged.');
         }
-        // Different School IDs: no chip or line of its own, since the score already counts them (different Coyote IDs, -120, a hard
-        // conflict that caps the pair at Low) and the write-up says so. The pair is still blocked from merging.
+        // Different School IDs: the list's badge says Forbidden for them, so the chip does too (the score also counts them: different
+        // Coyote IDs are -120, a hard conflict that caps the pair at Low). The pair is blocked from merging.
+        if (!forbidden && has('student-id-mismatch')) {
+            flags.push({ flag: 'forbidden', text: 'Forbidden', blocked: true, title: 'Blocked: the two contacts have different School IDs. This pair cannot be merged.' });
+            notes.push('Blocked: the two contacts have different School IDs, so this pair cannot be merged.');
+        }
         return { flags, notes };
     }
     // Why the total is the rating it is, in one sentence (the rules of scoreSlots).

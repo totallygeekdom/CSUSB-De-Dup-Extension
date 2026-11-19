@@ -1,6 +1,6 @@
 name: Chrome extension
 
-# Every pull request and every push to main: build the extension, smoke-test it in Chromium and keep the zip as a downloadable
+# Every pull request and every push to main: build the extension, run the tests that need no browser and keep the zip as a downloadable
 # artifact on the run (a test build, no release needed). On main or a tag like v1.0.1, if the extension's version has no
 # GitHub Release yet, the zip is published as one. The userscripts themselves are not bundled by hand: the build copies them from the repo root.
 on:
@@ -14,7 +14,6 @@ permissions:
 
 jobs:
   build:
-    # Pinned: ubuntu-latest moved to Ubuntu 26.04, which Playwright 1.56 cannot install Chromium (and its system packages) on.
     runs-on: ubuntu-24.04
     permissions:
       contents: write   # to create the release on a tag
@@ -39,13 +38,9 @@ jobs:
       - name: Build store edition
         run: node scripts/build-extension.js --store
 
-      - name: Install test browser
-        run: |
-          npm install --no-audit --no-fund
-          npx playwright install --with-deps chromium
-
-      - name: Smoke test
-        run: npm test
+      # The tests that need no browser (the browser smoke tests stay available locally: npm run test:smoke).
+      - name: Test
+        run: npm run test:ci
 
       - name: Upload zip as an artifact
         uses: actions/upload-artifact@v4

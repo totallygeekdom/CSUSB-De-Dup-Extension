@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - Database v2
 // @namespace    http://tampermonkey.net/
-// @version      2.74
+// @version      2.75
 // @description  Tracks duplicate entries in a database stored in browser localStorage (exports a password-protected .xlsx spreadsheet to share, or a personal .elmdb file locked to your Element451 login) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -15,7 +15,7 @@
     if (window.__elm451CsvDatabaseLoaded) return;
     window.__elm451CsvDatabaseLoaded = true;
 
-    const VERSION = '2.74'; // keep in sync with @version (the build checks it)
+    const VERSION = '2.75'; // keep in sync with @version (the build checks it)
     const STORAGE_KEY = 'elm_csv_database';
     const UI_KEY = 'elm_show_db_ui';
     function showDbUi() { try { return localStorage.getItem(UI_KEY) !== 'false'; } catch (e) { return true; } }
@@ -949,7 +949,7 @@
             DB_COLUMNS.forEach((c, i) => {
                 if (c.key === 'score' && XL_PAINT.some(x => x[0] === 'score:' + r[i].toLowerCase())) r.paint.set(i, 'score:' + r[i].toLowerCase());
                 if (c.key === 'dept' && XL_PAINT.some(x => x[0] === 'dept:' + r[i])) r.paint.set(i, 'dept:' + r[i]);
-                if (c.key === 'choice' && /^Applicant/i.test(r[i])) r.paint.set(i, 'applicant');
+                if (c.key === 'choice' && /^(Applicant|Coyote ID)/i.test(r[i])) r.paint.set(i, 'applicant');
                 if (c.key === 'scanDate' && /^\d{4}-\d{2}-\d{2}$/.test(r[i])) r.dates.add(i);
                 if (c.key === 'points' && r[i] !== '') r.nums.add(i);
                 if ((c.key === 'sparkId1' || c.key === 'sparkId2') && e.lostSpark && r[i] === e.lostSpark) r.struck.add(i);

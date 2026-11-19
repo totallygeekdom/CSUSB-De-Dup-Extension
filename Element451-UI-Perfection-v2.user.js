@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.288
+// @version      2.289
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.288'; // keep in sync with @version
+    const VERSION = '2.289'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -2754,13 +2754,15 @@
     function pointsTable(res) {
         const t = document.createElement('table'); t.className = 'elm2-an-table';
         const head = t.createTHead().insertRow();
-        // one sentence per rule (it names the field itself, so there is no separate field column)
+        // one sentence per rule (it names the field itself, so there is no separate field column), and a tag on the strong matches
         ['What we found', 'Points'].forEach((h, i) => { const th = document.createElement('th'); th.textContent = h; if (i === 1) th.className = 'elm2-an-num'; head.appendChild(th); });
         const body = t.createTBody();
         res.items.forEach(i => {
             const r = body.insertRow();
             const what = r.insertCell();
             what.textContent = i.phrase.charAt(0).toUpperCase() + i.phrase.slice(1);
+            // strong matches (an ID, birth date, exact email, phone, address) are tagged for information; the rating is the points alone
+            if (i.slot && SLOT_STRONG.includes(i.slot)) { const tag = document.createElement('span'); tag.className = 'elm2-an-strong'; tag.textContent = 'strong match'; what.append(' ', tag); }
             const c = r.insertCell(); c.className = 'elm2-an-num ' + (i.pts > 0 ? 'elm2-an-plus' : i.pts < 0 ? 'elm2-an-minus' : '');
             c.textContent = (i.pts > 0 ? '+' : '') + i.pts;
         });

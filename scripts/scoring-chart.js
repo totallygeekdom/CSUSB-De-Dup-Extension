@@ -9,7 +9,9 @@ const ROOT = path.join(__dirname, '..');
 const src = fs.readFileSync(path.join(ROOT, 'Element451-UI-Perfection-v2.user.js'), 'utf8');
 const a = src.indexOf('// ---- SCORE ENGINE START'), b = src.indexOf('// ---- SCORE ENGINE END');
 if (a < 0 || b < a) { console.error('SCORE ENGINE markers not found in the userscript'); process.exit(1); }
-const { scorePair, SCORE_W: W, SCORE_CUT: CUT } = new Function(src.slice(a, b) + '\nreturn { scorePair, SCORE_W, SCORE_CUT };')();
+const { scorePair, SCORE_W: W, SCORE_CUT: CUT, SLOT_STRONG } = new Function(src.slice(a, b) + '\nreturn { scorePair, SCORE_W, SCORE_CUT, SLOT_STRONG };')();
+// the Strong match column comes from the engine's own list, so it cannot drift from what the Points view tags
+const strong = (slot, note) => SLOT_STRONG.includes(slot) ? '**Yes**' + (note ? ' (' + note + ')' : '') : '';
 
 const n = (v) => (v > 0 ? '+' : v < 0 ? '-' : '') + Math.abs(v);
 
@@ -86,22 +88,25 @@ is out of date, so the numbers below are what runs. To change a number, edit \`S
 
 A field only counts when **both** records have it; a missing field scores 0 and is never held against a pair.
 
-| Field | Match | Mismatch |
-|---|---|---|
-| Coyote ID (School Id, or the number of a coyote.csusb.edu email) | ${n(W.coyote[0])} | ${n(W.coyote[1])} (hard conflict; not when one ID comes from an email) |
-| CAS ID | ${n(W.cas[0])} | ${n(W.cas[1])}, not a hard conflict (a student can have several applications) |
-| Date of birth | ${n(W.dob[0])} | ${n(W.dob[1])}, not a hard conflict (one typo or a day/month swap: ${n(W.dobTypo[1])}) |
-| Email | ${n(W.email[0])} exact; ${n(W.emailName[0])} same name part (another domain, or only the numbers differ: maria.soto444 / maria.soto1111) | ${n(0)} (people have several) |
-| Phone | ${n(W.phone[0])} | ${n(0)} |
-| First name | ${n(W.first[0])} same; ${n(W.firstRelated[0])} nickname, initial or prefix | ${n(W.first[1])} |
-| Last name | ${n(W.last[0])} same; ${n(W.lastPartial[0])} overlapping | ${n(W.last[1])} |
-| Address (the page's own comparer) | ${n(W.address[0])} | ${n(W.address[1])} (people move) |
-| Student type, academic level, school attended | ${n(W.soft[0])} each | ${n(0)} |
-| Gender | ${n(W.gender[0])} | ${n(W.gender[1])} (it can be missing, updated or entered wrong) |
-| Name of the other record found in an email address (counted whether or not the names match) | ${n(W.emailNameFull)} first + last name, ${n(W.emailNamePartial)} first 3+ letters + last name (mar.soto), ${n(W.emailNameInitial)} first initial + last name, ${n(W.emailNameOne)} first or last name alone (capped at ${n(W.emailNameCap)} for the pair) | none |
-| Birth date found in an email address | ${n(W.emailDobFull)} full date that matches, ${n(W.emailDobYear)} birth year | ${n(W.emailDobConflict)} (a full date that disagrees) |
-| Bolt's own score | High ${n(W.boltHigh)}, Medium ${n(W.boltMedium)} | Low ${n(W.boltLow)}; Bolt says "different people" ${n(W.boltDifferent)} |
-| Applicant with no Coyote ID vs a contact that has one | none | ${n(W.applicantVsCoyote)} |
+**Strong match** marks the matches that point to one person rather than a household: an ID, the birth date, the exact email, the phone and the address. They are tagged in the
+Points view too. They are shown for information only: the rating is the points alone.
+
+| Field | Match | Mismatch | Strong match |
+|---|---|---|---|
+| Coyote ID (School Id, or the number of a coyote.csusb.edu email) | ${n(W.coyote[0])} | ${n(W.coyote[1])} (hard conflict; not when one ID comes from an email) | ${strong('coyote.0')} |
+| CAS ID | ${n(W.cas[0])} | ${n(W.cas[1])}, not a hard conflict (a student can have several applications) | ${strong('cas.0')} |
+| Date of birth | ${n(W.dob[0])} | ${n(W.dob[1])}, not a hard conflict (one typo or a day/month swap: ${n(W.dobTypo[1])}) | ${strong('dob.0')} |
+| Email | ${n(W.email[0])} exact; ${n(W.emailName[0])} same name part (another domain, or only the numbers differ: maria.soto444 / maria.soto1111) | ${n(0)} (people have several) | ${strong('email.0', 'exact only')} |
+| Phone | ${n(W.phone[0])} | ${n(0)} | ${strong('phone.0')} |
+| First name | ${n(W.first[0])} same; ${n(W.firstRelated[0])} nickname, initial or prefix | ${n(W.first[1])} | ${strong('first.0')} |
+| Last name | ${n(W.last[0])} same; ${n(W.lastPartial[0])} overlapping | ${n(W.last[1])} | ${strong('last.0')} |
+| Address (the page's own comparer) | ${n(W.address[0])} | ${n(W.address[1])} (people move) | ${strong('address.0')} |
+| Student type, academic level, school attended | ${n(W.soft[0])} each | ${n(0)} | ${strong('soft.0')} |
+| Gender | ${n(W.gender[0])} | ${n(W.gender[1])} (it can be missing, updated or entered wrong) | ${strong('gender.0')} |
+| Name of the other record found in an email address (counted whether or not the names match) | ${n(W.emailNameFull)} first + last name, ${n(W.emailNamePartial)} first 3+ letters + last name (mar.soto), ${n(W.emailNameInitial)} first initial + last name, ${n(W.emailNameOne)} first or last name alone (capped at ${n(W.emailNameCap)} for the pair) | none | ${strong('emailNameFull')} |
+| Birth date found in an email address | ${n(W.emailDobFull)} full date that matches, ${n(W.emailDobYear)} birth year | ${n(W.emailDobConflict)} (a full date that disagrees) | ${strong('emailDobFull')} |
+| Bolt's own score | High ${n(W.boltHigh)}, Medium ${n(W.boltMedium)} | Low ${n(W.boltLow)}; Bolt says "different people" ${n(W.boltDifferent)} | ${strong('boltHigh')} |
+| Applicant with no Coyote ID vs a contact that has one | none | ${n(W.applicantVsCoyote)} | |
 
 There is no twin-pattern rule: first names that differ cost the first-name penalty and nothing more.
 

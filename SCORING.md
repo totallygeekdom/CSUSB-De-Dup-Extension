@@ -15,7 +15,7 @@ Points view too. They are shown for information only: the rating is the points a
 | Field | Match | Mismatch | Strong match |
 |---|---|---|---|
 | Coyote ID (School Id, or the number of a coyote.csusb.edu email) | +120 | -120 (hard conflict; not when one ID comes from an email) | **Yes** |
-| CAS ID | +120 | -25, not a hard conflict (a student can have several applications) | **Yes** |
+| CAS ID | +120 | -18, not a hard conflict (a student can have several applications) | **Yes** |
 | Date of birth | +40 | -45, not a hard conflict (one typo or a day/month swap: -20) | **Yes** |
 | Email | +40 exact; +15 same name part (another domain, or only the numbers differ: maria.soto444 / maria.soto1111) | 0 (people have several) | **Yes** (exact only) |
 | Phone | +25 | 0 | **Yes** |
@@ -69,9 +69,9 @@ Each row is run through the live engine (the Bolt score is not included unless t
 | Same name + address + DOB, applicant vs a contact with a Coyote ID | 55 | Medium |
 | Siblings (same last name, address, family email; different first name) | 54 | Medium |
 | Jr./Sr. with clearly different DOBs | 54 | Medium |
+| Different CAS IDs, same name and birth date | 52 | Medium |
 | Twins (same last name, DOB, address; different first name) | 50 | Medium |
 | Same first name, overlapping last names, emails differing only in the numbers (maria.soto444 / maria.soto1111) | 47 | Medium |
-| Different CAS IDs, same name and birth date | 45 | Medium |
 
 ## Examples of Low scores
 

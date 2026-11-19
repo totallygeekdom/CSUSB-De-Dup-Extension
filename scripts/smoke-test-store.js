@@ -71,6 +71,13 @@ const check = (ok, label) => { console.log((ok ? 'ok   ' : 'FAIL ') + label); if
     const lines = await site.$$eval('#elm-settings-pane .settings-build', els => els.map(e => e.textContent));
     check(lines.length === 4 && /^Main script · v\d+\.\d+$/.test(lines[0]) && /^Database script · v\d+\.\d+$/.test(lines[1]) && /^Database merge · v\d+\.\d+$/.test(lines[2]) && lines[3] === 'Extension · v' + manifest.version, 'settings pane lists the four versions (' + lines.join(' | ') + ')');
 
+    // Appeal and Forbidden checkboxes sit with the departments: off by default, and ticking one stores its setting
+    const allow0 = await site.$$eval('#elm-allow-appeal, #elm-allow-forbidden', els => els.map(e => e.checked));
+    await site.evaluate(() => { document.getElementById('elm-allow-appeal').click(); });
+    const allow1 = await site.evaluate(() => ({ a: localStorage.getItem('elm_allow_appeal'), f: localStorage.getItem('elm_allow_forbidden') }));
+    check(allow0.length === 2 && !allow0[0] && !allow0[1] && allow1.a === 'true' && allow1.f === null, 'Appeal and Forbidden checkboxes: off by default, ticking Appeal stores it');
+    await site.evaluate(() => { document.getElementById('elm-allow-appeal').click(); });
+
     await syncVia({ type: 'toggle', id: 'csv', enabled: false });
     await site.reload();
     await site.waitForFunction(() => window.__elm451UiPerfectionLoaded, null, { timeout: 15000 }).catch(() => {});

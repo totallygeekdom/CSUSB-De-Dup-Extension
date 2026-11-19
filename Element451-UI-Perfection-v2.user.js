@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.293
+// @version      2.294
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.293'; // keep in sync with @version
+    const VERSION = '2.294'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -122,6 +122,8 @@
         AUTO_SKIP_BLOCKED:        { get() { return getBoolSetting('elm_auto_skip_blocked', true); } },
         NEXT_AFTER_MERGE:         { get() { return getBoolSetting('elm_next_after_merge', true); } },
         ALLOWED_DEPARTMENT:       { get() { return lsGet('elm_allowed_department') || 'UnderGrad'; } },
+        ALLOW_APPEAL:             { get() { return getBoolSetting('elm_allow_appeal', false); } },
+        ALLOW_FORBIDDEN:          { get() { return getBoolSetting('elm_allow_forbidden', false); } },
     });
     // =========================================================
     // CSS
@@ -2297,7 +2299,8 @@
         }
         return { mismatch: false };
     }
-    function getAllBlockers() {
+    // Every reason a pair could be blocked, whatever the settings say (the chips and the Database signal use this)
+    function getAllReasons() {
         const blockers = [];
         const forbidden = isForbiddenEntry();
         if (forbidden.forbidden) blockers.push({ type: 'forbidden', ...forbidden });
@@ -2309,6 +2312,9 @@
         if (idMismatch.mismatch) blockers.push({ type: 'student-id-mismatch', ...idMismatch });
         return blockers;
     }
+    // Appeal and Forbidden are always blockers unless ticked next to Allowed departments in the settings pane
+    const isAllowedReason = (b) => (b.type === 'appeal' && CFG.ALLOW_APPEAL) || (b.type === 'forbidden' && CFG.ALLOW_FORBIDDEN);
+    function getAllBlockers() { return getAllReasons().filter(b => !isAllowedReason(b)); }
     // One reason per skipped pair, by priority: Range > Forbidden > Student ID > Grad/IA (wrong department)
     // > Appeal.
     function blockerLabel(blockers) {
@@ -2335,7 +2341,8 @@
     }
     // Signals the current entry's department/block status to database-v2.js
     // via document.body.dataset, same contract as the classic script.
-    function updateCsvSignal(blockers) {
+    function updateCsvSignal() {
+        const blockers = getAllReasons(); // the database still records an Appeal or Forbidden pair as one when you have allowed it
         const sparks = getSparkIds();
         const forbidden = blockers.some(b => b.type === 'forbidden' || b.type === 'student-id-mismatch');
         const appeal = blockers.find(b => b.type === 'appeal');
@@ -2753,7 +2760,7 @@
     // Department and blockers for the chips beside our score and the write-up (the popups for an appeal used to say this).
     function pairFlags() {
         const flags = [], notes = [];
-        const blockers = getAllBlockers();
+        const blockers = getAllReasons();
         const has = (t) => blockers.find(b => b.type === t);
         const dept = detectActualDepartment().dept, wrong = has('department');
         const allowed = CFG.ALLOWED_DEPARTMENT;
@@ -2764,8 +2771,9 @@
         const appeal = has('appeal');
         if (appeal) {
             const where = (appeal.row && appeal.row.label ? 'the ' + appeal.row.label.trim() + ' row of ' : '') + side(appeal.side);
-            flags.push({ flag: 'appeal', text: 'Appeal', blocked: true, title: 'The word "appeal" is in ' + where + '. This pair is blocked and cannot be merged.' });
-            notes.push('Blocked: the word "appeal" is in ' + where + ', so this pair cannot be merged.');
+            const ok = isAllowedReason(appeal);
+            flags.push({ flag: 'appeal', text: 'Appeal', blocked: !ok, title: 'The word "appeal" is in ' + where + (ok ? '. Appeals are allowed in your settings, so this pair is not blocked.' : '. This pair is blocked and cannot be merged.') });
+            notes.push(ok ? 'Note: the word "appeal" is in ' + where + '. Appeals are allowed in your settings, so this pair is not blocked.' : 'Blocked: the word "appeal" is in ' + where + ', so this pair cannot be merged.');
         }
         const forbidden = has('forbidden');
         if (forbidden) {
@@ -2773,8 +2781,9 @@
             // (a name with "test" in it) reads Test, a name on the forbidden list reads Forbidden name.
             const test = forbidden.reason === 'test in name';
             const why = test ? 'a contact\'s name contains "test" (a test record)' : 'a contact\'s name is on the forbidden list';
-            flags.push({ flag: test ? 'test' : 'forbidden', text: test ? 'Test' : 'Forbidden name', blocked: true, title: 'Blocked: ' + why + '. This pair cannot be merged.' });
-            notes.push('Blocked: ' + why + ', so this pair cannot be merged.');
+            const ok = isAllowedReason(forbidden);
+            flags.push({ flag: test ? 'test' : 'forbidden', text: test ? 'Test' : 'Forbidden name', blocked: !ok, title: (ok ? 'Note: ' : 'Blocked: ') + why + (ok ? '. Forbidden pairs are allowed in your settings, so this pair is not blocked.' : '. This pair cannot be merged.') });
+            notes.push(ok ? 'Note: ' + why + '. Forbidden pairs are allowed in your settings, so this pair is not blocked.' : 'Blocked: ' + why + ', so this pair cannot be merged.');
         }
         // Different School IDs: no chip or line of its own, since the score already counts them (different Coyote IDs, -120, a hard
         // conflict that caps the pair at Low) and the write-up says so. The pair is still blocked from merging.
@@ -4253,7 +4262,7 @@
         }
         const blockers = getAllBlockers();
         applyBlockStyling(blockers);
-        updateCsvSignal(blockers);
+        updateCsvSignal();
         if (blockers.length > 0) {
             if (resolutionAttempted) return;
             resolutionAttempted = true;
@@ -4560,8 +4569,11 @@
                 <div class="elm-checks">
                     <label class="elm-check"><input type="checkbox" id="elm-dept-undergrad"><span class="elm-check-box"></span><span>UnderGrad</span></label>
                     <label class="elm-check"><input type="checkbox" id="elm-dept-gradia"><span class="elm-check-box"></span><span>Grad/IA</span></label>
+                    <label class="elm-check"><input type="checkbox" id="elm-allow-appeal"><span class="elm-check-box"></span><span>Appeal</span></label>
+                    <label class="elm-check"><input type="checkbox" id="elm-allow-forbidden"><span class="elm-check-box"></span><span>Forbidden</span></label>
                 </div>
                 <div id="elm-dept-desc" class="elm-level-desc"></div>
+                <div id="elm-allow-desc" class="elm-level-desc"></div>
                 </div>
                 <div class="elm-item">
                 <div class="setting-row elm-seg-head"><label>Use picks from</label></div>
@@ -4739,6 +4751,21 @@
         [deptUnder, deptGrad].forEach(box => box.addEventListener('change', () => {
             lsSet('elm_allowed_department', deptUnder.checked && deptGrad.checked ? 'All' : deptUnder.checked ? 'UnderGrad' : deptGrad.checked ? 'Grad/IA' : 'None');
             showDeptDesc();
+        }));
+        // Appeal and Forbidden sit with the departments: ticked means those pairs are worked on instead of blocked (both start unticked)
+        const allowAppeal = document.getElementById('elm-allow-appeal'), allowForbidden = document.getElementById('elm-allow-forbidden'), allowDesc = document.getElementById('elm-allow-desc');
+        function showAllowDesc() {
+            const a = allowAppeal.checked, f = allowForbidden.checked;
+            allowDesc.textContent = a && f ? 'Appeal and Forbidden pairs (test records and names on the forbidden list) are worked on, not blocked.'
+                : a ? 'Appeal pairs are worked on, not blocked. Forbidden pairs stay blocked.'
+                : f ? 'Forbidden pairs (test records and names on the forbidden list) are worked on, not blocked. Appeal pairs stay blocked.'
+                : 'Appeal and Forbidden pairs stay blocked.';
+        }
+        allowAppeal.checked = CFG.ALLOW_APPEAL; allowForbidden.checked = CFG.ALLOW_FORBIDDEN;
+        showAllowDesc();
+        [[allowAppeal, 'elm_allow_appeal'], [allowForbidden, 'elm_allow_forbidden']].forEach(([box, key]) => box.addEventListener('change', () => {
+            lsSet(key, box.checked ? 'true' : 'false');
+            showAllowDesc();
         }));
     }
 

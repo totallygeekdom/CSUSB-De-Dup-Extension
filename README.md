@@ -17,7 +17,7 @@ chip). Two v2 scripts target it, plus an optional third that merges databases:
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.293` (shown in the settings pane) |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.294` (shown in the settings pane) |
 | Element451 - Database v2 | `database-v2.js` | `@version 2.74` |
 | Element451 - Database Merge v2 (optional, pairs with Database) | `database-merge-v2.js` | `@version 1.17` |
 
@@ -143,6 +143,7 @@ UI Perfection works without the Database script. The Database script needs UI Pe
 | `elm_outcome_toasts` | UI Perfection | Toasts switch |
 | `elm_highlight_rows` | UI Perfection | Highlight Rows |
 | `elm_allowed_department` | UI Perfection | Allowed departments (UnderGrad, Grad/IA checkboxes) |
+| `elm_allow_appeal`, `elm_allow_forbidden` | UI Perfection | Appeal and Forbidden checkboxes next to the departments (`true` = worked on instead of blocked; default off) |
 | `elm_show_merge_counter` | UI Perfection | Hidden: show the merge counter |
 | `elm_merge_count` | UI Perfection | Merge counter value |
 | `elm_pair_ratings` | UI Perfection | Our rating of each pair opened (keyed by the two Spark IDs), for the list's score chips |

@@ -19,6 +19,7 @@ const ana = { first: 'Ana', last: 'Cruz' }, dob = { dob: '2004-01-02' };
 const soft = { studentType: 'ftf', level: 'ug', school: 'csusb' };
 const SAMPLES = [
   ['Same Coyote ID + same name', P({ ...ana, coyote: '009123456' }), P({ ...ana, coyote: '009123456' })],
+  ['Same name, a family name put first on one record (Lan Vo / Tran Mai Lan Vo), same DOB', P({ first: 'Lan', last: 'Vo', ...dob }), P({ first: 'Tran Mai Lan', last: 'Vo', ...dob })],
   ['Same CAS ID + same name', P({ ...ana, cas: '8812345' }), P({ ...ana, cas: '8812345' })],
   ['Same Coyote ID, different first name', P({ first: 'Andy', last: 'Rios', coyote: '009123456' }), P({ first: 'Andres', last: 'Rios', coyote: '009123456' })],
   ['Same Coyote ID + name, clearly different DOB', P({ ...ana, coyote: '009123456', dob: '2004-01-02' }), P({ ...ana, coyote: '009123456', dob: '1999-07-30' })],
@@ -106,19 +107,18 @@ There is no twin-pattern rule: first names that differ cost the first-name penal
 
 ## Rating
 
-- **High**: ${CUT.high}+ points and no hard conflict, and either a matching **Coyote ID or CAS ID** (enough on its own) or at least **two strong matches**.
+- **High**: ${CUT.high}+ points and no hard conflict. The rating is the points alone.
 - **Medium**: ${CUT.medium}+ points.
 - **Low**: everything else. A Low pair under ${CUT.low} points is described as "probably different people" in the write-up.
-- **Strong matches** are: Coyote ID, CAS ID, date of birth, exact email, phone and a matching address.
 - **Hard conflict**: two different Coyote IDs. It caps the pair at Low. Different CAS IDs are a small penalty, not a hard conflict: a student can have several applications. A different birth date is a heavy penalty, not a hard conflict.
 
 ## Sample pairs: High and Medium
 
 Each row is run through the live engine (the Bolt score is not included unless the pair says so). Sorted by rating, then points.
 
-| Pair | Points | Strong matches | Rating |
-|---|---|---|---|
-${top.map(x => `| ${x.name} | ${x.r.points} | ${x.r.strong} | ${x.r.level === 'high' ? '**High**' : cap(x.r.level)} |`).join('\n')}
+| Pair | Points | Rating |
+|---|---|---|
+${top.map(x => `| ${x.name} | ${x.r.points} | ${x.r.level === 'high' ? '**High**' : cap(x.r.level)} |`).join('\n')}
 
 ## Examples of Low scores
 
@@ -133,11 +133,11 @@ ${low.map(x => `| ${x.name} | ${x.r.points} | ${adds(x.r)} |`).join('\n')}
 ## Known trade-offs
 
 - **Households.** Twins, siblings and parent/child pairs that share an address land on Medium (see the rows above). Medium is not High, but a slider that includes Medium
-  can still auto-apply or auto-merge it; the separate *possible twins* check only stops pairs with two or more conflicting rows. A larger first-name mismatch penalty would push
-  them down to Low.
-- **Address as a strong match.** It lets a pair with the same name, address and one family-shared email or phone (a Jr./Sr. with no birth date on file) reach High.
-  Requiring a birth date or ID for High would stop that.
-- **Birth date and address alone.** With no names on either record the pair stays Medium; a last name is enough to reach High.
+  auto-applies and, with When done = Merge, auto-merges them: there is no separate possible-twins check any more, the score alone decides. A larger first-name mismatch penalty
+  would push them down to Low.
+- **Points only.** High is ${CUT.high}+ points, whatever they come from, so a pair can reach it with no birth date, ID, email or phone: the same name with Bolt High,
+  name-based emails, gender and soft fields add up to 80. A Jr./Sr. with the same name, address and a family email or phone (no birth date on file) is High too.
+- **Birth date and address alone.** With no names on either record the pair stays Medium (65); a last name is enough to reach High.
 - **Bolt's "different people" flag.** It costs ${n(W.boltDifferent)}, which a same name and birth date outweigh: that pair is Medium (see the sample rows), not Low.
 - **An ID match outweighs a disagreeing birth date.** A matching Coyote ID or CAS ID with the same name is High even when the birth dates are clearly different.
 `;

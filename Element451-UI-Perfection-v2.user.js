@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.285
+// @version      2.288
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.285'; // keep in sync with @version
+    const VERSION = '2.288'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -100,7 +100,6 @@
         if (val === null) return defaultValue;
         return val === 'true';
     }
-    const CONFLICT_ROW_THRESHOLD = 2;
     function rangeLevel() {
         const v = parseInt(lsGet('elm_range_level2'), 10);
         return isNaN(v) ? 4 : Math.max(0, Math.min(4, v));
@@ -2188,7 +2187,6 @@
     let currentQueuePositionKey = '';   // "current/total" — used to detect navigation to a new pair
     let pairFirstSeenAt = 0;            // when the current pair was first seen
     let resolutionAttempted = false;    // resolution ran for the current pair
-    let conflictWarningShown = false;
     let awaitingMergeResult = false;
     let lastMergeContactNamesKey = '';
 
@@ -2277,7 +2275,7 @@
         return blockers;
     }
     // One reason per skipped pair, by priority: Range > Forbidden > Student ID > Grad/IA (wrong department)
-    // > Appeal. (Twins is only reached by pairs that passed all of these.)
+    // > Appeal.
     function blockerLabel(blockers) {
         computeAutoApplyForPair();
         if (!pairInRange) return 'Range';
@@ -2329,7 +2327,7 @@
         email: [40, 0], emailName: [15, 0], phone: [25, 0],
         first: [15, -30], firstRelated: [7, 0], last: [15, -15], lastPartial: [7, 0],
         address: [25, -3], soft: [5, 0], gender: [5, 0],
-        boltHigh: 20, boltMedium: 8, boltLow: -5, boltDifferent: -25,
+        boltHigh: 10, boltMedium: 5, boltLow: -10, boltDifferent: -25,
         applicantVsCoyote: -40,
         emailNameFull: 6, emailNamePartial: 4, emailNameInitial: 3, emailNameOne: 2, emailNameCap: 10, emailDobFull: 20, emailDobYear: 3, emailDobConflict: -8
     };
@@ -2363,6 +2361,14 @@
     }
     const scPhone = (s) => { const d = String(s || '').replace(/\D/g, ''); return d.length >= 10 ? d.slice(-10) : ''; };
     const scDigits = (s) => String(s || '').replace(/\D/g, '').replace(/^0+/, '');
+    // One name inside the other, word for word: every word of the shorter (2+ letters) is a word of the longer, which has more.
+    // "Lan" within "Tran Mai Lan", "Lan Mai Vo" within "Tran Mai Lan Vo": a full name typed into one field, or a family name
+    // put first on one record.
+    function scNameWithin(x, y) {
+        const a = scFold(x).split(' ').filter(t => t.length >= 2), b = scFold(y).split(' ').filter(t => t.length >= 2);
+        const [s, l] = a.length <= b.length ? [a, b] : [b, a];
+        return s.length > 0 && l.length > s.length && s.every(t => l.includes(t));
+    }
     function scRelatedFirst(a, b) {
         if (!a || !b) return false;
         if (a[0] === b[0] && (a.length === 1 || b.length === 1)) return true; // an initial
@@ -2426,7 +2432,7 @@
     }
     // slots: { slot: how many times it applied } -> { points, level, hard, strong }, or null when a slot is not one of this engine's
     function scoreSlots(slots) {
-        let pts = 0, nameFit = 0, strong = 0, hard = false, id = false;
+        let pts = 0, nameFit = 0, strong = 0, hard = false;
         for (const slot of Object.keys(slots)) {
             const n = slots[slot], w = slotWeight(slot);
             if (w === null) return null;
@@ -2434,14 +2440,12 @@
             pts += n * w;
             if (SLOT_STRONG.includes(slot)) strong += n;
             if (SLOT_HARD.includes(slot)) hard = true;
-            if (slot === 'coyote.0' || slot === 'cas.0') id = true;
         }
         pts += Math.min(SCORE_W.emailNameCap, nameFit);
-        // A matching Coyote ID or CAS ID is an identifier no two people share, so on its own it is enough for High (with the
-        // points and no hard conflict); every other kind of evidence needs a second strong match to back it.
-        let level = pts >= SCORE_CUT.high && (strong >= 2 || id) ? 'high' : pts >= SCORE_CUT.medium ? 'medium' : 'low';
-        if (level === 'high' && hard) level = 'low';
-        if (hard && level === 'medium') level = 'low';
+        // The rating is the points alone (70+ High, 45+ Medium), except that a hard conflict (different Coyote IDs) is always Low.
+        // (strong, the count of strong matches, is kept for the console and the remembered ratings; it no longer decides anything.)
+        let level = pts >= SCORE_CUT.high ? 'high' : pts >= SCORE_CUT.medium ? 'medium' : 'low';
+        if (hard) level = 'low';
         return { points: pts, level, hard, strong };
     }
     const slotsToString = (slots) => Object.keys(slots).sort().map(k => slots[k] > 1 ? k + '*' + slots[k] : k).join(',');
@@ -2508,9 +2512,10 @@
         // Names
         const fa = scFold(A.first), fb = scFold(B.first), la = scFold(A.last), lb = scFold(B.last);
         let firstState = null, lastState = null;
-        if (fa && fb) firstState = fa === fb ? 'same' : scRelatedFirst(fa, fb) ? 'related' : 'differ';
+        if (fa && fb) firstState = fa === fb ? 'same' : scNameWithin(fa, fb) ? 'within' : scRelatedFirst(fa, fb) ? 'related' : 'differ';
         if (la && lb) lastState = la === lb ? 'same' : (la.split(' ').some(t => t.length > 2 && lb.split(' ').includes(t)) ? 'partial' : 'differ');
         if (firstState === 'same') add('first', 'First name', W.first[0], 'for', 'the same first name', { nameFor: 'first', slot: 'first.0' });
+        else if (firstState === 'within') add('first', 'First name', W.first[0], 'for', 'the same first name, one name inside the other (' + (A.first.length <= B.first.length ? A.first + ' in ' + B.first : B.first + ' in ' + A.first) + ')', { nameFor: 'first', within: true, slot: 'first.0' });
         else if (firstState === 'related') add('first', 'First name', W.firstRelated[0], 'for', 'similar first names (' + A.first + ' and ' + B.first + ')', { nameFor: 'first', slot: 'firstRelated.0' });
         else if (firstState === 'differ') add('first', 'First name', W.first[1], 'against', 'different first names (' + A.first + ' and ' + B.first + ')', { slot: 'first.1' });
         if (lastState === 'same') add('last', 'Last name', W.last[0], 'for', 'the same last name', { nameFor: 'last', slot: 'last.0' });
@@ -2575,7 +2580,7 @@
             : res.different ? 'Probably different people.'
             : conflict || boltDiff ? 'Possibly different people.' : 'Not enough to say.';
         // what lines up
-        const nameBoth = names.length === 2 && names.every(n => n.key === 'first' ? n.pts >= SCORE_W.first[0] : n.pts >= SCORE_W.last[0]);
+        const nameBoth = names.length === 2 && names.every(n => !n.within && (n.key === 'first' ? n.pts >= SCORE_W.first[0] : n.pts >= SCORE_W.last[0]));
         const matchPhrases = [];
         if (nameBoth) matchPhrases.push('the same name (' + full(A) + ')');
         else names.forEach(n => matchPhrases.push(n.phrase));
@@ -2740,25 +2745,22 @@
     }
     // Why the total is the rating it is, in one sentence (the rules of scoreSlots).
     function ratingWhy(res) {
-        const id = !!(res.slots && (res.slots['coyote.0'] || res.slots['cas.0']));
-        const p = res.points, n = res.strong;
+        const p = res.points;
         if (res.hard) return 'Different Coyote IDs are a hard conflict: the rating is Low whatever the points.';
-        if (res.level === 'high') return p + ' points (High is ' + SCORE_CUT.high + '+), with ' + (id ? 'a matching Coyote or CAS ID' : n + ' strong matches') + '.';
-        if (res.level === 'medium' && p >= SCORE_CUT.high) return p + ' points is enough for High, but High also needs a matching Coyote or CAS ID or 2 strong matches (birth date, exact email, phone, address). This pair has ' + n + '.';
+        if (res.level === 'high') return p + ' points: High is ' + SCORE_CUT.high + '+.';
         if (res.level === 'medium') return p + ' points: Medium is ' + SCORE_CUT.medium + ' to ' + (SCORE_CUT.high - 1) + '.';
         return p + ' points: under ' + SCORE_CUT.medium + ' is Low.';
     }
     function pointsTable(res) {
         const t = document.createElement('table'); t.className = 'elm2-an-table';
         const head = t.createTHead().insertRow();
-        // one sentence per rule (it names the field itself, so there is no separate field column), and a tag on the strong matches
+        // one sentence per rule (it names the field itself, so there is no separate field column)
         ['What we found', 'Points'].forEach((h, i) => { const th = document.createElement('th'); th.textContent = h; if (i === 1) th.className = 'elm2-an-num'; head.appendChild(th); });
         const body = t.createTBody();
         res.items.forEach(i => {
             const r = body.insertRow();
             const what = r.insertCell();
             what.textContent = i.phrase.charAt(0).toUpperCase() + i.phrase.slice(1);
-            if (i.slot && SLOT_STRONG.includes(i.slot)) { const tag = document.createElement('span'); tag.className = 'elm2-an-strong'; tag.textContent = 'strong match'; what.append(' ', tag); }
             const c = r.insertCell(); c.className = 'elm2-an-num ' + (i.pts > 0 ? 'elm2-an-plus' : i.pts < 0 ? 'elm2-an-minus' : '');
             c.textContent = (i.pts > 0 ? '+' : '') + i.pts;
         });
@@ -3004,57 +3006,8 @@
     }
     // ---- SCORE CHIPS END ----
 
-    // =========================================================
-    // POSSIBLE TWINS / DIFFERENT PEOPLE WARNING
-    // Reuses the same First/Last Name + DOB + Address heuristics as the
-    // classic script, but also folds in Bolt's own AI analysis summary,
-    // which explicitly states when it thinks two contacts are different
-    // people — a signal the old merge page never had.
-    // =========================================================
-    function checkForConflictingRecords() {
-        if (CONFLICT_ROW_THRESHOLD === 0) return { conflictCount: 0, shouldWarn: false, conflicts: [] };
-        const conflicts = [];
-        let conflictCount = 0;
-        let boltFlagged = false;
-        const names = getContactNames();
-        if (names.length === 2 && names[0] && names[1]) {
-            const norm = (n) => n.toLowerCase().replace(/[\s-]/g, '');
-            // Compare first tokens (first name) and remaining tokens (last name) independently
-            const [aFirst, ...aRest] = names[0].split(/\s+/);
-            const [bFirst, ...bRest] = names[1].split(/\s+/);
-            if (aFirst && bFirst && norm(aFirst) !== norm(bFirst)) { conflictCount++; conflicts.push('First Name'); }
-            const aLast = aRest.join(' '), bLast = bRest.join(' ');
-            if (aLast && bLast && norm(aLast) !== norm(bLast)) { conflictCount++; conflicts.push('Last Name'); }
-        }
-        const isValidYear = (yearStr) => !!yearStr && !yearStr.startsWith('0') && parseInt(yearStr) >= 1900;
-        for (const row of getDiffRowsByLabel('birth')) {
-            const leftText = row.values[0].textContent, rightText = row.values[1].textContent;
-            if (!leftText || !rightText) continue;
-            const leftYear = leftText.match(/\b(\d{4})\b/), rightYear = rightText.match(/\b(\d{4})\b/);
-            if (leftYear && rightYear && isValidYear(leftYear[1]) && isValidYear(rightYear[1])) {
-                if (leftText.replace(/\s+/g, '').toLowerCase() !== rightText.replace(/\s+/g, '').toLowerCase()) {
-                    conflictCount++; conflicts.push('Date of Birth');
-                }
-            }
-        }
-        for (const row of getDiffRowsByLabel('address')) {
-            const leftText = row.values[0].textContent, rightText = row.values[1].textContent;
-            if (leftText.length > 10 && rightText.length > 10) {
-                const cmp = AddressComparer.compareAddresses(leftText, rightText);
-                if (!cmp.areSame) { conflictCount++; conflicts.push('Address'); }
-            }
-        }
-        // AI analysis signal: Bolt's summary explicitly says when it thinks
-        // these are different people. Treat that as a strong extra conflict.
-        const summary = getAnalysisSummaryText().toLowerCase();
-        if (summary && /different (people|person|individuals?)/i.test(summary)) {
-            boltFlagged = true; // forces a warning regardless of the threshold, without inflating the count
-            conflictCount++;
-            conflicts.push('Bolt Analysis (flagged as different people)');
-        }
-        const shouldWarn = boltFlagged || conflictCount >= CONFLICT_ROW_THRESHOLD;
-        return { conflictCount, shouldWarn, conflicts };
-    }
+    // (The possible-twins check that stood here is gone: our score already counts different names, birth dates and addresses and
+    // Bolt's "different people", so it no longer skips pairs or keeps them from auto-merge.)
 
     // =========================================================
     // FIELD RESOLUTION ENGINE
@@ -3684,7 +3637,7 @@
     function hideMergeBar() {
         document.querySelectorAll('#elm2-toast-stack .elm2-notice').forEach(t => t.remove());
     }
-    // keep = true: a short outcome toast ("Skip: Twins", "Merge: 2/3") that must survive the pair change,
+    // keep = true: a short outcome toast ("Skip: Appeal", "Merge: 2/3") that must survive the pair change,
     // whereas ordinary notices are cleared by hideMergeBar() when the pair changes.
     function showMergeNotice(text, keep) {
         const st = toastStack();
@@ -4020,7 +3973,6 @@
             const fields = Array.from(new Set(unresolved.map(r => r.label || '(unnamed)')));
             return { ok: false, reason: unresolved.length + ' field(s) need review (' + fields.join(', ') + ')', review: fields.slice(0, 3).join(', ') + (fields.length > 3 ? ' +' + (fields.length - 3) : '') };
         }
-        if (CONFLICT_ROW_THRESHOLD > 0 && checkForConflictingRecords().shouldWarn) return { ok: false, reason: 'possible twins' };
         const btn = getSidebarActionButton('Merge Contacts');
         if (!btn || btn.disabled || btn.getAttribute('aria-disabled') === 'true') return { ok: false, reason: 'the Merge Contacts button is unavailable' };
         return { ok: true, btn };
@@ -4207,7 +4159,7 @@
     // MAIN AUTOMATION LOOP
     //
     // Each pair: blockers -> (skip or stop) -> apply picks per "Use picks from" if the pair is
-    // inside the slider range -> twins check -> optional auto-merge (cancel window above).
+    // inside the slider range -> optional auto-merge (cancel window above).
     // =========================================================
     // True while the review form was off screen (for example behind the "Merge completed" card). The
     // pair that shows up next is a new one even if its key (names + queue position) matches the last:
@@ -4231,7 +4183,6 @@
             pairFirstSeenAt = Date.now();
             resolutionAttempted = false;
             engagementOpenedFor = '';
-            conflictWarningShown = false;
             errorStopShownFor = '';
             previewPicks(null);
             cancelAutoMerge();
@@ -4311,17 +4262,6 @@
             if (!pairInRange && CFG.AUTO_SKIP_BLOCKED) {
                 skipToNext('outside the slider range', 'Range');
                 return;
-            }
-            // Possible twins: with Auto-Skip on the pair is skipped; otherwise it is left for you. A twins pair is never auto-merged.
-            // (It used to raise a popup too; our score already says when the names or birth dates disagree, so there is none now.)
-            if (!conflictWarningShown && CONFLICT_ROW_THRESHOLD > 0) {
-                const { conflictCount, shouldWarn, conflicts } = checkForConflictingRecords();
-                if (shouldWarn) {
-                    conflictWarningShown = true;
-                    if (CFG.AUTO_SKIP_BLOCKED) skipToNext('possible twins: ' + conflicts.join(', '), 'Twins');
-                    else console.log('[elm2] Possible twins (' + conflictCount + ' conflicting: ' + conflicts.join(', ') + '): left for you, not auto-merged');
-                    return;
-                }
             }
             // "When done" = Merge: start the cancel window (the merge itself is clicked there,
             // after a final safety re-check).
@@ -4595,7 +4535,7 @@
                 </div>
                 <div class="elm-item">
                 <div class="setting-row"><label>Auto-Skip</label>${toggleHtml('elm-auto-skip-blocked')}</div>
-                <div class="elm-level-desc elm-skip-desc">Skips blocked, out-of-range and possible-twins pairs with no popup. Off: stops on them instead.</div>
+                <div class="elm-level-desc elm-skip-desc">Skips blocked and out-of-range pairs with no popup. Off: stops on them instead.</div>
                 </div>
                 <div class="elm-item">
                 <div class="setting-row"><label>Next after merge</label>${toggleHtml('elm-next-after-merge')}</div>

@@ -17,7 +17,7 @@ chip). Two v2 scripts target it, plus an optional third that merges databases:
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.285` (shown in the settings pane) |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.288` (shown in the settings pane) |
 | Element451 - Database v2 | `database-v2.js` | `@version 2.74` |
 | Element451 - Database Merge v2 (optional, pairs with Database) | `database-merge-v2.js` | `@version 1.17` |
 
@@ -34,7 +34,7 @@ the resolution rules, auto-merge, every website restyle, the database format, li
   - **When done**: Wait for me, or Merge after a cancel countdown (a centred dialog with a stepped ring,
     a short brief (names, Bolt score, how often the script agrees with Bolt, what it chose over Bolt) and a Cancel button; length set by **Merge countdown**, 2-15 s, or a 4 s "race lights" start signal). This setting
     resets every browser session. A final safety check runs before Merge Contacts is clicked.
-  - **Auto-Skip**: skips blocked, out-of-range and possible-twins pairs (Next duplicate
+  - **Auto-Skip**: skips blocked and out-of-range pairs (Next duplicate
     only, never Dismiss); off = stop on them. There are no popups: an appeal shows as a chip beside our score.
   - **Next after merge**: after a merge, presses "Next duplicate" on the "Merge completed" card (default on).
   - Slider **None** (or no Allowed department ticked) with Auto-Skip on is a **scan**: every pair is

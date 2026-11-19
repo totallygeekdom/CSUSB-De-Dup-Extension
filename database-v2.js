@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - Database v2
 // @namespace    http://tampermonkey.net/
-// @version      2.75
+// @version      2.76
 // @description  Tracks duplicate entries in a database stored in browser localStorage (exports a password-protected .xlsx spreadsheet to share, or a personal .elmdb file locked to your Element451 login) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -15,7 +15,7 @@
     if (window.__elm451CsvDatabaseLoaded) return;
     window.__elm451CsvDatabaseLoaded = true;
 
-    const VERSION = '2.75'; // keep in sync with @version (the build checks it)
+    const VERSION = '2.76'; // keep in sync with @version (the build checks it)
     const STORAGE_KEY = 'elm_csv_database';
     const UI_KEY = 'elm_show_db_ui';
     function showDbUi() { try { return localStorage.getItem(UI_KEY) !== 'false'; } catch (e) { return true; } }
@@ -471,14 +471,34 @@
         }
         return null;
     }
+    // ---- LIST NAMES START (pure helpers, so they can be tested on their own) ----
+    // The list call carries no top-level name: a record holds the two contacts as `master` and `duplicate` objects. A person's name is
+    // read from one of them (a full-name field, or first + last), looking one object level down when it is not at the top.
+    function personName(o, depth) {
+        if (!o || typeof o !== 'object' || Array.isArray(o)) return '';
+        const pick = (keys) => { for (const k of keys) { const v = o[k]; if (typeof v === 'string' && v.trim()) return v.trim(); } return ''; };
+        const full = pick(['name', 'full_name', 'fullName', 'display_name', 'displayName']);
+        if (full) return full;
+        const joined = [pick(['first_name', 'firstName', 'first', 'given_name', 'givenName']), pick(['last_name', 'lastName', 'last', 'surname', 'family_name', 'familyName'])].filter(Boolean).join(' ');
+        if (joined) return joined;
+        if (!depth) for (const k of Object.keys(o)) { const n = personName(o[k], 1); if (n) return n; }
+        return '';
+    }
+    // Does the row's text show this name? The whole name, or its first and last word (a middle name or the order "Last, First" is fine).
+    function rowShowsName(rowText, name) {
+        const n = (name || '').trim().toLowerCase();
+        if (n.length <= 3) return false;
+        if (rowText.includes(n)) return true;
+        const w = n.split(/[\s,]+/).filter(x => x.length > 1);
+        return w.length >= 2 && rowText.includes(w[0]) && rowText.includes(w[w.length - 1]);
+    }
+    // ---- LIST NAMES END ----
     function matchRowToApiEntry(row, apiEntries, usedIndices) {
         const rowText = row.textContent.trim().toLowerCase();
         for (let i = 0; i < apiEntries.length; i++) {
             if (usedIndices.has(i)) continue;
             const entry = apiEntries[i];
-            const name = (entry.name || '').trim().toLowerCase();
-            const dupName = (entry.duplicateName || '').trim().toLowerCase();
-            if (name.length > 3 && dupName.length > 3 && rowText.includes(name) && rowText.includes(dupName)) {
+            if (rowShowsName(rowText, entry.name) && rowShowsName(rowText, entry.duplicateName)) {
                 usedIndices.add(i);
                 return entry;
             }
@@ -486,9 +506,7 @@
         for (let i = 0; i < apiEntries.length; i++) {
             if (usedIndices.has(i)) continue;
             const entry = apiEntries[i];
-            const name = (entry.name || '').trim().toLowerCase();
-            const dupName = (entry.duplicateName || '').trim().toLowerCase();
-            if ((name.length > 3 && rowText.includes(name)) || (dupName.length > 3 && rowText.includes(dupName))) {
+            if (rowShowsName(rowText, entry.name) || rowShowsName(rowText, entry.duplicateName)) {
                 usedIndices.add(i);
                 return entry;
             }
@@ -574,15 +592,15 @@
             collectSparkIds(e, '', sparks, where);
             return {
                 uniqueId: ((idField && e[idField]) || 'api-' + i).toString().toLowerCase(),
-                name: e.name || e.full_name || '',
-                duplicateName: e.duplicate_name || '',
+                name: e.name || e.full_name || personName(e.master),
+                duplicateName: e.duplicate_name || personName(e.duplicate),
                 sparks: sparks.filter(Boolean),
                 raw: sparks.some(Boolean) ? '' : JSON.stringify(e) // only searched when the record gave no Spark IDs (a page of records is not small)
             };
         });
         // what the list call carries, for the console (field names only, never values): where the score chips' Spark IDs come from
-        const withIds = parsed.filter(p => p.sparks.length >= 2).length;
-        const shape = 'records ' + parsed.length + ', with 2+ Spark IDs ' + withIds + (where.size ? ' (from ' + Array.from(where).slice(0, 8).join(', ') + ')' : '') + '; fields of a record: ' + Object.keys(sample).slice(0, 30).join(', ');
+        const withIds = parsed.filter(p => p.sparks.length >= 2).length, withNames = parsed.filter(p => p.name.trim().length > 3 && p.duplicateName.trim().length > 3).length;
+        const shape = 'records ' + parsed.length + ', with both names ' + withNames + ', with 2+ Spark IDs ' + withIds + (where.size ? ' (from ' + Array.from(where).slice(0, 8).join(', ') + ')' : '') + '; fields of master: ' + (sample.master && typeof sample.master === 'object' ? Object.keys(sample.master).slice(0, 30).join(', ') : '-') + '; fields of a record: ' + Object.keys(sample).slice(0, 30).join(', ');
         if (shape !== lastApiShape) { lastApiShape = shape; console.log('[elm-db] list API: ' + shape); }
         return parsed;
     }
@@ -716,9 +734,9 @@
     }
     // Does the row show this record's names? (A record with no usable name cannot be checked: it is taken as fitting.)
     function rowHoldsNames(row, api) {
-        const text = row.textContent.trim().toLowerCase(), name = (api.name || '').trim().toLowerCase(), dup = (api.duplicateName || '').trim().toLowerCase();
-        if (name.length <= 3 && dup.length <= 3) return true;
-        return (name.length > 3 && text.includes(name)) || (dup.length > 3 && text.includes(dup));
+        const text = row.textContent.trim().toLowerCase();
+        if ((api.name || '').trim().length <= 3 && (api.duplicateName || '').trim().length <= 3) return true;
+        return rowShowsName(text, api.name) || rowShowsName(text, api.duplicateName);
     }
 
     // The list stays in the page behind the review sidebar, and its chips follow the profile being viewed, so it is annotated while a

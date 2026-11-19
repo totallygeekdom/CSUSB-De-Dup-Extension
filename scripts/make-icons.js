@@ -1,5 +1,5 @@
 // Renders extension/icons/icon{16,32,48,128}.png from an inline SVG (a merge glyph on the orange header colour).
-// Needs Playwright (the same one the smoke test uses); run by hand when the icon changes: node scripts/make-icons.js
+// Needs Playwright (a dev dependency); run by hand when the icon changes: node scripts/make-icons.js
 const { chromium } = require('playwright');
 const path = require('path');
 const SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">

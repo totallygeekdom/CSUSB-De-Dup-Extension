@@ -1,6 +1,6 @@
 name: Chrome extension
 
-# Every pull request and every push to main: build the extension, run the tests that need no browser and keep the zip as a downloadable
+# Every pull request and every push to main: build the extension, run the tests and keep the zip as a downloadable
 # artifact on the run (a test build, no release needed). On main or a tag like v1.0.1, if the extension's version has no
 # GitHub Release yet, the zip is published as one. The userscripts themselves are not bundled by hand: the build copies them from the repo root.
 on:
@@ -38,9 +38,8 @@ jobs:
       - name: Build store edition
         run: node scripts/build-extension.js --store
 
-      # The tests that need no browser (the browser smoke tests stay available locally: npm run test:smoke).
       - name: Test
-        run: npm run test:ci
+        run: npm test
 
       - name: Upload zip as an artifact
         uses: actions/upload-artifact@v4

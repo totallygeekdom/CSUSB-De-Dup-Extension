@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.314
+// @version      2.316
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.314'; // keep in sync with @version
+    const VERSION = '2.316'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -2125,16 +2125,18 @@
             clicks++;
             setTimeout(clickLoop, ok ? 3000 : 500);
         };
-        // The pair's rating is worked out from Bolt's overview and remembered by its Spark IDs, which is what gives its chip on the list.
-        // A pair skipped before Bolt's overview rendered kept no rating and stayed Pending, so the skip waits for the rating (at most
-        // 3 s: with no overview there is nothing to wait for).
-        const rated = () => { const { a, b } = getSparkIds(); return !!(a && b && currentRating()); };
+        // The pair's rating is worked out from Bolt's overview and saved by its Spark IDs, which is what gives its chip on the list.
+        // The skip waits until the rating is really saved (at most 6 s: with no overview or no Spark IDs there is nothing to save).
+        // Only asking for the rating was not enough: one worked out while the cover was still up was not saved, and the skip went on.
+        let unsaved = '';
         const attempt = () => {
             if (getPairKey() !== key) { skipInFlightKey = ''; return; } // already moved on
-            if (!rated() && Date.now() - startedAt < 3000) { setTimeout(attempt, 300); return; }
+            unsaved = saveRatingNow();
+            if (unsaved && Date.now() - startedAt < 6000) { setTimeout(attempt, 300); return; }
+            if (unsaved && !attempt.warned) { attempt.warned = true; console.log('[elm2] chips: skipping without saving a rating (' + unsaved + '): this pair\'s chip on the list stays Pending'); }
             const detail = {};
             document.dispatchEvent(new CustomEvent('elm2-record-pair', { detail }));
-            if (detail.handled && !detail.recorded && Date.now() - startedAt < 6000) { setTimeout(attempt, 250); return; }
+            if (detail.handled && !detail.recorded && Date.now() - startedAt < 9000) { setTimeout(attempt, 250); return; }
             const qp = getQueuePosition();
             console.log('[elm2] Skipping to next pair:', reason, qp ? '(was ' + qp.current + '/' + qp.total + ')' : '');
             clickLoop();
@@ -2750,16 +2752,21 @@
     // found and their shape (a date, an email, a 9 digit ID) but no names, dates of birth, emails or IDs.
     const scShape = (v) => typeof v === 'string' ? v.replace(/[A-Za-z\u00C0-\u024F]/g, 'x').replace(/\d/g, '9') : typeof v === 'number' ? 9 : v;
     const scShapeSide = (side) => { const o = {}; Object.keys(side).forEach(k => { o[k] = Array.isArray(side[k]) ? side[k].map(scShape) : scShape(side[k]); }); return o; };
-    let anCache = { t: 0, key: '', out: null };
+    let anCache = { t: 0, key: '', out: null, kept: false };
     // The rating of the pair on screen: { res, ev, write }, or null until Bolt's overview has rendered.
+    // It is remembered (saved by the pair's Spark IDs, which gives its chip on the list) as soon as it exists and the pair is no longer being
+    // read. A rating worked out while the cover was up is held back, and saved by the first call after it, even when that call is served
+    // from the 400 ms cache: an auto-skip right after the read used to find the cached rating, take it for saved, and move on without it.
     function currentRating() {
         const now = Date.now(), key = getPairKey();
-        if (anCache.key === key && now - anCache.t < 400) return anCache.out;
+        if (anCache.key === key && now - anCache.t < 400) {
+            if (anCache.out && !anCache.kept && !busyNow) { anCache.kept = true; rememberRating(anCache.out.res); }
+            return anCache.out;
+        }
         let out = null;
         try { const ev = gatherEvidence(); if (ev) { const res = scorePair(ev); out = { ev, res, write: writeUp(res, ev) }; } } catch (e) { console.log('[elm2] analysis failed:', e); }
-        anCache = { t: now, key, out };
-        // remembered as soon as it exists (not only when the analysis card is drawn), so a pair that is skipped in a second still gets its chip
-        if (out && !busyNow) rememberRating(out.res); // not while the pair is being read: the rows are not all there yet
+        anCache = { t: now, key, out, kept: false };
+        if (out && !busyNow) { anCache.kept = true; rememberRating(out.res); } // not while the pair is being read: the rows are not all there yet
         return out;
     }
     // The card's view: 'ours' (the write-up), 'points' (the table) or 'bolt' (Bolt's own write-up). Write-up or points is kept from pair
@@ -3009,6 +3016,18 @@
         if (keys.length > RATINGS_MAX) keys.sort((x, y) => all[x][1] - all[y][1]).slice(0, keys.length - RATINGS_MAX).forEach(k => delete all[k]);
         try { lsSet(RATINGS_KEY, JSON.stringify(all)); } catch (e) { /* storage full: the rating just is not kept */ }
         requestAnimationFrame(() => runStep(syncScoreChips)); // the list's chip for this pair follows at once, while its profile is still open
+    }
+    // Saves the rating of the pair on screen now, worked out afresh, even while the cover is up (Auto-Skip and a merge call this once the
+    // rows have been read). '' once it is saved under the pair's Spark IDs, else why not.
+    function saveRatingNow() {
+        const { a, b } = getSparkIds();
+        if (!a || !b) return 'no Spark IDs on the form';
+        anCache.t = 0; // not the cached one: it may be from before the rows were read
+        const out = currentRating();
+        if (!out) return 'no rating yet: Bolt\'s overview has not shown';
+        if (!anCache.kept) { anCache.kept = true; rememberRating(out.res); }
+        const hit = loadRatings()[ratingKey(a, b)];
+        return hit && typeof hit[2] === 'string' ? '' : 'the rating could not be stored';
     }
     // 'none' (no rating under that key), 'old' (rated before slots were kept: reopen the pair) or the level
     function levelOfKey(key) {
@@ -4586,6 +4605,9 @@
             pendingMergeToast = { text: 'Merge: ' + (st.applicant ? st.applicant : st.total > 0 ? st.agree + '/' + st.total : 'Bolt'), at: Date.now() };
             // For the database: which pair this was and what the script chose over Bolt, then record the
             // pair now (the poll might not have run yet).
+            // the pair's rating is saved before it goes (a merged pair keeps its chip on the list)
+            const unsaved = saveRatingNow();
+            if (unsaved) console.log('[elm2] chips: merging without saving a rating (' + unsaved + '): this pair\'s chip on the list stays Pending');
             const sp = getSparkIds();
             // lost = the Spark ID that is merged away (the side not selected on the Spark Id row), '' if unknown
             const keep = keptSparkSide();

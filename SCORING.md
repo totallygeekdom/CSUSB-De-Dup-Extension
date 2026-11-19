@@ -26,7 +26,7 @@ Points view too. They are shown for information only: the rating is the points a
 | Gender | +5 | 0 (it can be missing, updated or entered wrong) |  |
 | Name of the other record found in an email address (counted whether or not the names match) | +6 first + last name, +4 first 3+ letters + last name (mar.soto), +3 first initial + last name, +2 first or last name alone (capped at +10 for the pair) | none |  |
 | Birth date found in an email address | +20 full date that matches, +3 birth year | -8 (a full date that disagrees) |  |
-| Bolt's own score | High +10, Medium +5 | Low -10; Bolt's analysis failed (it shows Error) -5; Bolt says "different people" -25 |  |
+| Bolt's own score | High +10, Medium +5 | Low -10; Bolt's analysis failed (it shows Error) -5; Bolt says "different people" -10 |  |
 | Applicant with no Coyote ID vs a contact that has one | none | -40 | |
 
 There is no twin-pattern rule: first names that differ cost the first-name penalty and nothing more.
@@ -64,13 +64,13 @@ Each row is run through the live engine (the Bolt score is not included unless t
 | Same name + DOB + email, applicant vs a contact with a Coyote ID | 70 | **High** |
 | Same DOB + address, no names on either record | 65 | Medium |
 | Same name + email + address + soft fields, clearly different DOB | 65 | Medium |
+| Bolt flags "different people", same name + birth date | 60 | Medium |
 | Same name + address + DOB, applicant vs a contact with a Coyote ID | 55 | Medium |
 | Siblings (same last name, address, family email; different first name) | 54 | Medium |
 | Jr./Sr. with clearly different DOBs | 54 | Medium |
 | Twins (same last name, DOB, address; different first name) | 50 | Medium |
 | Same first name, overlapping last names, emails differing only in the numbers (maria.soto444 / maria.soto1111) | 47 | Medium |
 | Different CAS IDs, same name and birth date | 45 | Medium |
-| Bolt flags "different people", same name + birth date | 45 | Medium |
 
 ## Examples of Low scores
 
@@ -109,5 +109,5 @@ points add up. Closest to Medium first.
 - **Points only.** High is 70+ points, whatever they come from, so a pair can reach it with no birth date, ID, email or phone: the same name with Bolt High,
   name-based emails, gender and soft fields add up to 80. A Jr./Sr. with the same name, address and a family email or phone (no birth date on file) is High too.
 - **Birth date and address alone.** With no names on either record the pair stays Medium (65); a last name is enough to reach High.
-- **Bolt's "different people" flag.** It costs -25, which a same name and birth date outweigh: that pair is Medium (see the sample rows), not Low.
+- **Bolt's "different people" flag.** It costs -10, which a same name and birth date outweigh: that pair is Medium (see the sample rows), not Low.
 - **An ID match outweighs a disagreeing birth date.** A matching Coyote ID or CAS ID with the same name is High even when the birth dates are clearly different.

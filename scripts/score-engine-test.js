@@ -103,5 +103,15 @@ check(pairs[0][1].level === 'high' && other.scoreSlots(slotsFromString(remembere
 const slotText = slotsToString(pairs[0][1].slots);
 check(!/[A-Za-z]{6,}\.?\d?/.test(slotText.replace(/[a-z]+\.\d|[A-Za-z]+(?=,|$|\*)/g, '')) && !/ana|cruz|2004|@/i.test(slotText), 'the remembered text holds no names, dates or contact details: "' + slotText + '"');
 check(scoreSlots({ 'dob.0': 1, 'retiredRule.0': 1 }) === null && slotsFromString('dob.0,,x') === null && slotsFromString(undefined) === null, 'an unknown slot or a malformed text is not rated (so the chip reads Pending)');
+// Bolt saying "different people" takes back its High / Medium bonus (only the -10 penalty is left)
+{
+  const base = score({ ...person }, { ...person }, { bolt: { level: 'medium' } });
+  const diff = score({ ...person }, { ...person }, { bolt: { level: 'medium', different: true } });
+  const diffHigh = score({ ...person }, { ...person }, { bolt: { level: 'high', different: true } });
+  check(pts(base, 'bolt') === SCORE_W.boltMedium, 'Bolt Medium alone is +' + SCORE_W.boltMedium);
+  check(!diff.items.some(i => i.key === 'bolt') && pts(diff, 'boltDifferent') === SCORE_W.boltDifferent, 'Bolt Medium + "different people": no Medium bonus, only ' + SCORE_W.boltDifferent);
+  check(!diffHigh.items.some(i => i.key === 'bolt') && diff.points === base.points - SCORE_W.boltMedium + SCORE_W.boltDifferent, 'the points are the same with or without the bonus plus the penalty (' + diff.points + ')');
+}
+
 console.log(failures ? failures + ' check(s) failed' : 'all checks passed');
 process.exit(failures ? 1 : 0);

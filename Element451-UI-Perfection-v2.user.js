@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.295
+// @version      2.296
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.295'; // keep in sync with @version
+    const VERSION = '2.296'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -2591,11 +2591,13 @@
         if (emFit) add('emailNameHint', 'Name in email', emFit, 'for', 'an email address that contains the other record\'s name (' + emNotes.join(', ') + ')');
         // Bolt's own view
         const bl = ev.bolt && ev.bolt.level;
-        if (bl === 'high') add('bolt', 'Bolt', W.boltHigh, 'for', 'Bolt rated the pair High', { slot: 'boltHigh' });
-        else if (bl === 'medium') add('bolt', 'Bolt', W.boltMedium, 'for', 'Bolt rated the pair Medium', { slot: 'boltMedium' });
+        // Bolt saying "different people" takes back its High / Medium bonus: no points for the rating, only the penalty below
+        const boltDiff = !!(ev.bolt && ev.bolt.different);
+        if (bl === 'high' && !boltDiff) add('bolt', 'Bolt', W.boltHigh, 'for', 'Bolt rated the pair High', { slot: 'boltHigh' });
+        else if (bl === 'medium' && !boltDiff) add('bolt', 'Bolt', W.boltMedium, 'for', 'Bolt rated the pair Medium', { slot: 'boltMedium' });
         else if (bl === 'low') add('bolt', 'Bolt', W.boltLow, 'against', 'Bolt rated the pair Low', { slot: 'boltLow' });
         else if (ev.bolt && ev.bolt.error) add('bolt', 'Bolt', W.boltError, 'against', "Bolt's own analysis failed (its score shows Error)", { slot: 'boltError' });
-        if (ev.bolt && ev.bolt.different) add('boltDifferent', 'Bolt "different people"', W.boltDifferent, 'against', 'Bolt flagged them as different people', { slot: 'boltDifferent' });
+        if (boltDiff) add('boltDifferent', 'Bolt "different people"', W.boltDifferent, 'against', 'Bolt flagged them as different people', { slot: 'boltDifferent' });
         // totals: the points and the rating come from the slots (shared with the list's re-rating); the items are the reasons in words
         const rated = scoreSlots(slots);
         const keyFields = ['coyote', 'cas', 'dob', 'email', 'phone'];

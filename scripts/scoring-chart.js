@@ -67,7 +67,8 @@ const SAMPLES = [
   ['Siblings: same last name and family email, no shared address', P({ first: 'Ana', last: 'Cruz', emails: ['cruz@x.com'] }), P({ first: 'Eva', last: 'Cruz', emails: ['cruz@x.com'] })],
   ['Same name, different address', P({ ...ana }), P({ ...ana }), { addrState: 'mismatch' }],
   ['Same name, nothing else known', P({ ...ana }), P({ ...ana })],
-  ['Bolt flags "different people", same name + birth date', P({ ...ana, ...dob }), P({ ...ana, ...dob }), { bolt: { different: true } }]
+  ['Bolt flags "different people", same name + birth date', P({ ...ana, ...dob }), P({ ...ana, ...dob }), { bolt: { different: true } }],
+  ['Bolt rates Medium but flags "different people", same name + birth date', P({ ...ana, ...dob }), P({ ...ana, ...dob }), { bolt: { level: 'medium', different: true } }]
 ];
 const ORDER = { high: 0, medium: 1, low: 2 };
 const rows = SAMPLES.map(([name, A, B, ev]) => ({ name, r: scorePair(Object.assign({ A, B, bolt: {} }, ev || {})) }))
@@ -105,7 +106,7 @@ Points view too. They are shown for information only: the rating is the points a
 | Gender | ${n(W.gender[0])} | ${n(W.gender[1])} (it can be missing, updated or entered wrong) | ${strong('gender.0')} |
 | Name of the other record found in an email address (counted whether or not the names match) | ${n(W.emailNameFull)} first + last name, ${n(W.emailNamePartial)} first 3+ letters + last name (mar.soto), ${n(W.emailNameInitial)} first initial + last name, ${n(W.emailNameOne)} first or last name alone (capped at ${n(W.emailNameCap)} for the pair) | none | ${strong('emailNameFull')} |
 | Birth date found in an email address | ${n(W.emailDobFull)} full date that matches, ${n(W.emailDobYear)} birth year | ${n(W.emailDobConflict)} (a full date that disagrees) | ${strong('emailDobFull')} |
-| Bolt's own score | High ${n(W.boltHigh)}, Medium ${n(W.boltMedium)} | Low ${n(W.boltLow)}; Bolt's analysis failed (it shows Error) ${n(W.boltError)}; Bolt says "different people" ${n(W.boltDifferent)} | ${strong('boltHigh')} |
+| Bolt's own score | High ${n(W.boltHigh)}, Medium ${n(W.boltMedium)} | Low ${n(W.boltLow)}; Bolt's analysis failed (it shows Error) ${n(W.boltError)}; Bolt says "different people" ${n(W.boltDifferent)}, and then its High / Medium bonus is not given | ${strong('boltHigh')} |
 | Applicant with no Coyote ID vs a contact that has one | none | ${n(W.applicantVsCoyote)} | |
 
 There is no twin-pattern rule: first names that differ cost the first-name penalty and nothing more.

@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.295`, shown in the settings pane |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.296`, shown in the settings pane |
 | Element451 - Database v2 | `database-v2.js` | `@version 2.74` |
 | Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.17`, see [section 17](#17-database-merge) |
 
@@ -389,7 +389,7 @@ A three-way switch picks the view: **Write-up** (the plain-English write-up), **
 | Name or birth date found in an email address | name: +6 first + last, +4 first 3+ letters + last (`mar.soto`), +3 initial + last, +2 first or last alone, up to +10 for the pair / birth date: +20 (year only +3) | -8 (a full date that disagrees) |
 | Applicant with no Coyote ID vs a contact that has one | | -40 |
 | Bolt High / Medium / Low | +10 / +5 / -10 | |
-| Bolt says "different people" | | -10 |
+| Bolt says "different people" | | -10, and Bolt's High / Medium bonus is not given |
 
 **Rating.** The rating is the points alone (UI 2.287): High is 70+, Medium 45+, everything else Low, except that a **hard conflict** always makes the pair Low. (It used to need a matching Coyote or CAS ID or two strong matches for High as well; that rule is gone.) A **hard conflict** is now only two different Coyote IDs, and it caps the pair at Low. Different CAS IDs are -25, not a hard conflict, because a student can have several applications. A clearly different birth date is a -45 penalty like any other, so the other fields can outweigh it (a matching Coyote ID and name with a clearly different birth date scores 90 and is High). There is no twin-pattern rule: first names that differ cost the first-name penalty (-30) and nothing more, so a pair of twins or siblings who share a last name, birth date and address scores 50 points (Medium); there is no separate possible-twins check any more (section 8), so the score alone decides. A Low pair under 15 points is described as probably different people in the write-up. These are deliberately cautious: merging two people is the worse mistake. The weights, thresholds and nickname list are in `SCORE_W`, `SCORE_CUT` and `NICK` at the top of the score engine, which is a set of pure functions (no page access) between the `SCORE ENGINE START` / `END` comments.
 
@@ -574,7 +574,7 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 - **ID weights ±120** (UI 2.272): a matching Coyote ID or CAS ID is +120 and different ones are -120 (were +100 / -100 and +80 / -80).
 - **Birth date mismatch -45** (UI 2.271): was -60.
 - **SCORING.md** (generated chart of the scoring system, kept in step by `npm test`; `npm run scoring` regenerates it).
-- **Bolt "different people" is -10** (UI 2.295): was -25. It now costs the same as Bolt's Low score.
+- **Bolt "different people" is -10, and takes back Bolt's bonus** (UI 2.295, 2.296): was -25. It now costs the same as Bolt's Low score, and when Bolt says different people the +10 (High) or +5 (Medium) it would have added is not given.
 - **Appeal and Forbidden checkboxes** (UI 2.294): two new checkboxes next to the departments under Allowed departments. Ticked, an Appeal or Forbidden pair is worked on instead of blocked (both default off, so nothing changes unless you tick them); the chip stays as a note and the Database script still records the pair as Appeal or Forbidden. Section 4.7.
 - **Forbidden names kept as hashes** (UI 2.293, and the v1 script): the hard-coded forbidden-name list is stored as SHA-256 hashes of the lower-case full name, so the names are no longer readable in the code or the docs. Blocking works as before (spaces inside a name are now collapsed before comparing).
 - **Real student details removed** (UI 2.292): examples taken from screenshots are replaced with made-up ones.

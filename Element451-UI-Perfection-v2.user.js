@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.309
+// @version      2.310
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.309'; // keep in sync with @version
+    const VERSION = '2.310'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -2109,11 +2109,16 @@
             clicks++;
             setTimeout(clickLoop, ok ? 3000 : 500);
         };
+        // The pair's rating is worked out from Bolt's overview and remembered by its Spark IDs, which is what gives its chip on the list.
+        // A pair skipped before Bolt's overview rendered kept no rating and stayed Pending, so the skip waits for the rating (at most
+        // 5 s: with no overview there is nothing to wait for).
+        const rated = () => { const { a, b } = getSparkIds(); return !!(a && b && currentRating()); };
         const attempt = () => {
             if (getPairKey() !== key) { skipInFlightKey = ''; return; } // already moved on
+            if (!rated() && Date.now() - startedAt < 5000) { setTimeout(attempt, 300); return; }
             const detail = {};
             document.dispatchEvent(new CustomEvent('elm2-record-pair', { detail }));
-            if (detail.handled && !detail.recorded && Date.now() - startedAt < 3000) { setTimeout(attempt, 250); return; }
+            if (detail.handled && !detail.recorded && Date.now() - startedAt < 8000) { setTimeout(attempt, 250); return; }
             const qp = getQueuePosition();
             console.log('[elm2] Skipping to next pair:', reason, qp ? '(was ' + qp.current + '/' + qp.total + ')' : '');
             clickLoop();

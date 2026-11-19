@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.312
+// @version      2.314
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.312'; // keep in sync with @version
+    const VERSION = '2.314'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -227,6 +227,7 @@
         #elm2-busy .elm2-li { width: 56px; height: 56px; border-radius: 50%; background: var(--md-primary-container, #fde3cc); display: flex; align-items: center; justify-content: center; }
         #elm2-busy .elm2-li svg { width: 44px; height: 44px; }
         #elm2-busy .elm2-li path { fill: var(--md-primary-text, #b34e00); }
+        body.elm2-reading bolt-slide-toggle.hide-matching-items-toggle { visibility: hidden !important; }
         bolt-card.analysis-card.elm2-an-wait .analysis-header, bolt-card.analysis-card.elm2-an-wait .analysis-summary { display: none !important; }
         .elm2-an-skel { display: flex; flex-direction: column; gap: 10px; padding: 6px 0 4px; }
         .elm2-an-skel-bar { display: flex; align-items: center; gap: 8px; }
@@ -2208,6 +2209,9 @@
     // =========================================================
     let currentQueuePositionKey = '';   // "current/total" — used to detect navigation to a new pair
     let pairFirstSeenAt = 0;            // when the current pair was first seen
+    // the cover while a pair is read (declared here, early: the rating code reads busyNow)
+    const BUSY_MAX_MS = 8000, SCORE_WAIT_MS = 4000;
+    let busySince = 0, busyGaveUp = '', busyNow = false;
     let resolutionAttempted = false;    // resolution ran for the current pair
     let awaitingMergeResult = false;
     let lastMergeContactNamesKey = '';
@@ -2755,7 +2759,7 @@
         try { const ev = gatherEvidence(); if (ev) { const res = scorePair(ev); out = { ev, res, write: writeUp(res, ev) }; } } catch (e) { console.log('[elm2] analysis failed:', e); }
         anCache = { t: now, key, out };
         // remembered as soon as it exists (not only when the analysis card is drawn), so a pair that is skipped in a second still gets its chip
-        if (out) rememberRating(out.res);
+        if (out && !busyNow) rememberRating(out.res); // not while the pair is being read: the rows are not all there yet
         return out;
     }
     // The card's view: 'ours' (the write-up), 'points' (the table) or 'bolt' (Bolt's own write-up). Write-up or points is kept from pair
@@ -2832,16 +2836,17 @@
     }
     function renderOurAnalysis() {
         const card = document.querySelector('bolt-card.analysis-card');
-        const body = card && card.querySelector(':scope > bolt-card-body, :scope > .bolt-card-body');
+        const body = card && (card.querySelector(':scope > bolt-card-body, :scope > .bolt-card-body') || card);
         if (!body) return;
-        const rating = currentRating();
+        // while the pair is being read (the cover is up) the numbers are not final, so they are not shown: the placeholder lines are
+        const rating = busyNow ? null : currentRating();
         const old = body.querySelector(':scope > .elm2-an');
         let skel = body.querySelector(':scope > .elm2-an-skel');
         if (!rating) {
             if (old) old.remove();
             card.classList.remove('elm2-an-ours', 'elm2-an-bolt');
-            // pulsing placeholder lines while the rating is on its way (not for good: with no Bolt overview the card falls back to Bolt's own)
-            const waiting = isDedupReviewPage() && !!pairFirstSeenAt && Date.now() - pairFirstSeenAt < BUSY_MAX_MS;
+            // pulsing placeholder lines while the pair is read and the rating is on its way (not for good: with no Bolt overview the card falls back to Bolt's own)
+            const waiting = busyNow || (isDedupReviewPage() && !!pairFirstSeenAt && Date.now() - pairFirstSeenAt < BUSY_MAX_MS);
             card.classList.toggle('elm2-an-wait', waiting);
             if (waiting && !skel) {
                 skel = document.createElement('div'); skel.className = 'elm2-an-skel'; skel.setAttribute('aria-hidden', 'true');
@@ -4385,8 +4390,6 @@
     }
     // ---- The cover: while a pair is being read (the matching rows shown, read and hidden again) and scored, the fields are covered by a
     // Material indeterminate progress, which also blocks clicks and keys on them. It never holds for more than BUSY_MAX_MS. ----
-    const BUSY_MAX_MS = 8000, SCORE_WAIT_MS = 4000;
-    let busySince = 0, busyGaveUp = '';
     function pairIsBusy() {
         const pk = isDedupReviewPage() && !completionCardVisible() ? getPairKey() : '';
         if (!pk) return false;
@@ -4402,9 +4405,9 @@
     // The loading indicator's shapes, as polar curves (radius by angle) sampled into the same number of points, so the browser can morph
     // one into the next: soft burst, 9-sided cookie, pentagon, pill, sunny, 4-sided cookie, oval.
     const LI_POINTS = 64, LI_RADIUS = 20;
-    const liPolygon = (k) => (t) => { const a = Math.PI / k, u = ((t % (2 * a)) + 2 * a) % (2 * a); const r = Math.cos(a) / Math.cos(u - a); return r + (1 - r) * 0.45; };
+    const liPolygon = (k) => (t) => { const a = Math.PI / k, u = ((t % (2 * a)) + 2 * a) % (2 * a); const r = Math.cos(a) / Math.cos(u - a); return r + (1 - r) * 0.58; };
     const liSuper = (a, b, n) => (t) => Math.pow(Math.pow(Math.abs(Math.cos(t) / a), n) + Math.pow(Math.abs(Math.sin(t) / b), n), -1 / n);
-    const LI_SHAPES = [(t) => 1 + 0.12 * Math.cos(10 * t), (t) => 1 + 0.08 * Math.cos(9 * t), liPolygon(5), liSuper(1, 0.62, 4), (t) => 1 + 0.15 * Math.cos(8 * t), (t) => 1 + 0.11 * Math.cos(4 * t), liSuper(1, 0.74, 2)];
+    const LI_SHAPES = [(t) => 1 + 0.105 * Math.cos(10 * t), (t) => 1 + 0.075 * Math.cos(9 * t), liPolygon(5), liSuper(1, 0.7, 3.6), (t) => 1 + 0.14 * Math.cos(8 * t), (t) => 1 + 0.13 * Math.cos(4 * t), liSuper(1, 0.66, 2)];
     const liPath = (fn) => {
         const pts = [];
         for (let i = 0; i < LI_POINTS; i++) { const t = i / LI_POINTS * 2 * Math.PI; pts.push([Math.cos(t) * fn(t), Math.sin(t) * fn(t)]); }
@@ -4419,15 +4422,20 @@
         path.setAttribute('d', ds[0]);
         g.appendChild(path); svg.appendChild(g); wrap.appendChild(svg);
         if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return wrap; // a still shape
-        const n = ds.length, dur = n * 0.7 + 's';
+        // as in Material's own animation: each shape is held for 0.6 s and morphs into the next in 0.2 s (5.6 s for the seven), while the
+        // whole shape keeps turning (two turns per round)
+        const n = ds.length, dur = n * 0.8 + 's', HOLD = 0.6 / (n * 0.8), STEP = 0.8 / (n * 0.8);
+        const values = [], keyTimes = [], splines = [];
+        ds.forEach((d, i) => { values.push(d, d); keyTimes.push(i * STEP, i * STEP + HOLD); splines.push('0 0 1 1', '.4 0 .2 1'); });
+        values.push(ds[0]); keyTimes.push(1); // 15 values, 14 segments: a hold and a morph for each shape
         const morph = document.createElementNS(NS, 'animate');
         morph.setAttribute('attributeName', 'd'); morph.setAttribute('dur', dur); morph.setAttribute('repeatCount', 'indefinite'); morph.setAttribute('calcMode', 'spline');
-        morph.setAttribute('values', ds.concat([ds[0]]).join(';'));
-        morph.setAttribute('keyTimes', ds.concat([ds[0]]).map((x, i) => (i / n).toFixed(4)).join(';'));
-        morph.setAttribute('keySplines', ds.map(() => '.4 0 .2 1').join(';'));
+        morph.setAttribute('values', values.join(';'));
+        morph.setAttribute('keyTimes', keyTimes.map(t => t.toFixed(4)).join(';'));
+        morph.setAttribute('keySplines', splines.join(';'));
         path.appendChild(morph);
         const turn = document.createElementNS(NS, 'animateTransform');
-        turn.setAttribute('attributeName', 'transform'); turn.setAttribute('type', 'rotate'); turn.setAttribute('from', '0'); turn.setAttribute('to', '360');
+        turn.setAttribute('attributeName', 'transform'); turn.setAttribute('type', 'rotate'); turn.setAttribute('from', '0'); turn.setAttribute('to', '720');
         turn.setAttribute('dur', dur); turn.setAttribute('repeatCount', 'indefinite');
         g.appendChild(turn);
         return wrap;
@@ -4435,7 +4443,10 @@
     function updateBusyOverlay() {
         const form = getDiffForm(), host = form && (form.querySelector('form.diff-form') || form); // the form that holds the fields is the block the cover sits in
         let cover = document.getElementById('elm2-busy');
-        if (!host || !pairIsBusy()) { if (cover) cover.remove(); return; }
+        busyNow = !!host && pairIsBusy();
+        // Element's "Hide matching items" switch is hidden meanwhile too, so the script flipping it is not seen (it is still clicked)
+        document.body.classList.toggle('elm2-reading', busyNow);
+        if (!busyNow) { if (cover) cover.remove(); return; }
         if (cover && cover.parentElement === host) return;
         if (cover) cover.remove();
         if (getComputedStyle(host).position === 'static') host.style.position = 'relative';

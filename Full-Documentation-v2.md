@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.296`, shown in the settings pane |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.297`, shown in the settings pane |
 | Element451 - Database v2 | `database-v2.js` | `@version 2.74` |
 | Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.17`, see [section 17](#17-database-merge) |
 
@@ -68,7 +68,7 @@ Chrome users can instead install the scripts through the unpacked extension, whi
 | Full page of `elm-merge-row` rows with a floating "FAB" merge button | A review queue with a side panel holding `elm-duplicate-field-diff-form`; each field is a `.diff-row` with two value buttons and arrow buttons |
 | Entry identified by `/duplicates/<id>` in the URL | The URL is always `/v2/data/duplicates/bolt/review-queue` and never changes per pair |
 | The FAB's first click revealed conflicts, the second merged | One click on **Merge Contacts** merges |
-| Conflict rows highlighted by Element | Element hides matching rows; differing rows are the conflicts |
+| Conflict rows highlighted by Element | Element hides matching rows (its "Hide matching items" switch); differing rows are the conflicts. The script keeps that switch off by default (*Read matching rows*) so the blocker and department checks see every row |
 | No AI | **Bolt AI** pre-selects a side on each row (marked on the "Keep Contact A/B" arrow buttons) and shows a score chip (High / Medium / Low) and an analysis summary |
 | List page: `elm-row` chips, URL-driven pagination (`offset`/`limit`) | List page: `elm-review-queue-table` + Angular Material paginator (state not in the URL) |
 | Next entry: link/URL navigation | `Previous duplicate` / `Next duplicate` buttons in a queue nav bar; **Dismiss** opens a permanent "Not a duplicate?" verdict dialog |
@@ -574,6 +574,7 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 - **ID weights ±120** (UI 2.272): a matching Coyote ID or CAS ID is +120 and different ones are -120 (were +100 / -100 and +80 / -80).
 - **Birth date mismatch -45** (UI 2.271): was -60.
 - **SCORING.md** (generated chart of the scoring system, kept in step by `npm test`; `npm run scoring` regenerates it).
+- **Read matching rows** (UI 2.297): Element's "Hide matching items" switch leaves only the differing rows on the page, so an Appeal or test keyword, a School ID or a department marker in a row both contacts share went unseen. A new switch in the settings pane (*Read matching rows*, `elm_read_matching_rows`, on by default) keeps Element's switch off so every row is on the page for the blocker and department checks. Turn it off to keep Element's own setting.
 - **Bolt "different people" is -10, and takes back Bolt's bonus** (UI 2.295, 2.296): was -25. It now costs the same as Bolt's Low score, and when Bolt says different people the +10 (High) or +5 (Medium) it would have added is not given.
 - **Appeal and Forbidden checkboxes** (UI 2.294): two new checkboxes next to the departments under Allowed departments. Ticked, an Appeal or Forbidden pair is worked on instead of blocked (both default off, so nothing changes unless you tick them); the chip stays as a note and the Database script still records the pair as Appeal or Forbidden. Section 4.7.
 - **Forbidden names kept as hashes** (UI 2.293, and the v1 script): the hard-coded forbidden-name list is stored as SHA-256 hashes of the lower-case full name, so the names are no longer readable in the code or the docs. Blocking works as before (spaces inside a name are now collapsed before comparing).

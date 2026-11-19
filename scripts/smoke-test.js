@@ -72,7 +72,7 @@ const check = (ok, label) => { console.log((ok ? 'ok   ' : 'FAIL ') + label); if
     check(healed === 'csv,merge,ui', 'opening the popup registers scripts that are missing (' + healed + ')');
     check((await syncVia({ type: 'toggle', id: 'nope', enabled: false })).ok === false, 'a toggle for an unknown script is refused');
     const site = await context.newPage();
-    await site.route('https://test.element451.io/**', r => r.fulfill({ contentType: 'text/html', body: '<html><body><div class="bolt-navigation-right"><elm-universal-search>s</elm-universal-search></div></body></html>' }));
+    await site.route('https://test.element451.io/**', r => r.fulfill({ contentType: 'text/html', body: '<html><body><div class="bolt-navigation-right"><elm-universal-search>s</elm-universal-search></div><elm-duplicate-field-diff-form></elm-duplicate-field-diff-form><bolt-slide-toggle class="hide-matching-items-toggle"><button class="mdc-switch mdc-switch--selected" role="switch" aria-checked="true" onclick="this.setAttribute(&quot;aria-checked&quot;, this.getAttribute(&quot;aria-checked&quot;) === &quot;true&quot; ? &quot;false&quot; : &quot;true&quot;); this.classList.toggle(&quot;mdc-switch--selected&quot;)"></button></bolt-slide-toggle></body></html>' }));
     const flags = () => site.evaluate(() => ({ ui: !!window.__elm451UiPerfectionLoaded, csv: !!window.__elm451CsvDatabaseLoaded, merge: !!window.__elm451DbMergeLoaded }));
     await site.goto('https://test.element451.io/review');
     await site.waitForFunction(() => window.__elm451UiPerfectionLoaded && window.__elm451CsvDatabaseLoaded && window.__elm451DbMergeLoaded, null, { timeout: 15000 }).catch(() => {});
@@ -104,6 +104,10 @@ const check = (ok, label) => { console.log((ok ? 'ok   ' : 'FAIL ') + label); if
     await site.waitForFunction(() => window.__elm451UiPerfectionLoaded && window.__elm451CsvDatabaseLoaded && window.__elm451DbMergeLoaded, null, { timeout: 15000 }).catch(() => {});
 
     // the in-page settings pane lists main script, database script and extension versions
+        // "Read matching rows" (on by default) keeps Element's "Hide matching items" switch off, so every row is on the page to check
+    await site.waitForFunction(() => document.querySelector('.hide-matching-items-toggle button').getAttribute('aria-checked') === 'false', null, { timeout: 15000 }).catch(() => {});
+    check(await site.evaluate(() => document.querySelector('.hide-matching-items-toggle button').getAttribute('aria-checked')) === 'false', 'the "Hide matching items" switch is turned off so matching rows are on the page');
+
     await site.click('#elm-settings-btn');
     await site.waitForFunction(() => document.querySelectorAll('#elm-settings-pane .settings-build').length >= 4, null, { timeout: 15000 }).catch(() => {});
     const lines = await site.$$eval('#elm-settings-pane .settings-build', els => els.map(e => e.textContent));

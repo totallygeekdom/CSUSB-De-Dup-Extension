@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.296
+// @version      2.297
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.296'; // keep in sync with @version
+    const VERSION = '2.297'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -122,6 +122,7 @@
         AUTO_SKIP_BLOCKED:        { get() { return getBoolSetting('elm_auto_skip_blocked', true); } },
         NEXT_AFTER_MERGE:         { get() { return getBoolSetting('elm_next_after_merge', true); } },
         ALLOWED_DEPARTMENT:       { get() { return lsGet('elm_allowed_department') || 'UnderGrad'; } },
+        READ_MATCHING_ROWS:       { get() { return getBoolSetting('elm_read_matching_rows', true); } },
         ALLOW_APPEAL:             { get() { return getBoolSetting('elm_allow_appeal', false); } },
         ALLOW_FORBIDDEN:          { get() { return getBoolSetting('elm_allow_forbidden', false); } },
     });
@@ -4236,8 +4237,21 @@
     // a merge removes a pair from the queue, so the next pair can land on the same position, and
     // duplicates usually share their names.
     let formWasAbsent = false;
+    // Element451's "Hide matching items" switch leaves only the rows that differ on the page, so a keyword (appeal, test), a School ID
+    // or a department marker in a row both contacts share would go unseen. With "Read matching rows" on, the switch is kept off,
+    // so every row is there for the blocker and department checks.
+    let matchSwitchClickedAt = 0;
+    function showMatchingRows() {
+        if (!CFG.READ_MATCHING_ROWS) return;
+        const btn = document.querySelector('bolt-slide-toggle.hide-matching-items-toggle button[role="switch"], bolt-slide-toggle.hide-matching-items-toggle button.mdc-switch');
+        if (!btn || !(btn.getAttribute('aria-checked') === 'true' || btn.classList.contains('mdc-switch--selected'))) return;
+        if (Date.now() - matchSwitchClickedAt < 3000) return; // one click at a time; the page needs a moment to show the rows
+        matchSwitchClickedAt = Date.now();
+        btn.click();
+    }
     function attemptAutoResolve() {
         if (!isDedupReviewPage() || completionCardVisible()) { formWasAbsent = true; return; }
+        showMatchingRows();
         if (!getContactNames().filter(Boolean).length) return; // page still loading
         if (formWasAbsent) {
             formWasAbsent = false;
@@ -4608,6 +4622,10 @@
                 <div class="elm-level-desc elm-skip-desc">Skips blocked and out-of-range pairs with no popup. Off: stops on them instead.</div>
                 </div>
                 <div class="elm-item">
+                <div class="setting-row"><label>Read matching rows</label>${toggleHtml('elm-read-matching')}</div>
+                <div class="elm-level-desc">Keeps Element's "Hide matching items" switch off, so every row is on the page. Appeal and test keywords, School IDs and the department are then checked in rows both contacts share, too.</div>
+                </div>
+                <div class="elm-item">
                 <div class="setting-row"><label>Next after merge</label>${toggleHtml('elm-next-after-merge')}</div>
                 <div class="elm-level-desc elm-next-desc">After a merge (yours or an auto-merge), presses "Next duplicate" on the "Merge completed" card, and hides Element\'s own "Skip merge completion screen" switches (which would remove that card).</div>
                 </div>
@@ -4728,6 +4746,7 @@
         setupToggle('elm-auto-skip-blocked', 'elm_auto_skip_blocked', syncToasts);
         syncToasts();
         setupToggle('elm-next-after-merge', 'elm_next_after_merge');
+        setupToggle('elm-read-matching', 'elm_read_matching_rows', showMatchingRows);
         setupToggle('elm-highlight-rows', 'elm_highlight_rows');
         function setupToggle(elementId, storageKey, onChange, defaultValue = true) {
             const el = document.getElementById(elementId);

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.291
+// @version      2.293
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.291'; // keep in sync with @version
+    const VERSION = '2.293'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -2199,13 +2199,57 @@
     // contact-field data, which this redesign did not change. Only the
     // container markup changed, so these regexes port over unmodified.)
     // =========================================================
+    // SHA-256 of a string, as hex (synchronous, so the blocker check can stay synchronous). The forbidden-name list is
+    // kept as hashes so the names themselves are not readable in this public source.
+    const sha256Hex = (() => {
+        const K = [], H0 = [];
+        const frac = (x) => ((x - Math.floor(x)) * 4294967296) | 0;
+        for (let n = 2, c = 0; c < 64; n++) {
+            let prime = true;
+            for (let d = 2; d * d <= n; d++) if (n % d === 0) { prime = false; break; }
+            if (!prime) continue;
+            if (c < 8) H0[c] = frac(Math.pow(n, 1 / 2));
+            K[c++] = frac(Math.pow(n, 1 / 3));
+        }
+        const rot = (x, n) => (x >>> n) | (x << (32 - n));
+        return (str) => {
+            const bytes = Array.from(new TextEncoder().encode(String(str)));
+            const bitLen = bytes.length * 8;
+            bytes.push(0x80);
+            while (bytes.length % 64 !== 56) bytes.push(0);
+            for (let i = 7; i >= 0; i--) bytes.push(i >= 4 ? 0 : (bitLen >>> (i * 8)) & 0xff);
+            const h = H0.slice(), w = new Array(64);
+            for (let off = 0; off < bytes.length; off += 64) {
+                for (let i = 0; i < 16; i++) w[i] = (bytes[off + 4 * i] << 24) | (bytes[off + 4 * i + 1] << 16) | (bytes[off + 4 * i + 2] << 8) | bytes[off + 4 * i + 3];
+                for (let i = 16; i < 64; i++) {
+                    const s0 = rot(w[i - 15], 7) ^ rot(w[i - 15], 18) ^ (w[i - 15] >>> 3), s1 = rot(w[i - 2], 17) ^ rot(w[i - 2], 19) ^ (w[i - 2] >>> 10);
+                    w[i] = (w[i - 16] + s0 + w[i - 7] + s1) | 0;
+                }
+                let [a, b, c, d, e, f, g, k] = h;
+                for (let i = 0; i < 64; i++) {
+                    const t1 = (k + (rot(e, 6) ^ rot(e, 11) ^ rot(e, 25)) + ((e & f) ^ (~e & g)) + K[i] + w[i]) | 0;
+                    const t2 = ((rot(a, 2) ^ rot(a, 13) ^ rot(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))) | 0;
+                    k = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0;
+                }
+                [a, b, c, d, e, f, g, k].forEach((v, i) => { h[i] = (h[i] + v) | 0; });
+            }
+            return h.map(v => (v >>> 0).toString(16).padStart(8, '0')).join('');
+        };
+    })();
+    // SHA-256 of 'elm-forbidden-name:' + the full name in lower case (spaces collapsed). To add a name, hash it the same way:
+    //   node -e "console.log(require('crypto').createHash('sha256').update('elm-forbidden-name:' + 'first last').digest('hex'))"
+    const FORBIDDEN_NAME_HASHES = new Set([
+        '9d9221e01137212bc56ee84d0dc05e453e5537fbcbe91819ebc6ba952f496f3e',
+        '653097b81b706a0092b552cf94c6c3d5f7e04b4f22d8d2bb2f49bcb0b53e8ee4',
+        '6020f882af797df81acbd5d814936904402e6fd7652ace5d28e82749bbae97f9'
+    ]);
+    const isForbiddenName = (name) => FORBIDDEN_NAME_HASHES.has(sha256Hex('elm-forbidden-name:' + String(name || '').toLowerCase().replace(/\s+/g, ' ').trim()));
     function isForbiddenEntry() {
         const names = getContactNames();
-        const forbiddenNames = ['forbidden name 1', 'forbidden name 2', 'forbidden name 3'];
         for (const name of names) {
             const lower = name.toLowerCase().trim();
             if (lower.includes('test')) return { forbidden: true, reason: 'test in name', name };
-            if (forbiddenNames.includes(lower)) return { forbidden: true, reason: 'forbidden name', name };
+            if (isForbiddenName(lower)) return { forbidden: true, reason: 'forbidden name', name };
         }
         return { forbidden: false };
     }

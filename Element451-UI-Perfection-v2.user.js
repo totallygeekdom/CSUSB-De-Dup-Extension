@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.289
+// @version      2.290
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.289'; // keep in sync with @version
+    const VERSION = '2.290'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -3979,16 +3979,20 @@
         if (!btn || btn.disabled || btn.getAttribute('aria-disabled') === 'true') return { ok: false, reason: 'the Merge Contacts button is unavailable' };
         return { ok: true, btn };
     }
-    function startAutoMerge(key) {
+    const BTN_WAIT_MS = 8000; // the Merge Contacts button can be disabled for a moment while Element loads the pair
+    const btnUnavailable = (r) => !r.ok && r.reason === 'the Merge Contacts button is unavailable';
+    function startAutoMerge(key, since) {
         if (mergedPairKey === key || getPairKey() !== key) return;
         cancelAutoMerge();
         // Do not count down to a merge that the final check would refuse anyway.
         const pre = mergeReadiness(key);
+        since = since || Date.now();
+        if (btnUnavailable(pre) && Date.now() - since < BTN_WAIT_MS) { setTimeout(() => startAutoMerge(key, since), 500); return; }
         if (!pre.ok) {
             console.log('[elm2] Auto-merge not started:', pre.reason);
             if (pre.reason === 'the pair changed') return;
             // A pair that needs a human is never skipped: it stays on screen (whatever Auto-Skip says).
-            if (pre.review) return; // needs a human: stays on screen, no toast (the console names the fields)
+            if (pre.review) { showMergeNotice('Not merged: needs review (' + pre.review + ')', true); return; } // needs a human: stays on screen
             if (CFG.AUTO_SKIP_BLOCKED) skipToNext('not merged, ' + pre.reason);
             else showMergeNotice('Auto-merge stopped: ' + pre.reason + '.');
             return;
@@ -4113,9 +4117,39 @@
             hideMergeModal();
             console.log('[elm2] Auto-merge not done:', ready.reason);
             if (ready.reason === 'the pair changed') return;
-            if (ready.review) return; // needs a human: stays on screen, no toast
+            if (ready.review) { showMergeNotice('Not merged: needs review (' + ready.review + ')', true); return; } // needs a human: stays on screen
             if (CFG.AUTO_SKIP_BLOCKED) { skipToNext('not merged, ' + ready.reason); }
             else showMergeNotice('Auto-merge stopped: ' + ready.reason + '.');
+        };
+        const fire = (btn) => {
+            card.classList.add('fired');
+            mergedPairKey = key;
+            console.log('[elm2] Auto-merging pair');
+            btn.click();
+            setTimeout(hideMergeModal, LINGER);
+            // Watchdog: a merge shows a "Merge completed" card. If it never comes (for example a
+            // confirmation dialog is waiting), the console says so.
+            setTimeout(() => {
+                if (getPairKey() !== key || completionCardVisible()) return;
+                const dlg = document.querySelector('bolt-dialog');
+                console.log('[elm2] Merge Contacts clicked but no "Merge completed" card;', dlg ? 'dialog open: ' + dlg.textContent.replace(/\s+/g, ' ').trim().slice(0, 160) : 'no dialog open');
+                showMergeNotice(dlg ? 'Auto-merge stopped: Element is asking something (see the dialog)' : 'Auto-merge stopped: no "Merge completed" card after 6 s', true);
+            }, 6000);
+        };
+        // At 0 the button was still disabled: hold the dialog and check again until it is enabled (or BTN_WAIT_MS pass).
+        const waitForButton = () => {
+            const t0 = Date.now();
+            document.getElementById('elm2-merge-title').textContent = 'Waiting for Merge Contacts…';
+            mergeTimer = setInterval(() => {
+                if (getPairKey() !== key) { cancelAutoMerge(); return; }
+                const r = mergeReadiness(key);
+                if (btnUnavailable(r) && Date.now() - t0 < BTN_WAIT_MS) return;
+                clearInterval(mergeTimer); mergeTimer = null;
+                if (!r.ok) { stop(r); return; }
+                card.classList.add('done');
+                document.getElementById('elm2-merge-title').textContent = 'Merging…';
+                fire(r.btn);
+            }, 300);
         };
         mergeTimer = setInterval(() => {
             if (getPairKey() !== key) { cancelAutoMerge(); return; }
@@ -4125,6 +4159,7 @@
             clearInterval(mergeTimer);
             mergeTimer = null;
             const ready = mergeReadiness(key);
+            if (btnUnavailable(ready)) { waitForButton(); return; }
             if (!ready.ok) { stop(ready); return; }
             // 0: the ring (or lamps) goes green; the merge is clicked right away (race lights: after RACE_GO).
             card.classList.add('done');
@@ -4132,20 +4167,6 @@
             if (race) driveKart(kart, 700); // green: GO
             document.getElementById('elm2-merge-title').textContent = race ? 'GO!' : 'Merging…';
             render();
-            const fire = (btn) => {
-                card.classList.add('fired');
-                mergedPairKey = key;
-                console.log('[elm2] Auto-merging pair');
-                btn.click();
-                setTimeout(hideMergeModal, LINGER);
-                // Watchdog: a merge shows a "Merge completed" card. If it never comes (for example a
-                // confirmation dialog is waiting), the console says so.
-                setTimeout(() => {
-                    if (getPairKey() !== key || completionCardVisible()) return;
-                    const dlg = document.querySelector('bolt-dialog');
-                    console.log('[elm2] Merge Contacts clicked but no "Merge completed" card;', dlg ? 'dialog open: ' + dlg.textContent.replace(/\s+/g, ' ').trim().slice(0, 160) : 'no dialog open');
-                }, 6000);
-            };
             if (!race) { fire(ready.btn); return; }
             mergeTimer = setTimeout(() => {
                 mergeTimer = null;
@@ -4215,14 +4236,14 @@
         // made no picks on this pair).
         const bolt = getDiffRows().filter(r => r.element.dataset.elm2AiSide).length;
         if (bolt === 0 && Date.now() - pairFirstSeenAt < 3000) return;
-        // Bolt's score chip decides two things: whether the analysis errored (stop on the pair) and, at the Low /
-        // Medium levels, whether it is in range. It can render a moment after the field rows, so wait for it.
-        if (!getScoreChips().length && Date.now() - pairFirstSeenAt < 3000) return;
-        if (scoreIsError()) { stopOnBoltError(); return; }
-        // At the Low / Medium Auto-Apply levels the decision depends on Bolt's score, which can
-        // render a moment after the field rows: wait for it (up to 3s) before deciding.
+        // Bolt's score chip decides two things: whether the analysis errored (stop on the pair) and, at the High /
+        // Medium / Low levels, whether it is in range. It can render a moment after the field rows, so wait for it:
+        // 3 s to see it at all, and where the slider decides by rating, up to 10 s (a slow load used to leave the pair
+        // "out of range" for good, because the pair is only judged once).
         const lvl = CFG.RANGE_LEVEL;
-        if (lvl >= 1 && lvl < 4 && !getScoreChipLevel() && Date.now() - pairFirstSeenAt < 3000) return;
+        if (!getScoreChips().length && Date.now() - pairFirstSeenAt < (lvl >= 1 && lvl < 4 ? 10000 : 3000)) return;
+        if (scoreIsError()) { stopOnBoltError(); return; }
+        if (lvl >= 1 && lvl < 4 && !getScoreChipLevel() && Date.now() - pairFirstSeenAt < 10000) return;
         // Dual personal emails: wait (up to 4s) for the engagement table, which the script opens itself.
         if (waitingForEngagement() && Date.now() - pairFirstSeenAt < 4000) return;
         resolutionAttempted = true;

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.304
+// @version      2.305
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.304'; // keep in sync with @version
+    const VERSION = '2.305'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -2763,12 +2763,12 @@
         }
         const forbidden = has('forbidden');
         if (forbidden) {
-            // The list's badge says Forbidden for all of these (and for different School IDs); here they are told apart: a test record
-            // (a name with "test" in it) reads Test, a name on the forbidden list reads Forbidden name.
+            // Every forbidden entry reads Forbidden, like the list's badge (a name on the forbidden list, a test record, different School
+            // IDs); the reason is in the chip's title and in the write-up.
             const test = forbidden.reason === 'test in name';
             const why = test ? 'a contact\'s name contains "test" (a test record)' : 'a contact\'s name is on the forbidden list';
             const ok = isAllowedReason(forbidden);
-            flags.push({ flag: test ? 'test' : 'forbidden', text: test ? 'Test' : 'Forbidden name', blocked: !ok, title: (ok ? 'Note: ' : 'Blocked: ') + why + (ok ? '. Forbidden pairs are allowed in your settings, so this pair is not blocked.' : '. This pair cannot be merged.') });
+            flags.push({ flag: 'forbidden', text: 'Forbidden', blocked: !ok, title: (ok ? 'Note: ' : 'Blocked: ') + why + (ok ? '. Forbidden pairs are allowed in your settings, so this pair is not blocked.' : '. This pair cannot be merged.') });
             notes.push(ok ? 'Note: ' + why + '. Forbidden pairs are allowed in your settings, so this pair is not blocked.' : 'Blocked: ' + why + ', so this pair cannot be merged.');
         }
         // Different School IDs: the list's badge says Forbidden for them, so the chip does too (the score also counts them: different

@@ -80,7 +80,7 @@ const check = (ok, label) => { console.log((ok ? 'ok   ' : 'FAIL ') + label); if
     const marks = await appPage.evaluate(() => {
         const m = document.getElementById('elm2-applicant-row-mark'), o = document.getElementById('elm2-applicant-outline'), rows = Array.from(document.querySelectorAll('.diff-row'));
         const r = rows[1].getBoundingClientRect(), f = document.querySelector('form.diff-form').getBoundingClientRect(), mr = m && m.getBoundingClientRect();
-        return { mark: !!m, outline: !!o, bands: rows.filter(x => x.dataset.elm2Band).length, onRow: !!mr && Math.abs(mr.top - r.top) < 2 && Math.abs(mr.height - r.height) < 2, over: !!mr && !!o && mr.right > o.getBoundingClientRect().left && mr.left < o.getBoundingClientRect().right && mr.top >= o.getBoundingClientRect().top && mr.bottom <= o.getBoundingClientRect().bottom && parseInt(getComputedStyle(m).zIndex, 10) > parseInt(getComputedStyle(o).zIndex, 10) };
+        return { mark: !!m, outline: !!o, bands: rows.filter(x => x.dataset.elm2Band).length, onRow: !!mr && Math.abs(mr.top - r.top) < 2 && Math.abs(mr.height - r.height) < 2, over: !!mr && !!o && Math.abs(mr.left - o.getBoundingClientRect().left) < 2 && Math.abs(mr.right - o.getBoundingClientRect().right) < 2 && mr.top >= o.getBoundingClientRect().top && mr.bottom <= o.getBoundingClientRect().bottom && parseInt(getComputedStyle(m).zIndex, 10) > parseInt(getComputedStyle(o).zIndex, 10) };
     });
     check(marks.mark && marks.outline && marks.bands === 3 && marks.onRow && marks.over, 'the applicant row gets an extra highlight over the band and the outline (' + JSON.stringify(marks) + ')');
     await appPage.close();

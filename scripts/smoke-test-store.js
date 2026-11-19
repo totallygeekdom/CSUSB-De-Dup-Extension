@@ -111,6 +111,15 @@ const check = (ok, label) => { console.log((ok ? 'ok   ' : 'FAIL ') + label); if
     const idInfo = await idPage.evaluate(() => { const f = document.querySelector('.elm2-an-flag[data-flag="forbidden"]'); return { chip: f ? f.textContent : null, blocked: document.body.classList.contains('elm2-blocked') }; });
     check(idInfo.chip === 'Forbidden' && idInfo.blocked, 'different School IDs: the pair is blocked and shows a Forbidden chip (' + JSON.stringify(idInfo) + ')');
     await idPage.close();
+    // only one side has a School Id: that side leads like an applicant (its band, outline and row highlight), and the other side has no application rows
+    const leadPage = await context.newPage();
+    await leadPage.route('https://test.element451.io/lead', r => r.fulfill({ contentType: 'text/html', body: makeFixture('').replace(row('Phone', '3105550101', '9515550101'), row('Identities', 'School Id: 009000001', '-')).replace(row('Workflows', '-', 'Cal State Apply Application, type: Application Submit'), row('Workflows', '-', '-')) }));
+    await leadPage.goto('https://test.element451.io/lead');
+    await leadPage.waitForSelector('#elm2-applicant-row-mark', { timeout: 15000 }).catch(() => {});
+    await leadPage.waitForTimeout(1500);
+    const lead = await leadPage.evaluate(() => { const m = document.getElementById('elm2-applicant-row-mark'), bands = Array.from(document.querySelectorAll('[data-elm2-band]')).map(e => e.dataset.elm2Band); const rows = Array.from(document.querySelectorAll('.diff-row')); const mr = m && m.getBoundingClientRect(); const id = rows.find(r => /School Id/.test(r.textContent)); const ir = id && id.getBoundingClientRect(); return { sides: Array.from(new Set(bands)).join(), mark: !!m, onIdRow: !!mr && !!ir && Math.abs(mr.top - ir.top) < 2, leftHalf: !!mr && !!ir && mr.right <= ir.left + ir.width / 2 + 2 }; });
+    check(lead.sides === 'left' && lead.mark && lead.onIdRow && lead.leftHalf, 'the side with the only School Id leads, like an applicant (' + JSON.stringify(lead) + ')');
+    await leadPage.close();
 
     await site.click('#elm-settings-btn');
     await site.waitForFunction(() => document.querySelectorAll('#elm-settings-pane .settings-build').length >= 4, null, { timeout: 15000 }).catch(() => {});

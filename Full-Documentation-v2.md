@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.292`, shown in the settings pane |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.293`, shown in the settings pane |
 | Element451 - Database v2 | `database-v2.js` | `@version 2.74` |
 | Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.17`, see [section 17](#17-database-merge) |
 
@@ -231,7 +231,7 @@ A pair is blocked when any of these is true. Blocked pairs get red styling (the 
 
 | Blocker | Detection |
 |---|---|
-| **Forbidden** | Either contact's name contains `test`, or equals one of three hard-coded names (`forbidden name 1`, `forbidden name 2`, `forbidden name 3`) |
+| **Forbidden** | Either contact's name contains `test`, or is on a short hard-coded list of names. The list is kept in the code as SHA-256 hashes (`FORBIDDEN_NAME_HASHES`), so the names cannot be read from the public source; the comment above it shows how to hash a name to add one |
 | **Appeal** | Any row value, on either side, contains the word `appeal` (the side is reported) |
 | **Wrong department** | The detected department is not ticked under **Allowed departments** (see below) |
 | **Student ID mismatch** | A row containing `School Id:` shows two different numeric IDs |
@@ -572,6 +572,8 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 - **ID weights ±120** (UI 2.272): a matching Coyote ID or CAS ID is +120 and different ones are -120 (were +100 / -100 and +80 / -80).
 - **Birth date mismatch -45** (UI 2.271): was -60.
 - **SCORING.md** (generated chart of the scoring system, kept in step by `npm test`; `npm run scoring` regenerates it).
+- **Forbidden names kept as hashes** (UI 2.293, and the v1 script): the hard-coded forbidden-name list is stored as SHA-256 hashes of the lower-case full name, so the names are no longer readable in the code or the docs. Blocking works as before (spaces inside a name are now collapsed before comparing).
+- **Real student details removed** (UI 2.292): examples taken from screenshots are replaced with made-up ones.
 - **A Bolt error is a -5, not a stop** (UI 2.291): a pair whose Bolt score chip reads Error used to halt the whole run (no resolution, merge or skip, even with Auto-Skip on). It is now rated by our own points like any other pair, with Bolt's analysis failing counted as -5, and the write-up and the Points view say so.
 - **Auto-merge stops are visible and retried** (UI 2.290): a pair that needs review now shows `Not merged: needs review (…)` (it used to stay silent); a Merge Contacts button that is still disabled is waited for (up to 8 s, before and after the countdown) instead of ending the merge; a merge click with no *Merge completed* card within 6 s shows a toast; and on High / Medium / Low the script waits up to 10 s (was 3 s) for the rating before judging the pair, because a pair is only judged once.
 - **Strong matches marked again** (UI 2.289): the Points view tags strong matches again and SCORING.md's points table has a *Strong match* column (an ID, birth date, exact email, phone, address), both for information: the rating stays points only.

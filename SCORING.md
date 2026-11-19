@@ -23,7 +23,6 @@ Points view too. They are shown for information only: the rating is the points a
 | Last name | +15 same; +7 overlapping | -15 |  |
 | Address (the page's own comparer) | +25 | -3 (people move) | **Yes** |
 | Student type, academic level, school attended | +5 each | 0 |  |
-| Gender | +5 | 0 (it can be missing, updated or entered wrong) |  |
 | Name of the other record found in an email address (counted whether or not the names match) | +6 first + last name, +4 first 3+ letters + last name (mar.soto), +3 first initial + last name, +2 first or last name alone (capped at +10 for the pair) | none |  |
 | Birth date found in an email address | +20 full date that matches, +3 birth year | -8 (a full date that disagrees) |  |
 | Bolt's own score | High +10, Medium +5 | Low -10; Bolt's analysis failed (it shows Error) -5; Bolt says "different people" -10, and then its High / Medium bonus is not given |  |
@@ -108,7 +107,7 @@ points add up. Closest to Medium first.
   auto-applies and, with When done = Merge, auto-merges them: there is no separate possible-twins check any more, the score alone decides. A larger first-name mismatch penalty
   would push them down to Low.
 - **Points only.** High is 70+ points, whatever they come from, so a pair can reach it with no birth date, ID, email or phone: the same name with Bolt High,
-  name-based emails, gender and soft fields add up to 80. A Jr./Sr. with the same name, address and a family email or phone (no birth date on file) is High too.
+  name-based emails and soft fields add up to 80. A Jr./Sr. with the same name, address and a family email or phone (no birth date on file) is High too.
 - **Birth date and address alone.** With no names on either record the pair stays Medium (65); a last name is enough to reach High.
 - **Bolt's "different people" flag.** It costs -10, which a same name and birth date outweigh: that pair is Medium (see the sample rows), not Low.
 - **An ID match outweighs a disagreeing birth date.** A matching Coyote ID or CAS ID with the same name is High even when the birth dates are clearly different.

@@ -26,7 +26,8 @@ check(pts(score({ ...person, coyote: '009123456' }, { ...person, coyote: '009123
 const casDiff = score({ ...person, dob: '2004-01-02' }, { ...person, dob: '2004-01-02', cas: '654321' }), casDiff2 = score({ ...person, dob: '2004-01-02', cas: '123456' }, { ...person, dob: '2004-01-02', cas: '654321' });
 check(casDiff2.hard === false && casDiff2.level === 'medium', 'different CAS IDs are not a hard conflict (a student can have several applications): same name and birth date stays Medium (' + casDiff2.points + ')');
 check(casDiff.items.every(i => i.key !== 'cas'), 'a CAS ID on one side only is not compared');
-check(pts(score({ ...person, gender: 'Female' }, { ...person, gender: 'female' }), 'gender') === 5 && pts(score({ ...person, gender: 'Female' }, { ...person, gender: 'Male' }), 'gender') === null && pts(score({ ...person, gender: 'Female' }, person), 'gender') === null, 'the same gender is +5; a different or missing one is 0');
+check(!score({ ...person, gender: 'Female' }, { ...person, gender: 'Female' }).items.some(x => x.key === 'gender') && !('gender' in SCORE_W), 'gender is not scored');
+check(scoreSlots({ 'last.0': 1, 'gender.0': 1 }).points === scoreSlots({ 'last.0': 1 }).points, 'a remembered rating that holds a gender slot is re-rated without it');
 const viaMail = score({ ...person, coyote: '009000001' }, { ...person, coyote: '009000001', coyoteFrom: 'email' }), viaMailOff = score({ ...person, coyote: '009000001' }, { ...person, coyote: '009999999', coyoteFrom: 'email' });
 check(pts(viaMail, 'coyote') === 120 && viaMail.level === 'high' && pts(viaMailOff, 'coyote') === null && viaMailOff.hard === false, 'a Coyote ID read from a coyote.csusb.edu email confirms (+120) but never makes a hard conflict');
 const within = score({ ...person, first: 'Lan', last: 'Vo' }, { ...person, first: 'Tran Mai Lan', last: 'Vo' });

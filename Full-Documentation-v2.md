@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.308`, shown in the settings pane |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.309`, shown in the settings pane |
 | Element451 - Database v2 | `database-v2.js` | `@version 2.75` |
 | Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.17`, see [section 17](#17-database-merge) |
 
@@ -385,7 +385,6 @@ A three-way switch picks the view: **Write-up** (the plain-English write-up), **
 | Last name (same / overlapping) | +15 / +7 | -15 |
 | Address (the page's own comparer) | +25 | -3 |
 | Student type, Academic level, School attended | +5 each | 0 |
-| Gender | +5 | 0 (it can be missing, updated or entered wrong) |
 | Name or birth date found in an email address | name: +6 first + last, +4 first 3+ letters + last (`mar.soto`), +3 initial + last, +2 first or last alone, up to +10 for the pair / birth date: +20 (year only +3) | -8 (a full date that disagrees) |
 | Applicant with no Coyote ID vs a contact that has one | | -40 |
 | Bolt High / Medium / Low | +10 / +5 / -10 | |
@@ -593,6 +592,7 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 - **One name inside the other** (UI 2.286): a first name whose every word is a word of the other record's first name is the same first name (+15): *Lan* and *Tran Mai Lan* (a family name put first, or a full name typed into the first-name field), *Ana* and *Ana Maria*. It used to be a different first name (-30). *Mai Lan* / *Mai Linh* still differ.
 - **The Identities section is read** (UI 2.285): values that name themselves are read wherever they are, so the Identities rows (labelled *Identities* or nothing) count: `School Id: …`, `Cas Id: …`, `Email: …` and `School Email: …`. A **coyote.csusb.edu address is the student's Coyote ID** (`009000001@coyote.csusb.edu`): a side with no School Id takes its Coyote ID from it, so a School Id on one record and the same number in the other's coyote email is the same Coyote ID (+120, enough for High). An ID read from an email only confirms: if it differs from the other record's, it scores nothing (a mistyped email never makes a hard conflict). The Maria Soto pair (School Id 009000001 on one side, 009000001@coyote.csusb.edu on the other) goes to High.
 - **Matching gender +5** (UI 2.284): the same gender on both records is +5, like student type, level and school; a different or missing one is 0. A gender that matches is read from its row like any other (the matching rows are kept on the page).
+- **Gender is no longer scored** (UI 2.309): the +5 for the same gender is gone (2.284 added it), and the script no longer reads a gender row at all. A remembered rating that holds the old gender point is re-rated without it.
 - **Orange Write-up / Points / Bolt's control** (UI 2.308): the selected segment was Bolt's blue; it now uses the same orange container colour as the rest of our UI (it follows Element's header colour).
 - **Hide matching items is put back reliably** (UI 2.307): the step that turns the switch back on no longer depends on the pair staying the same (a re-render that changed the pair key could leave it off); it runs first on every tick and clicks again, up to six times, until the switch is on. The switch's state is read from `aria-checked` when it has one (the selected class only otherwise). Each click logs the switch's `aria-checked` and class to the console.
 - **Different CAS IDs are -18** (UI 2.306): was -25. Still not a hard conflict.

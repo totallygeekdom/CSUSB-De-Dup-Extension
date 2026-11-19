@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.308
+// @version      2.309
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.308'; // keep in sync with @version
+    const VERSION = '2.309'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -2377,7 +2377,7 @@
         coyote: [120, -120], cas: [120, -18], dob: [40, -45], dobTypo: [25, -20],
         email: [40, 0], emailName: [15, 0], phone: [25, 0],
         first: [15, -30], firstRelated: [7, 0], last: [15, -15], lastPartial: [7, 0],
-        address: [25, -3], soft: [5, 0], gender: [5, 0],
+        address: [25, -3], soft: [5, 0],
         boltHigh: 10, boltMedium: 5, boltLow: -10, boltDifferent: -10, boltError: -5,
         applicantVsCoyote: -40,
         emailNameFull: 6, emailNamePartial: 4, emailNameInitial: 3, emailNameOne: 2, emailNameCap: 10, emailDobFull: 20, emailDobYear: 3, emailDobConflict: -8
@@ -2482,9 +2482,11 @@
         return typeof v === 'number' ? v : null; // null: not a slot of this engine
     }
     // slots: { slot: how many times it applied } -> { points, level, hard, strong }, or null when a slot is not one of this engine's
+    const RETIRED_SLOTS = ['gender.0']; // gender is no longer scored; a remembered rating that holds it is re-rated without it
     function scoreSlots(slots) {
         let pts = 0, nameFit = 0, strong = 0, hard = false;
         for (const slot of Object.keys(slots)) {
+            if (RETIRED_SLOTS.includes(slot)) continue;
             const n = slots[slot], w = slotWeight(slot);
             if (w === null) return null;
             if (slot === 'emailNameFull' || slot === 'emailNamePartial' || slot === 'emailNameInitial' || slot === 'emailNameOne') { nameFit += n * w; continue; } // together they are capped (below)
@@ -2579,8 +2581,6 @@
         [['studentType', 'Student type'], ['level', 'Academic level'], ['school', 'School attended']].forEach(([k, label]) => {
             if (both(A[k], B[k]) && scFold(A[k]) === scFold(B[k])) add(k, label, W.soft[0], 'for', 'the same ' + label.toLowerCase(), { slot: 'soft.0' });
         });
-        // Gender: a small plus when both records have it and it is the same (a different one costs nothing: it can be missing, updated or entered wrong)
-        if (both(A.gender, B.gender) && scFold(A.gender) === scFold(B.gender)) add('gender', 'Gender', W.gender[0], 'for', 'the same gender (' + A.gender + ')', { slot: 'gender.0' });
         // Name and birth date hidden in the email addresses
         let emFit = 0; const emNotes = [];
         [[A, B, 'A'], [B, A, 'B']].forEach(([own, other]) => {
@@ -2669,8 +2669,7 @@
     // matched (with their values), so both are read: the form for what differs, Bolt's bullets for what is the same.
     const BOLT_FIELDS = [['dob', /birth|\bdob\b/i], ['phone', /phone|mobile|cell/i], ['email', /e-?mail/i], ['address', /address/i], ['first', /first\s*name|given name/i],
         ['last', /last\s*name|surname|family name/i], ['cas', /\bcas\b|cal state apply id/i], ['coyote', /coyote|student id|school id|campus id/i],
-        ['studentType', /student type/i], ['level', /academic level/i], ['school', /school attended|previous school|high school|college attended/i],
-        ['gender', /\bgender\b|^\s*sex\s*$/i]];
+        ['studentType', /student type/i], ['level', /academic level/i], ['school', /school attended|previous school|high school|college attended/i]];
     function boltFieldKey(label) { const f = BOLT_FIELDS.find(([, re]) => re.test(label)); return f ? f[0] : null; }
     function readBoltSummary() {
         const el = document.querySelector('.analysis-summary');

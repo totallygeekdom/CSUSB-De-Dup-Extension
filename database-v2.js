@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - Database v2
 // @namespace    http://tampermonkey.net/
-// @version      2.76
+// @version      2.77
 // @description  Tracks duplicate entries in a database stored in browser localStorage (exports a password-protected .xlsx spreadsheet to share, or a personal .elmdb file locked to your Element451 login) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -15,7 +15,7 @@
     if (window.__elm451CsvDatabaseLoaded) return;
     window.__elm451CsvDatabaseLoaded = true;
 
-    const VERSION = '2.76'; // keep in sync with @version (the build checks it)
+    const VERSION = '2.77'; // keep in sync with @version (the build checks it)
     const STORAGE_KEY = 'elm_csv_database';
     const UI_KEY = 'elm_show_db_ui';
     function showDbUi() { try { return localStorage.getItem(UI_KEY) !== 'false'; } catch (e) { return true; } }
@@ -368,7 +368,10 @@
     document.addEventListener('elm2-record-pair', (e) => {
         if (!e.detail) return;
         e.detail.handled = true;
-        e.detail.recorded = recordEntry(document.body.dataset.csvDept);
+        const ok = recordEntryNow(document.body.dataset.csvDept);
+        trackRecording(ok === true ? '' : ok);
+        e.detail.recorded = ok === true;
+        e.detail.reason = ok === true ? '' : ok; // the main script logs it when a skip or merge goes on without the pair recorded
     });
 
     // The main script reports a confirmed merge (the Merge completed card): the pair's entry gets Merged = Y

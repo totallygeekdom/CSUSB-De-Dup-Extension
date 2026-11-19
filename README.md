@@ -17,7 +17,7 @@ chip). Two v2 scripts target it, plus an optional third that merges databases:
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.288` (shown in the settings pane) |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.291` (shown in the settings pane) |
 | Element451 - Database v2 | `database-v2.js` | `@version 2.74` |
 | Element451 - Database Merge v2 (optional, pairs with Database) | `database-merge-v2.js` | `@version 1.17` |
 
@@ -39,7 +39,7 @@ the resolution rules, auto-merge, every website restyle, the database format, li
   - **Next after merge**: after a merge, presses "Next duplicate" on the "Merge completed" card (default on).
   - Slider **None** (or no Allowed department ticked) with Auto-Skip on is a **scan**: every pair is
     recorded in the database and skipped.
-- **Stops on a Bolt error**: when the score chip reads **Error** (Bolt's analysis failed) the script does nothing to the pair, not even skip it, and shows a `Stop: Bolt error` toast.
+- **A Bolt error is not a stop**: when the score chip reads **Error** (Bolt's analysis failed) the pair is rated and handled like any other; the error counts as −5 points in our score and there are just no Bolt picks to compare with.
 - **Blockers**: forbidden names, an `appeal` keyword, wrong department, student-ID mismatch (ignored pairs are already filtered out of the v2 queue).
 - **Field rules**: applicant side first, then personal email (two personal addresses: more email opens, then clicks, then a name / birth-year tiebreak), csusb.major /
   csusb.school (one side), date-of-birth validity, first generation, later intended term, name case and address
@@ -80,6 +80,12 @@ the resolution rules, auto-merge, every website restyle, the database format, li
   Next duplicate.
 
 ---
+
+---
+
+## Chrome Web Store edition
+
+A second build of the extension, made for the Chrome Web Store (`extension-store/`): no `userScripts` permission, nothing downloaded from GitHub, and the three scripts are bundled in the package, so the code that runs is the code the store reviewed and the **store delivers updates**. Access is only `*.element451.io`. It has its own version and its own releases (`store-vX.Y.Z`); see [STORE.md](STORE.md) for the listing text, the permission justifications and the release steps. The extension below stays as it is for people who load it unpacked.
 
 ---
 

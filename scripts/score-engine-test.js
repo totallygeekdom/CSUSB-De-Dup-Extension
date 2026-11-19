@@ -73,6 +73,11 @@ const weak = score({ ...person, ...soft, emails: ['ana.cruz@y.com'] }, { ...pers
 check(weak.points >= 70 && weak.level === 'high', 'name, address, soft fields and Bolt High is High on its points (' + weak.points + ')');
 const softBolt = score({ ...person, ...soft }, { ...person, ...soft }, { bolt: { level: 'high' } });
 check(softBolt.points >= 45 && softBolt.points < 70 && softBolt.level === 'medium', 'name, soft fields and Bolt High (' + softBolt.points + ' points) is Medium');
+// a failed Bolt analysis (its chip reads Error) is a small negative, never a stop
+const errRes = score({ ...person, ...soft }, { ...person, ...soft }, { bolt: { level: null, error: true } });
+const noErr = score({ ...person, ...soft }, { ...person, ...soft }, {});
+check(SCORE_W.boltError === -5 && pts(errRes, 'bolt') === -5 && errRes.points === noErr.points - 5, 'a Bolt error counts -5 (' + errRes.points + ' vs ' + noErr.points + ')');
+check(pts(score({ ...person }, { ...person }, { bolt: { level: 'high', error: true } }), 'bolt') === 10, 'a Bolt level wins over the error flag');
 check(SCORE_W.boltHigh === 10 && SCORE_W.boltMedium === 5 && SCORE_W.boltLow === -10, "Bolt's own score: High +10, Medium +5, Low -10");
 
 // the rating as data: the slots that applied are remembered and re-rated with whatever weights are in force

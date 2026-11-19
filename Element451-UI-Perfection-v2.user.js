@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.316
+// @version      2.317
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.316'; // keep in sync with @version
+    const VERSION = '2.317'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -2134,9 +2134,9 @@
             unsaved = saveRatingNow();
             if (unsaved && Date.now() - startedAt < 6000) { setTimeout(attempt, 300); return; }
             if (unsaved && !attempt.warned) { attempt.warned = true; console.log('[elm2] chips: skipping without saving a rating (' + unsaved + '): this pair\'s chip on the list stays Pending'); }
-            const detail = {};
-            document.dispatchEvent(new CustomEvent('elm2-record-pair', { detail }));
+            const detail = recordPairNow();
             if (detail.handled && !detail.recorded && Date.now() - startedAt < 9000) { setTimeout(attempt, 250); return; }
+            if (detail.handled && !detail.recorded) console.log('[elm2] dept chip: skipping without the pair in the database (' + (detail.reason || 'unknown') + '): its department chip on the list stays blank');
             const qp = getQueuePosition();
             console.log('[elm2] Skipping to next pair:', reason, qp ? '(was ' + qp.current + '/' + qp.total + ')' : '');
             clickLoop();
@@ -3028,6 +3028,14 @@
         if (!anCache.kept) { anCache.kept = true; rememberRating(out.res); }
         const hit = loadRatings()[ratingKey(a, b)];
         return hit && typeof hit[2] === 'string' ? '' : 'the rating could not be stored';
+    }
+    // Has the Database script record the pair on screen now, with its department (the list's department chip comes from that record) and
+    // our points worked out afresh. Returns the event's detail: { handled, recorded, reason } (handled is unset without the Database script).
+    function recordPairNow() {
+        try { updateCsvSignal(); } catch (e) { /* the 1 s poll sets the signal anyway */ }
+        const detail = {};
+        document.dispatchEvent(new CustomEvent('elm2-record-pair', { detail }));
+        return detail;
     }
     // 'none' (no rating under that key), 'old' (rated before slots were kept: reopen the pair) or the level
     function levelOfKey(key) {
@@ -4255,7 +4263,15 @@
             if (CFG.AUTO_SKIP_BLOCKED) { skipToNext('not merged, ' + ready.reason); }
             else showMergeNotice('Auto-merge stopped: ' + ready.reason + '.');
         };
-        const fire = (btn) => {
+        // The pair is recorded in the database (its department chip on the list) and its rating saved (its score chip) before the
+        // click: after the merge the form is gone and neither can be done. Waits at most 3 s, then merges anyway.
+        // The wait is held in mergeTimer, so Escape still cancels it, and the pair is checked again before the click.
+        const fire = (btn, since) => {
+            const t0 = since || Date.now();
+            if (getPairKey() !== key) { cancelAutoMerge(); return; }
+            if (since) { const again = mergeReadiness(key); if (!again.ok) { stop(again); return; } btn = again.btn; }
+            const rec = recordPairNow(), unsaved = saveRatingNow();
+            if (((rec.handled && !rec.recorded) || unsaved) && Date.now() - t0 < 3000) { mergeTimer = setTimeout(() => { mergeTimer = null; fire(btn, t0); }, 250); return; }
             card.classList.add('fired');
             mergedPairKey = key;
             console.log('[elm2] Auto-merging pair');
@@ -4612,7 +4628,8 @@
             // lost = the Spark ID that is merged away (the side not selected on the Spark Id row), '' if unknown
             const keep = keptSparkSide();
             pendingMergeRecord = { a: sp.a, b: sp.b, choice: choiceSummary("Bolt's picks"), lost: keep === 'left' ? sp.b : keep === 'right' ? sp.a : '', names: lostNameSides(), at: Date.now() };
-            document.dispatchEvent(new CustomEvent('elm2-record-pair', { detail: {} }));
+            const rec = recordPairNow();
+            if (rec.handled && !rec.recorded) console.log('[elm2] dept chip: merging without the pair in the database (' + (rec.reason || 'unknown') + '): its department chip on the list stays blank');
         });
     }
     // After a merge Element451 replaces the form with a "Merge completed" card

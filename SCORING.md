@@ -26,7 +26,7 @@ Points view too. They are shown for information only: the rating is the points a
 | Gender | +5 | 0 (it can be missing, updated or entered wrong) |  |
 | Name of the other record found in an email address (counted whether or not the names match) | +6 first + last name, +4 first 3+ letters + last name (mar.soto), +3 first initial + last name, +2 first or last name alone (capped at +10 for the pair) | none |  |
 | Birth date found in an email address | +20 full date that matches, +3 birth year | -8 (a full date that disagrees) |  |
-| Bolt's own score | High +10, Medium +5 | Low -10; Bolt says "different people" -25 |  |
+| Bolt's own score | High +10, Medium +5 | Low -10; Bolt's analysis failed (it shows Error) -5; Bolt says "different people" -25 |  |
 | Applicant with no Coyote ID vs a contact that has one | none | -40 | |
 
 There is no twin-pattern rule: first names that differ cost the first-name penalty and nothing more.

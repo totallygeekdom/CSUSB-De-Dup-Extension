@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.290
+// @version      2.291
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.290'; // keep in sync with @version
+    const VERSION = '2.291'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -2030,18 +2030,9 @@
         return null;
     }
     // Bolt's score chip reads "Error" when its AI analysis failed (tooltip: "AI analysis merge guidance references an
-    // unknown user id."). The pair then has no Bolt picks to lean on, so the script stops on it: no resolution, no merge,
-    // no skip, even with Auto-Skip on. It is left on screen for a person.
+    // unknown user id."). Our rating does not depend on Bolt, so the pair is still rated and handled like any other: the error
+    // is one small negative input (boltError, -5) and there are just no Bolt picks to compare with.
     const scoreIsError = () => getScoreChips().some(c => !chipLevel(c) && /error/i.test(c.textContent));
-    let errorStopShownFor = '';
-    function stopOnBoltError() {
-        resolutionAttempted = true;
-        const key = getPairKey();
-        if (errorStopShownFor === key) return;
-        errorStopShownFor = key;
-        console.log('[elm2] Stopped: Bolt analysis error, left for you');
-        if (toastsEnabled()) showMergeNotice('Stop: Bolt error', true);
-    }
     // Bolt's own chip (high / medium / low), still read as one input of our score and for the database's score column.
     function getBoltChipLevel() {
         const chips = getScoreChips();
@@ -2327,7 +2318,7 @@
         email: [40, 0], emailName: [15, 0], phone: [25, 0],
         first: [15, -30], firstRelated: [7, 0], last: [15, -15], lastPartial: [7, 0],
         address: [25, -3], soft: [5, 0], gender: [5, 0],
-        boltHigh: 10, boltMedium: 5, boltLow: -10, boltDifferent: -25,
+        boltHigh: 10, boltMedium: 5, boltLow: -10, boltDifferent: -25, boltError: -5,
         applicantVsCoyote: -40,
         emailNameFull: 6, emailNamePartial: 4, emailNameInitial: 3, emailNameOne: 2, emailNameCap: 10, emailDobFull: 20, emailDobYear: 3, emailDobConflict: -8
     };
@@ -2552,6 +2543,7 @@
         if (bl === 'high') add('bolt', 'Bolt', W.boltHigh, 'for', 'Bolt rated the pair High', { slot: 'boltHigh' });
         else if (bl === 'medium') add('bolt', 'Bolt', W.boltMedium, 'for', 'Bolt rated the pair Medium', { slot: 'boltMedium' });
         else if (bl === 'low') add('bolt', 'Bolt', W.boltLow, 'against', 'Bolt rated the pair Low', { slot: 'boltLow' });
+        else if (ev.bolt && ev.bolt.error) add('bolt', 'Bolt', W.boltError, 'against', "Bolt's own analysis failed (its score shows Error)", { slot: 'boltError' });
         if (ev.bolt && ev.bolt.different) add('boltDifferent', 'Bolt "different people"', W.boltDifferent, 'against', 'Bolt flagged them as different people', { slot: 'boltDifferent' });
         // totals: the points and the rating come from the slots (shared with the list's re-rating); the items are the reasons in words
         const rated = scoreSlots(slots);
@@ -2604,6 +2596,7 @@
         // Bolt's own score, always said (our chips replace Bolt's on the page, so this is where it can still be read)
         const bl = ev.bolt && ev.bolt.level, raw = ev.bolt && ev.bolt.raw;
         if (bl) out.paragraphs.push('Bolt\'s original score: ' + cap(bl) + '.');
+        else if (ev.bolt && ev.bolt.error) out.paragraphs.push('Bolt\'s original score: Error (its own analysis failed), counted as ' + SCORE_W.boltError + ' points.');
         else if (raw) out.paragraphs.push('Bolt\'s original score: ' + cap(raw) + ', but Bolt\'s own text says they are different people, so the score was not counted.');
         else out.paragraphs.push('Bolt\'s original score could not be read.');
         return out;
@@ -2691,7 +2684,7 @@
         let boltLevel = boltRaw;
         if (boltLevel === 'high' && bolt.different) { console.log('[elm2] Bolt chip reads High but Bolt\'s text says different people: the chip is ignored'); boltLevel = null; }
         const chips = getScoreChips();
-        return { A: sides[0], B: sides[1], addrState, bolt: { level: boltLevel, raw: boltRaw, different: bolt.different }, chips: { found: chips.length, levels: chips.map(c => chipLevel(c) || '?').join('/') } };
+        return { A: sides[0], B: sides[1], addrState, bolt: { level: boltLevel, raw: boltRaw, different: bolt.different, error: scoreIsError() }, chips: { found: chips.length, levels: chips.map(c => chipLevel(c) || '?').join('/') } };
     }
     // For the console: what was read, without the values. Letters become x and digits 9, so a line shows which fields were
     // found and their shape (a date, an email, a 9 digit ID) but no names, dates of birth, emails or IDs.
@@ -3966,7 +3959,6 @@
     function mergeReadiness(key) {
         if (getPairKey() !== key) return { ok: false, reason: 'the pair changed' };
         if (getAllBlockers().length > 0) return { ok: false, reason: 'the pair is blocked' };
-        if (scoreIsError()) return { ok: false, reason: "Bolt's analysis errored" };
         // A conflicting row with no selected side (Bolt left it blank and a rule applied but could not
         // decide) means a human has to look: the pair is not merged.
         const unresolved = getDiffRows().filter(r => r.isConflict && !r.nativeSide && !r.otherSelected);
@@ -4206,7 +4198,6 @@
             pairFirstSeenAt = Date.now();
             resolutionAttempted = false;
             engagementOpenedFor = '';
-            errorStopShownFor = '';
             previewPicks(null);
             cancelAutoMerge();
             delete document.body.dataset.csvDept;
@@ -4236,13 +4227,11 @@
         // made no picks on this pair).
         const bolt = getDiffRows().filter(r => r.element.dataset.elm2AiSide).length;
         if (bolt === 0 && Date.now() - pairFirstSeenAt < 3000) return;
-        // Bolt's score chip decides two things: whether the analysis errored (stop on the pair) and, at the High /
-        // Medium / Low levels, whether it is in range. It can render a moment after the field rows, so wait for it:
+        // Bolt's score chip decides, at the High / Medium / Low levels, whether the pair is in range. It can render a moment after the field rows, so wait for it:
         // 3 s to see it at all, and where the slider decides by rating, up to 10 s (a slow load used to leave the pair
         // "out of range" for good, because the pair is only judged once).
         const lvl = CFG.RANGE_LEVEL;
         if (!getScoreChips().length && Date.now() - pairFirstSeenAt < (lvl >= 1 && lvl < 4 ? 10000 : 3000)) return;
-        if (scoreIsError()) { stopOnBoltError(); return; }
         if (lvl >= 1 && lvl < 4 && !getScoreChipLevel() && Date.now() - pairFirstSeenAt < 10000) return;
         // Dual personal emails: wait (up to 4s) for the engagement table, which the script opens itself.
         if (waitingForEngagement() && Date.now() - pairFirstSeenAt < 4000) return;

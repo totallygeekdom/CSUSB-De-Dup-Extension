@@ -105,7 +105,7 @@ Points view too. They are shown for information only: the rating is the points a
 | Gender | ${n(W.gender[0])} | ${n(W.gender[1])} (it can be missing, updated or entered wrong) | ${strong('gender.0')} |
 | Name of the other record found in an email address (counted whether or not the names match) | ${n(W.emailNameFull)} first + last name, ${n(W.emailNamePartial)} first 3+ letters + last name (mar.soto), ${n(W.emailNameInitial)} first initial + last name, ${n(W.emailNameOne)} first or last name alone (capped at ${n(W.emailNameCap)} for the pair) | none | ${strong('emailNameFull')} |
 | Birth date found in an email address | ${n(W.emailDobFull)} full date that matches, ${n(W.emailDobYear)} birth year | ${n(W.emailDobConflict)} (a full date that disagrees) | ${strong('emailDobFull')} |
-| Bolt's own score | High ${n(W.boltHigh)}, Medium ${n(W.boltMedium)} | Low ${n(W.boltLow)}; Bolt says "different people" ${n(W.boltDifferent)} | ${strong('boltHigh')} |
+| Bolt's own score | High ${n(W.boltHigh)}, Medium ${n(W.boltMedium)} | Low ${n(W.boltLow)}; Bolt's analysis failed (it shows Error) ${n(W.boltError)}; Bolt says "different people" ${n(W.boltDifferent)} | ${strong('boltHigh')} |
 | Applicant with no Coyote ID vs a contact that has one | none | ${n(W.applicantVsCoyote)} | |
 
 There is no twin-pattern rule: first names that differ cost the first-name penalty and nothing more.

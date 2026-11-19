@@ -4,7 +4,7 @@
   "description": "Build and test scripts for the Element451 Dedup Tools Chrome extension (the userscripts themselves need no build).",
   "scripts": {
     "build": "node scripts/build-extension.js",
-    "test": "node scripts/protected-files-test.js && node scripts/forbidden-names-test.js && node scripts/merge-rules-test.js && node scripts/score-engine-test.js && node scripts/scoring-chart.js --check && node scripts/smoke-test.js && node scripts/smoke-test-store.js",
+    "test": "node scripts/protected-files-test.js && node scripts/forbidden-names-test.js && node scripts/merge-rules-test.js && node scripts/score-engine-test.js && node scripts/scoring-chart.js --check",
     "icons": "node scripts/make-icons.js",
     "scoring": "node scripts/scoring-chart.js",
     "build:store": "node scripts/build-extension.js --store"

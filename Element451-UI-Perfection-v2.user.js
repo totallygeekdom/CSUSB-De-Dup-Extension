@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.301
+// @version      2.305
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.301'; // keep in sync with @version
+    const VERSION = '2.305'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -2715,7 +2715,7 @@
         });
         let addrState = null;
         if (addr[0] && addr[1]) { try { addrState = AddressComparer.compareAddresses(addr[0], addr[1]).areSame ? 'match' : 'mismatch'; } catch (e) { addrState = null; } }
-        const app = findApplicantSide();
+        const app = findApplicantOnly();
         sides[0].applicant = app === 'left'; sides[1].applicant = app === 'right';
         const boltRaw = getBoltChipLevel();
         let boltLevel = boltRaw;
@@ -2763,16 +2763,20 @@
         }
         const forbidden = has('forbidden');
         if (forbidden) {
-            // The list's badge says Forbidden for all of these (and for different School IDs); here they are told apart: a test record
-            // (a name with "test" in it) reads Test, a name on the forbidden list reads Forbidden name.
+            // Every forbidden entry reads Forbidden, like the list's badge (a name on the forbidden list, a test record, different School
+            // IDs); the reason is in the chip's title and in the write-up.
             const test = forbidden.reason === 'test in name';
             const why = test ? 'a contact\'s name contains "test" (a test record)' : 'a contact\'s name is on the forbidden list';
             const ok = isAllowedReason(forbidden);
-            flags.push({ flag: test ? 'test' : 'forbidden', text: test ? 'Test' : 'Forbidden name', blocked: !ok, title: (ok ? 'Note: ' : 'Blocked: ') + why + (ok ? '. Forbidden pairs are allowed in your settings, so this pair is not blocked.' : '. This pair cannot be merged.') });
+            flags.push({ flag: 'forbidden', text: 'Forbidden', blocked: !ok, title: (ok ? 'Note: ' : 'Blocked: ') + why + (ok ? '. Forbidden pairs are allowed in your settings, so this pair is not blocked.' : '. This pair cannot be merged.') });
             notes.push(ok ? 'Note: ' + why + '. Forbidden pairs are allowed in your settings, so this pair is not blocked.' : 'Blocked: ' + why + ', so this pair cannot be merged.');
         }
-        // Different School IDs: no chip or line of its own, since the score already counts them (different Coyote IDs, -120, a hard
-        // conflict that caps the pair at Low) and the write-up says so. The pair is still blocked from merging.
+        // Different School IDs: the list's badge says Forbidden for them, so the chip does too (the score also counts them: different
+        // Coyote IDs are -120, a hard conflict that caps the pair at Low). The pair is blocked from merging.
+        if (!forbidden && has('student-id-mismatch')) {
+            flags.push({ flag: 'forbidden', text: 'Forbidden', blocked: true, title: 'Blocked: the two contacts have different School IDs. This pair cannot be merged.' });
+            notes.push('Blocked: the two contacts have different School IDs, so this pair cannot be merged.');
+        }
         return { flags, notes };
     }
     // Why the total is the rating it is, in one sentence (the rules of scoreSlots).
@@ -3072,7 +3076,7 @@
         }
         return null;
     }
-    function findApplicantSide() {
+    function findApplicantOnly() {
         const isUndergrad = detectActualDepartment().dept === 'UnderGrad';
         if (!isUndergrad) return null;
         for (const row of getCheckRows()) {
@@ -3117,12 +3121,27 @@
         return null;
     }
     const CAS_ID_RE = /\bcas[\s_-]*id\s*[:=]?\s*\d{5,}/i;
+    // The side that has a School / Coyote ID when the other has none (a School Id value, or a coyote.csusb.edu email, which is the
+    // same ID). Like the applicant, it is the side every conflict row follows (UI 2.304). Same department gate as the applicant rule.
+    const COYOTE_ID_RE = /School Id:\s*\d+|\b\d{6,10}@coyote\.csusb\.edu\b/i;
+    function findIdSide() {
+        if (detectActualDepartment().dept !== 'UnderGrad') return null;
+        const has = [false, false];
+        for (const row of getCheckRows()) [0, 1].forEach(i => { if (COYOTE_ID_RE.test(row.values[i].textContent)) has[i] = true; });
+        return has[0] !== has[1] ? (has[0] ? 'left' : 'right') : null;
+    }
+    // The side every conflict row follows: the one with the School / Coyote ID, else the applicant. (If the applicant has none and
+    // the other side has one, the ID side wins.)
+    function findApplicantSide() { return findIdSide() || findApplicantOnly(); }
+    const leadKind = () => findIdSide() ? 'id' : findApplicantOnly() ? 'applicant' : null;
+    const leadLabel = () => leadKind() === 'id' ? 'Coyote ID' : 'Applicant';
     // The row that shows the applicant: the first Cal State Apply / application row the applicant side has (the same rows
     // findApplicantSide reads), else the row with its CAS ID. It gets an extra highlight on top of the applicant band.
     function findApplicantRow(side) {
         if (!side) return null;
         const i = side === 'left' ? 0 : 1;
         const rows = getDiffRows();
+        if (leadKind() === 'id') return rows.find(r => COYOTE_ID_RE.test(r.values[i].textContent)) || null; // the row that shows the ID
         const appRe = /type:\s*(Application Start|Application Submit|Application Complete|Admit)/i;
         const byApplication = rows.find(r => r.values[i].textContent.includes('Cal State Apply Application') || appRe.test(r.values[i].textContent));
         if (byApplication) return byApplication;
@@ -3162,7 +3181,7 @@
                     applyScriptPick(row, otherSide);
                     return;
                 }
-                currentRule = 'follows applicant side (Application/Cal State Apply)';
+                currentRule = leadKind() === 'id' ? 'follows the side with the School/Coyote ID' : 'follows applicant side (Application/Cal State Apply)';
                 applyScriptPick(row, applicantSide);
                 return;
             }
@@ -3368,7 +3387,7 @@
                     applyScriptPick(row, applicantSide === 'left' ? 'right' : 'left');
                     return;
                 }
-                currentRule = 'follows applicant side (Application/Cal State Apply)';
+                currentRule = leadKind() === 'id' ? 'follows the side with the School/Coyote ID' : 'follows applicant side (Application/Cal State Apply)';
                 applyScriptPick(row, applicantSide);
                 return;
             }
@@ -3967,16 +3986,16 @@
         const rows = getDiffRows().filter(r => r.isConflict);
         const picks = rows.filter(r => r.element.dataset.elm2ScriptSide && r.element.dataset.elm2AiSide);
         const over = picks.filter(r => r.element.dataset.elm2ScriptSide !== r.element.dataset.elm2AiSide);
-        return { picks, over, total: picks.length, agree: picks.length - over.length, applicant: !!findApplicantSide() };
+        return { picks, over, total: picks.length, agree: picks.length - over.length, applicant: leadKind() ? leadLabel() : '' };
     }
     // The same comparison as a short line for the database's "Script vs Bolt" column, in the words of the
     // auto-merge brief: "2/3 agree · script chose 1 over Bolt: Email, Address", "Applicant · script chose 1 over
     // Bolt: Address", "3/3 agree". Empty when the script made no picks (unless fallback is given).
     function choiceSummary(fallback) {
         const { picks, over, applicant } = mergeStats();
-        if (picks.length === 0) return applicant ? 'Applicant' : (fallback || '');
+        if (picks.length === 0) return applicant || (fallback || '');
         const ours = CFG.USE_PICKS === 'ours';
-        let out = applicant ? 'Applicant' : (picks.length - over.length) + '/' + picks.length + ' agree';
+        let out = applicant ? applicant : (picks.length - over.length) + '/' + picks.length + ' agree';
         if (over.length) {
             const labels = Array.from(new Set(over.map(r => r.label).filter(Boolean)));
             out += ' \u00b7 ' + (ours ? 'script' : 'Bolt') + ' chose ' + over.length + ' over ' + (ours ? 'Bolt' : 'script') +
@@ -4006,10 +4025,10 @@
         if (over.length === 0) return;
         const l = line();
         const ours = CFG.USE_PICKS === 'ours';
-        const applicant = !!findApplicantSide();
+        const applicant = leadKind() ? leadLabel() : '';
         if (applicant) {
             text(l, 'Script found ');
-            strong(l, 'applicant');
+            strong(l, applicant === 'Coyote ID' ? 'a Coyote ID on one side' : 'applicant');
             if (ours) { text(l, ' and chose '); strong(l, String(over.length)); text(l, ' over Bolt.'); }
             else text(l, ' but Bolt chose instead.');
             return;
@@ -4254,7 +4273,7 @@
     const isHidingMatches = (btn) => btn.getAttribute('aria-checked') === 'true' || btn.classList.contains('mdc-switch--selected');
     const rowRecord = (r) => ({ key: r.key, label: r.label, values: r.values.map(v => ({ textContent: v.textContent })), textContent: r.textContent, isConflict: r.isConflict, element: null });
     let rowSnapshot = { pair: '', rows: [] };
-    const peek = { pair: '', phase: 'done', wasHiding: false, since: 0, before: 0, clicked: 0, tries: 0, warned: false };
+    const peek = { pair: '', phase: 'done', wasHiding: false, since: 0, before: 0, clicked: 0, tries: 0, opened: 0, warned: false };
     // The rows on screen plus the ones the snapshot holds that are hidden right now (same order: the live rows first)
     function getCheckRows() {
         const live = getDiffRows();
@@ -4262,7 +4281,8 @@
         const seen = new Set(live.map(r => r.key));
         return live.concat(rowSnapshot.rows.filter(r => !seen.has(r.key)));
     }
-    // True once the pair's rows have been read (and the switch is back); false while that is still going on
+    // True once the pair's rows have been read (and the switch is back); false while that is still going on.
+    // Each click is confirmed by the switch changing state (Element updates it a moment after the click) and repeated if it did not.
     function readMatchingRows() {
         const pk = getPairKey();
         if (!pk) return true;
@@ -4273,22 +4293,34 @@
             return true;
         }
         const now = Date.now();
+        const giveUp = (why) => { console.log('[elm2] Matching rows: ' + why + ' (switch now ' + (isHidingMatches(btn) ? 'on' : 'off') + ')'); peek.phase = 'done'; return true; };
         if (peek.phase === 'start') {
             if (!isHidingMatches(btn)) { peek.phase = 'done'; return true; } // already showing every row: nothing to open
-            peek.wasHiding = true; peek.before = getDiffRows().length; peek.since = now; peek.clicked = now; peek.phase = 'opening';
+            peek.wasHiding = true; peek.before = getDiffRows().length; peek.since = now; peek.clicked = now; peek.tries = 0; peek.phase = 'opening';
+            console.log('[elm2] Matching rows: switch on, turning it off to read every row');
             btn.click();
             return false;
         }
         if (peek.phase === 'opening') {
-            if (getDiffRows().length <= peek.before && now - peek.since < 1500) return false; // the rows have not shown up yet
+            if (isHidingMatches(btn)) { // the switch has not changed yet
+                if (now - peek.clicked < 800) return false;
+                if (++peek.tries > 3) return giveUp('the switch did not turn off');
+                peek.clicked = now; btn.click();
+                return false;
+            }
+            if (!peek.opened) peek.opened = now;
+            if (getDiffRows().length <= peek.before && now - peek.opened < 1500) return false; // the rows have not shown up yet
             rowSnapshot = { pair: pk, rows: getDiffRows().map(rowRecord) };
-            peek.phase = 'closing'; peek.tries = 0; peek.since = now;
-            if (!isHidingMatches(btn)) { peek.clicked = now; btn.click(); }
+            console.log('[elm2] Matching rows: read ' + rowSnapshot.rows.length + ' rows (' + (rowSnapshot.rows.length - peek.before) + ' were hidden), putting the switch back on');
+            peek.opened = 0; peek.phase = 'closing'; peek.tries = 0; peek.clicked = now;
+            btn.click();
             return false;
         }
         if (peek.phase === 'closing') {
-            if (isHidingMatches(btn)) { peek.phase = 'done'; return true; }
-            if (now - peek.clicked > 800) { if (++peek.tries > 3) { peek.phase = 'done'; return true; } peek.clicked = now; btn.click(); }
+            if (isHidingMatches(btn)) { console.log('[elm2] Matching rows: switch is back on'); peek.phase = 'done'; return true; }
+            if (now - peek.clicked < 800) return false;
+            if (++peek.tries > 3) return giveUp('the switch did not turn back on');
+            peek.clicked = now; btn.click();
             return false;
         }
         // done: while the rows are showing (the switch was already off), keep the snapshot up to date
@@ -4413,7 +4445,7 @@
             lastMergeContactNamesKey = getPairKey();
             // Worked out now (the rows are gone after the merge), shown when the Merge completed card appears.
             const st = mergeStats();
-            pendingMergeToast = { text: 'Merge: ' + (st.applicant ? 'Applicant' : st.total > 0 ? st.agree + '/' + st.total : 'Bolt'), at: Date.now() };
+            pendingMergeToast = { text: 'Merge: ' + (st.applicant ? st.applicant : st.total > 0 ? st.agree + '/' + st.total : 'Bolt'), at: Date.now() };
             // For the database: which pair this was and what the script chose over Bolt, then record the
             // pair now (the poll might not have run yet).
             const sp = getSparkIds();

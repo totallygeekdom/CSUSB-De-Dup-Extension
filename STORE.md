@@ -46,11 +46,11 @@ None. The extension downloads nothing and runs only files that are in the packag
 
 ## Data and privacy
 
-- The extension collects nothing and sends nothing to the developer or anyone else; it makes no network requests of its own.
+- The extension collects nothing and sends nothing to the developer or anyone else; it talks only to Element451, by repeating requests the page itself makes with your own signed-in session. The full policy, including the Limited Use statement, is in [PRIVACY.md](PRIVACY.md).
 - The scripts' settings and the optional database of reviewed pairs are kept in the browser's local storage on that computer. A database file can be downloaded, password-protected, and shared by the user.
 - Contact details shown on Element451 pages are read only to score and explain the pair on screen; they are not stored outside the optional local database and never leave the browser.
 
-Fill in the privacy practices tab of the Developer Dashboard to match: no personal data sold or transferred; the data handled is "personally identifiable information" and "website content", used only for the extension's single purpose.
+Fill in the privacy practices tab of the Developer Dashboard to match: no personal data sold or transferred; the data handled is "personally identifiable information", "website content" and "authentication information" (the sign-in ID read locally to lock a personal export file, and the export password kept in local storage), used only for the extension's single purpose. Google requires these disclosures even for data that only stays on the computer. Privacy policy URL: `https://github.com/totallygeekdom/CSUSB-De-Dup-Extension/blob/main/PRIVACY.md`.
 
 ## Before submitting
 

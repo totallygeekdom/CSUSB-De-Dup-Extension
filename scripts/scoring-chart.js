@@ -103,7 +103,6 @@ Points view too. They are shown for information only: the rating is the points a
 | Last name | ${n(W.last[0])} same; ${n(W.lastPartial[0])} overlapping | ${n(W.last[1])} | ${strong('last.0')} |
 | Address (the page's own comparer) | ${n(W.address[0])} | ${n(W.address[1])} (people move) | ${strong('address.0')} |
 | Student type, academic level, school attended | ${n(W.soft[0])} each | ${n(0)} | ${strong('soft.0')} |
-| Gender | ${n(W.gender[0])} | ${n(W.gender[1])} (it can be missing, updated or entered wrong) | ${strong('gender.0')} |
 | Name of the other record found in an email address (counted whether or not the names match) | ${n(W.emailNameFull)} first + last name, ${n(W.emailNamePartial)} first 3+ letters + last name (mar.soto), ${n(W.emailNameInitial)} first initial + last name, ${n(W.emailNameOne)} first or last name alone (capped at ${n(W.emailNameCap)} for the pair) | none | ${strong('emailNameFull')} |
 | Birth date found in an email address | ${n(W.emailDobFull)} full date that matches, ${n(W.emailDobYear)} birth year | ${n(W.emailDobConflict)} (a full date that disagrees) | ${strong('emailDobFull')} |
 | Bolt's own score | High ${n(W.boltHigh)}, Medium ${n(W.boltMedium)} | Low ${n(W.boltLow)}; Bolt's analysis failed (it shows Error) ${n(W.boltError)}; Bolt says "different people" ${n(W.boltDifferent)}, and then its High / Medium bonus is not given | ${strong('boltHigh')} |
@@ -142,7 +141,7 @@ ${low.map(x => `| ${x.name} | ${x.r.points} | ${adds(x.r)} |`).join('\n')}
   auto-applies and, with When done = Merge, auto-merges them: there is no separate possible-twins check any more, the score alone decides. A larger first-name mismatch penalty
   would push them down to Low.
 - **Points only.** High is ${CUT.high}+ points, whatever they come from, so a pair can reach it with no birth date, ID, email or phone: the same name with Bolt High,
-  name-based emails, gender and soft fields add up to 80. A Jr./Sr. with the same name, address and a family email or phone (no birth date on file) is High too.
+  name-based emails and soft fields add up to 80. A Jr./Sr. with the same name, address and a family email or phone (no birth date on file) is High too.
 - **Birth date and address alone.** With no names on either record the pair stays Medium (65); a last name is enough to reach High.
 - **Bolt's "different people" flag.** It costs ${n(W.boltDifferent)}, which a same name and birth date outweigh: that pair is Medium (see the sample rows), not Low.
 - **An ID match outweighs a disagreeing birth date.** A matching Coyote ID or CAS ID with the same name is High even when the birth dates are clearly different.

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.308
+// @version      2.312
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.308'; // keep in sync with @version
+    const VERSION = '2.312'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -220,6 +220,21 @@
         bolt-card.analysis-card.elm2-an-ours .analysis-header, bolt-card.analysis-card.elm2-an-ours .analysis-summary { display: none !important; }
         bolt-card.analysis-card.elm2-an-bolt .elm2-an-text, bolt-card.analysis-card.elm2-an-bolt .elm2-an-table { display: none; }
         .elm2-an[data-view="ours"] .elm2-an-table, .elm2-an[data-view="points"] .elm2-an-text { display: none; }
+        /* while the pair is being read and scored: a cover over the fields (it hides the matching rows being shown and hidden again and
+           blocks clicks), the Material 3 Expressive loading indicator, and pulsing placeholder lines where the analysis will be */
+        #elm2-busy { position: absolute; inset: 0; z-index: 40; background: #fff; display: flex; justify-content: center; align-items: flex-start; padding-top: 96px; cursor: progress; }
+        /* the Material 3 Expressive loading indicator, contained: a shape that morphs through a sequence of shapes while it turns, in a round container */
+        #elm2-busy .elm2-li { width: 56px; height: 56px; border-radius: 50%; background: var(--md-primary-container, #fde3cc); display: flex; align-items: center; justify-content: center; }
+        #elm2-busy .elm2-li svg { width: 44px; height: 44px; }
+        #elm2-busy .elm2-li path { fill: var(--md-primary-text, #b34e00); }
+        bolt-card.analysis-card.elm2-an-wait .analysis-header, bolt-card.analysis-card.elm2-an-wait .analysis-summary { display: none !important; }
+        .elm2-an-skel { display: flex; flex-direction: column; gap: 10px; padding: 6px 0 4px; }
+        .elm2-an-skel-bar { display: flex; align-items: center; gap: 8px; }
+        .elm2-an-skel span { display: block; height: 12px; border-radius: 6px; background: var(--md-surface-container-high, #ece7e2); animation: elm2-pulse 1.3s ease-in-out infinite; }
+        .elm2-an-skel-bar span:nth-child(1) { width: 110px; height: 22px; border-radius: 11px; } .elm2-an-skel-bar span:nth-child(2) { width: 60px; height: 22px; border-radius: 11px; animation-delay: .15s; }
+        .elm2-an-skel > span:nth-child(2) { width: 92%; animation-delay: .1s; } .elm2-an-skel > span:nth-child(3) { width: 78%; animation-delay: .25s; } .elm2-an-skel > span:nth-child(4) { width: 55%; animation-delay: .4s; }
+        @keyframes elm2-pulse { 0%, 100% { opacity: .4; } 50% { opacity: 1; } }
+        @media (prefers-reduced-motion: reduce) { .elm2-an-skel span { animation-duration: 3s; } }
         .elm2-an { margin: 0 0 8px; }
         .elm2-an-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 6px; }
         .elm2-an-title { font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: #1a1c20; }
@@ -2109,11 +2124,16 @@
             clicks++;
             setTimeout(clickLoop, ok ? 3000 : 500);
         };
+        // The pair's rating is worked out from Bolt's overview and remembered by its Spark IDs, which is what gives its chip on the list.
+        // A pair skipped before Bolt's overview rendered kept no rating and stayed Pending, so the skip waits for the rating (at most
+        // 3 s: with no overview there is nothing to wait for).
+        const rated = () => { const { a, b } = getSparkIds(); return !!(a && b && currentRating()); };
         const attempt = () => {
             if (getPairKey() !== key) { skipInFlightKey = ''; return; } // already moved on
+            if (!rated() && Date.now() - startedAt < 3000) { setTimeout(attempt, 300); return; }
             const detail = {};
             document.dispatchEvent(new CustomEvent('elm2-record-pair', { detail }));
-            if (detail.handled && !detail.recorded && Date.now() - startedAt < 3000) { setTimeout(attempt, 250); return; }
+            if (detail.handled && !detail.recorded && Date.now() - startedAt < 6000) { setTimeout(attempt, 250); return; }
             const qp = getQueuePosition();
             console.log('[elm2] Skipping to next pair:', reason, qp ? '(was ' + qp.current + '/' + qp.total + ')' : '');
             clickLoop();
@@ -2377,7 +2397,7 @@
         coyote: [120, -120], cas: [120, -18], dob: [40, -45], dobTypo: [25, -20],
         email: [40, 0], emailName: [15, 0], phone: [25, 0],
         first: [15, -30], firstRelated: [7, 0], last: [15, -15], lastPartial: [7, 0],
-        address: [25, -3], soft: [5, 0], gender: [5, 0],
+        address: [25, -3], soft: [5, 0],
         boltHigh: 10, boltMedium: 5, boltLow: -10, boltDifferent: -10, boltError: -5,
         applicantVsCoyote: -40,
         emailNameFull: 6, emailNamePartial: 4, emailNameInitial: 3, emailNameOne: 2, emailNameCap: 10, emailDobFull: 20, emailDobYear: 3, emailDobConflict: -8
@@ -2482,9 +2502,11 @@
         return typeof v === 'number' ? v : null; // null: not a slot of this engine
     }
     // slots: { slot: how many times it applied } -> { points, level, hard, strong }, or null when a slot is not one of this engine's
+    const RETIRED_SLOTS = ['gender.0']; // gender is no longer scored; a remembered rating that holds it is re-rated without it
     function scoreSlots(slots) {
         let pts = 0, nameFit = 0, strong = 0, hard = false;
         for (const slot of Object.keys(slots)) {
+            if (RETIRED_SLOTS.includes(slot)) continue;
             const n = slots[slot], w = slotWeight(slot);
             if (w === null) return null;
             if (slot === 'emailNameFull' || slot === 'emailNamePartial' || slot === 'emailNameInitial' || slot === 'emailNameOne') { nameFit += n * w; continue; } // together they are capped (below)
@@ -2579,8 +2601,6 @@
         [['studentType', 'Student type'], ['level', 'Academic level'], ['school', 'School attended']].forEach(([k, label]) => {
             if (both(A[k], B[k]) && scFold(A[k]) === scFold(B[k])) add(k, label, W.soft[0], 'for', 'the same ' + label.toLowerCase(), { slot: 'soft.0' });
         });
-        // Gender: a small plus when both records have it and it is the same (a different one costs nothing: it can be missing, updated or entered wrong)
-        if (both(A.gender, B.gender) && scFold(A.gender) === scFold(B.gender)) add('gender', 'Gender', W.gender[0], 'for', 'the same gender (' + A.gender + ')', { slot: 'gender.0' });
         // Name and birth date hidden in the email addresses
         let emFit = 0; const emNotes = [];
         [[A, B, 'A'], [B, A, 'B']].forEach(([own, other]) => {
@@ -2669,8 +2689,7 @@
     // matched (with their values), so both are read: the form for what differs, Bolt's bullets for what is the same.
     const BOLT_FIELDS = [['dob', /birth|\bdob\b/i], ['phone', /phone|mobile|cell/i], ['email', /e-?mail/i], ['address', /address/i], ['first', /first\s*name|given name/i],
         ['last', /last\s*name|surname|family name/i], ['cas', /\bcas\b|cal state apply id/i], ['coyote', /coyote|student id|school id|campus id/i],
-        ['studentType', /student type/i], ['level', /academic level/i], ['school', /school attended|previous school|high school|college attended/i],
-        ['gender', /\bgender\b|^\s*sex\s*$/i]];
+        ['studentType', /student type/i], ['level', /academic level/i], ['school', /school attended|previous school|high school|college attended/i]];
     function boltFieldKey(label) { const f = BOLT_FIELDS.find(([, re]) => re.test(label)); return f ? f[0] : null; }
     function readBoltSummary() {
         const el = document.querySelector('.analysis-summary');
@@ -2817,7 +2836,22 @@
         if (!body) return;
         const rating = currentRating();
         const old = body.querySelector(':scope > .elm2-an');
-        if (!rating) { if (old) old.remove(); card.classList.remove('elm2-an-ours', 'elm2-an-bolt'); return; }
+        let skel = body.querySelector(':scope > .elm2-an-skel');
+        if (!rating) {
+            if (old) old.remove();
+            card.classList.remove('elm2-an-ours', 'elm2-an-bolt');
+            // pulsing placeholder lines while the rating is on its way (not for good: with no Bolt overview the card falls back to Bolt's own)
+            const waiting = isDedupReviewPage() && !!pairFirstSeenAt && Date.now() - pairFirstSeenAt < BUSY_MAX_MS;
+            card.classList.toggle('elm2-an-wait', waiting);
+            if (waiting && !skel) {
+                skel = document.createElement('div'); skel.className = 'elm2-an-skel'; skel.setAttribute('aria-hidden', 'true');
+                skel.innerHTML = '<div class="elm2-an-skel-bar"><span></span><span></span></div><span></span><span></span><span></span>';
+                body.appendChild(skel);
+            } else if (!waiting && skel) skel.remove();
+            return;
+        }
+        card.classList.remove('elm2-an-wait');
+        if (skel) skel.remove();
         const pk = getPairKey();
         if (anView.pair !== pk) { anView.pair = pk; anView.mode = anView.kept; }
         const mode = anView.mode || anView.kept;
@@ -4349,8 +4383,76 @@
         if (!isHidingMatches(btn)) rowSnapshot = { pair: pk, rows: getDiffRows().map(rowRecord) };
         return true;
     }
+    // ---- The cover: while a pair is being read (the matching rows shown, read and hidden again) and scored, the fields are covered by a
+    // Material indeterminate progress, which also blocks clicks and keys on them. It never holds for more than BUSY_MAX_MS. ----
+    const BUSY_MAX_MS = 8000, SCORE_WAIT_MS = 4000;
+    let busySince = 0, busyGaveUp = '';
+    function pairIsBusy() {
+        const pk = isDedupReviewPage() && !completionCardVisible() ? getPairKey() : '';
+        if (!pk) return false;
+        let busy = peek.owed || peek.phase === 'opening' || peek.phase === 'restoring';
+        if (!busy && peek.pair !== pk) { const btn = hideMatchingBtn(); busy = !!btn && isHidingMatches(btn); } // a new pair whose rows are still to be read
+        if (!busy && Date.now() - pairFirstSeenAt < SCORE_WAIT_MS && pairFirstSeenAt && !currentRating()) busy = true; // Bolt's overview has not shown yet
+        if (!busy) { busySince = 0; busyGaveUp = ''; return false; }
+        if (busyGaveUp === pk) return false;
+        if (!busySince) busySince = Date.now();
+        if (Date.now() - busySince > BUSY_MAX_MS) { busyGaveUp = pk; busySince = 0; console.log('[elm2] The cover came off after ' + BUSY_MAX_MS / 1000 + ' s: the pair was still being read'); return false; }
+        return true;
+    }
+    // The loading indicator's shapes, as polar curves (radius by angle) sampled into the same number of points, so the browser can morph
+    // one into the next: soft burst, 9-sided cookie, pentagon, pill, sunny, 4-sided cookie, oval.
+    const LI_POINTS = 64, LI_RADIUS = 20;
+    const liPolygon = (k) => (t) => { const a = Math.PI / k, u = ((t % (2 * a)) + 2 * a) % (2 * a); const r = Math.cos(a) / Math.cos(u - a); return r + (1 - r) * 0.45; };
+    const liSuper = (a, b, n) => (t) => Math.pow(Math.pow(Math.abs(Math.cos(t) / a), n) + Math.pow(Math.abs(Math.sin(t) / b), n), -1 / n);
+    const LI_SHAPES = [(t) => 1 + 0.12 * Math.cos(10 * t), (t) => 1 + 0.08 * Math.cos(9 * t), liPolygon(5), liSuper(1, 0.62, 4), (t) => 1 + 0.15 * Math.cos(8 * t), (t) => 1 + 0.11 * Math.cos(4 * t), liSuper(1, 0.74, 2)];
+    const liPath = (fn) => {
+        const pts = [];
+        for (let i = 0; i < LI_POINTS; i++) { const t = i / LI_POINTS * 2 * Math.PI; pts.push([Math.cos(t) * fn(t), Math.sin(t) * fn(t)]); }
+        const m = Math.max.apply(null, pts.map(p => Math.hypot(p[0], p[1]))); // every shape fits the same circle
+        return 'M' + pts.map(p => (p[0] / m * LI_RADIUS).toFixed(2) + ' ' + (p[1] / m * LI_RADIUS).toFixed(2)).join('L') + 'Z';
+    };
+    function loadingIndicator() {
+        const NS = 'http://www.w3.org/2000/svg', ds = LI_SHAPES.map(liPath);
+        const wrap = document.createElement('div'); wrap.className = 'elm2-li';
+        const svg = document.createElementNS(NS, 'svg'); svg.setAttribute('viewBox', '-24 -24 48 48'); svg.setAttribute('aria-hidden', 'true');
+        const g = document.createElementNS(NS, 'g'), path = document.createElementNS(NS, 'path');
+        path.setAttribute('d', ds[0]);
+        g.appendChild(path); svg.appendChild(g); wrap.appendChild(svg);
+        if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return wrap; // a still shape
+        const n = ds.length, dur = n * 0.7 + 's';
+        const morph = document.createElementNS(NS, 'animate');
+        morph.setAttribute('attributeName', 'd'); morph.setAttribute('dur', dur); morph.setAttribute('repeatCount', 'indefinite'); morph.setAttribute('calcMode', 'spline');
+        morph.setAttribute('values', ds.concat([ds[0]]).join(';'));
+        morph.setAttribute('keyTimes', ds.concat([ds[0]]).map((x, i) => (i / n).toFixed(4)).join(';'));
+        morph.setAttribute('keySplines', ds.map(() => '.4 0 .2 1').join(';'));
+        path.appendChild(morph);
+        const turn = document.createElementNS(NS, 'animateTransform');
+        turn.setAttribute('attributeName', 'transform'); turn.setAttribute('type', 'rotate'); turn.setAttribute('from', '0'); turn.setAttribute('to', '360');
+        turn.setAttribute('dur', dur); turn.setAttribute('repeatCount', 'indefinite');
+        g.appendChild(turn);
+        return wrap;
+    }
+    function updateBusyOverlay() {
+        const form = getDiffForm(), host = form && (form.querySelector('form.diff-form') || form); // the form that holds the fields is the block the cover sits in
+        let cover = document.getElementById('elm2-busy');
+        if (!host || !pairIsBusy()) { if (cover) cover.remove(); return; }
+        if (cover && cover.parentElement === host) return;
+        if (cover) cover.remove();
+        if (getComputedStyle(host).position === 'static') host.style.position = 'relative';
+        cover = document.createElement('div');
+        cover.id = 'elm2-busy'; cover.setAttribute('role', 'progressbar'); cover.setAttribute('aria-label', 'Reading the pair'); cover.setAttribute('aria-busy', 'true');
+        cover.appendChild(loadingIndicator());
+        host.appendChild(cover);
+    }
+    // keys do not reach the fields under the cover (Escape still cancels an auto-merge)
+    document.addEventListener('keydown', (e) => {
+        const cover = document.getElementById('elm2-busy');
+        if (!cover || e.key === 'Escape' || !cover.parentElement || !cover.parentElement.contains(e.target)) return;
+        e.preventDefault(); e.stopPropagation();
+    }, true);
     function attemptAutoResolve() {
         if (peek.owed) restoreOwedSwitch(); // first, before any early return below
+        updateBusyOverlay(); // the cover goes up before the switch is touched
         if (!isDedupReviewPage() || completionCardVisible()) { formWasAbsent = true; return; }
         if (!getContactNames().filter(Boolean).length) return; // page still loading
         if (formWasAbsent) {
@@ -4376,7 +4478,9 @@
             delete document.body.dataset.csvScore;
             delete document.body.dataset.csvPoints;
         }
-        if (!readMatchingRows()) return; // the pair's rows are being read: decide nothing yet
+        const readDone = readMatchingRows();
+        updateBusyOverlay();
+        if (!readDone) return; // the pair's rows are being read: decide nothing yet
         const blockers = getAllBlockers();
         applyBlockStyling(blockers);
         updateCsvSignal();
@@ -4550,7 +4654,7 @@
         ensureManifest, // after the header colour is known (the icon uses it)
         injectPager, injectHistorySearch, stripFilterTooltips, syncSkipToggles
     ];
-    const REVIEW_PAGE_STEPS = [syncBoltBlue, annotateRowColors, pinReviewQueueNav, annotateApplicantSide, injectPickComparisonBar, renderOurAnalysis];
+    const REVIEW_PAGE_STEPS = [syncBoltBlue, annotateRowColors, pinReviewQueueNav, annotateApplicantSide, injectPickComparisonBar, renderOurAnalysis, updateBusyOverlay];
     setInterval(() => {
         EVERY_PAGE_STEPS.forEach(runStep);
         if (isDedupReviewPage()) REVIEW_PAGE_STEPS.forEach(runStep);

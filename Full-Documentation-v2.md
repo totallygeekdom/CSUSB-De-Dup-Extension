@@ -5,8 +5,8 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.308`, shown in the settings pane |
-| Element451 - Database v2 | `database-v2.js` | `@version 2.75` |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.312`, shown in the settings pane |
+| Element451 - Database v2 | `database-v2.js` | `@version 2.76` |
 | Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.17`, see [section 17](#17-database-merge) |
 
 
@@ -385,7 +385,6 @@ A three-way switch picks the view: **Write-up** (the plain-English write-up), **
 | Last name (same / overlapping) | +15 / +7 | -15 |
 | Address (the page's own comparer) | +25 | -3 |
 | Student type, Academic level, School attended | +5 each | 0 |
-| Gender | +5 | 0 (it can be missing, updated or entered wrong) |
 | Name or birth date found in an email address | name: +6 first + last, +4 first 3+ letters + last (`mar.soto`), +3 initial + last, +2 first or last alone, up to +10 for the pair / birth date: +20 (year only +3) | -8 (a full date that disagrees) |
 | Applicant with no Coyote ID vs a contact that has one | | -40 |
 | Bolt High / Medium / Low | +10 / +5 / -10 | |
@@ -593,6 +592,10 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 - **One name inside the other** (UI 2.286): a first name whose every word is a word of the other record's first name is the same first name (+15): *Lan* and *Tran Mai Lan* (a family name put first, or a full name typed into the first-name field), *Ana* and *Ana Maria*. It used to be a different first name (-30). *Mai Lan* / *Mai Linh* still differ.
 - **The Identities section is read** (UI 2.285): values that name themselves are read wherever they are, so the Identities rows (labelled *Identities* or nothing) count: `School Id: …`, `Cas Id: …`, `Email: …` and `School Email: …`. A **coyote.csusb.edu address is the student's Coyote ID** (`009000001@coyote.csusb.edu`): a side with no School Id takes its Coyote ID from it, so a School Id on one record and the same number in the other's coyote email is the same Coyote ID (+120, enough for High). An ID read from an email only confirms: if it differs from the other record's, it scores nothing (a mistyped email never makes a hard conflict). The Maria Soto pair (School Id 009000001 on one side, 009000001@coyote.csusb.edu on the other) goes to High.
 - **Matching gender +5** (UI 2.284): the same gender on both records is +5, like student type, level and school; a different or missing one is 0. A gender that matches is read from its row like any other (the matching rows are kept on the page).
+- **A cover while a pair is read and scored** (UI 2.311): while the matching rows are shown, read and hidden again (and, for up to 4 s, while Bolt's overview has not shown yet) the fields are covered by a white layer with the Material 3 Expressive loading indicator (contained: a shape that morphs through a soft burst, a 9-sided cookie, a pentagon, a pill, a sunny shape, a 4-sided cookie and an oval while it turns, in a round orange container; UI 2.312, it was a circular progress). It hides the rows appearing and disappearing, and blocks clicks and keys on the fields (Escape still cancels an auto-merge). It never stays longer than 8 s; the console says when it gave up. The Dedup analysis card shows pulsing placeholder lines (a skeleton) in the meantime instead of Bolt's own text, for at most 8 s per pair.
+- **A skipped pair gets its chip** (UI 2.310): Auto-Skip moved on 1.2 s after a pair loaded, which is sooner than Bolt's overview often rendered, and a pair's rating is only worked out (and remembered for its list chip) once that overview is there, so skipped pairs stayed Pending. A skip now waits for the rating, for 3 s at most (UI 2.312; it was 5 s), before it records the pair and moves on.
+- **List chips: rows are tied to their records by the names inside `master` / `duplicate`** (Database 2.76): the list call's records hold the two contacts as `master` and `duplicate` objects and have no top-level name, so no row was ever tied to its record by name (the console said "0 tied to a list record") and the rows got Spark IDs only from the database; a reviewed pair with no database entry stayed Pending. Names are now read from those objects (a full-name field, or first + last, one object level down), and a row matches when it shows the whole name or the first and last word. The `[elm-db] list API:` console line now also says how many records gave both names and lists the field names of `master`.
+- **Gender is no longer scored** (UI 2.309): the +5 for the same gender is gone (2.284 added it), and the script no longer reads a gender row at all. A remembered rating that holds the old gender point is re-rated without it.
 - **Orange Write-up / Points / Bolt's control** (UI 2.308): the selected segment was Bolt's blue; it now uses the same orange container colour as the rest of our UI (it follows Element's header colour).
 - **Hide matching items is put back reliably** (UI 2.307): the step that turns the switch back on no longer depends on the pair staying the same (a re-render that changed the pair key could leave it off); it runs first on every tick and clicks again, up to six times, until the switch is on. The switch's state is read from `aria-checked` when it has one (the selected class only otherwise). Each click logs the switch's `aria-checked` and class to the console.
 - **Different CAS IDs are -18** (UI 2.306): was -25. Still not a hard conflict.

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.310
+// @version      2.311
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.310'; // keep in sync with @version
+    const VERSION = '2.311'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -220,6 +220,21 @@
         bolt-card.analysis-card.elm2-an-ours .analysis-header, bolt-card.analysis-card.elm2-an-ours .analysis-summary { display: none !important; }
         bolt-card.analysis-card.elm2-an-bolt .elm2-an-text, bolt-card.analysis-card.elm2-an-bolt .elm2-an-table { display: none; }
         .elm2-an[data-view="ours"] .elm2-an-table, .elm2-an[data-view="points"] .elm2-an-text { display: none; }
+        /* while the pair is being read and scored: a cover over the fields (it hides the matching rows being shown and hidden again and
+           blocks clicks), a Material indeterminate circular progress, and pulsing placeholder lines where the analysis will be */
+        #elm2-busy { position: absolute; inset: 0; z-index: 40; background: #fff; display: flex; justify-content: center; align-items: flex-start; padding-top: 96px; cursor: progress; }
+        #elm2-busy svg { width: 48px; height: 48px; animation: elm2-spin-rot 1.568s linear infinite; }
+        #elm2-busy circle { fill: none; stroke: var(--md-primary, #ef6c00); stroke-width: 4; stroke-linecap: round; stroke-dasharray: 1 126; transform-origin: 50% 50%; animation: elm2-spin-dash 1.4s cubic-bezier(.4, 0, .2, 1) infinite; }
+        @keyframes elm2-spin-rot { to { transform: rotate(360deg); } }
+        @keyframes elm2-spin-dash { 0% { stroke-dasharray: 1 126; stroke-dashoffset: 0; } 50% { stroke-dasharray: 85 126; stroke-dashoffset: -35; } 100% { stroke-dasharray: 85 126; stroke-dashoffset: -124; } }
+        bolt-card.analysis-card.elm2-an-wait .analysis-header, bolt-card.analysis-card.elm2-an-wait .analysis-summary { display: none !important; }
+        .elm2-an-skel { display: flex; flex-direction: column; gap: 10px; padding: 6px 0 4px; }
+        .elm2-an-skel-bar { display: flex; align-items: center; gap: 8px; }
+        .elm2-an-skel span { display: block; height: 12px; border-radius: 6px; background: var(--md-surface-container-high, #ece7e2); animation: elm2-pulse 1.3s ease-in-out infinite; }
+        .elm2-an-skel-bar span:nth-child(1) { width: 110px; height: 22px; border-radius: 11px; } .elm2-an-skel-bar span:nth-child(2) { width: 60px; height: 22px; border-radius: 11px; animation-delay: .15s; }
+        .elm2-an-skel > span:nth-child(2) { width: 92%; animation-delay: .1s; } .elm2-an-skel > span:nth-child(3) { width: 78%; animation-delay: .25s; } .elm2-an-skel > span:nth-child(4) { width: 55%; animation-delay: .4s; }
+        @keyframes elm2-pulse { 0%, 100% { opacity: .4; } 50% { opacity: 1; } }
+        @media (prefers-reduced-motion: reduce) { #elm2-busy svg, #elm2-busy circle, .elm2-an-skel span { animation-duration: 3s; } }
         .elm2-an { margin: 0 0 8px; }
         .elm2-an-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 6px; }
         .elm2-an-title { font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: #1a1c20; }
@@ -2821,7 +2836,22 @@
         if (!body) return;
         const rating = currentRating();
         const old = body.querySelector(':scope > .elm2-an');
-        if (!rating) { if (old) old.remove(); card.classList.remove('elm2-an-ours', 'elm2-an-bolt'); return; }
+        let skel = body.querySelector(':scope > .elm2-an-skel');
+        if (!rating) {
+            if (old) old.remove();
+            card.classList.remove('elm2-an-ours', 'elm2-an-bolt');
+            // pulsing placeholder lines while the rating is on its way (not for good: with no Bolt overview the card falls back to Bolt's own)
+            const waiting = isDedupReviewPage() && !!pairFirstSeenAt && Date.now() - pairFirstSeenAt < BUSY_MAX_MS;
+            card.classList.toggle('elm2-an-wait', waiting);
+            if (waiting && !skel) {
+                skel = document.createElement('div'); skel.className = 'elm2-an-skel'; skel.setAttribute('aria-hidden', 'true');
+                skel.innerHTML = '<div class="elm2-an-skel-bar"><span></span><span></span></div><span></span><span></span><span></span>';
+                body.appendChild(skel);
+            } else if (!waiting && skel) skel.remove();
+            return;
+        }
+        card.classList.remove('elm2-an-wait');
+        if (skel) skel.remove();
         const pk = getPairKey();
         if (anView.pair !== pk) { anView.pair = pk; anView.mode = anView.kept; }
         const mode = anView.mode || anView.kept;
@@ -4353,8 +4383,43 @@
         if (!isHidingMatches(btn)) rowSnapshot = { pair: pk, rows: getDiffRows().map(rowRecord) };
         return true;
     }
+    // ---- The cover: while a pair is being read (the matching rows shown, read and hidden again) and scored, the fields are covered by a
+    // Material indeterminate progress, which also blocks clicks and keys on them. It never holds for more than BUSY_MAX_MS. ----
+    const BUSY_MAX_MS = 8000, SCORE_WAIT_MS = 4000;
+    let busySince = 0, busyGaveUp = '';
+    function pairIsBusy() {
+        const pk = isDedupReviewPage() && !completionCardVisible() ? getPairKey() : '';
+        if (!pk) return false;
+        let busy = peek.owed || peek.phase === 'opening' || peek.phase === 'restoring';
+        if (!busy && peek.pair !== pk) { const btn = hideMatchingBtn(); busy = !!btn && isHidingMatches(btn); } // a new pair whose rows are still to be read
+        if (!busy && Date.now() - pairFirstSeenAt < SCORE_WAIT_MS && pairFirstSeenAt && !currentRating()) busy = true; // Bolt's overview has not shown yet
+        if (!busy) { busySince = 0; busyGaveUp = ''; return false; }
+        if (busyGaveUp === pk) return false;
+        if (!busySince) busySince = Date.now();
+        if (Date.now() - busySince > BUSY_MAX_MS) { busyGaveUp = pk; busySince = 0; console.log('[elm2] The cover came off after ' + BUSY_MAX_MS / 1000 + ' s: the pair was still being read'); return false; }
+        return true;
+    }
+    function updateBusyOverlay() {
+        const form = getDiffForm(), host = form && (form.querySelector('form.diff-form') || form); // the form that holds the fields is the block the cover sits in
+        let cover = document.getElementById('elm2-busy');
+        if (!host || !pairIsBusy()) { if (cover) cover.remove(); return; }
+        if (cover && cover.parentElement === host) return;
+        if (cover) cover.remove();
+        if (getComputedStyle(host).position === 'static') host.style.position = 'relative';
+        cover = document.createElement('div');
+        cover.id = 'elm2-busy'; cover.setAttribute('role', 'progressbar'); cover.setAttribute('aria-label', 'Reading the pair'); cover.setAttribute('aria-busy', 'true');
+        cover.innerHTML = '<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="20"></circle></svg>';
+        host.appendChild(cover);
+    }
+    // keys do not reach the fields under the cover (Escape still cancels an auto-merge)
+    document.addEventListener('keydown', (e) => {
+        const cover = document.getElementById('elm2-busy');
+        if (!cover || e.key === 'Escape' || !cover.parentElement || !cover.parentElement.contains(e.target)) return;
+        e.preventDefault(); e.stopPropagation();
+    }, true);
     function attemptAutoResolve() {
         if (peek.owed) restoreOwedSwitch(); // first, before any early return below
+        updateBusyOverlay(); // the cover goes up before the switch is touched
         if (!isDedupReviewPage() || completionCardVisible()) { formWasAbsent = true; return; }
         if (!getContactNames().filter(Boolean).length) return; // page still loading
         if (formWasAbsent) {
@@ -4380,7 +4445,9 @@
             delete document.body.dataset.csvScore;
             delete document.body.dataset.csvPoints;
         }
-        if (!readMatchingRows()) return; // the pair's rows are being read: decide nothing yet
+        const readDone = readMatchingRows();
+        updateBusyOverlay();
+        if (!readDone) return; // the pair's rows are being read: decide nothing yet
         const blockers = getAllBlockers();
         applyBlockStyling(blockers);
         updateCsvSignal();
@@ -4554,7 +4621,7 @@
         ensureManifest, // after the header colour is known (the icon uses it)
         injectPager, injectHistorySearch, stripFilterTooltips, syncSkipToggles
     ];
-    const REVIEW_PAGE_STEPS = [syncBoltBlue, annotateRowColors, pinReviewQueueNav, annotateApplicantSide, injectPickComparisonBar, renderOurAnalysis];
+    const REVIEW_PAGE_STEPS = [syncBoltBlue, annotateRowColors, pinReviewQueueNav, annotateApplicantSide, injectPickComparisonBar, renderOurAnalysis, updateBusyOverlay];
     setInterval(() => {
         EVERY_PAGE_STEPS.forEach(runStep);
         if (isDedupReviewPage()) REVIEW_PAGE_STEPS.forEach(runStep);

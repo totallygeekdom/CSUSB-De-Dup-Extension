@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.318
+// @version      2.319
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.318'; // keep in sync with @version
+    const VERSION = '2.319'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -3761,11 +3761,14 @@
     // AUTO-DISMISS: two different School Ids are two students. Such a pair is dismissed with "Different student IDs" written as the
     // reason: after a 3 s notice (Escape cancels), Dismiss is clicked, the reason is typed into the dialog and the dialog's Dismiss is
     // clicked. Not for a pair that is also Forbidden by name (those are only ever skipped), and not when the two IDs are the same
-    // number written with and without leading zeros. Setting: Dismiss different student IDs (on by default).
+    // number written with and without leading zeros. Setting: Dismiss different student IDs (on by default), and only while auto-merge is
+    // on (When done = Merge).
     // =========================================================
     const DISMISS_REASON = 'Different student IDs';
     let allowDismissClick = false; // the click guard above lets through only the clicks made here, while this is true
     let dismissState = null; // { key, step: 'countdown' | 'dialog' | 'done', timer, t0, t1, t2 }
+    // Tied to auto-merge: only while When done is on Merge (and the slider is not on None); with Wait for me the pair is skipped.
+    const dismissOn = () => CFG.DISMISS_ID_MISMATCH && autoMergeOn();
     function idMismatchToDismiss() {
         const m = isStudentIdMismatch();
         if (!m.mismatch || parseInt(m.leftId, 10) === parseInt(m.rightId, 10)) return null;
@@ -3814,6 +3817,7 @@
         };
         if (st.step === 'countdown') {
             if (getPairKey() !== st.key) { dismissState = null; return; }
+            if (!dismissOn()) { dismissState = null; showMergeNotice('Auto-dismiss cancelled: auto-merge is off'); return; } // When done went back to Wait for me
             if (!idMismatchToDismiss()) { fail('the student IDs no longer differ'); return; }
             const btn = getSidebarActionButton('Dismiss');
             if (!btn || btn.disabled) { if (Date.now() - st.t0 < 8000) next(300); else fail('no Dismiss button'); return; }
@@ -4626,7 +4630,7 @@
             resolutionAttempted = true;
             console.log('[elm2] Blocked:', blockers.map(b => b.type + (b.reason ? ' (' + b.reason + ')' : '')).join(', '),
                 '| auto-skip', CFG.AUTO_SKIP_BLOCKED ? 'ON' : 'OFF');
-            if (CFG.DISMISS_ID_MISMATCH && idMismatchToDismiss()) { startAutoDismiss(pairKey); return; }
+            if (dismissOn() && idMismatchToDismiss()) { startAutoDismiss(pairKey); return; }
             if (CFG.AUTO_SKIP_BLOCKED) {
                 setTimeout(() => skipToNext('blocked', blockerLabel(blockers)), 1200);
             }
@@ -4657,7 +4661,7 @@
             const laterBlockers = getAllBlockers();
             applyBlockStyling(laterBlockers);
             if (laterBlockers.length > 0) {
-                if (CFG.DISMISS_ID_MISMATCH && idMismatchToDismiss()) { startAutoDismiss(phaseOnePairKey); return; }
+                if (dismissOn() && idMismatchToDismiss()) { startAutoDismiss(phaseOnePairKey); return; }
                 if (CFG.AUTO_SKIP_BLOCKED) { skipToNext('blocked', blockerLabel(laterBlockers)); }
                 return;
             }
@@ -4971,7 +4975,7 @@
                 </div>
                 <div class="elm-item">
                 <div class="setting-row"><label>Dismiss different student IDs</label>${toggleHtml('elm-dismiss-id-mismatch')}</div>
-                <div class="elm-level-desc">A pair whose School Ids differ is two students: it is dismissed with "Different student IDs" as the reason, after a 3 second notice (Esc cancels). Off: it is skipped like any blocked pair.</div>
+                <div class="elm-level-desc">While When done is on Merge: a pair whose School Ids differ is two students, so it is dismissed with "Different student IDs" as the reason, after a 3 second notice (Esc cancels). Off, or with Wait for me: it is skipped like any blocked pair.</div>
                 </div>
                 <div class="elm-item">
                 <div class="setting-row"><label>Next after merge</label>${toggleHtml('elm-next-after-merge')}</div>
@@ -5087,6 +5091,9 @@
             toastsEl.checked = !off && (on || getBoolSetting('elm_outcome_toasts', true));
             toastsEl.disabled = off || on;
             toastsEl.closest('.setting-row').style.opacity = (off || on) ? '.38' : '';
+            // Dismiss different student IDs only acts with auto-merge on: dimmed (still switchable) otherwise
+            const dismissEl = document.getElementById('elm-dismiss-id-mismatch');
+            if (dismissEl) dismissEl.closest('.setting-row').style.opacity = autoMergeOn() ? '' : '.38';
         };
         toastsEl.addEventListener('change', () => lsSet('elm_outcome_toasts', String(toastsEl.checked)));
         document.getElementById('elm-when-done').addEventListener('click', syncToasts);

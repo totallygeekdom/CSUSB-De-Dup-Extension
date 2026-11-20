@@ -17,7 +17,7 @@ chip). Two v2 scripts target it, plus an optional third that merges databases:
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.318` (shown in the settings pane) |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.319` (shown in the settings pane) |
 | Element451 - Database v2 | `database-v2.js` | `@version 2.77` |
 | Element451 - Database Merge v2 (optional, pairs with Database) | `database-merge-v2.js` | `@version 1.17` |
 
@@ -36,7 +36,7 @@ the resolution rules, auto-merge, every website restyle, the database format, li
     resets every browser session. A final safety check runs before Merge Contacts is clicked.
   - **Auto-Skip**: skips blocked and out-of-range pairs (Next duplicate
     only, never Dismiss); off = stop on them. There are no popups: an appeal shows as a chip beside our score.
-  - **Dismiss different student IDs**: a pair whose School Ids differ is dismissed with "Different student IDs" as the reason, after a 3 second notice (Esc cancels); not for a pair that is also Forbidden by name (default on).
+  - **Dismiss different student IDs**: while When done is on Merge, a pair whose School Ids differ is dismissed with "Different student IDs" as the reason, after a 3 second notice (Esc cancels); not for a pair that is also Forbidden by name (default on).
   - **Next after merge**: after a merge, presses "Next duplicate" on the "Merge completed" card (default on).
   - Slider **None** (or no Allowed department ticked) with Auto-Skip on is a **scan**: every pair is
     recorded in the database and skipped.
@@ -78,7 +78,7 @@ the resolution rules, auto-merge, every website restyle, the database format, li
 - When both emails are personal, email opens then clicks (from the engagement panel, which the script opens itself) decide; if those tie and nothing in the addresses separates them either, no pick is made and the pair is left for manual review.
 - The classic scroll-to-bottom requirement and Auto-Click FAB were not ported. (The email-open-count tiebreaker is back, fed by the engagement panel.)
 - Dismiss (it permanently tells Bolt a pair is not a duplicate) is clicked by the script only for a pair whose two School Ids
-  differ, with "Different student IDs" as the reason (setting **Dismiss different student IDs**, default on). Every other skip
+  differ, with "Different student IDs" as the reason, while auto-merge is on (setting **Dismiss different student IDs**, default on). Every other skip
   only uses Next duplicate.
 
 ---

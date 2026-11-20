@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.317
+// @version      2.318
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.317'; // keep in sync with @version
+    const VERSION = '2.318'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -124,6 +124,8 @@
         ALLOWED_DEPARTMENT:       { get() { return lsGet('elm_allowed_department') || 'UnderGrad'; } },
         ALLOW_APPEAL:             { get() { return getBoolSetting('elm_allow_appeal', false); } },
         ALLOW_FORBIDDEN:          { get() { return getBoolSetting('elm_allow_forbidden', false); } },
+        // A pair whose two School Ids differ is two students: it is dismissed ("Different student IDs") instead of skipped.
+        DISMISS_ID_MISMATCH:      { get() { return getBoolSetting('elm_dismiss_id_mismatch', true); } },
     });
     // =========================================================
     // CSS
@@ -2097,9 +2099,10 @@
     // tells Bolt these two contacts are different people — removing the
     // pair from the queue and training the matcher on that verdict. A
     // department/forbidden/appeal block says nothing about whether
-    // the pair is actually a duplicate, so automation must never click this.
+    // the pair is actually a duplicate, so automation never clicks this for them.
     // Skipping a blocked entry must only ever move to the next pair via
     // clickNextDuplicate() below, leaving the pair untouched in the queue.
+    // The one exception is two different School Ids (two students): see AUTO-DISMISS below, which is the only code allowed to click it.
     // Skips to the next pair, but first has the Database script (if installed) record this
     // one, retrying for up to 3s until it confirms, so a fast skip never loses an entry.
     let skipInFlightKey = '';
@@ -3735,11 +3738,11 @@
 
 
     // Safety net: Dismiss (and Confirm on its "Not a duplicate?" dialog) is a
-    // permanent verdict and must only ever come from a human. Real clicks have
+    // permanent verdict and must only come from a human, or from AUTO-DISMISS for two different School Ids. Real clicks have
     // isTrusted=true; anything a script fires via .click() is false. Block those
-    // in the capture phase, and log a stack trace naming whoever tried.
+    // in the capture phase (except the ones AUTO-DISMISS makes), and log a stack trace naming whoever tried.
     document.addEventListener('click', (e) => {
-        if (e.isTrusted) return;
+        if (e.isTrusted || allowDismissClick) return;
         const btn = e.target && e.target.closest ? e.target.closest('button') : null;
         if (!btn) return;
         const text = btn.textContent.trim().toLowerCase();
@@ -3755,11 +3758,98 @@
     }, true);
 
     // =========================================================
+    // AUTO-DISMISS: two different School Ids are two students. Such a pair is dismissed with "Different student IDs" written as the
+    // reason: after a 3 s notice (Escape cancels), Dismiss is clicked, the reason is typed into the dialog and the dialog's Dismiss is
+    // clicked. Not for a pair that is also Forbidden by name (those are only ever skipped), and not when the two IDs are the same
+    // number written with and without leading zeros. Setting: Dismiss different student IDs (on by default).
+    // =========================================================
+    const DISMISS_REASON = 'Different student IDs';
+    let allowDismissClick = false; // the click guard above lets through only the clicks made here, while this is true
+    let dismissState = null; // { key, step: 'countdown' | 'dialog' | 'done', timer, t0, t1, t2 }
+    function idMismatchToDismiss() {
+        const m = isStudentIdMismatch();
+        if (!m.mismatch || parseInt(m.leftId, 10) === parseInt(m.rightId, 10)) return null;
+        if (isForbiddenEntry().forbidden) return null;
+        return m;
+    }
+    function clickAllowed(btn) { allowDismissClick = true; try { btn.click(); } finally { allowDismissClick = false; } }
+    const feedbackBox = () => Array.from(document.querySelectorAll('textarea[formcontrolname="feedback"]')).find(t => t.getClientRects().length) || null;
+    // typed the way Angular's form sees it (the value set through the native setter, then an input event)
+    function setFeedback(t, text) {
+        const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+        t.focus();
+        setter.call(t, text);
+        t.dispatchEvent(new Event('input', { bubbles: true }));
+        t.dispatchEvent(new Event('change', { bubbles: true }));
+        t.dispatchEvent(new Event('blur'));
+    }
+    function dialogDismissButton(t) {
+        const box = t.closest('bolt-dialog, mat-dialog-container, [role="dialog"], .cdk-overlay-pane') || document;
+        return Array.from(box.querySelectorAll('button')).find(b => /^(dismiss|confirm|submit)$/i.test(b.textContent.trim()) && !b.closest('bolt-stackable-sidebar-header-actions')) || null;
+    }
+    function cancelAutoDismiss(message) {
+        if (!dismissState) return;
+        const counting = dismissState.step === 'countdown';
+        clearTimeout(dismissState.timer);
+        dismissState = null;
+        if (counting && message) showMergeNotice(message);
+    }
+    function startAutoDismiss(key) {
+        if (dismissState) return;
+        saveRatingNow(); recordPairNow(); // its chips on the list, before the pair leaves the queue
+        dismissState = { key, step: 'countdown', timer: null, t0: Date.now() };
+        console.log('[elm2] Different student IDs: dismissing this pair in 3 s (Escape cancels)');
+        showMergeNotice('Dismissing in 3 s: ' + DISMISS_REASON + ' (Esc cancels)', true);
+        dismissState.timer = setTimeout(stepDismiss, 3000);
+    }
+    function stepDismiss() {
+        const st = dismissState;
+        if (!st) return;
+        const next = (ms) => { st.timer = setTimeout(stepDismiss, ms); };
+        const fail = (why) => {
+            dismissState = null;
+            console.log('[elm2] Auto-dismiss stopped:', why);
+            showMergeNotice('Auto-dismiss stopped: ' + why, true);
+            if (CFG.AUTO_SKIP_BLOCKED && getPairKey() === st.key && !feedbackBox()) skipToNext('not dismissed, ' + why, 'Student ID');
+        };
+        if (st.step === 'countdown') {
+            if (getPairKey() !== st.key) { dismissState = null; return; }
+            if (!idMismatchToDismiss()) { fail('the student IDs no longer differ'); return; }
+            const btn = getSidebarActionButton('Dismiss');
+            if (!btn || btn.disabled) { if (Date.now() - st.t0 < 8000) next(300); else fail('no Dismiss button'); return; }
+            clickAllowed(btn);
+            st.step = 'dialog'; st.t1 = Date.now();
+            next(200);
+            return;
+        }
+        if (st.step === 'dialog') {
+            const t = feedbackBox();
+            if (!t) { if (Date.now() - st.t1 < 5000) next(200); else fail('the Dismiss dialog did not open'); return; }
+            if (t.value !== DISMISS_REASON) setFeedback(t, DISMISS_REASON);
+            const ok = dialogDismissButton(t);
+            if (!ok || ok.disabled) { if (Date.now() - st.t1 < 5000) next(200); else fail('no Dismiss button in the dialog'); return; }
+            clickAllowed(ok);
+            st.step = 'done'; st.t2 = Date.now();
+            console.log('[elm2] Dismissed:', DISMISS_REASON);
+            if (toastsEnabled()) showMergeNotice('Dismiss: ' + DISMISS_REASON, true);
+            next(500);
+            return;
+        }
+        // done: Element normally moves on by itself; a pair still on screen after 4 s is skipped (Auto-Skip on)
+        if (getPairKey() !== st.key || completionCardVisible()) { dismissState = null; return; }
+        if (feedbackBox()) { if (Date.now() - st.t2 < 6000) next(300); else fail('the Dismiss dialog stayed open'); return; }
+        if (Date.now() - st.t2 < 4000) { next(300); return; }
+        dismissState = null;
+        if (CFG.AUTO_SKIP_BLOCKED) skipToNext('dismissed, still on screen', 'Dismissed');
+    }
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && dismissState && dismissState.step === 'countdown') cancelAutoDismiss('Auto-dismiss cancelled'); });
+
+    // =========================================================
     // AUTO-MERGE ("When done" = Merge)
     // Merging is permanent, so it only happens after a visible countdown with a Cancel
     // button and a short written overview, and only after a final re-check that the pair
     // is still unblocked, still the same pair, and every conflicting field has a pick.
-    // Dismiss is never clicked (see the click guard above).
+    // Dismiss is never clicked here (see the click guard and AUTO-DISMISS above).
     // =========================================================
     let mergeTimer = null;
     let mergedPairKey = '';
@@ -4517,6 +4607,7 @@
             engagementOpenedFor = '';
             previewPicks(null);
             cancelAutoMerge();
+            cancelAutoDismiss();
             delete document.body.dataset.csvDept;
             delete document.body.dataset.csvSpark1;
             delete document.body.dataset.csvSpark2;
@@ -4535,6 +4626,7 @@
             resolutionAttempted = true;
             console.log('[elm2] Blocked:', blockers.map(b => b.type + (b.reason ? ' (' + b.reason + ')' : '')).join(', '),
                 '| auto-skip', CFG.AUTO_SKIP_BLOCKED ? 'ON' : 'OFF');
+            if (CFG.DISMISS_ID_MISMATCH && idMismatchToDismiss()) { startAutoDismiss(pairKey); return; }
             if (CFG.AUTO_SKIP_BLOCKED) {
                 setTimeout(() => skipToNext('blocked', blockerLabel(blockers)), 1200);
             }
@@ -4565,6 +4657,7 @@
             const laterBlockers = getAllBlockers();
             applyBlockStyling(laterBlockers);
             if (laterBlockers.length > 0) {
+                if (CFG.DISMISS_ID_MISMATCH && idMismatchToDismiss()) { startAutoDismiss(phaseOnePairKey); return; }
                 if (CFG.AUTO_SKIP_BLOCKED) { skipToNext('blocked', blockerLabel(laterBlockers)); }
                 return;
             }
@@ -4877,6 +4970,10 @@
                 <div class="elm-level-desc elm-skip-desc">Skips blocked and out-of-range pairs with no popup. Off: stops on them instead.</div>
                 </div>
                 <div class="elm-item">
+                <div class="setting-row"><label>Dismiss different student IDs</label>${toggleHtml('elm-dismiss-id-mismatch')}</div>
+                <div class="elm-level-desc">A pair whose School Ids differ is two students: it is dismissed with "Different student IDs" as the reason, after a 3 second notice (Esc cancels). Off: it is skipped like any blocked pair.</div>
+                </div>
+                <div class="elm-item">
                 <div class="setting-row"><label>Next after merge</label>${toggleHtml('elm-next-after-merge')}</div>
                 <div class="elm-level-desc elm-next-desc">After a merge (yours or an auto-merge), presses "Next duplicate" on the "Merge completed" card, and hides Element\'s own "Skip merge completion screen" switches (which would remove that card).</div>
                 </div>
@@ -4997,6 +5094,7 @@
         setupToggle('elm-auto-skip-blocked', 'elm_auto_skip_blocked', syncToasts);
         syncToasts();
         setupToggle('elm-next-after-merge', 'elm_next_after_merge');
+        setupToggle('elm-dismiss-id-mismatch', 'elm_dismiss_id_mismatch');
         setupToggle('elm-highlight-rows', 'elm_highlight_rows');
         function setupToggle(elementId, storageKey, onChange, defaultValue = true) {
             const el = document.getElementById(elementId);

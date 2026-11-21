@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.319
+// @version      2.320
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.319'; // keep in sync with @version
+    const VERSION = '2.320'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -248,6 +248,7 @@
         .elm2-an-flag { display: inline-block; padding: 1px 10px; border-radius: 12px; font-size: 12px; line-height: 20px; font-weight: 600; cursor: help; background: #eceef4; color: #434750; }
         .elm2-an-flag[data-dept="UnderGrad"] { background: #f3e5f5; color: #6a1b9a; } .elm2-an-flag[data-dept="Grad/IA"] { background: #e3f2fd; color: #1565c0; }
         .elm2-an-flag[data-flag="appeal"] { background: #fff8e1; color: #f57f17; } .elm2-an-flag[data-flag="forbidden"], .elm2-an-flag[data-flag="test"] { background: #fce4ec; color: #c2185b; }
+        .elm2-an-flag[data-flag="twins"] { background: #ede7f6; color: #5e35b1; }
         .elm2-an-flag[data-blocked="1"] { box-shadow: inset 0 0 0 1.5px currentColor; }
         .elm2-an-flag[data-flag="bolt"] { background: transparent; box-shadow: inset 0 0 0 1px rgba(26, 28, 32, .24); color: #434750; font-weight: 500; }
         .elm2-an-views { margin-left: auto; display: inline-flex; border: 1px solid rgba(26, 28, 32, .24); border-radius: 12px; overflow: hidden; }
@@ -2409,6 +2410,9 @@
         address: [25, -3], soft: [5, 0],
         boltHigh: 10, boltMedium: 5, boltLow: -10, boltDifferent: -10, boltError: -5,
         applicantVsCoyote: -40,
+        // Twin rule: when the first names do not match (a nickname, an initial or one name inside the other still matches) and no Coyote ID or
+        // CAS ID matches, what a family shares stops counting for the pair: the same last name 0, the same address and the same birth date -30 each.
+        twinLast: 0, twinAddress: -30, twinDob: -30,
         emailNameFull: 6, emailNamePartial: 4, emailNameInitial: 3, emailNameOne: 2, emailNameCap: 10, emailDobFull: 20, emailDobYear: 3, emailDobConflict: -8
     };
     const SCORE_CUT = { high: 70, medium: 45, low: 15 };
@@ -2512,7 +2516,16 @@
     }
     // slots: { slot: how many times it applied } -> { points, level, hard, strong }, or null when a slot is not one of this engine's
     const RETIRED_SLOTS = ['gender.0']; // gender is no longer scored; a remembered rating that holds it is re-rated without it
+    // A rating remembered before the twin rule (UI 2.320) holds the plain slots: the twin rule is applied to it here, the same way scorePair does.
+    const TWIN_SLOTS = { 'last.0': 'twinLast', 'lastPartial.0': 'twinLast', 'address.0': 'twinAddress', 'dob.0': 'twinDob' };
+    function twinSlots(slots) {
+        if (!slots['first.1'] || slots['coyote.0'] || slots['cas.0']) return slots;
+        const out = {};
+        Object.keys(slots).forEach(k => { const t = TWIN_SLOTS[k] || k; out[t] = (out[t] || 0) + slots[k]; });
+        return out;
+    }
     function scoreSlots(slots) {
+        slots = twinSlots(slots);
         let pts = 0, nameFit = 0, strong = 0, hard = false;
         for (const slot of Object.keys(slots)) {
             if (RETIRED_SLOTS.includes(slot)) continue;
@@ -2568,10 +2581,18 @@
             const app = appSide === 'A' ? A : B, other = appSide === 'A' ? B : A;
             if (!scDigits(app.coyote) && scDigits(other.coyote)) add('appCoyote', 'Applicant vs Coyote ID', W.applicantVsCoyote, 'against', 'one record is an applicant with no Coyote ID, while the other already has one (' + other.coyote + ')', { slot: 'applicantVsCoyote' });
         }
+        // Names are compared first: different first names (not a nickname, an initial or one name inside the other) with no matching Coyote ID or
+        // CAS ID turn on the twin rule, under which a shared last name, address and birth date count against the pair instead of for it.
+        const fa = scFold(A.first), fb = scFold(B.first), la = scFold(A.last), lb = scFold(B.last);
+        let firstState = null, lastState = null;
+        if (fa && fb) firstState = fa === fb ? 'same' : scNameWithin(fa, fb) ? 'within' : scRelatedFirst(fa, fb) ? 'related' : 'differ';
+        if (la && lb) lastState = la === lb ? 'same' : (la.split(' ').some(t => t.length > 2 && lb.split(' ').includes(t)) ? 'partial' : 'differ');
+        const twin = firstState === 'differ' && !slots['coyote.0'] && !slots['cas.0'];
         // DOB
         const da = scDate(A.dob), db = scDate(B.dob);
         if (da && db) {
-            if (da === db) { add('dob', 'Date of birth', W.dob[0], 'for', 'the same date of birth (' + da + ')', { strong: true, slot: 'dob.0' }); }
+            if (da === db && twin) add('dob', 'Date of birth', W.twinDob, 'against', 'the same date of birth with different first names (as twins have) (' + da + ')', { twin: true, slot: 'twinDob' });
+            else if (da === db) { add('dob', 'Date of birth', W.dob[0], 'for', 'the same date of birth (' + da + ')', { strong: true, slot: 'dob.0' }); }
             else if (scDateTypo(da, db)) add('dob', 'Date of birth', W.dobTypo[1], 'against', 'dates of birth that are one typo apart (' + da + ' and ' + db + ')', { typo: true, slot: 'dobTypo.1' });
             else { add('dob', 'Date of birth', W.dob[1], 'against', 'different dates of birth (' + da + ' and ' + db + ')', { clear: true, slot: 'dob.1' }); }
         }
@@ -2591,20 +2612,18 @@
         // Phone
         const pa = scPhone(A.phone), pb = scPhone(B.phone);
         if (pa && pb) { if (pa === pb) { add('phone', 'Phone', W.phone[0], 'for', 'the same phone number (' + A.phone + ')', { strong: true, slot: 'phone.0' }); } else add('phone', 'Phone', 0, 'info', 'different phone numbers'); }
-        // Names
-        const fa = scFold(A.first), fb = scFold(B.first), la = scFold(A.last), lb = scFold(B.last);
-        let firstState = null, lastState = null;
-        if (fa && fb) firstState = fa === fb ? 'same' : scNameWithin(fa, fb) ? 'within' : scRelatedFirst(fa, fb) ? 'related' : 'differ';
-        if (la && lb) lastState = la === lb ? 'same' : (la.split(' ').some(t => t.length > 2 && lb.split(' ').includes(t)) ? 'partial' : 'differ');
+        // Names (compared above)
         if (firstState === 'same') add('first', 'First name', W.first[0], 'for', 'the same first name', { nameFor: 'first', slot: 'first.0' });
         else if (firstState === 'within') add('first', 'First name', W.first[0], 'for', 'the same first name, one name inside the other (' + (A.first.length <= B.first.length ? A.first + ' in ' + B.first : B.first + ' in ' + A.first) + ')', { nameFor: 'first', within: true, slot: 'first.0' });
         else if (firstState === 'related') add('first', 'First name', W.firstRelated[0], 'for', 'similar first names (' + A.first + ' and ' + B.first + ')', { nameFor: 'first', slot: 'firstRelated.0' });
         else if (firstState === 'differ') add('first', 'First name', W.first[1], 'against', 'different first names (' + A.first + ' and ' + B.first + ')', { slot: 'first.1' });
-        if (lastState === 'same') add('last', 'Last name', W.last[0], 'for', 'the same last name', { nameFor: 'last', slot: 'last.0' });
+        if (twin && (lastState === 'same' || lastState === 'partial')) add('last', 'Last name', W.twinLast, 'info', (lastState === 'same' ? 'the same last name' : 'overlapping last names (' + A.last + ' and ' + B.last + ')') + ', which family members share, so it does not count with different first names', { twin: true, slot: 'twinLast' });
+        else if (lastState === 'same') add('last', 'Last name', W.last[0], 'for', 'the same last name', { nameFor: 'last', slot: 'last.0' });
         else if (lastState === 'partial') add('last', 'Last name', W.lastPartial[0], 'for', 'overlapping last names (' + A.last + ' and ' + B.last + ')', { nameFor: 'last', slot: 'lastPartial.0' });
         else if (lastState === 'differ') add('last', 'Last name', W.last[1], 'against', 'different last names (' + A.last + ' and ' + B.last + ')', { slot: 'last.1' });
         // Address
-        if (ev.addrState === 'match') { add('address', 'Address', W.address[0], 'for', 'the same address', { strong: true, slot: 'address.0' }); }
+        if (ev.addrState === 'match' && twin) add('address', 'Address', W.twinAddress, 'against', 'the same address with different first names (family members often share one)', { twin: true, slot: 'twinAddress' });
+        else if (ev.addrState === 'match') { add('address', 'Address', W.address[0], 'for', 'the same address', { strong: true, slot: 'address.0' }); }
         else if (ev.addrState === 'mismatch') add('address', 'Address', W.address[1], 'against', 'different addresses (people move)', { slot: 'address.1' });
         // Soft fields
         [['studentType', 'Student type'], ['level', 'Academic level'], ['school', 'School attended']].forEach(([k, label]) => {
@@ -2642,7 +2661,8 @@
         const present = keyFields.filter(k => k === 'dob' ? (da && db) : k === 'email' ? (ea.length && eb.length) : k === 'phone' ? (pa && pb) : (scDigits(A[k]) && scDigits(B[k])));
         const missing = keyFields.filter(k => !present.includes(k));
         const thin = !present.some(k => k === 'coyote' || k === 'cas') && present.length < 2;
-        return { points: rated.points, level: rated.level, hard: rated.hard, strong: rated.strong, slots, items, missing, thin, different: rated.points < SCORE_CUT.low };
+        const twins = items.some(i => i.twin && i.pts < 0); // a shared address or birth date with different first names: the Twins? chip
+        return { points: rated.points, level: rated.level, hard: rated.hard, strong: rated.strong, slots, items, missing, thin, twins, different: rated.points < SCORE_CUT.low };
     }
     // ---- SCORE ENGINE END ----
     // ---- WRITE-UP START: the score turned into plain sentences (templates, no AI, so it always agrees with the points) ----
@@ -2873,6 +2893,8 @@
         const { res, ev, write } = rating;
         const boltLevel = getBoltChipLevel();
         const { flags, notes } = pairFlags();
+        // the twin rule applied (different first names with a shared address or birth date): a chip says so
+        if (res.twins) flags.push({ flag: 'twins', text: 'Twins?', title: 'Different first names with the same ' + res.items.filter(i => i.twin && i.pts < 0).map(i => i.key === 'dob' ? 'birth date' : 'address').join(' and ') + ': these count against the pair (twins and siblings share them), and the same last name gives no points.' });
         const sig = JSON.stringify([pk, res.points, res.level, write.paragraphs, mode, boltLevel, flags, notes]);
         card.classList.toggle('elm2-an-bolt', mode === 'bolt');
         card.classList.toggle('elm2-an-ours', mode !== 'bolt');
@@ -3113,8 +3135,8 @@
     }
     // ---- SCORE CHIPS END ----
 
-    // (The possible-twins check that stood here is gone: our score already counts different names, birth dates and addresses and
-    // Bolt's "different people", so it no longer skips pairs or keeps them from auto-merge.)
+    // (The possible-twins check that stood here is gone: the score's twin rule (SCORE_W twinLast / twinAddress / twinDob) handles twins,
+    // and its Twins? chip beside the score says when it applied.)
 
     // =========================================================
     // FIELD RESOLUTION ENGINE

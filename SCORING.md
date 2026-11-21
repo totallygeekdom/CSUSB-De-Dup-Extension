@@ -28,7 +28,9 @@ Points view too. They are shown for information only: the rating is the points a
 | Bolt's own score | High +10, Medium +5 | Low -10; Bolt's analysis failed (it shows Error) -5; Bolt says "different people" -10, and then its High / Medium bonus is not given |  |
 | Applicant with no Coyote ID vs a contact that has one | none | -40 | |
 
-There is no twin-pattern rule: first names that differ cost the first-name penalty and nothing more.
+**Twin rule.** When the first names do not match (a nickname, an initial or one name inside the other still matches; a rhyme such as Kayla / Layla
+does not) and no Coyote ID or CAS ID matches, what a family shares stops counting for the pair: the same or overlapping last name 0, the same
+address -30, the same birth date -30 (instead of their usual points). The pair then shows a **Twins?** chip beside the score.
 
 ## Rating
 
@@ -66,10 +68,8 @@ Each row is run through the live engine (the Bolt score is not included unless t
 | Bolt flags "different people", same name + birth date | 60 | Medium |
 | Bolt rates Medium but flags "different people", same name + birth date | 60 | Medium |
 | Same name + address + DOB, applicant vs a contact with a Coyote ID | 55 | Medium |
-| Siblings (same last name, address, family email; different first name) | 54 | Medium |
 | Jr./Sr. with clearly different DOBs | 54 | Medium |
 | Different CAS IDs, same name and birth date | 52 | Medium |
-| Twins (same last name, DOB, address; different first name) | 50 | Medium |
 | Same first name, overlapping last names, emails differing only in the numbers (maria.soto444 / maria.soto1111) | 47 | Medium |
 
 ## Examples of Low scores
@@ -81,31 +81,32 @@ points add up. Closest to Medium first.
 | Pair | Points | How it adds up |
 |---|---|---|
 | Same name only, Bolt High | 40 | First name +15, Last name +15, Bolt +10 |
-| Parent/child (same phone and address, different names) | 35 | Phone +25, First name -30, Last name +15, Address +25 |
 | Same name, nothing else known | 30 | First name +15, Last name +15 |
-| Siblings: same last name and family email, no shared address | 29 | Email +40, First name -30, Last name +15, Name in email +4 |
 | Same name, different address | 27 | First name +15, Last name +15, Address -3 |
 | Same name, Bolt says Low | 20 | First name +15, Last name +15, Bolt -10 |
 | Different Coyote IDs, everything else the same | 15 | Coyote ID -120, Date of birth +40, Email +40, First name +15, Last name +15, Address +25 (hard conflict: capped at Low) |
 | Same name + address, applicant vs a contact with a Coyote ID | 15 | Applicant vs Coyote ID -40, First name +15, Last name +15, Address +25 |
+| Siblings: same last name and family email, no shared address | 14 | Email +40, First name -30, Name in email +4 |
 | Same name, birth date one typo apart | 10 | Date of birth -20, First name +15, Last name +15 |
 | Same name, different birth date, same address | 10 | Date of birth -45, First name +15, Last name +15, Address +25 |
-| Relatives: same last name and address, different first names | 10 | First name -30, Last name +15, Address +25 |
 | Same first name only, different last name | 0 | First name +15, Last name -15 |
 | Same email only (a shared family email), different names | -3 | Email +40, First name -30, Last name -15, Name in email +2 |
-| Same birth date only (a coincidence), different names | -5 | Date of birth +40, First name -30, Last name -15 |
-| Same last name only, different first name | -15 | First name -30, Last name +15 |
 | Same name, clearly different birth date | -15 | Date of birth -45, First name +15, Last name +15 |
+| Siblings (same last name, address, family email; different first name) | -16 | Email +40, First name -30, Address -30, Name in email +4 |
 | Same phone only (a family line), different names | -20 | Phone +25, First name -30, Last name -15 |
-| Same address only (roommates), different names | -20 | First name -30, Last name -15, Address +25 |
+| Same last name only, different first name | -30 | First name -30 |
+| Parent/child (same phone and address, different names) | -35 | Phone +25, First name -30, Address -30 |
 | Same email, different names and different birth dates | -48 | Date of birth -45, Email +40, First name -30, Last name -15, Name in email +2 |
+| Relatives: same last name and address, different first names | -60 | First name -30, Address -30 |
+| Same address only (roommates), different names | -75 | First name -30, Last name -15, Address -30 |
+| Same birth date only (a coincidence), different names | -75 | Date of birth -30, First name -30, Last name -15 |
+| Twins (same last name, DOB, address; different first name) | -90 | Date of birth -30, First name -30, Address -30 |
 | Completely different people | -93 | Date of birth -45, First name -30, Last name -15, Address -3 |
 
 ## Known trade-offs
 
-- **Households.** Twins, siblings and parent/child pairs that share an address land on Medium (see the rows above). Medium is not High, but a slider that includes Medium
-  auto-applies and, with When done = Merge, auto-merges them: there is no separate possible-twins check any more, the score alone decides. A larger first-name mismatch penalty
-  would push them down to Low.
+- **Households.** Twins and siblings with different first names are Low under the twin rule. A real duplicate whose first name has a typo
+  (Maria / Marai) is caught by it too and lands on Low, so it waits for you instead of being merged.
 - **Points only.** High is 70+ points, whatever they come from, so a pair can reach it with no birth date, ID, email or phone: the same name with Bolt High,
   name-based emails and soft fields add up to 80. A Jr./Sr. with the same name, address and a family email or phone (no birth date on file) is High too.
 - **Birth date and address alone.** With no names on either record the pair stays Medium (65); a last name is enough to reach High.

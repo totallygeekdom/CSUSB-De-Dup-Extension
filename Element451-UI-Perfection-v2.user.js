@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.322
+// @version      2.323
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.322'; // keep in sync with @version
+    const VERSION = '2.323'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -2218,6 +2218,7 @@
     // the cover while a pair is read (declared here, early: the rating code reads busyNow)
     const BUSY_MAX_MS = 8000, SCORE_WAIT_MS = 4000;
     let busySince = 0, busyGaveUp = '', busyNow = false;
+    let dismissState = null;            // the auto-dismiss in progress: { key, reason, step: 'countdown' | 'dialog' | 'done', timer, t0, t1, t2 } (declared early: the database signal reads it)
     let resolutionAttempted = false;    // resolution ran for the current pair
     let awaitingMergeResult = false;
     let lastMergeContactNamesKey = '';
@@ -2385,7 +2386,9 @@
         const sparks = getSparkIds();
         const forbidden = blockers.some(b => b.type === 'forbidden' || b.type === 'student-id-mismatch');
         const appeal = blockers.find(b => b.type === 'appeal');
-        if (forbidden) document.body.dataset.csvDept = 'Forbidden';
+        // a pair being dismissed (clearly different people) is recorded in the database with "Dismissed" as its department
+        if (dismissState && dismissState.key === getPairKey()) document.body.dataset.csvDept = 'Dismissed';
+        else if (forbidden) document.body.dataset.csvDept = 'Forbidden';
         else if (appeal) document.body.dataset.csvDept = 'Appeal';
         else document.body.dataset.csvDept = detectActualDepartment().dept;
         if (sparks.a || sparks.b) { document.body.dataset.csvSpark1 = sparks.a; document.body.dataset.csvSpark2 = sparks.b; }
@@ -3797,7 +3800,6 @@
     // student IDs / birth dates (on by default), and only while auto-merge is on (When done = Merge).
     // =========================================================
     let allowDismissClick = false; // the click guard above lets through only the clicks made here, while this is true
-    let dismissState = null; // { key, step: 'countdown' | 'dialog' | 'done', timer, t0, t1, t2 }
     // Tied to auto-merge: only while When done is on Merge (and the slider is not on None); with Wait for me the pair is skipped.
     const dismissOn = () => CFG.DISMISS_ID_MISMATCH && autoMergeOn();
     function idMismatchToDismiss() {
@@ -3850,8 +3852,8 @@
     }
     function startAutoDismiss(key, reason) {
         if (dismissState) return;
-        saveRatingNow(); recordPairNow(); // its chips on the list, before the pair leaves the queue
         dismissState = { key, reason, step: 'countdown', timer: null, t0: Date.now() };
+        saveRatingNow(); recordPairNow(); // its chips on the list (department: Dismissed), before the pair leaves the queue
         console.log('[elm2] ' + reason + ': dismissing this pair in 3 s (Escape cancels)');
         showMergeNotice('Dismissing in 3 s: ' + reason + ' (Esc cancels)', true);
         dismissState.timer = setTimeout(stepDismiss, 3000);
@@ -3883,6 +3885,7 @@
             if (t.value !== st.reason) setFeedback(t, st.reason);
             const ok = dialogDismissButton(t);
             if (!ok || ok.disabled) { if (Date.now() - st.t1 < 5000) next(200); else fail('no Dismiss button in the dialog'); return; }
+            recordPairNow(); // recorded as Dismissed before the pair goes
             clickAllowed(ok);
             st.step = 'done'; st.t2 = Date.now();
             console.log('[elm2] Dismissed:', st.reason);

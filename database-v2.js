@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - Database v2
 // @namespace    http://tampermonkey.net/
-// @version      2.77
+// @version      2.78
 // @description  Tracks duplicate entries in a database stored in browser localStorage (exports a password-protected .xlsx spreadsheet to share, or a personal .elmdb file locked to your Element451 login) — adapted for the redesigned Deduplication review-queue UI
 // @author       You
 // @match        https://*.element451.io/*
@@ -15,7 +15,7 @@
     if (window.__elm451CsvDatabaseLoaded) return;
     window.__elm451CsvDatabaseLoaded = true;
 
-    const VERSION = '2.77'; // keep in sync with @version (the build checks it)
+    const VERSION = '2.78'; // keep in sync with @version (the build checks it)
     const STORAGE_KEY = 'elm_csv_database';
     const UI_KEY = 'elm_show_db_ui';
     function showDbUi() { try { return localStorage.getItem(UI_KEY) !== 'false'; } catch (e) { return true; } }
@@ -43,7 +43,7 @@
         .csv-dept-badge { margin-left: auto; float: right; }
         .csv-dept-badge[data-dept="Grad/IA"]      { background: #e3f2fd; color: #1565c0; }
         .csv-dept-badge[data-dept="UnderGrad"]    { background: #f3e5f5; color: #6a1b9a; }
-        .csv-dept-badge[data-dept="Forbidden"]    { background: #fce4ec; color: #c2185b; }
+        .csv-dept-badge[data-dept="Forbidden"], .csv-dept-badge[data-dept="Dismissed"] { background: #fce4ec; color: #c2185b; }
         .csv-dept-badge[data-dept="Appeal"]       { background: #fff8e1; color: #f57f17; }
 
         /* Shared toast stack (same rules as in the main script; whichever loads first creates it) */
@@ -722,7 +722,7 @@
             target.appendChild(badge);
         }
         badge.dataset.dept = dept;
-        const labels = { 'Grad/IA': 'Grad/IA', 'UnderGrad': 'UnderGrad', 'Forbidden': 'Forbidden', 'Appeal': 'Appeal' };
+        const labels = { 'Grad/IA': 'Grad/IA', 'UnderGrad': 'UnderGrad', 'Forbidden': 'Forbidden', 'Appeal': 'Appeal', 'Dismissed': 'Dismissed' };
         badge.textContent = labels[dept] || dept;
     }
 
@@ -954,7 +954,7 @@
     // text) when the script found an applicant. [key, fill, text]; the cell style number is 4 + the position here.
     const XL_PAINT = [
         ['score:high', 'C8E6C9', '1B5E20'], ['score:medium', 'FFE0B2', 'BF360C'], ['score:low', 'FFCDD2', 'B71C1C'],
-        ['dept:Grad/IA', 'E3F2FD', '1565C0'], ['dept:UnderGrad', 'F3E5F5', '6A1B9A'], ['dept:Forbidden', 'FCE4EC', 'C2185B'], ['dept:Appeal', 'FFF8E1', 'F57F17'],
+        ['dept:Grad/IA', 'E3F2FD', '1565C0'], ['dept:UnderGrad', 'F3E5F5', '6A1B9A'], ['dept:Forbidden', 'FCE4EC', 'C2185B'], ['dept:Appeal', 'FFF8E1', 'F57F17'], ['dept:Dismissed', 'FCE4EC', 'C2185B'],
         ['applicant', 'FFF9C4', '9A6700']
     ];
     function dbRows(db) {

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.324
+// @version      2.325
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.324'; // keep in sync with @version
+    const VERSION = '2.325'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -2791,19 +2791,32 @@
     const scShapeSide = (side) => { const o = {}; Object.keys(side).forEach(k => { o[k] = Array.isArray(side[k]) ? side[k].map(scShape) : scShape(side[k]); }); return o; };
     let anCache = { t: 0, key: '', out: null, kept: false };
     // The rating of the pair on screen: { res, ev, write }, or null until Bolt's overview has rendered.
-    // It is remembered (saved by the pair's Spark IDs, which gives its chip on the list) as soon as it exists and the pair is no longer being
-    // read. A rating worked out while the cover was up is held back, and saved by the first call after it, even when that call is served
-    // from the 400 ms cache: an auto-skip right after the read used to find the cached rating, take it for saved, and move on without it.
+    // It is remembered (saved by the pair's Spark IDs, which gives its chip on the list) as soon as it exists.
+    // There is no rating (null) until the pair's matching rows have been read: one worked out from the rows that were showing (the "Hide
+    // matching items" switch is on) would be a first score that the list's chip showed and then changed once the read finished. Once the
+    // read is done the rating is worked out, saved, and the list's chip shows that one. (If the read does not finish, the cover gives up
+    // after 8 s and the rating is worked out from what there is.) A rating is saved by the first call after it exists, even when that call
+    // is served from the 400 ms cache: an auto-skip right after the read used to find the cached rating, take it for saved, and move on without it.
+    function pairRead(key) {
+        try {
+            if (busyGaveUp === key) return true;
+            if (peek.pair !== key || peek.owed) return false;
+            if (peek.phase === 'opening' || peek.phase === 'restoring') return false;
+            if (peek.phase === 'start') return !hideMatchingBtn(); // with no switch there is nothing to open
+            return true;
+        } catch (e) { return true; } // not set up yet (the script is still loading)
+    }
     function currentRating() {
         const now = Date.now(), key = getPairKey();
+        if (!pairRead(key)) return null;
         if (anCache.key === key && now - anCache.t < 400) {
-            if (anCache.out && !anCache.kept && !busyNow) { anCache.kept = true; rememberRating(anCache.out.res); }
+            if (anCache.out && !anCache.kept) { anCache.kept = true; rememberRating(anCache.out.res); }
             return anCache.out;
         }
         let out = null;
         try { const ev = gatherEvidence(); if (ev) { const res = scorePair(ev); out = { ev, res, write: writeUp(res, ev) }; } } catch (e) { console.log('[elm2] analysis failed:', e); }
         anCache = { t: now, key, out, kept: false };
-        if (out && !busyNow) { anCache.kept = true; rememberRating(out.res); } // not while the pair is being read: the rows are not all there yet
+        if (out) { anCache.kept = true; rememberRating(out.res); }
         return out;
     }
     // The card's view: 'ours' (the write-up), 'points' (the table) or 'bolt' (Bolt's own write-up). Write-up or points is kept from pair
@@ -3061,6 +3074,7 @@
     function saveRatingNow() {
         const { a, b } = getSparkIds();
         if (!a || !b) return 'no Spark IDs on the form';
+        if (!pairRead(getPairKey())) return 'the pair is still being read';
         anCache.t = 0; // not the cached one: it may be from before the rows were read
         const out = currentRating();
         if (!out) return 'no rating yet: Bolt\'s overview has not shown';

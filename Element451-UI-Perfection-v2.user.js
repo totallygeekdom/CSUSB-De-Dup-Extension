@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.320
+// @version      2.321
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.320'; // keep in sync with @version
+    const VERSION = '2.321'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -2433,8 +2433,17 @@
         else if ((r = s.match(/\b(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4}|\d{2})\b/))) { m = +r[1]; d = +r[2]; y = +r[3]; if (y < 100) y += y > 30 ? 1900 : 2000; }
         else if ((r = s.match(/\b([A-Za-z]{3,9})\.?\s+(\d{1,2}),?\s+(\d{4})\b/))) { const mi = 'jan feb mar apr may jun jul aug sep oct nov dec'.split(' ').indexOf(r[1].slice(0, 3).toLowerCase()); if (mi < 0) return null; m = mi + 1; d = +r[2]; y = +r[3]; }
         else return null;
-        if (y < 1900 || m < 1 || m > 12 || d < 1 || d > 31) return null;
+        if (!scValidDob(y, m, d)) return null;
         return String(y) + '-' + String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+    }
+    // A birth date only counts (match or mismatch) when both records hold a valid one: a real calendar day (no February 30), from 1920 on,
+    // and at least 10 years ago (not a future date, or today's date entered as a placeholder). An invalid date reads as no date at all.
+    const DOB_MIN_YEAR = 1920, DOB_MIN_AGE = 10;
+    function scValidDob(y, m, d) {
+        if (!(y >= DOB_MIN_YEAR) || !(m >= 1 && m <= 12) || !(d >= 1)) return false;
+        if (d > new Date(Date.UTC(y, m, 0)).getUTCDate()) return false; // the day exists in that month (leap years included)
+        const now = new Date();
+        return Date.UTC(y, m - 1, d) <= Date.UTC(now.getUTCFullYear() - DOB_MIN_AGE, now.getUTCMonth(), now.getUTCDate());
     }
     // Two dates one typo apart: a single digit wrong, or the day and month swapped.
     function scDateTypo(a, b) {

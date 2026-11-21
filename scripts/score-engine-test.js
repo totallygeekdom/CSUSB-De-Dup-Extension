@@ -63,6 +63,17 @@ const oldSlots = { 'first.1': 1, 'last.0': 1, 'address.0': 1, 'dob.0': 1 };
 check(scoreSlots(oldSlots).points === twins.points, 'a remembered rating from before the twin rule is re-rated under it (' + scoreSlots(oldSlots).points + ' pts)');
 check(scoreSlots({ 'first.1': 1, 'coyote.0': 1, 'dob.0': 1 }).points === SCORE_W.first[1] + SCORE_W.coyote[0] + SCORE_W.dob[0], 'and not when an ID matched');
 
+// a birth date only counts when both are valid
+const dobPts = (a, b) => pts(score({ ...person, dob: a }, { ...person, dob: b }), 'dob');
+check(dobPts('2004-02-30', '2004-02-30') === null, 'an impossible date (February 30) on both sides counts for nothing');
+check(dobPts('2004-02-30', '1999-07-30') === null, 'an impossible date against a valid one is no mismatch');
+check(dobPts('2004-02-29', '2004-02-29') === SCORE_W.dob[0], 'February 29 of a leap year is valid');
+check(dobPts('2003-02-29', '1999-07-30') === null, 'February 29 of a year that is not a leap year is not');
+check(dobPts('1900-01-01', '2004-01-02') === null, 'a placeholder year (1900) is no date');
+check(dobPts(new Date().getFullYear() + '-01-01', '2004-01-02') === null, 'a date this year (a placeholder or a future date) is no date');
+check(dobPts('13/45/2004', '2004-01-02') === null, 'month 13 / day 45 is no date');
+check(dobPts('2004-01-02', '1999-07-30') === SCORE_W.dob[1], 'two valid different dates still count as a mismatch');
+
 // a matching Coyote ID or CAS ID is enough for High on its own
 check(score({ ...person, coyote: '009123456' }, { ...person, coyote: '009123456' }).level === 'high', 'the same Coyote ID and the same name is High');
 check(score({ ...person, cas: '8812345' }, { ...person, cas: '8812345' }).level === 'high', 'the same CAS ID and the same name is High');

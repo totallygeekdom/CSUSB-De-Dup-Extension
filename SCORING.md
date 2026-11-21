@@ -16,7 +16,7 @@ Points view too. They are shown for information only: the rating is the points a
 |---|---|---|---|
 | Coyote ID (School Id, or the number of a coyote.csusb.edu email) | +120 | -120 (hard conflict; not when one ID comes from an email) | **Yes** |
 | CAS ID | +120 | -18, not a hard conflict (a student can have several applications) | **Yes** |
-| Date of birth | +40 | -45, not a hard conflict (one typo or a day/month swap: -20) | **Yes** |
+| Date of birth (only when both records hold a valid date: a real calendar day, 1920 or later, at least 10 years ago) | +40 | -45, not a hard conflict (one typo or a day/month swap: -20) | **Yes** |
 | Email | +40 exact; +15 same name part (another domain, or only the numbers differ: maria.soto444 / maria.soto1111) | 0 (people have several) | **Yes** (exact only) |
 | Phone | +25 | 0 | **Yes** |
 | First name | +15 same; +7 nickname, initial or prefix | -30 |  |

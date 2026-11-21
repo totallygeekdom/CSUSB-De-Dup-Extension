@@ -96,7 +96,7 @@ Points view too. They are shown for information only: the rating is the points a
 |---|---|---|---|
 | Coyote ID (School Id, or the number of a coyote.csusb.edu email) | ${n(W.coyote[0])} | ${n(W.coyote[1])} (hard conflict; not when one ID comes from an email) | ${strong('coyote.0')} |
 | CAS ID | ${n(W.cas[0])} | ${n(W.cas[1])}, not a hard conflict (a student can have several applications) | ${strong('cas.0')} |
-| Date of birth | ${n(W.dob[0])} | ${n(W.dob[1])}, not a hard conflict (one typo or a day/month swap: ${n(W.dobTypo[1])}) | ${strong('dob.0')} |
+| Date of birth (only when both records hold a valid date: a real calendar day, 1920 or later, at least 10 years ago) | ${n(W.dob[0])} | ${n(W.dob[1])}, not a hard conflict (one typo or a day/month swap: ${n(W.dobTypo[1])}) | ${strong('dob.0')} |
 | Email | ${n(W.email[0])} exact; ${n(W.emailName[0])} same name part (another domain, or only the numbers differ: maria.soto444 / maria.soto1111) | ${n(0)} (people have several) | ${strong('email.0', 'exact only')} |
 | Phone | ${n(W.phone[0])} | ${n(0)} | ${strong('phone.0')} |
 | First name | ${n(W.first[0])} same; ${n(W.firstRelated[0])} nickname, initial or prefix | ${n(W.first[1])} | ${strong('first.0')} |

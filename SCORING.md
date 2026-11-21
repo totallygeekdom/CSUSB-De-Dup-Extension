@@ -19,7 +19,7 @@ Points view too. They are shown for information only: the rating is the points a
 | Date of birth | +40 | -45, not a hard conflict (one typo or a day/month swap: -20) | **Yes** |
 | Email | +40 exact; +15 same name part (another domain, or only the numbers differ: maria.soto444 / maria.soto1111) | 0 (people have several) | **Yes** (exact only) |
 | Phone | +25 | 0 | **Yes** |
-| First name | +15 same or one inside the other; +15 nickname, initial or prefix (Bob / Robert) | -30 |  |
+| First name | +15 same; +7 nickname, initial or prefix | -30 |  |
 | Last name | +15 same; +7 overlapping | -15 |  |
 | Address (the page's own comparer) | +25 | -3 (people move) | **Yes** |
 | Student type, academic level, school attended | +5 each | 0 |  |

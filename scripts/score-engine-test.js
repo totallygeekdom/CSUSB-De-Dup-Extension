@@ -43,9 +43,36 @@ check(score({ ...person, dob: '2004-01-02' }, { ...person, dob: '2004-01-12' }).
 const ids = score({ ...person, coyote: '009111222', dob: '2004-01-02' }, { ...person, coyote: '009333444', dob: '2004-01-02' }, { addrState: 'match' });
 check(ids.hard === true && ids.level === 'low', 'different Coyote IDs are still a hard conflict that caps the pair at Low');
 
-// the twin pattern is gone: first names that differ cost only the first-name penalty
+// the twin rule: different first names, so the shared last name gives 0 and the same address and birth date -30 each
 const twins = score({ first: 'Ana', last: 'Cruz', dob: '2004-01-02' }, { first: 'Eva', last: 'Cruz', dob: '2004-01-02' }, { addrState: 'match' });
-check(!twins.items.some(i => i.key === 'twins') && twins.points === SCORE_W.dob[0] + SCORE_W.last[0] + SCORE_W.first[1] + SCORE_W.address[0], 'no twin penalty: same last name, birth date and address with different first names is just the weights added up (' + SCORE_W.dob[0] + ' + ' + SCORE_W.last[0] + ' ' + SCORE_W.first[1] + ' + ' + SCORE_W.address[0] + ' = ' + twins.points + ')');
+check(twins.twins && twins.points === SCORE_W.first[1] + SCORE_W.twinLast + SCORE_W.twinAddress + SCORE_W.twinDob && twins.level === 'low', 'twins (Ana / Eva Cruz, same birth date and address): ' + SCORE_W.first[1] + ' + ' + SCORE_W.twinLast + ' ' + SCORE_W.twinAddress + ' ' + SCORE_W.twinDob + ' = ' + twins.points + ', Low, Twins? chip');
+const rhyme = score({ first: 'Kayla', last: 'Soto', dob: '2004-01-02' }, { first: 'Layla', last: 'Soto', dob: '2004-01-02' });
+check(rhyme.twins && rhyme.level === 'low', 'rhyming first names (Kayla / Layla) count as different: twin rule, Low (' + rhyme.points + ' pts)');
+const sibs = score({ first: 'Ana', last: 'Cruz', dob: '2004-01-02' }, { first: 'Eva', last: 'Cruz', dob: '2001-05-06' }, { addrState: 'match' });
+check(sibs.points === SCORE_W.first[1] + SCORE_W.twinLast + SCORE_W.twinAddress + SCORE_W.dob[1], 'siblings (different birth dates, same address): ' + sibs.points + ' pts');
+const nick = score({ first: 'Robert', last: 'Soto', dob: '2004-01-02' }, { first: 'Bob', last: 'Soto', dob: '2004-01-02' }, { addrState: 'match' });
+check(!nick.twins && nick.level === 'high', 'a nickname (Robert / Bob) still matches: no twin rule, High (' + nick.points + ' pts)');
+const mid = score({ first: 'Maria', last: 'Soto', dob: '2004-01-02' }, { first: 'Maria Elena', last: 'Soto', dob: '2004-01-02' }, { addrState: 'match' });
+check(!mid.twins && mid.level === 'high', 'a middle name added (Maria / Maria Elena) still matches: no twin rule, High (' + mid.points + ' pts)');
+const twinId = score({ first: 'Andy', last: 'Rios', coyote: '009123456', dob: '2004-01-02' }, { first: 'Luis', last: 'Rios', coyote: '009123456', dob: '2004-01-02' }, { addrState: 'match' });
+check(!twinId.twins && twinId.level === 'high', 'a matching Coyote ID turns the twin rule off (' + twinId.points + ' pts)');
+const twinCas = score({ first: 'Andy', last: 'Rios', cas: '8812345', dob: '2004-01-02' }, { first: 'Luis', last: 'Rios', cas: '8812345', dob: '2004-01-02' });
+check(!twinCas.twins, 'a matching CAS ID turns the twin rule off');
+// a rating remembered before the twin rule is re-rated under it
+const oldSlots = { 'first.1': 1, 'last.0': 1, 'address.0': 1, 'dob.0': 1 };
+check(scoreSlots(oldSlots).points === twins.points, 'a remembered rating from before the twin rule is re-rated under it (' + scoreSlots(oldSlots).points + ' pts)');
+check(scoreSlots({ 'first.1': 1, 'coyote.0': 1, 'dob.0': 1 }).points === SCORE_W.first[1] + SCORE_W.coyote[0] + SCORE_W.dob[0], 'and not when an ID matched');
+
+// a birth date only counts when both are valid
+const dobPts = (a, b) => pts(score({ ...person, dob: a }, { ...person, dob: b }), 'dob');
+check(dobPts('2004-02-30', '2004-02-30') === null, 'an impossible date (February 30) on both sides counts for nothing');
+check(dobPts('2004-02-30', '1999-07-30') === null, 'an impossible date against a valid one is no mismatch');
+check(dobPts('2004-02-29', '2004-02-29') === SCORE_W.dob[0], 'February 29 of a leap year is valid');
+check(dobPts('2003-02-29', '1999-07-30') === null, 'February 29 of a year that is not a leap year is not');
+check(dobPts('1900-01-01', '2004-01-02') === null, 'a placeholder year (1900) is no date');
+check(dobPts(new Date().getFullYear() + '-01-01', '2004-01-02') === null, 'a date this year (a placeholder or a future date) is no date');
+check(dobPts('13/45/2004', '2004-01-02') === null, 'month 13 / day 45 is no date');
+check(dobPts('2004-01-02', '1999-07-30') === SCORE_W.dob[1], 'two valid different dates still count as a mismatch');
 
 // a matching Coyote ID or CAS ID is enough for High on its own
 check(score({ ...person, coyote: '009123456' }, { ...person, coyote: '009123456' }).level === 'high', 'the same Coyote ID and the same name is High');
@@ -63,9 +90,10 @@ check(score({ ...person, dob: '2004-01-02' }, { ...person, dob: '2004-01-02' }, 
 check(score({ ...person, dob: '2004-01-02' }, { ...person, dob: '2004-01-02' }, { addrState: 'match', bolt: { level: 'high' } }).level === 'high', 'the same birth date, name and address with Bolt High is High (100 pts)');
 check(score({ ...person, emails: ['ana@x.com'] }, { ...person, emails: ['ana@x.com'] }, { addrState: 'match', bolt: { level: 'high' } }).level === 'high', 'the same name, email and address with Bolt High is High (100 pts)');
 check(score({ ...person, phone: '3105550101' }, { ...person, phone: '3105550101' }, { addrState: 'match', bolt: { level: 'high' } }).level === 'high', 'the same name, phone and address with Bolt High is High (85 pts)');
-// households that share an address stay below High because a different first name costs points
-check(score({ first: 'Ana', last: 'Cruz', dob: '2004-01-02' }, { first: 'Eva', last: 'Cruz', dob: '2004-01-02' }, { addrState: 'match' }).level === 'medium', 'twins (same last name, birth date and address, different first name) stay Medium (61 pts)');
-check(score({ first: 'Ana', last: 'Cruz', emails: ['cruz@x.com'] }, { first: 'Eva', last: 'Cruz', emails: ['cruz@x.com'] }, { addrState: 'match' }).level === 'medium', 'siblings (same last name, address and family email) stay Medium (61 pts)');
+// households that share an address: the twin rule puts them on Low
+check(score({ first: 'Ana', last: 'Cruz', dob: '2004-01-02' }, { first: 'Eva', last: 'Cruz', dob: '2004-01-02' }, { addrState: 'match' }).level === 'low', 'twins (same last name, birth date and address, different first name) are Low');
+const famMail = score({ first: 'Ana', last: 'Cruz', emails: ['cruz@x.com'] }, { first: 'Eva', last: 'Cruz', emails: ['cruz@x.com'] }, { addrState: 'match' });
+check(famMail.level === 'low', 'siblings (same last name, address and family email) are Low (' + famMail.points + ' pts)');
 check(score({ first: 'Rosa', last: 'Diaz', phone: '3105550101' }, { first: 'Marco', last: 'Diaz', phone: '3105550101' }, { addrState: 'match' }).level === 'low', 'parent and child (same phone and address, different names) are Low (35 pts)');
 // points only: 70+ is High, 45-69 Medium
 const strong2 = score({ ...person, dob: '2004-01-02', phone: '3105550101' }, { ...person, dob: '2004-01-02', phone: '3105550101' });

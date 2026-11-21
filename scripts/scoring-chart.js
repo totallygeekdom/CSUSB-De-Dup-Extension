@@ -99,7 +99,7 @@ Points view too. They are shown for information only: the rating is the points a
 | Date of birth | ${n(W.dob[0])} | ${n(W.dob[1])}, not a hard conflict (one typo or a day/month swap: ${n(W.dobTypo[1])}) | ${strong('dob.0')} |
 | Email | ${n(W.email[0])} exact; ${n(W.emailName[0])} same name part (another domain, or only the numbers differ: maria.soto444 / maria.soto1111) | ${n(0)} (people have several) | ${strong('email.0', 'exact only')} |
 | Phone | ${n(W.phone[0])} | ${n(0)} | ${strong('phone.0')} |
-| First name | ${n(W.first[0])} same; ${n(W.firstRelated[0])} nickname, initial or prefix | ${n(W.first[1])} | ${strong('first.0')} |
+| First name | ${n(W.first[0])} same or one inside the other; ${n(W.firstRelated[0])} nickname, initial or prefix (Bob / Robert) | ${n(W.first[1])} | ${strong('first.0')} |
 | Last name | ${n(W.last[0])} same; ${n(W.lastPartial[0])} overlapping | ${n(W.last[1])} | ${strong('last.0')} |
 | Address (the page's own comparer) | ${n(W.address[0])} | ${n(W.address[1])} (people move) | ${strong('address.0')} |
 | Student type, academic level, school attended | ${n(W.soft[0])} each | ${n(0)} | ${strong('soft.0')} |

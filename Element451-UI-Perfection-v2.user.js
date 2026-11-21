@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.320
+// @version      2.321
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.320'; // keep in sync with @version
+    const VERSION = '2.321'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -2403,10 +2403,11 @@
 
     // ---- SCORE ENGINE START (pure functions: no page access, so it can be tested on its own) ----
     // Points per field. Both sides must have the field for it to count; a missing field scores 0.
+    // firstRelated (a nickname, an initial or a prefix: Bob / Robert) is a full first-name match, as it is for the twin rule (UI 2.321; was +7)
     const SCORE_W = {
         coyote: [120, -120], cas: [120, -18], dob: [40, -45], dobTypo: [25, -20],
         email: [40, 0], emailName: [15, 0], phone: [25, 0],
-        first: [15, -30], firstRelated: [7, 0], last: [15, -15], lastPartial: [7, 0],
+        first: [15, -30], firstRelated: [15, 0], last: [15, -15], lastPartial: [7, 0],
         address: [25, -3], soft: [5, 0],
         boltHigh: 10, boltMedium: 5, boltLow: -10, boltDifferent: -10, boltError: -5,
         applicantVsCoyote: -40,
@@ -2683,7 +2684,7 @@
             : res.different ? 'Probably different people.'
             : conflict || boltDiff ? 'Possibly different people.' : 'Not enough to say.';
         // what lines up
-        const nameBoth = names.length === 2 && names.every(n => !n.within && (n.key === 'first' ? n.pts >= SCORE_W.first[0] : n.pts >= SCORE_W.last[0]));
+        const nameBoth = names.length === 2 && names.every(n => !n.within && (n.slot === 'first.0' || n.slot === 'last.0')); // a nickname or overlapping last name is described as such
         const matchPhrases = [];
         if (nameBoth) matchPhrases.push('the same name (' + full(A) + ')');
         else names.forEach(n => matchPhrases.push(n.phrase));

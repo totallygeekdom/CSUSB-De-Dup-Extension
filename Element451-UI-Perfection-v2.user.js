@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.321
+// @version      2.322
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.321'; // keep in sync with @version
+    const VERSION = '2.322'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -3789,13 +3789,13 @@
     }, true);
 
     // =========================================================
-    // AUTO-DISMISS: two different School Ids are two students. Such a pair is dismissed with "Different student IDs" written as the
-    // reason: after a 3 s notice (Escape cancels), Dismiss is clicked, the reason is typed into the dialog and the dialog's Dismiss is
-    // clicked. Not for a pair that is also Forbidden by name (those are only ever skipped), and not when the two IDs are the same
-    // number written with and without leading zeros. Setting: Dismiss different student IDs (on by default), and only while auto-merge is
-    // on (When done = Merge).
+    // AUTO-DISMISS: two clearly different people. Two different School Ids ("Different student IDs"), or two valid birth dates that clearly
+    // differ ("Different birth dates": more than 2 digits apart, or more than 18 years apart; not one typo or a day/month swap, and not when a
+    // Coyote ID or CAS ID matches). The pair is dismissed with that reason: after a 3 s notice (Escape cancels), Dismiss is clicked, the
+    // reason is typed into the dialog and the dialog's Dismiss is clicked. Not for a pair that is also Forbidden by name (those are only
+    // ever skipped), and not when the two IDs are the same number written with and without leading zeros. Setting: Dismiss different
+    // student IDs / birth dates (on by default), and only while auto-merge is on (When done = Merge).
     // =========================================================
-    const DISMISS_REASON = 'Different student IDs';
     let allowDismissClick = false; // the click guard above lets through only the clicks made here, while this is true
     let dismissState = null; // { key, step: 'countdown' | 'dialog' | 'done', timer, t0, t1, t2 }
     // Tied to auto-merge: only while When done is on Merge (and the slider is not on None); with Wait for me the pair is skipped.
@@ -3805,6 +3805,26 @@
         if (!m.mismatch || parseInt(m.leftId, 10) === parseInt(m.rightId, 10)) return null;
         if (isForbiddenEntry().forbidden) return null;
         return m;
+    }
+    // Birth dates that clearly differ: both valid, not one typo or a day/month swap, and more than 2 of the 8 digits different or more
+    // than 18 years apart. Never when a Coyote ID or CAS ID matches (that is one student with a wrong date).
+    const DOB_DISMISS_DIGITS = 2, DOB_DISMISS_YEARS = 18;
+    function dobsClearlyDiffer(rating) {
+        if (!rating || rating.res.slots['coyote.0'] || rating.res.slots['cas.0']) return false;
+        const a = scDate(rating.ev.A.dob), b = scDate(rating.ev.B.dob);
+        if (!a || !b || a === b || scDateTypo(a, b)) return false;
+        const x = a.replace(/-/g, ''), y = b.replace(/-/g, '');
+        let digits = 0; for (let i = 0; i < 8; i++) if (x[i] !== y[i]) digits++;
+        const years = Math.abs(Date.parse(a) - Date.parse(b)) / (365.25 * 864e5);
+        return digits > DOB_DISMISS_DIGITS || years > DOB_DISMISS_YEARS;
+    }
+    // The reason the pair on screen is dismissed, '' when it is not, or 'wait' while the birth dates cannot be read yet (Bolt's overview)
+    function dismissReason() {
+        if (isForbiddenEntry().forbidden) return '';
+        if (idMismatchToDismiss()) return 'Different student IDs';
+        const r = currentRating();
+        if (!r) return Date.now() - pairFirstSeenAt < SCORE_WAIT_MS ? 'wait' : '';
+        return dobsClearlyDiffer(r) ? 'Different birth dates' : '';
     }
     function clickAllowed(btn) { allowDismissClick = true; try { btn.click(); } finally { allowDismissClick = false; } }
     const feedbackBox = () => Array.from(document.querySelectorAll('textarea[formcontrolname="feedback"]')).find(t => t.getClientRects().length) || null;
@@ -3828,12 +3848,12 @@
         dismissState = null;
         if (counting && message) showMergeNotice(message);
     }
-    function startAutoDismiss(key) {
+    function startAutoDismiss(key, reason) {
         if (dismissState) return;
         saveRatingNow(); recordPairNow(); // its chips on the list, before the pair leaves the queue
-        dismissState = { key, step: 'countdown', timer: null, t0: Date.now() };
-        console.log('[elm2] Different student IDs: dismissing this pair in 3 s (Escape cancels)');
-        showMergeNotice('Dismissing in 3 s: ' + DISMISS_REASON + ' (Esc cancels)', true);
+        dismissState = { key, reason, step: 'countdown', timer: null, t0: Date.now() };
+        console.log('[elm2] ' + reason + ': dismissing this pair in 3 s (Escape cancels)');
+        showMergeNotice('Dismissing in 3 s: ' + reason + ' (Esc cancels)', true);
         dismissState.timer = setTimeout(stepDismiss, 3000);
     }
     function stepDismiss() {
@@ -3844,12 +3864,12 @@
             dismissState = null;
             console.log('[elm2] Auto-dismiss stopped:', why);
             showMergeNotice('Auto-dismiss stopped: ' + why, true);
-            if (CFG.AUTO_SKIP_BLOCKED && getPairKey() === st.key && !feedbackBox()) skipToNext('not dismissed, ' + why, 'Student ID');
+            if (CFG.AUTO_SKIP_BLOCKED && getPairKey() === st.key && !feedbackBox()) skipToNext('not dismissed, ' + why, st.reason === 'Different birth dates' ? 'Birth date' : 'Student ID');
         };
         if (st.step === 'countdown') {
             if (getPairKey() !== st.key) { dismissState = null; return; }
             if (!dismissOn()) { dismissState = null; showMergeNotice('Auto-dismiss cancelled: auto-merge is off'); return; } // When done went back to Wait for me
-            if (!idMismatchToDismiss()) { fail('the student IDs no longer differ'); return; }
+            if (dismissReason() !== st.reason) { fail(st.reason.toLowerCase().replace('different ', 'the ') + ' no longer clearly differ'); return; }
             const btn = getSidebarActionButton('Dismiss');
             if (!btn || btn.disabled) { if (Date.now() - st.t0 < 8000) next(300); else fail('no Dismiss button'); return; }
             clickAllowed(btn);
@@ -3860,13 +3880,13 @@
         if (st.step === 'dialog') {
             const t = feedbackBox();
             if (!t) { if (Date.now() - st.t1 < 5000) next(200); else fail('the Dismiss dialog did not open'); return; }
-            if (t.value !== DISMISS_REASON) setFeedback(t, DISMISS_REASON);
+            if (t.value !== st.reason) setFeedback(t, st.reason);
             const ok = dialogDismissButton(t);
             if (!ok || ok.disabled) { if (Date.now() - st.t1 < 5000) next(200); else fail('no Dismiss button in the dialog'); return; }
             clickAllowed(ok);
             st.step = 'done'; st.t2 = Date.now();
-            console.log('[elm2] Dismissed:', DISMISS_REASON);
-            if (toastsEnabled()) showMergeNotice('Dismiss: ' + DISMISS_REASON, true);
+            console.log('[elm2] Dismissed:', st.reason);
+            if (toastsEnabled()) showMergeNotice('Dismiss: ' + st.reason, true);
             next(500);
             return;
         }
@@ -4656,12 +4676,17 @@
         const blockers = getAllBlockers();
         applyBlockStyling(blockers);
         updateCsvSignal();
+        // clearly different people (student IDs, birth dates) are dismissed, blocked or not
+        if (!resolutionAttempted && dismissOn()) {
+            const why = dismissReason();
+            if (why === 'wait') return; // the birth dates are read from Bolt's overview, which has not shown yet
+            if (why) { resolutionAttempted = true; startAutoDismiss(pairKey, why); return; }
+        }
         if (blockers.length > 0) {
             if (resolutionAttempted) return;
             resolutionAttempted = true;
             console.log('[elm2] Blocked:', blockers.map(b => b.type + (b.reason ? ' (' + b.reason + ')' : '')).join(', '),
                 '| auto-skip', CFG.AUTO_SKIP_BLOCKED ? 'ON' : 'OFF');
-            if (dismissOn() && idMismatchToDismiss()) { startAutoDismiss(pairKey); return; }
             if (CFG.AUTO_SKIP_BLOCKED) {
                 setTimeout(() => skipToNext('blocked', blockerLabel(blockers)), 1200);
             }
@@ -4691,8 +4716,9 @@
             if (getPairKey() !== phaseOnePairKey) return; // moved on already
             const laterBlockers = getAllBlockers();
             applyBlockStyling(laterBlockers);
+            const laterWhy = dismissOn() ? dismissReason() : '';
+            if (laterWhy && laterWhy !== 'wait') { startAutoDismiss(phaseOnePairKey, laterWhy); return; }
             if (laterBlockers.length > 0) {
-                if (dismissOn() && idMismatchToDismiss()) { startAutoDismiss(phaseOnePairKey); return; }
                 if (CFG.AUTO_SKIP_BLOCKED) { skipToNext('blocked', blockerLabel(laterBlockers)); }
                 return;
             }
@@ -5005,8 +5031,8 @@
                 <div class="elm-level-desc elm-skip-desc">Skips blocked and out-of-range pairs with no popup. Off: stops on them instead.</div>
                 </div>
                 <div class="elm-item">
-                <div class="setting-row"><label>Dismiss different student IDs</label>${toggleHtml('elm-dismiss-id-mismatch')}</div>
-                <div class="elm-level-desc">While When done is on Merge: a pair whose School Ids differ is two students, so it is dismissed with "Different student IDs" as the reason, after a 3 second notice (Esc cancels). Off, or with Wait for me: it is skipped like any blocked pair.</div>
+                <div class="setting-row"><label>Dismiss different people</label>${toggleHtml('elm-dismiss-id-mismatch')}</div>
+                <div class="elm-level-desc">While When done is on Merge: a pair with different School Ids, or with birth dates more than 2 digits or 18 years apart (and no matching ID), is two people, so it is dismissed with "Different student IDs" or "Different birth dates" as the reason, after a 3 second notice (Esc cancels). Off, or with Wait for me: it is handled as before.</div>
                 </div>
                 <div class="elm-item">
                 <div class="setting-row"><label>Next after merge</label>${toggleHtml('elm-next-after-merge')}</div>

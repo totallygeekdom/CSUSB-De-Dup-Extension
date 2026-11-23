@@ -82,6 +82,8 @@ check(dobPts('2004-01-02', '1999-07-30') === SCORE_W.dob[1], 'two valid differen
   check(d('2004-01-02', '1999-07-30') === true, 'dates that clearly differ are dismissed');
   check(d('2004-01-02', '2004-01-03') === false && d('2004-03-12', '2004-12-03') === false, 'a typo or a day/month swap is not');
   check(d('2004-02-30', '1999-07-30') === false && d('2004-01-02', '1900-01-01') === false && d('13/45/2004', '1999-07-30') === false, 'a pair where either date is invalid is never dismissed for its birth dates');
+  check(d('1925-05-05', '2004-01-02') === false && d('2004-01-02', '2018-03-03') === false, 'a date that is no believable age for a student (over 100 or under 13) is not enough to dismiss');
+  check(d('1990-05-05', '2004-01-02') === true, 'two believable dates that clearly differ are dismissed');
   check(d('2004-01-02', '1999-07-30', { coyote: '009000001' }) === false, 'a matching Coyote ID stops it');
 }
 

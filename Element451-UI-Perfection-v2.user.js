@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.327
+// @version      2.328
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.327'; // keep in sync with @version
+    const VERSION = '2.328'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -3824,13 +3824,15 @@
         if (isForbiddenEntry().forbidden) return null;
         return m;
     }
-    // Birth dates that clearly differ: both valid, not one typo or a day/month swap, and more than 2 of the 8 digits different or more
+    // Birth dates that clearly differ: both valid (a real calendar day, and a believable age for a student: 13 to 100 years, stricter than the score's
+    // own check, because a dismissal can not be undone), not one typo or a day/month swap, and more than 2 of the 8 digits different or more
     // than 18 years apart. Never when a Coyote ID or CAS ID matches (that is one student with a wrong date).
-    const DOB_DISMISS_DIGITS = 2, DOB_DISMISS_YEARS = 18;
+    const DOB_DISMISS_DIGITS = 2, DOB_DISMISS_YEARS = 18, DOB_AGE_MIN = 13, DOB_AGE_MAX = 100;
+    const dobBelievable = (iso) => { const age = (Date.now() - Date.parse(iso)) / (365.25 * 864e5); return age >= DOB_AGE_MIN && age <= DOB_AGE_MAX; };
     function dobsClearlyDiffer(rating) {
         if (!rating || rating.res.slots['coyote.0'] || rating.res.slots['cas.0']) return false;
         const a = scDate(rating.ev.A.dob), b = scDate(rating.ev.B.dob);
-        if (!a || !b || a === b || scDateTypo(a, b)) return false;
+        if (!a || !b || !dobBelievable(a) || !dobBelievable(b) || a === b || scDateTypo(a, b)) return false;
         const x = a.replace(/-/g, ''), y = b.replace(/-/g, '');
         let digits = 0; for (let i = 0; i < 8; i++) if (x[i] !== y[i]) digits++;
         const years = Math.abs(Date.parse(a) - Date.parse(b)) / (365.25 * 864e5);
@@ -4242,6 +4244,10 @@
         line('brief-names', names.length === 2 ? names.join(' | ') : 'These two contacts');
         const l = line('', 'Reason: ');
         const b = document.createElement('b'); b.textContent = reason; l.appendChild(b);
+        if (reason === 'Different birth dates') { // the dates it went by, so they can be checked at a glance
+            const r = currentRating();
+            if (r) line('', 'Birth dates read: ' + (scDate(r.ev.A.dob) || '?') + ' and ' + (scDate(r.ev.B.dob) || '?'));
+        }
         line('', 'They are two different people, so the pair is dismissed, not merged. This can not be undone.');
     }
     function renderMergeBrief(box) {

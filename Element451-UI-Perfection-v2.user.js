@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.328
+// @version      2.329
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.328'; // keep in sync with @version
+    const VERSION = '2.329'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -2096,9 +2096,10 @@
     // Merging is only ever clicked by startAutoMerge() ("When done" = Merge), after a countdown.
     // IMPORTANT: "Dismiss" is NOT the equivalent of the classic script's
     // auto-skip (which just moved to the next entry). In this UI it opens a
-    // "Not a duplicate?" feedback dialog and, once confirmed, permanently
-    // tells Bolt these two contacts are different people — removing the
-    // pair from the queue and training the matcher on that verdict. A
+    // "Not a duplicate?" feedback dialog and, once confirmed, tells Bolt
+    // these two contacts are different people — removing the pair from
+    // the queue and training the matcher on that verdict (it can be undone
+    // from Element's history, but not by this script). A
     // department/forbidden/appeal block says nothing about whether
     // the pair is actually a duplicate, so automation never clicks this for them.
     // Skipping a blocked entry must only ever move to the next pair via
@@ -3788,7 +3789,7 @@
 
 
     // Safety net: Dismiss (and Confirm on its "Not a duplicate?" dialog) is a
-    // permanent verdict and must only come from a human, or from AUTO-DISMISS for two different School Ids. Real clicks have
+    // verdict that removes the pair from the queue (it can be undone from Element's history) and must only come from a human, or from AUTO-DISMISS for two different School Ids. Real clicks have
     // isTrusted=true; anything a script fires via .click() is false. Block those
     // in the capture phase (except the ones AUTO-DISMISS makes), and log a stack trace naming whoever tried.
     document.addEventListener('click', (e) => {
@@ -3825,7 +3826,7 @@
         return m;
     }
     // Birth dates that clearly differ: both valid (a real calendar day, and a believable age for a student: 13 to 100 years, stricter than the score's
-    // own check, because a dismissal can not be undone), not one typo or a day/month swap, and more than 2 of the 8 digits different or more
+    // own check, so a placeholder or a typo'd year is left alone), not one typo or a day/month swap, and more than 2 of the 8 digits different or more
     // than 18 years apart. Never when a Coyote ID or CAS ID matches (that is one student with a wrong date).
     const DOB_DISMISS_DIGITS = 2, DOB_DISMISS_YEARS = 18, DOB_AGE_MIN = 13, DOB_AGE_MAX = 100;
     const dobBelievable = (iso) => { const age = (Date.now() - Date.parse(iso)) / (365.25 * 864e5); return age >= DOB_AGE_MIN && age <= DOB_AGE_MAX; };
@@ -4248,7 +4249,7 @@
             const r = currentRating();
             if (r) line('', 'Birth dates read: ' + (scDate(r.ev.A.dob) || '?') + ' and ' + (scDate(r.ev.B.dob) || '?'));
         }
-        line('', 'They are two different people, so the pair is dismissed, not merged. This can not be undone.');
+        line('', 'They are two different people, so the pair is dismissed, not merged. A dismissal can be undone from the history.');
     }
     function renderMergeBrief(box) {
         const line = (cls) => { const d = document.createElement('div'); d.className = 'brief-line ' + (cls || ''); box.appendChild(d); return d; };

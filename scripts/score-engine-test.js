@@ -74,6 +74,19 @@ check(dobPts(new Date().getFullYear() + '-01-01', '2004-01-02') === null, 'a dat
 check(dobPts('13/45/2004', '2004-01-02') === null, 'month 13 / day 45 is no date');
 check(dobPts('2004-01-02', '1999-07-30') === SCORE_W.dob[1], 'two valid different dates still count as a mismatch');
 
+// the auto-dismiss on birth dates (outside the engine block, so its pieces are cut out of the script by their markers)
+{
+  const fnSrc = src.slice(src.indexOf('    const DOB_DISMISS_DIGITS'), src.indexOf('    // The reason the pair on screen is dismissed'));
+  const { dobsClearlyDiffer } = new Function(src.slice(a, b) + fnSrc + '\nreturn { dobsClearlyDiffer };')();
+  const d = (x, y, ids) => { const A = side({ ...person, dob: x, ...(ids || {}) }), B = side({ ...person, dob: y, ...(ids || {}) }); return dobsClearlyDiffer({ ev: { A, B }, res: scorePair({ A, B, bolt: {} }) }); };
+  check(d('2004-01-02', '1999-07-30') === true, 'dates that clearly differ are dismissed');
+  check(d('2004-01-02', '2004-01-03') === false && d('2004-03-12', '2004-12-03') === false, 'a typo or a day/month swap is not');
+  check(d('2004-02-30', '1999-07-30') === false && d('2004-01-02', '1900-01-01') === false && d('13/45/2004', '1999-07-30') === false, 'a pair where either date is invalid is never dismissed for its birth dates');
+  check(d('1925-05-05', '2004-01-02') === false && d('2004-01-02', '2018-03-03') === false, 'a date that is no believable age for a student (over 100 or under 13) is not enough to dismiss');
+  check(d('1990-05-05', '2004-01-02') === true, 'two believable dates that clearly differ are dismissed');
+  check(d('2004-01-02', '1999-07-30', { coyote: '009000001' }) === false, 'a matching Coyote ID stops it');
+}
+
 // a matching Coyote ID or CAS ID is enough for High on its own
 check(score({ ...person, coyote: '009123456' }, { ...person, coyote: '009123456' }).level === 'high', 'the same Coyote ID and the same name is High');
 check(score({ ...person, cas: '8812345' }, { ...person, cas: '8812345' }).level === 'high', 'the same CAS ID and the same name is High');

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.325
+// @version      2.329
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.325'; // keep in sync with @version
+    const VERSION = '2.329'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -2096,9 +2096,10 @@
     // Merging is only ever clicked by startAutoMerge() ("When done" = Merge), after a countdown.
     // IMPORTANT: "Dismiss" is NOT the equivalent of the classic script's
     // auto-skip (which just moved to the next entry). In this UI it opens a
-    // "Not a duplicate?" feedback dialog and, once confirmed, permanently
-    // tells Bolt these two contacts are different people — removing the
-    // pair from the queue and training the matcher on that verdict. A
+    // "Not a duplicate?" feedback dialog and, once confirmed, tells Bolt
+    // these two contacts are different people — removing the pair from
+    // the queue and training the matcher on that verdict (it can be undone
+    // from Element's history, but not by this script). A
     // department/forbidden/appeal block says nothing about whether
     // the pair is actually a duplicate, so automation never clicks this for them.
     // Skipping a blocked entry must only ever move to the next pair via
@@ -2976,7 +2977,7 @@
         el.appendChild(text);
         el.appendChild(pointsTable(res));
         body.insertBefore(el, body.firstChild);
-        console.log('[elm2] analysis:', WRITE_LEVEL[res.level], res.points + ' pts |', res.items.map(i => i.key + ' ' + (i.pts > 0 ? '+' : '') + i.pts).join(', '), '| Bolt chips read:', ev.chips.found + ' (' + ev.chips.levels + ')', '| read (values masked):', JSON.stringify({ A: scShapeSide(ev.A), B: scShapeSide(ev.B), addr: ev.addrState }));
+        console.log('[elm2] analysis:', WRITE_LEVEL[res.level], res.points + ' pts |', res.items.map(i => i.key + ' ' + (i.pts > 0 ? '+' : '') + i.pts).join(', '), '| Bolt chips read:', ev.chips.found + ' (' + ev.chips.levels + ')', '| read (values masked):', JSON.stringify({ A: scShapeSide(ev.A), B: scShapeSide(ev.B), addr: ev.addrState, dobCounts: (ev.A.dob && ev.B.dob) ? [scDate(ev.A.dob) ? 'valid' : 'invalid', scDate(ev.B.dob) ? 'valid' : 'invalid'] : 'a date is missing' }));
     }
     // ---- ANALYSIS CARD END ----
     // ---- SCORE CHIPS: the chips on the list and in the review sidebar show our rating, "Pending" (in Bolt's blue) until a pair has been analysed ----
@@ -3788,7 +3789,7 @@
 
 
     // Safety net: Dismiss (and Confirm on its "Not a duplicate?" dialog) is a
-    // permanent verdict and must only come from a human, or from AUTO-DISMISS for two different School Ids. Real clicks have
+    // verdict that removes the pair from the queue (it can be undone from Element's history) and must only come from a human, or from AUTO-DISMISS for two different School Ids. Real clicks have
     // isTrusted=true; anything a script fires via .click() is false. Block those
     // in the capture phase (except the ones AUTO-DISMISS makes), and log a stack trace naming whoever tried.
     document.addEventListener('click', (e) => {
@@ -3824,13 +3825,15 @@
         if (isForbiddenEntry().forbidden) return null;
         return m;
     }
-    // Birth dates that clearly differ: both valid, not one typo or a day/month swap, and more than 2 of the 8 digits different or more
+    // Birth dates that clearly differ: both valid (a real calendar day, and a believable age for a student: 13 to 100 years, stricter than the score's
+    // own check, so a placeholder or a typo'd year is left alone), not one typo or a day/month swap, and more than 2 of the 8 digits different or more
     // than 18 years apart. Never when a Coyote ID or CAS ID matches (that is one student with a wrong date).
-    const DOB_DISMISS_DIGITS = 2, DOB_DISMISS_YEARS = 18;
+    const DOB_DISMISS_DIGITS = 2, DOB_DISMISS_YEARS = 18, DOB_AGE_MIN = 13, DOB_AGE_MAX = 100;
+    const dobBelievable = (iso) => { const age = (Date.now() - Date.parse(iso)) / (365.25 * 864e5); return age >= DOB_AGE_MIN && age <= DOB_AGE_MAX; };
     function dobsClearlyDiffer(rating) {
         if (!rating || rating.res.slots['coyote.0'] || rating.res.slots['cas.0']) return false;
         const a = scDate(rating.ev.A.dob), b = scDate(rating.ev.B.dob);
-        if (!a || !b || a === b || scDateTypo(a, b)) return false;
+        if (!a || !b || !dobBelievable(a) || !dobBelievable(b) || a === b || scDateTypo(a, b)) return false;
         const x = a.replace(/-/g, ''), y = b.replace(/-/g, '');
         let digits = 0; for (let i = 0; i < 8; i++) if (x[i] !== y[i]) digits++;
         const years = Math.abs(Date.parse(a) - Date.parse(b)) / (365.25 * 864e5);
@@ -3870,9 +3873,9 @@
         if (dismissState) return;
         dismissState = { key, reason, step: 'countdown', timer: null, t0: Date.now() };
         saveRatingNow(); recordPairNow(); // its chips on the list (department: Dismissed), before the pair leaves the queue
-        console.log('[elm2] ' + reason + ': dismissing this pair in 3 s (Escape cancels)');
-        showMergeNotice('Dismissing in 3 s: ' + reason + ' (Esc cancels)', true);
-        dismissState.timer = setTimeout(stepDismiss, 3000);
+        console.log('[elm2] ' + reason + ': dismissing this pair after the countdown (' + CFG.MERGE_COUNTDOWN + ' s; Escape or Cancel stops it)');
+        startAutoMerge(key, undefined, reason); // the same countdown dialog as an auto-merge
+        if (!document.getElementById('elm2-merge-overlay') || !mergeTimer) { dismissState = null; } // the dialog did not start: nothing is counting
     }
     function stepDismiss() {
         const st = dismissState;
@@ -3916,7 +3919,6 @@
         dismissState = null;
         if (CFG.AUTO_SKIP_BLOCKED) skipToNext('dismissed, still on screen', 'Dismissed');
     }
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && dismissState && dismissState.step === 'countdown') cancelAutoDismiss('Auto-dismiss cancelled'); });
 
     // =========================================================
     // AUTO-MERGE ("When done" = Merge)
@@ -4203,6 +4205,8 @@
     }
     function cancelAutoMerge(message) {
         const wasRunning = !!mergeTimer;
+        // a dismiss countdown is cancelled the same way (the Cancel button, Escape, a pair change)
+        if (dismissState && dismissState.step === 'countdown') { clearTimeout(dismissState.timer); dismissState = null; if (message) message = 'Auto-dismiss cancelled'; }
         clearInterval(mergeTimer); clearTimeout(mergeTimer);
         mergeTimer = null;
         hideMergeModal();
@@ -4232,6 +4236,20 @@
                 (labels.length ? ': ' + labels.slice(0, 4).join(', ') + (labels.length > 4 ? ' +' + (labels.length - 4) + ' more' : '') : '');
         }
         return out;
+    }
+    // The summary of the dismiss countdown: who, and why they are two different people.
+    function renderDismissBrief(box, reason) {
+        const line = (cls, t) => { const d = document.createElement('div'); d.className = 'brief-line ' + (cls || ''); d.textContent = t; box.appendChild(d); return d; };
+        box.textContent = '';
+        const names = getContactNames().filter(Boolean);
+        line('brief-names', names.length === 2 ? names.join(' | ') : 'These two contacts');
+        const l = line('', 'Reason: ');
+        const b = document.createElement('b'); b.textContent = reason; l.appendChild(b);
+        if (reason === 'Different birth dates') { // the dates it went by, so they can be checked at a glance
+            const r = currentRating();
+            if (r) line('', 'Birth dates read: ' + (scDate(r.ev.A.dob) || '?') + ' and ' + (scDate(r.ev.B.dob) || '?'));
+        }
+        line('', 'They are two different people, so the pair is dismissed, not merged. A dismissal can be undone from the history.');
     }
     function renderMergeBrief(box) {
         const line = (cls) => { const d = document.createElement('div'); d.className = 'brief-line ' + (cls || ''); box.appendChild(d); return d; };
@@ -4287,11 +4305,14 @@
     }
     const BTN_WAIT_MS = 8000; // the Merge Contacts button can be disabled for a moment while Element loads the pair
     const btnUnavailable = (r) => !r.ok && r.reason === 'the Merge Contacts button is unavailable';
-    function startAutoMerge(key, since) {
-        if (mergedPairKey === key || getPairKey() !== key) return;
-        cancelAutoMerge();
+    // dismissReason (a string): the same dialog counts down to a Dismiss instead of a merge (see AUTO-DISMISS), with that reason in it.
+    function startAutoMerge(key, since, dismissReason) {
+        const dismissing = !!dismissReason;
+        if ((!dismissing && mergedPairKey === key) || getPairKey() !== key) return;
+        if (dismissing) { clearInterval(mergeTimer); clearTimeout(mergeTimer); mergeTimer = null; hideMergeModal(); hideMergeBar(); } // not cancelAutoMerge(): that would cancel the dismiss that is starting
+        else cancelAutoMerge();
         // Do not count down to a merge that the final check would refuse anyway.
-        const pre = mergeReadiness(key);
+        const pre = dismissing ? { ok: true } : mergeReadiness(key);
         since = since || Date.now();
         if (btnUnavailable(pre) && Date.now() - since < BTN_WAIT_MS) { setTimeout(() => startAutoMerge(key, since), 500); return; }
         if (!pre.ok) {
@@ -4321,7 +4342,7 @@
         arc.style.transition = 'none';
         ov.querySelector('.elm2-ring-track').style.transition = 'none';
         card.classList.remove('done', 'fired');
-        const race = CFG.COUNTDOWN_STYLE === 'race';
+        const race = !dismissing && CFG.COUNTDOWN_STYLE === 'race';
         const TICK = race ? (total * 1000 - RACE_GO) / total : 1000; // race: 4 steps of 925 ms + 300 ms GO = 4 s
         card.classList.toggle('race', race);
         const lamps = Array.from(ov.querySelectorAll('.elm2-lamps i'));
@@ -4331,8 +4352,9 @@
             // red lamps at 3, 2, 1 seconds left; all green at 0
             l.className = left <= 0 ? 'green' : (i < Math.max(0, 4 - left) ? 'red' : '');
         });
-        document.getElementById('elm2-merge-title').textContent = race ? 'Get ready…' : 'Merging automatically';
-        renderMergeBrief(document.getElementById('elm2-merge-summary'));
+        document.getElementById('elm2-merge-title').textContent = dismissing ? 'Dismissing automatically' : race ? 'Get ready…' : 'Merging automatically';
+        if (dismissing) renderDismissBrief(document.getElementById('elm2-merge-summary'), dismissReason);
+        else renderMergeBrief(document.getElementById('elm2-merge-summary'));
         // The ring drains one step per second, in time with the number: the arc starts at 12 o'clock
         // and its far end walks back counter-clockwise. A round line cap pokes half a stroke past
         // the end of its dash, which made the end bit sit visibly left of its mark (6 o'clock at half
@@ -4472,6 +4494,15 @@
             if (left > 0) { render(); return; }
             clearInterval(mergeTimer);
             mergeTimer = null;
+            if (dismissing) { // 0: the ring goes green and Dismiss is clicked (the dialog lingers a moment, as after a merge)
+                card.classList.add('done');
+                fill.style.strokeDasharray = C + ' ' + C;
+                document.getElementById('elm2-merge-title').textContent = 'Dismissing…';
+                render();
+                setTimeout(hideMergeModal, LINGER);
+                if (dismissState) { dismissState.t0 = Date.now(); stepDismiss(); }
+                return;
+            }
             const ready = mergeReadiness(key);
             if (btnUnavailable(ready)) { waitForButton(); return; }
             if (!ready.ok) { stop(ready); return; }
@@ -4680,7 +4711,7 @@
             resolutionAttempted = false;
             engagementOpenedFor = '';
             previewPicks(null);
-            cancelAutoMerge();
+            cancelAutoMerge(); // (also stops a dismiss countdown)
             cancelAutoDismiss();
             delete document.body.dataset.csvDept;
             delete document.body.dataset.csvSpark1;
@@ -5051,7 +5082,7 @@
                 </div>
                 <div class="elm-item">
                 <div class="setting-row"><label>Dismiss different people</label>${toggleHtml('elm-dismiss-id-mismatch')}</div>
-                <div class="elm-level-desc">While When done is on Merge: a pair with different School Ids, or with birth dates more than 2 digits or 18 years apart (and no matching ID), is two people, so it is dismissed with "Different student IDs" or "Different birth dates" as the reason, after a 3 second notice (Esc cancels). Off, or with Wait for me: it is handled as before.</div>
+                <div class="elm-level-desc">While When done is on Merge: a pair with different School Ids, or with birth dates more than 2 digits or 18 years apart (and no matching ID), is two people, so it is dismissed with "Different student IDs" or "Different birth dates" as the reason, after the countdown dialog (Cancel or Esc stops it). Off, or with Wait for me: it is handled as before.</div>
                 </div>
                 <div class="elm-item">
                 <div class="setting-row"><label>Next after merge</label>${toggleHtml('elm-next-after-merge')}</div>

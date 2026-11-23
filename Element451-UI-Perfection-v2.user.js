@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.330
+// @version      2.332
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.330'; // keep in sync with @version
+    const VERSION = '2.332'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -2892,14 +2892,25 @@
         const w = why.insertCell(); w.colSpan = 2; w.textContent = ratingWhy(res);
         return t;
     }
+    // Where the write-up (and, while loading, the placeholder lines) go: at the top of the card's content, and above the "Show engagement data"
+    // button when that button sits before the content (in the card, outside its body): then right before the part of the card that holds it.
+    function analysisAnchor(card, body) {
+        const panel = card.querySelector('elm-duplicate-engagement-panel');
+        if (panel && !body.contains(panel)) {
+            let top = panel;
+            while (top.parentElement && top.parentElement !== card && !top.parentElement.contains(body)) top = top.parentElement;
+            if (top.parentElement && !top.contains(body) && (top.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING)) return { host: top.parentElement, ref: top };
+        }
+        return { host: body, ref: body.firstChild };
+    }
     function renderOurAnalysis() {
         const card = document.querySelector('bolt-card.analysis-card');
         const body = card && (card.querySelector(':scope > bolt-card-body, :scope > .bolt-card-body') || card);
         if (!body) return;
         // while the pair is being read (the cover is up) the numbers are not final, so they are not shown: the placeholder lines are
         const rating = busyNow ? null : currentRating();
-        const old = body.querySelector(':scope > .elm2-an');
-        let skel = body.querySelector(':scope > .elm2-an-skel');
+        const old = card.querySelector('.elm2-an');
+        let skel = card.querySelector('.elm2-an-skel');
         if (!rating) {
             if (old) old.remove();
             card.classList.remove('elm2-an-ours', 'elm2-an-bolt');
@@ -2909,7 +2920,7 @@
             if (waiting && !skel) {
                 skel = document.createElement('div'); skel.className = 'elm2-an-skel'; skel.setAttribute('aria-hidden', 'true');
                 skel.innerHTML = '<div class="elm2-an-skel-bar"><span></span><span></span></div><span></span><span></span><span></span>';
-                body.appendChild(skel);
+                const at = analysisAnchor(card, body); at.host.insertBefore(skel, at.ref); // where the write-up goes: above Element's own content, the "Show engagement data" button included
             } else if (!waiting && skel) skel.remove();
             return;
         }
@@ -2976,7 +2987,7 @@
         notes.concat(write.paragraphs).forEach(t => { const p = document.createElement('p'); p.textContent = t; text.appendChild(p); });
         el.appendChild(text);
         el.appendChild(pointsTable(res));
-        body.insertBefore(el, body.firstChild);
+        const at = analysisAnchor(card, body); at.host.insertBefore(el, at.ref);
         console.log('[elm2] analysis:', WRITE_LEVEL[res.level], res.points + ' pts |', res.items.map(i => i.key + ' ' + (i.pts > 0 ? '+' : '') + i.pts).join(', '), '| Bolt chips read:', ev.chips.found + ' (' + ev.chips.levels + ')', '| read (values masked):', JSON.stringify({ A: scShapeSide(ev.A), B: scShapeSide(ev.B), addr: ev.addrState, dobCounts: (ev.A.dob && ev.B.dob) ? [scDate(ev.A.dob) ? 'valid' : 'invalid', scDate(ev.B.dob) ? 'valid' : 'invalid'] : 'a date is missing' }));
     }
     // ---- ANALYSIS CARD END ----

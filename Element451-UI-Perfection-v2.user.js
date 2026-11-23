@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.317
+// @version      2.325
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.317'; // keep in sync with @version
+    const VERSION = '2.325'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -124,6 +124,8 @@
         ALLOWED_DEPARTMENT:       { get() { return lsGet('elm_allowed_department') || 'UnderGrad'; } },
         ALLOW_APPEAL:             { get() { return getBoolSetting('elm_allow_appeal', false); } },
         ALLOW_FORBIDDEN:          { get() { return getBoolSetting('elm_allow_forbidden', false); } },
+        // A pair whose two School Ids differ is two students: it is dismissed ("Different student IDs") instead of skipped.
+        DISMISS_ID_MISMATCH:      { get() { return getBoolSetting('elm_dismiss_id_mismatch', true); } },
     });
     // =========================================================
     // CSS
@@ -246,6 +248,7 @@
         .elm2-an-flag { display: inline-block; padding: 1px 10px; border-radius: 12px; font-size: 12px; line-height: 20px; font-weight: 600; cursor: help; background: #eceef4; color: #434750; }
         .elm2-an-flag[data-dept="UnderGrad"] { background: #f3e5f5; color: #6a1b9a; } .elm2-an-flag[data-dept="Grad/IA"] { background: #e3f2fd; color: #1565c0; }
         .elm2-an-flag[data-flag="appeal"] { background: #fff8e1; color: #f57f17; } .elm2-an-flag[data-flag="forbidden"], .elm2-an-flag[data-flag="test"] { background: #fce4ec; color: #c2185b; }
+        .elm2-an-flag[data-flag="twins"] { background: #ede7f6; color: #5e35b1; }
         .elm2-an-flag[data-blocked="1"] { box-shadow: inset 0 0 0 1.5px currentColor; }
         .elm2-an-flag[data-flag="bolt"] { background: transparent; box-shadow: inset 0 0 0 1px rgba(26, 28, 32, .24); color: #434750; font-weight: 500; }
         .elm2-an-views { margin-left: auto; display: inline-flex; border: 1px solid rgba(26, 28, 32, .24); border-radius: 12px; overflow: hidden; }
@@ -2097,9 +2100,10 @@
     // tells Bolt these two contacts are different people — removing the
     // pair from the queue and training the matcher on that verdict. A
     // department/forbidden/appeal block says nothing about whether
-    // the pair is actually a duplicate, so automation must never click this.
+    // the pair is actually a duplicate, so automation never clicks this for them.
     // Skipping a blocked entry must only ever move to the next pair via
     // clickNextDuplicate() below, leaving the pair untouched in the queue.
+    // The one exception is two different School Ids (two students): see AUTO-DISMISS below, which is the only code allowed to click it.
     // Skips to the next pair, but first has the Database script (if installed) record this
     // one, retrying for up to 3s until it confirms, so a fast skip never loses an entry.
     let skipInFlightKey = '';
@@ -2212,8 +2216,11 @@
     let currentQueuePositionKey = '';   // "current/total" — used to detect navigation to a new pair
     let pairFirstSeenAt = 0;            // when the current pair was first seen
     // the cover while a pair is read (declared here, early: the rating code reads busyNow)
+    // SCORE_WAIT_MS: how long a pair is given for Bolt's overview (and so our score) to show: the cover, the dismiss decision, the range check and
+    // the wait before an auto-merge click all use it. (A skip waits up to 6 s for the rating to be saved.)
     const BUSY_MAX_MS = 8000, SCORE_WAIT_MS = 4000;
     let busySince = 0, busyGaveUp = '', busyNow = false;
+    let dismissState = null;            // the auto-dismiss in progress: { key, reason, step: 'countdown' | 'dialog' | 'done', timer, t0, t1, t2 } (declared early: the database signal reads it)
     let resolutionAttempted = false;    // resolution ran for the current pair
     let awaitingMergeResult = false;
     let lastMergeContactNamesKey = '';
@@ -2381,7 +2388,9 @@
         const sparks = getSparkIds();
         const forbidden = blockers.some(b => b.type === 'forbidden' || b.type === 'student-id-mismatch');
         const appeal = blockers.find(b => b.type === 'appeal');
-        if (forbidden) document.body.dataset.csvDept = 'Forbidden';
+        // a pair being dismissed (clearly different people) is recorded in the database with "Dismissed" as its department
+        if (dismissState && dismissState.key === getPairKey()) document.body.dataset.csvDept = 'Dismissed';
+        else if (forbidden) document.body.dataset.csvDept = 'Forbidden';
         else if (appeal) document.body.dataset.csvDept = 'Appeal';
         else document.body.dataset.csvDept = detectActualDepartment().dept;
         if (sparks.a || sparks.b) { document.body.dataset.csvSpark1 = sparks.a; document.body.dataset.csvSpark2 = sparks.b; }
@@ -2406,6 +2415,9 @@
         address: [25, -3], soft: [5, 0],
         boltHigh: 10, boltMedium: 5, boltLow: -10, boltDifferent: -10, boltError: -5,
         applicantVsCoyote: -40,
+        // Twin rule: when the first names do not match (a nickname, an initial or one name inside the other still matches) and no Coyote ID or
+        // CAS ID matches, what a family shares stops counting for the pair: the same last name 0, the same address and the same birth date -30 each.
+        twinLast: 0, twinAddress: -30, twinDob: -30,
         emailNameFull: 6, emailNamePartial: 4, emailNameInitial: 3, emailNameOne: 2, emailNameCap: 10, emailDobFull: 20, emailDobYear: 3, emailDobConflict: -8
     };
     const SCORE_CUT = { high: 70, medium: 45, low: 15 };
@@ -2426,8 +2438,17 @@
         else if ((r = s.match(/\b(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4}|\d{2})\b/))) { m = +r[1]; d = +r[2]; y = +r[3]; if (y < 100) y += y > 30 ? 1900 : 2000; }
         else if ((r = s.match(/\b([A-Za-z]{3,9})\.?\s+(\d{1,2}),?\s+(\d{4})\b/))) { const mi = 'jan feb mar apr may jun jul aug sep oct nov dec'.split(' ').indexOf(r[1].slice(0, 3).toLowerCase()); if (mi < 0) return null; m = mi + 1; d = +r[2]; y = +r[3]; }
         else return null;
-        if (y < 1900 || m < 1 || m > 12 || d < 1 || d > 31) return null;
+        if (!scValidDob(y, m, d)) return null;
         return String(y) + '-' + String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+    }
+    // A birth date only counts (match or mismatch) when both records hold a valid one: a real calendar day (no February 30), from 1920 on,
+    // and at least 10 years ago (not a future date, or today's date entered as a placeholder). An invalid date reads as no date at all.
+    const DOB_MIN_YEAR = 1920, DOB_MIN_AGE = 10;
+    function scValidDob(y, m, d) {
+        if (!(y >= DOB_MIN_YEAR) || !(m >= 1 && m <= 12) || !(d >= 1)) return false;
+        if (d > new Date(Date.UTC(y, m, 0)).getUTCDate()) return false; // the day exists in that month (leap years included)
+        const now = new Date();
+        return Date.UTC(y, m - 1, d) <= Date.UTC(now.getUTCFullYear() - DOB_MIN_AGE, now.getUTCMonth(), now.getUTCDate());
     }
     // Two dates one typo apart: a single digit wrong, or the day and month swapped.
     function scDateTypo(a, b) {
@@ -2509,7 +2530,16 @@
     }
     // slots: { slot: how many times it applied } -> { points, level, hard, strong }, or null when a slot is not one of this engine's
     const RETIRED_SLOTS = ['gender.0']; // gender is no longer scored; a remembered rating that holds it is re-rated without it
+    // A rating remembered before the twin rule (UI 2.320) holds the plain slots: the twin rule is applied to it here, the same way scorePair does.
+    const TWIN_SLOTS = { 'last.0': 'twinLast', 'lastPartial.0': 'twinLast', 'address.0': 'twinAddress', 'dob.0': 'twinDob' };
+    function twinSlots(slots) {
+        if (!slots['first.1'] || slots['coyote.0'] || slots['cas.0']) return slots;
+        const out = {};
+        Object.keys(slots).forEach(k => { const t = TWIN_SLOTS[k] || k; out[t] = (out[t] || 0) + slots[k]; });
+        return out;
+    }
     function scoreSlots(slots) {
+        slots = twinSlots(slots);
         let pts = 0, nameFit = 0, strong = 0, hard = false;
         for (const slot of Object.keys(slots)) {
             if (RETIRED_SLOTS.includes(slot)) continue;
@@ -2565,10 +2595,18 @@
             const app = appSide === 'A' ? A : B, other = appSide === 'A' ? B : A;
             if (!scDigits(app.coyote) && scDigits(other.coyote)) add('appCoyote', 'Applicant vs Coyote ID', W.applicantVsCoyote, 'against', 'one record is an applicant with no Coyote ID, while the other already has one (' + other.coyote + ')', { slot: 'applicantVsCoyote' });
         }
+        // Names are compared first: different first names (not a nickname, an initial or one name inside the other) with no matching Coyote ID or
+        // CAS ID turn on the twin rule, under which a shared last name, address and birth date count against the pair instead of for it.
+        const fa = scFold(A.first), fb = scFold(B.first), la = scFold(A.last), lb = scFold(B.last);
+        let firstState = null, lastState = null;
+        if (fa && fb) firstState = fa === fb ? 'same' : scNameWithin(fa, fb) ? 'within' : scRelatedFirst(fa, fb) ? 'related' : 'differ';
+        if (la && lb) lastState = la === lb ? 'same' : (la.split(' ').some(t => t.length > 2 && lb.split(' ').includes(t)) ? 'partial' : 'differ');
+        const twin = firstState === 'differ' && !slots['coyote.0'] && !slots['cas.0'];
         // DOB
         const da = scDate(A.dob), db = scDate(B.dob);
         if (da && db) {
-            if (da === db) { add('dob', 'Date of birth', W.dob[0], 'for', 'the same date of birth (' + da + ')', { strong: true, slot: 'dob.0' }); }
+            if (da === db && twin) add('dob', 'Date of birth', W.twinDob, 'against', 'the same date of birth with different first names (as twins have) (' + da + ')', { twin: true, slot: 'twinDob' });
+            else if (da === db) { add('dob', 'Date of birth', W.dob[0], 'for', 'the same date of birth (' + da + ')', { strong: true, slot: 'dob.0' }); }
             else if (scDateTypo(da, db)) add('dob', 'Date of birth', W.dobTypo[1], 'against', 'dates of birth that are one typo apart (' + da + ' and ' + db + ')', { typo: true, slot: 'dobTypo.1' });
             else { add('dob', 'Date of birth', W.dob[1], 'against', 'different dates of birth (' + da + ' and ' + db + ')', { clear: true, slot: 'dob.1' }); }
         }
@@ -2588,20 +2626,18 @@
         // Phone
         const pa = scPhone(A.phone), pb = scPhone(B.phone);
         if (pa && pb) { if (pa === pb) { add('phone', 'Phone', W.phone[0], 'for', 'the same phone number (' + A.phone + ')', { strong: true, slot: 'phone.0' }); } else add('phone', 'Phone', 0, 'info', 'different phone numbers'); }
-        // Names
-        const fa = scFold(A.first), fb = scFold(B.first), la = scFold(A.last), lb = scFold(B.last);
-        let firstState = null, lastState = null;
-        if (fa && fb) firstState = fa === fb ? 'same' : scNameWithin(fa, fb) ? 'within' : scRelatedFirst(fa, fb) ? 'related' : 'differ';
-        if (la && lb) lastState = la === lb ? 'same' : (la.split(' ').some(t => t.length > 2 && lb.split(' ').includes(t)) ? 'partial' : 'differ');
+        // Names (compared above)
         if (firstState === 'same') add('first', 'First name', W.first[0], 'for', 'the same first name', { nameFor: 'first', slot: 'first.0' });
         else if (firstState === 'within') add('first', 'First name', W.first[0], 'for', 'the same first name, one name inside the other (' + (A.first.length <= B.first.length ? A.first + ' in ' + B.first : B.first + ' in ' + A.first) + ')', { nameFor: 'first', within: true, slot: 'first.0' });
         else if (firstState === 'related') add('first', 'First name', W.firstRelated[0], 'for', 'similar first names (' + A.first + ' and ' + B.first + ')', { nameFor: 'first', slot: 'firstRelated.0' });
         else if (firstState === 'differ') add('first', 'First name', W.first[1], 'against', 'different first names (' + A.first + ' and ' + B.first + ')', { slot: 'first.1' });
-        if (lastState === 'same') add('last', 'Last name', W.last[0], 'for', 'the same last name', { nameFor: 'last', slot: 'last.0' });
+        if (twin && (lastState === 'same' || lastState === 'partial')) add('last', 'Last name', W.twinLast, 'info', (lastState === 'same' ? 'the same last name' : 'overlapping last names (' + A.last + ' and ' + B.last + ')') + ', which family members share, so it does not count with different first names', { twin: true, slot: 'twinLast' });
+        else if (lastState === 'same') add('last', 'Last name', W.last[0], 'for', 'the same last name', { nameFor: 'last', slot: 'last.0' });
         else if (lastState === 'partial') add('last', 'Last name', W.lastPartial[0], 'for', 'overlapping last names (' + A.last + ' and ' + B.last + ')', { nameFor: 'last', slot: 'lastPartial.0' });
         else if (lastState === 'differ') add('last', 'Last name', W.last[1], 'against', 'different last names (' + A.last + ' and ' + B.last + ')', { slot: 'last.1' });
         // Address
-        if (ev.addrState === 'match') { add('address', 'Address', W.address[0], 'for', 'the same address', { strong: true, slot: 'address.0' }); }
+        if (ev.addrState === 'match' && twin) add('address', 'Address', W.twinAddress, 'against', 'the same address with different first names (family members often share one)', { twin: true, slot: 'twinAddress' });
+        else if (ev.addrState === 'match') { add('address', 'Address', W.address[0], 'for', 'the same address', { strong: true, slot: 'address.0' }); }
         else if (ev.addrState === 'mismatch') add('address', 'Address', W.address[1], 'against', 'different addresses (people move)', { slot: 'address.1' });
         // Soft fields
         [['studentType', 'Student type'], ['level', 'Academic level'], ['school', 'School attended']].forEach(([k, label]) => {
@@ -2639,7 +2675,8 @@
         const present = keyFields.filter(k => k === 'dob' ? (da && db) : k === 'email' ? (ea.length && eb.length) : k === 'phone' ? (pa && pb) : (scDigits(A[k]) && scDigits(B[k])));
         const missing = keyFields.filter(k => !present.includes(k));
         const thin = !present.some(k => k === 'coyote' || k === 'cas') && present.length < 2;
-        return { points: rated.points, level: rated.level, hard: rated.hard, strong: rated.strong, slots, items, missing, thin, different: rated.points < SCORE_CUT.low };
+        const twins = items.some(i => i.twin && i.pts < 0); // a shared address or birth date with different first names: the Twins? chip
+        return { points: rated.points, level: rated.level, hard: rated.hard, strong: rated.strong, slots, items, missing, thin, twins, different: rated.points < SCORE_CUT.low };
     }
     // ---- SCORE ENGINE END ----
     // ---- WRITE-UP START: the score turned into plain sentences (templates, no AI, so it always agrees with the points) ----
@@ -2754,19 +2791,32 @@
     const scShapeSide = (side) => { const o = {}; Object.keys(side).forEach(k => { o[k] = Array.isArray(side[k]) ? side[k].map(scShape) : scShape(side[k]); }); return o; };
     let anCache = { t: 0, key: '', out: null, kept: false };
     // The rating of the pair on screen: { res, ev, write }, or null until Bolt's overview has rendered.
-    // It is remembered (saved by the pair's Spark IDs, which gives its chip on the list) as soon as it exists and the pair is no longer being
-    // read. A rating worked out while the cover was up is held back, and saved by the first call after it, even when that call is served
-    // from the 400 ms cache: an auto-skip right after the read used to find the cached rating, take it for saved, and move on without it.
+    // It is remembered (saved by the pair's Spark IDs, which gives its chip on the list) as soon as it exists.
+    // There is no rating (null) until the pair's matching rows have been read: one worked out from the rows that were showing (the "Hide
+    // matching items" switch is on) would be a first score that the list's chip showed and then changed once the read finished. Once the
+    // read is done the rating is worked out, saved, and the list's chip shows that one. (If the read does not finish, the cover gives up
+    // after 8 s and the rating is worked out from what there is.) A rating is saved by the first call after it exists, even when that call
+    // is served from the 400 ms cache: an auto-skip right after the read used to find the cached rating, take it for saved, and move on without it.
+    function pairRead(key) {
+        try {
+            if (busyGaveUp === key) return true;
+            if (peek.pair !== key || peek.owed) return false;
+            if (peek.phase === 'opening' || peek.phase === 'restoring') return false;
+            if (peek.phase === 'start') return !hideMatchingBtn(); // with no switch there is nothing to open
+            return true;
+        } catch (e) { return true; } // not set up yet (the script is still loading)
+    }
     function currentRating() {
         const now = Date.now(), key = getPairKey();
+        if (!pairRead(key)) return null;
         if (anCache.key === key && now - anCache.t < 400) {
-            if (anCache.out && !anCache.kept && !busyNow) { anCache.kept = true; rememberRating(anCache.out.res); }
+            if (anCache.out && !anCache.kept) { anCache.kept = true; rememberRating(anCache.out.res); }
             return anCache.out;
         }
         let out = null;
         try { const ev = gatherEvidence(); if (ev) { const res = scorePair(ev); out = { ev, res, write: writeUp(res, ev) }; } } catch (e) { console.log('[elm2] analysis failed:', e); }
         anCache = { t: now, key, out, kept: false };
-        if (out && !busyNow) { anCache.kept = true; rememberRating(out.res); } // not while the pair is being read: the rows are not all there yet
+        if (out) { anCache.kept = true; rememberRating(out.res); }
         return out;
     }
     // The card's view: 'ours' (the write-up), 'points' (the table) or 'bolt' (Bolt's own write-up). Write-up or points is kept from pair
@@ -2870,6 +2920,8 @@
         const { res, ev, write } = rating;
         const boltLevel = getBoltChipLevel();
         const { flags, notes } = pairFlags();
+        // the twin rule applied (different first names with a shared address or birth date): a chip says so
+        if (res.twins) flags.push({ flag: 'twins', text: 'Twins?', title: 'Different first names with the same ' + res.items.filter(i => i.twin && i.pts < 0).map(i => i.key === 'dob' ? 'birth date' : 'address').join(' and ') + ': these count against the pair (twins and siblings share them), and the same last name gives no points.' });
         const sig = JSON.stringify([pk, res.points, res.level, write.paragraphs, mode, boltLevel, flags, notes]);
         card.classList.toggle('elm2-an-bolt', mode === 'bolt');
         card.classList.toggle('elm2-an-ours', mode !== 'bolt');
@@ -3022,6 +3074,7 @@
     function saveRatingNow() {
         const { a, b } = getSparkIds();
         if (!a || !b) return 'no Spark IDs on the form';
+        if (!pairRead(getPairKey())) return 'the pair is still being read';
         anCache.t = 0; // not the cached one: it may be from before the rows were read
         const out = currentRating();
         if (!out) return 'no rating yet: Bolt\'s overview has not shown';
@@ -3110,8 +3163,8 @@
     }
     // ---- SCORE CHIPS END ----
 
-    // (The possible-twins check that stood here is gone: our score already counts different names, birth dates and addresses and
-    // Bolt's "different people", so it no longer skips pairs or keeps them from auto-merge.)
+    // (The possible-twins check that stood here is gone: the score's twin rule (SCORE_W twinLast / twinAddress / twinDob) handles twins,
+    // and its Twins? chip beside the score says when it applied.)
 
     // =========================================================
     // FIELD RESOLUTION ENGINE
@@ -3735,11 +3788,11 @@
 
 
     // Safety net: Dismiss (and Confirm on its "Not a duplicate?" dialog) is a
-    // permanent verdict and must only ever come from a human. Real clicks have
+    // permanent verdict and must only come from a human, or from AUTO-DISMISS for two different School Ids. Real clicks have
     // isTrusted=true; anything a script fires via .click() is false. Block those
-    // in the capture phase, and log a stack trace naming whoever tried.
+    // in the capture phase (except the ones AUTO-DISMISS makes), and log a stack trace naming whoever tried.
     document.addEventListener('click', (e) => {
-        if (e.isTrusted) return;
+        if (e.isTrusted || allowDismissClick) return;
         const btn = e.target && e.target.closest ? e.target.closest('button') : null;
         if (!btn) return;
         const text = btn.textContent.trim().toLowerCase();
@@ -3755,11 +3808,122 @@
     }, true);
 
     // =========================================================
+    // AUTO-DISMISS: two clearly different people. Two different School Ids ("Different student IDs"), or two valid birth dates that clearly
+    // differ ("Different birth dates": more than 2 digits apart, or more than 18 years apart; not one typo or a day/month swap, and not when a
+    // Coyote ID or CAS ID matches). The pair is dismissed with that reason: after a 3 s notice (Escape cancels), Dismiss is clicked, the
+    // reason is typed into the dialog and the dialog's Dismiss is clicked. Not for a pair that is also Forbidden by name (those are only
+    // ever skipped), and not when the two IDs are the same number written with and without leading zeros. Setting: Dismiss different
+    // student IDs / birth dates (on by default), and only while auto-merge is on (When done = Merge).
+    // =========================================================
+    let allowDismissClick = false; // the click guard above lets through only the clicks made here, while this is true
+    // Tied to auto-merge: only while When done is on Merge (and the slider is not on None); with Wait for me the pair is skipped.
+    const dismissOn = () => CFG.DISMISS_ID_MISMATCH && autoMergeOn();
+    function idMismatchToDismiss() {
+        const m = isStudentIdMismatch();
+        if (!m.mismatch || parseInt(m.leftId, 10) === parseInt(m.rightId, 10)) return null;
+        if (isForbiddenEntry().forbidden) return null;
+        return m;
+    }
+    // Birth dates that clearly differ: both valid, not one typo or a day/month swap, and more than 2 of the 8 digits different or more
+    // than 18 years apart. Never when a Coyote ID or CAS ID matches (that is one student with a wrong date).
+    const DOB_DISMISS_DIGITS = 2, DOB_DISMISS_YEARS = 18;
+    function dobsClearlyDiffer(rating) {
+        if (!rating || rating.res.slots['coyote.0'] || rating.res.slots['cas.0']) return false;
+        const a = scDate(rating.ev.A.dob), b = scDate(rating.ev.B.dob);
+        if (!a || !b || a === b || scDateTypo(a, b)) return false;
+        const x = a.replace(/-/g, ''), y = b.replace(/-/g, '');
+        let digits = 0; for (let i = 0; i < 8; i++) if (x[i] !== y[i]) digits++;
+        const years = Math.abs(Date.parse(a) - Date.parse(b)) / (365.25 * 864e5);
+        return digits > DOB_DISMISS_DIGITS || years > DOB_DISMISS_YEARS;
+    }
+    // The reason the pair on screen is dismissed, '' when it is not, or 'wait' while the birth dates cannot be read yet (Bolt's overview)
+    function dismissReason() {
+        if (isForbiddenEntry().forbidden) return '';
+        if (idMismatchToDismiss()) return 'Different student IDs';
+        const r = currentRating();
+        if (!r) return Date.now() - pairFirstSeenAt < SCORE_WAIT_MS ? 'wait' : '';
+        return dobsClearlyDiffer(r) ? 'Different birth dates' : '';
+    }
+    function clickAllowed(btn) { allowDismissClick = true; try { btn.click(); } finally { allowDismissClick = false; } }
+    const feedbackBox = () => Array.from(document.querySelectorAll('textarea[formcontrolname="feedback"]')).find(t => t.getClientRects().length) || null;
+    // typed the way Angular's form sees it (the value set through the native setter, then an input event)
+    function setFeedback(t, text) {
+        const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+        t.focus();
+        setter.call(t, text);
+        t.dispatchEvent(new Event('input', { bubbles: true }));
+        t.dispatchEvent(new Event('change', { bubbles: true }));
+        t.dispatchEvent(new Event('blur'));
+    }
+    function dialogDismissButton(t) {
+        const box = t.closest('bolt-dialog, mat-dialog-container, [role="dialog"], .cdk-overlay-pane') || document;
+        return Array.from(box.querySelectorAll('button')).find(b => /^(dismiss|confirm|submit)$/i.test(b.textContent.trim()) && !b.closest('bolt-stackable-sidebar-header-actions')) || null;
+    }
+    function cancelAutoDismiss(message) {
+        if (!dismissState) return;
+        const counting = dismissState.step === 'countdown';
+        clearTimeout(dismissState.timer);
+        dismissState = null;
+        if (counting && message) showMergeNotice(message);
+    }
+    function startAutoDismiss(key, reason) {
+        if (dismissState) return;
+        dismissState = { key, reason, step: 'countdown', timer: null, t0: Date.now() };
+        saveRatingNow(); recordPairNow(); // its chips on the list (department: Dismissed), before the pair leaves the queue
+        console.log('[elm2] ' + reason + ': dismissing this pair in 3 s (Escape cancels)');
+        showMergeNotice('Dismissing in 3 s: ' + reason + ' (Esc cancels)', true);
+        dismissState.timer = setTimeout(stepDismiss, 3000);
+    }
+    function stepDismiss() {
+        const st = dismissState;
+        if (!st) return;
+        const next = (ms) => { st.timer = setTimeout(stepDismiss, ms); };
+        const fail = (why) => {
+            dismissState = null;
+            console.log('[elm2] Auto-dismiss stopped:', why);
+            showMergeNotice('Auto-dismiss stopped: ' + why, true);
+            if (CFG.AUTO_SKIP_BLOCKED && getPairKey() === st.key && !feedbackBox()) skipToNext('not dismissed, ' + why, st.reason === 'Different birth dates' ? 'Birth date' : 'Student ID');
+        };
+        if (st.step === 'countdown') {
+            if (getPairKey() !== st.key) { dismissState = null; return; }
+            if (!dismissOn()) { dismissState = null; showMergeNotice('Auto-dismiss cancelled: auto-merge is off'); return; } // When done went back to Wait for me
+            if (dismissReason() !== st.reason) { fail(st.reason.toLowerCase().replace('different ', 'the ') + ' no longer clearly differ'); return; }
+            const btn = getSidebarActionButton('Dismiss');
+            if (!btn || btn.disabled) { if (Date.now() - st.t0 < 8000) next(300); else fail('no Dismiss button'); return; }
+            clickAllowed(btn);
+            st.step = 'dialog'; st.t1 = Date.now();
+            next(200);
+            return;
+        }
+        if (st.step === 'dialog') {
+            const t = feedbackBox();
+            if (!t) { if (Date.now() - st.t1 < 5000) next(200); else fail('the Dismiss dialog did not open'); return; }
+            if (t.value !== st.reason) setFeedback(t, st.reason);
+            const ok = dialogDismissButton(t);
+            if (!ok || ok.disabled) { if (Date.now() - st.t1 < 5000) next(200); else fail('no Dismiss button in the dialog'); return; }
+            recordPairNow(); // recorded as Dismissed before the pair goes
+            clickAllowed(ok);
+            st.step = 'done'; st.t2 = Date.now();
+            console.log('[elm2] Dismissed:', st.reason);
+            if (toastsEnabled()) showMergeNotice('Dismiss: ' + st.reason, true);
+            next(500);
+            return;
+        }
+        // done: Element normally moves on by itself; a pair still on screen after 4 s is skipped (Auto-Skip on)
+        if (getPairKey() !== st.key || completionCardVisible()) { dismissState = null; return; }
+        if (feedbackBox()) { if (Date.now() - st.t2 < 6000) next(300); else fail('the Dismiss dialog stayed open'); return; }
+        if (Date.now() - st.t2 < 4000) { next(300); return; }
+        dismissState = null;
+        if (CFG.AUTO_SKIP_BLOCKED) skipToNext('dismissed, still on screen', 'Dismissed');
+    }
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && dismissState && dismissState.step === 'countdown') cancelAutoDismiss('Auto-dismiss cancelled'); });
+
+    // =========================================================
     // AUTO-MERGE ("When done" = Merge)
     // Merging is permanent, so it only happens after a visible countdown with a Cancel
     // button and a short written overview, and only after a final re-check that the pair
     // is still unblocked, still the same pair, and every conflicting field has a pick.
-    // Dismiss is never clicked (see the click guard above).
+    // Dismiss is never clicked here (see the click guard and AUTO-DISMISS above).
     // =========================================================
     let mergeTimer = null;
     let mergedPairKey = '';
@@ -4264,14 +4428,14 @@
             else showMergeNotice('Auto-merge stopped: ' + ready.reason + '.');
         };
         // The pair is recorded in the database (its department chip on the list) and its rating saved (its score chip) before the
-        // click: after the merge the form is gone and neither can be done. Waits at most 3 s, then merges anyway.
+        // click: after the merge the form is gone and neither can be done. Waits at most SCORE_WAIT_MS (4 s), then merges anyway.
         // The wait is held in mergeTimer, so Escape still cancels it, and the pair is checked again before the click.
         const fire = (btn, since) => {
             const t0 = since || Date.now();
             if (getPairKey() !== key) { cancelAutoMerge(); return; }
             if (since) { const again = mergeReadiness(key); if (!again.ok) { stop(again); return; } btn = again.btn; }
             const rec = recordPairNow(), unsaved = saveRatingNow();
-            if (((rec.handled && !rec.recorded) || unsaved) && Date.now() - t0 < 3000) { mergeTimer = setTimeout(() => { mergeTimer = null; fire(btn, t0); }, 250); return; }
+            if (((rec.handled && !rec.recorded) || unsaved) && Date.now() - t0 < SCORE_WAIT_MS) { mergeTimer = setTimeout(() => { mergeTimer = null; fire(btn, t0); }, 250); return; }
             card.classList.add('fired');
             mergedPairKey = key;
             console.log('[elm2] Auto-merging pair');
@@ -4517,6 +4681,7 @@
             engagementOpenedFor = '';
             previewPicks(null);
             cancelAutoMerge();
+            cancelAutoDismiss();
             delete document.body.dataset.csvDept;
             delete document.body.dataset.csvSpark1;
             delete document.body.dataset.csvSpark2;
@@ -4530,6 +4695,12 @@
         const blockers = getAllBlockers();
         applyBlockStyling(blockers);
         updateCsvSignal();
+        // clearly different people (student IDs, birth dates) are dismissed, blocked or not
+        if (!resolutionAttempted && dismissOn()) {
+            const why = dismissReason();
+            if (why === 'wait') return; // the birth dates are read from Bolt's overview, which has not shown yet
+            if (why) { resolutionAttempted = true; startAutoDismiss(pairKey, why); return; }
+        }
         if (blockers.length > 0) {
             if (resolutionAttempted) return;
             resolutionAttempted = true;
@@ -4548,10 +4719,10 @@
         const bolt = getDiffRows().filter(r => r.element.dataset.elm2AiSide).length;
         if (bolt === 0 && Date.now() - pairFirstSeenAt < 3000) return;
         // Bolt's score chip decides, at the High / Medium / Low levels, whether the pair is in range. It can render a moment after the field rows, so wait for it:
-        // 3 s to see it at all, and where the slider decides by rating, up to 10 s (a slow load used to leave the pair
+        // SCORE_WAIT_MS (4 s) to see it at all, and where the slider decides by rating, up to 10 s (a slow load used to leave the pair
         // "out of range" for good, because the pair is only judged once).
         const lvl = CFG.RANGE_LEVEL;
-        if (!getScoreChips().length && Date.now() - pairFirstSeenAt < (lvl >= 1 && lvl < 4 ? 10000 : 3000)) return;
+        if (!getScoreChips().length && Date.now() - pairFirstSeenAt < (lvl >= 1 && lvl < 4 ? 10000 : SCORE_WAIT_MS)) return;
         if (lvl >= 1 && lvl < 4 && !getScoreChipLevel() && Date.now() - pairFirstSeenAt < 10000) return;
         // Dual personal emails: wait (up to 4s) for the engagement table, which the script opens itself.
         if (waitingForEngagement() && Date.now() - pairFirstSeenAt < 4000) return;
@@ -4564,6 +4735,8 @@
             if (getPairKey() !== phaseOnePairKey) return; // moved on already
             const laterBlockers = getAllBlockers();
             applyBlockStyling(laterBlockers);
+            const laterWhy = dismissOn() ? dismissReason() : '';
+            if (laterWhy && laterWhy !== 'wait') { startAutoDismiss(phaseOnePairKey, laterWhy); return; }
             if (laterBlockers.length > 0) {
                 if (CFG.AUTO_SKIP_BLOCKED) { skipToNext('blocked', blockerLabel(laterBlockers)); }
                 return;
@@ -4877,6 +5050,10 @@
                 <div class="elm-level-desc elm-skip-desc">Skips blocked and out-of-range pairs with no popup. Off: stops on them instead.</div>
                 </div>
                 <div class="elm-item">
+                <div class="setting-row"><label>Dismiss different people</label>${toggleHtml('elm-dismiss-id-mismatch')}</div>
+                <div class="elm-level-desc">While When done is on Merge: a pair with different School Ids, or with birth dates more than 2 digits or 18 years apart (and no matching ID), is two people, so it is dismissed with "Different student IDs" or "Different birth dates" as the reason, after a 3 second notice (Esc cancels). Off, or with Wait for me: it is handled as before.</div>
+                </div>
+                <div class="elm-item">
                 <div class="setting-row"><label>Next after merge</label>${toggleHtml('elm-next-after-merge')}</div>
                 <div class="elm-level-desc elm-next-desc">After a merge (yours or an auto-merge), presses "Next duplicate" on the "Merge completed" card, and hides Element\'s own "Skip merge completion screen" switches (which would remove that card).</div>
                 </div>
@@ -4990,6 +5167,9 @@
             toastsEl.checked = !off && (on || getBoolSetting('elm_outcome_toasts', true));
             toastsEl.disabled = off || on;
             toastsEl.closest('.setting-row').style.opacity = (off || on) ? '.38' : '';
+            // Dismiss different student IDs only acts with auto-merge on: dimmed (still switchable) otherwise
+            const dismissEl = document.getElementById('elm-dismiss-id-mismatch');
+            if (dismissEl) dismissEl.closest('.setting-row').style.opacity = autoMergeOn() ? '' : '.38';
         };
         toastsEl.addEventListener('change', () => lsSet('elm_outcome_toasts', String(toastsEl.checked)));
         document.getElementById('elm-when-done').addEventListener('click', syncToasts);
@@ -4997,6 +5177,7 @@
         setupToggle('elm-auto-skip-blocked', 'elm_auto_skip_blocked', syncToasts);
         syncToasts();
         setupToggle('elm-next-after-merge', 'elm_next_after_merge');
+        setupToggle('elm-dismiss-id-mismatch', 'elm_dismiss_id_mismatch');
         setupToggle('elm-highlight-rows', 'elm_highlight_rows');
         function setupToggle(elementId, storageKey, onChange, defaultValue = true) {
             const el = document.getElementById(elementId);

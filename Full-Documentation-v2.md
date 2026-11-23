@@ -5,8 +5,8 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.317`, shown in the settings pane |
-| Element451 - Database v2 | `database-v2.js` | `@version 2.77` |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.325`, shown in the settings pane |
+| Element451 - Database v2 | `database-v2.js` | `@version 2.78` |
 | Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.17`, see [section 17](#17-database-merge) |
 
 
@@ -77,7 +77,7 @@ Consequences that shaped the scripts:
 
 - Pairs are identified by contact names plus the queue position (for the review loop) and by the two
   contacts' **Spark IDs** (for the database).
-- **Dismiss is never clicked by the script.** Skipping only ever uses **Next duplicate**.
+- **Dismiss is clicked by the script only for two different School Ids** ([4.5b](#45b-auto-dismiss-different-student-ids)). Skipping only ever uses **Next duplicate**.
 - Bolt's own picks are the starting point, so the script records Bolt's pick on every row before
   touching anything, and compares its own suggestions against them.
 
@@ -111,7 +111,8 @@ read from the arrow buttons first and the value buttons as a fallback), a stable
 ### 3.4 Safety net: the click guard
 
 A capture-phase click listener blocks any **untrusted** (script-generated) click on **Dismiss** and on **Confirm**
-inside the "Not a duplicate?" dialog, and logs a stack trace naming the caller. Other script clicks are allowed
+inside the "Not a duplicate?" dialog, and logs a stack trace naming the caller. The only clicks it lets through are the ones
+Auto-Dismiss makes for two different School Ids ([4.5b](#45b-auto-dismiss-different-student-ids)). Other script clicks are allowed
 and logged (the pager's own First/Next/Previous/Last buttons are not logged).
 
 ### 3.4b Page context
@@ -165,6 +166,19 @@ Stored in **`sessionStorage`** (`elm_when_done`), so every new browser session s
 ### 4.4 Merge countdown
 
 2, 3, 4 (default), 5, 6, 8, 10 or 15 seconds. Never below 2: the cancel window is required. Only active when When done = Merge and the slider is not None. Storage: `elm_merge_countdown`.
+
+### 4.5b Auto-Dismiss: different student IDs
+
+A pair whose two **School Id** rows hold different numbers is two students, so while auto-merge is on (**When done** on **Merge**, slider not on None) it is dismissed rather than skipped (UI 2.318; tied to auto-merge in 2.319). With **Wait for me** it is skipped like any blocked pair (or left on screen with Auto-Skip off), and the switch is dimmed in the settings pane.
+
+1. Its rating and database record are saved first (its chips on the list).
+2. A notice says *Dismissing in 3 s: Different student IDs (Esc cancels)*. **Escape** in those 3 s cancels; the pair then stays on screen for you.
+3. **Dismiss** (in the sidebar) is clicked, *Different student IDs* is typed into the dialog's feedback box, and the dialog's **Dismiss** is clicked. The console says `[elm2] Dismissed: Different student IDs`.
+4. Element normally moves on by itself. If the pair is still on screen 4 s later, it is skipped (Auto-Skip on).
+
+**Different birth dates** (UI 2.322) are dismissed the same way, with *Different birth dates* as the reason: both dates valid, more than 2 of the 8 digits different or more than 18 years apart, not one typo or a day/month swap, and no matching Coyote ID or CAS ID. The dates come from the score's reading of the rows, so the decision waits (up to 4 s) for Bolt's overview.
+
+Not dismissed: a pair that is also Forbidden by name or "test" (only ever skipped), and two IDs that are the same number with and without leading zeros. If a step fails (no Dismiss button, the dialog does not open, the dialog stays open) the console and a notice say `Auto-dismiss stopped: …`, and the pair is skipped when Auto-Skip is on. The **Dismiss different student IDs** switch (`elm_dismiss_id_mismatch`, default on) turns it off: the pair is then skipped like any blocked pair.
 
 ### 4.5 Auto-Skip
 
@@ -308,7 +322,7 @@ Merging is permanent, so auto-merge is opt-in (**When done = Merge**, which rese
 
 The console logs each merge (`[elm2] Merged 7/40 | …`) and each skip with its queue position and reason (`[elm2] Skipping to next pair: … (was 8/40)`). The final-check conditions are tested **before** the countdown starts, so a pair that could not merge (for example a field with no pick, named in the console as `[elm2] No pick on: …`) is skipped without showing the dialog.
 
-The script never clicks **Dismiss** and never merges while the slider is on None or When done is on Wait for me.
+The script never merges while the slider is on None or When done is on Wait for me, and clicks **Dismiss** only for two different School Ids ([4.5b](#45b-auto-dismiss-different-student-ids)).
 
 ---
 
@@ -479,6 +493,7 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 | `elm_merge_countdown` | main | Cancel window seconds (2–15) |
 | `elm_auto_skip_blocked` | main | Auto-Skip |
 | `elm_next_after_merge` | main | Next after merge (default on) |
+| `elm_dismiss_id_mismatch` | main | Dismiss different student IDs (default on) |
 | `elm_dedup_path` | main | the path of the Deduplication page, learnt from the list page, for the installed app's shortcut |
 | `elm_install_dismissed` | main | the X on the Install as an app card was clicked |
 | `elm_pair_ratings` | main | per pair (keyed by the two Spark IDs): `[level code, time, the scoring rules that applied]`, for the score chips on the list (re-rated with the current weights) |
@@ -593,6 +608,14 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 - **The Identities section is read** (UI 2.285): values that name themselves are read wherever they are, so the Identities rows (labelled *Identities* or nothing) count: `School Id: …`, `Cas Id: …`, `Email: …` and `School Email: …`. A **coyote.csusb.edu address is the student's Coyote ID** (`009000001@coyote.csusb.edu`): a side with no School Id takes its Coyote ID from it, so a School Id on one record and the same number in the other's coyote email is the same Coyote ID (+120, enough for High). An ID read from an email only confirms: if it differs from the other record's, it scores nothing (a mistyped email never makes a hard conflict). The Maria Soto pair (School Id 009000001 on one side, 009000001@coyote.csusb.edu on the other) goes to High.
 - **Matching gender +5** (UI 2.284): the same gender on both records is +5, like student type, level and school; a different or missing one is 0. A gender that matches is read from its row like any other (the matching rows are kept on the page).
 - **A cover while a pair is read and scored** (UI 2.311): while the matching rows are shown, read and hidden again (and, for up to 4 s, while Bolt's overview has not shown yet) the fields are covered by a white layer with the Material 3 Expressive loading indicator (contained: a shape that morphs through a soft burst, a 9-sided cookie, a pentagon, a pill, a sunny shape, a 4-sided cookie and an oval while it turns, in a round orange container; UI 2.312, it was a circular progress). It hides the rows appearing and disappearing, and blocks clicks and keys on the fields (Escape still cancels an auto-merge). It never stays longer than 8 s; the console says when it gave up. The Dedup analysis card shows pulsing placeholder lines (a skeleton) in the meantime instead of Bolt's own text, for at most 8 s per pair.
+- **No first score on the list** (UI 2.325): the pair's rating is only worked out once its matching rows have been read (the Hide matching items switch has been turned off, read and turned back on). Before, a score worked out from the rows that were showing was remembered at once, so the list's chip showed that first score and then changed when the read finished. Now the chip stays Pending until the finished score, and the analysis card, the database's points and the range check wait for it too. If a read never finishes, the cover gives up after 8 s and the rating is worked out from what there is.
+- **4 s for the score everywhere** (UI 2.324): the waits for Bolt's overview (and so our score) that were 3 s are now 4 s: seeing Bolt's score chip before a pair is judged (when the slider is not deciding by rating) and the wait for the pair to be recorded and rated before an auto-merge click. The cover and the dismiss decision already gave it 4 s, and a skip waits up to 6 s for the rating to be saved. One constant, `SCORE_WAIT_MS`, now sets them all.
+- **Dismissed pairs are recorded as Dept. "Dismissed"** (UI 2.323, Database 2.78): a pair the script dismisses (different student IDs or birth dates) is saved in the database with *Dismissed* in the Dept. column, instead of its department, from the moment the 3 s notice starts. The badge on the list and the spreadsheet cell use the same pink as Forbidden.
+- **Auto-Dismiss for clearly different birth dates** (UI 2.322): with auto-merge on, a pair whose two valid birth dates differ in more than 2 of their 8 digits, or are more than 18 years apart, is dismissed with *Different birth dates* as the reason, like different student IDs. Not for one typo or a day/month swap, not when a Coyote ID or CAS ID matches, and not for a Forbidden pair. The switch is now called **Dismiss different people** (same key, `elm_dismiss_id_mismatch`).
+- **Birth dates count only when both are valid** (UI 2.321): a match or a mismatch (and a one-typo-apart date) is scored only when both records hold a real calendar day (no February 30; February 29 only in a leap year), from 1920 on and at least 10 years ago. A date that fails reads as no date: no points either way. The same check covers the other record's date that a birth date in an email address is compared with.
+- **Twin rule** (UI 2.320): when the first names do not match (a nickname, an initial or one name inside the other still matches; rhymes such as Kayla / Layla and typos do not) and no Coyote ID or CAS ID matches, the same last name gives 0 (was +15), the same address -30 (was +25) and the same birth date -30 (was +40). Twins with the same last name, birth date and address go from +50 (Medium) to -90 (Low), and the pair shows a purple **Twins?** chip beside the score. Ratings remembered before this are re-rated under it on the list. See SCORING.md.
+- **Auto-Dismiss is tied to auto-merge** (UI 2.319): different student IDs are only dismissed while When done is on Merge; with Wait for me they are skipped as before, and the **Dismiss different student IDs** switch is dimmed.
+- **Auto-Dismiss for different student IDs** (UI 2.318): a pair whose School Ids differ is dismissed with *Different student IDs* as the reason, after a 3 s notice that Escape cancels ([4.5b](#45b-auto-dismiss-different-student-ids)). The click guard lets only these clicks through. New switch: **Dismiss different student IDs** (default on).
 - **The department chip too** (UI 2.317, Database 2.77): the list's department chip comes from the pair's database record, so a skip and a merge now refresh the department and points signal and have the Database script record the pair right then. A skip already waited for the record; Auto-Merge now waits for it as well (and for the rating), up to 3 s, before clicking Merge Contacts (Escape still cancels, and the pair is checked again before the click). If the pair still is not recorded, the console says why: `[elm2] dept chip: skipping without the pair in the database (…)` or `merging without …`.
 - **Auto-Skip and Merge wait for the rating to be saved** (UI 2.316): instead of only asking for the rating, a skip and a merge now save it themselves (worked out afresh, even while the cover is up) and check it is stored under the pair's Spark IDs before moving on. A skip waits up to 6 s for that (was 3 s). If it still can't be saved, the console says why: `[elm2] chips: skipping without saving a rating (no Spark IDs on the form)` or `(no rating yet: Bolt's overview has not shown)`; that pair's chip stays Pending.
 - **Chips no longer missed during Auto-Skip / Auto-Merge** (UI 2.315): a rating worked out while the cover was up was held back, then handed out from a 400 ms cache without being saved, so a pair skipped or merged right after being read could keep a Pending chip on the list. The rating is now saved by the first call after the read (cache or not), and again just before Merge Contacts is clicked.

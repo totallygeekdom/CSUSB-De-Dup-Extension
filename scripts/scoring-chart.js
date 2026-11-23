@@ -96,7 +96,7 @@ Points view too. They are shown for information only: the rating is the points a
 |---|---|---|---|
 | Coyote ID (School Id, or the number of a coyote.csusb.edu email) | ${n(W.coyote[0])} | ${n(W.coyote[1])} (hard conflict; not when one ID comes from an email) | ${strong('coyote.0')} |
 | CAS ID | ${n(W.cas[0])} | ${n(W.cas[1])}, not a hard conflict (a student can have several applications) | ${strong('cas.0')} |
-| Date of birth | ${n(W.dob[0])} | ${n(W.dob[1])}, not a hard conflict (one typo or a day/month swap: ${n(W.dobTypo[1])}) | ${strong('dob.0')} |
+| Date of birth (only when both records hold a valid date: a real calendar day, 1920 or later, at least 10 years ago) | ${n(W.dob[0])} | ${n(W.dob[1])}, not a hard conflict (one typo or a day/month swap: ${n(W.dobTypo[1])}) | ${strong('dob.0')} |
 | Email | ${n(W.email[0])} exact; ${n(W.emailName[0])} same name part (another domain, or only the numbers differ: maria.soto444 / maria.soto1111) | ${n(0)} (people have several) | ${strong('email.0', 'exact only')} |
 | Phone | ${n(W.phone[0])} | ${n(0)} | ${strong('phone.0')} |
 | First name | ${n(W.first[0])} same; ${n(W.firstRelated[0])} nickname, initial or prefix | ${n(W.first[1])} | ${strong('first.0')} |
@@ -108,7 +108,9 @@ Points view too. They are shown for information only: the rating is the points a
 | Bolt's own score | High ${n(W.boltHigh)}, Medium ${n(W.boltMedium)} | Low ${n(W.boltLow)}; Bolt's analysis failed (it shows Error) ${n(W.boltError)}; Bolt says "different people" ${n(W.boltDifferent)}, and then its High / Medium bonus is not given | ${strong('boltHigh')} |
 | Applicant with no Coyote ID vs a contact that has one | none | ${n(W.applicantVsCoyote)} | |
 
-There is no twin-pattern rule: first names that differ cost the first-name penalty and nothing more.
+**Twin rule.** When the first names do not match (a nickname, an initial or one name inside the other still matches; a rhyme such as Kayla / Layla
+does not) and no Coyote ID or CAS ID matches, what a family shares stops counting for the pair: the same or overlapping last name ${n(W.twinLast)}, the same
+address ${n(W.twinAddress)}, the same birth date ${n(W.twinDob)} (instead of their usual points). The pair then shows a **Twins?** chip beside the score.
 
 ## Rating
 
@@ -137,9 +139,8 @@ ${low.map(x => `| ${x.name} | ${x.r.points} | ${adds(x.r)} |`).join('\n')}
 
 ## Known trade-offs
 
-- **Households.** Twins, siblings and parent/child pairs that share an address land on Medium (see the rows above). Medium is not High, but a slider that includes Medium
-  auto-applies and, with When done = Merge, auto-merges them: there is no separate possible-twins check any more, the score alone decides. A larger first-name mismatch penalty
-  would push them down to Low.
+- **Households.** Twins and siblings with different first names are Low under the twin rule. A real duplicate whose first name has a typo
+  (Maria / Marai) is caught by it too and lands on Low, so it waits for you instead of being merged.
 - **Points only.** High is ${CUT.high}+ points, whatever they come from, so a pair can reach it with no birth date, ID, email or phone: the same name with Bolt High,
   name-based emails and soft fields add up to 80. A Jr./Sr. with the same name, address and a family email or phone (no birth date on file) is High too.
 - **Birth date and address alone.** With no names on either record the pair stays Medium (65); a last name is enough to reach High.

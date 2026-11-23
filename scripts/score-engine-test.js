@@ -71,6 +71,9 @@ check(dobPts('2004-02-29', '2004-02-29') === SCORE_W.dob[0], 'February 29 of a l
 check(dobPts('2003-02-29', '1999-07-30') === null, 'February 29 of a year that is not a leap year is not');
 check(dobPts('1900-01-01', '2004-01-02') === null, 'a placeholder year (1900) is no date');
 check(dobPts(new Date().getFullYear() + '-01-01', '2004-01-02') === null, 'a date this year (a placeholder or a future date) is no date');
+check(dobPts('05/05/0009', '05/05/2009') === null, 'a year written 0009 is year 9, not 2009: no date (it used to be read as 2009)');
+check(dobPts('05/05/09', '05/05/2009') === SCORE_W.dob[0], 'a year written with 2 digits (09) is still read as 2009');
+check(dobPts('0009-05-05', '2009-05-05') === null && dobPts('May 5, 0009', '2009-05-05') === null, 'the same for 0009-05-05 and May 5, 0009');
 check(dobPts('13/45/2004', '2004-01-02') === null, 'month 13 / day 45 is no date');
 check(dobPts('2004-01-02', '1999-07-30') === SCORE_W.dob[1], 'two valid different dates still count as a mismatch');
 

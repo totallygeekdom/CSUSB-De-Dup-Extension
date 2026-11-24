@@ -17,7 +17,7 @@ chip). Two v2 scripts target it, plus an optional third that merges databases:
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.335` (shown in the settings pane) |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.336` (shown in the settings pane) |
 | Element451 - Database v2 | `database-v2.js` | `@version 2.78` |
 | Element451 - Database Merge v2 (optional, pairs with Database) | `database-merge-v2.js` | `@version 1.17` |
 
@@ -30,7 +30,7 @@ the resolution rules, auto-merge, every website restyle, the database format, li
 - **Dedup analysis**: our own points-based rating replaces Bolt's overview card, with department, Appeal and Bolt's-score chips beside it and a Write-up / Points / Bolt's switch (Full-Documentation-v2.md, section 10.6).
 - **Automation per pair**, controlled by these settings in the gear pane:
   - **What to do, by rating**: three drop-downs, **High**, **Medium** and **Low** (our rating; Bolt's score is one input), each **Stop** (our picks applied, then left for you), **Merge** (after a cancel countdown; a centred dialog with a stepped ring,
-    a short brief (names, Bolt score, how often the script agrees with Bolt, what it chose over Bolt) and a Cancel button; length set by **Countdown**, 2-15 s, or a 4 s "race lights" start signal), **Skip** (Next duplicate) or **Dismiss** (after the same kind of countdown, with the rating as the reason).
+    a short brief (names, Bolt score, how often the script agrees with Bolt, what it chose over Bolt) and a Cancel button; length set by **Countdown**, 2-15 s, or a 4 s "race lights" start signal), **Skip** (Next duplicate) or **Dismiss** (after the same kind of countdown, with our write-up pasted in as the reason).
     A blocked pair is never merged or dismissed by its rating: it is skipped (or left on Stop). Merge goes back to Stop in every new browser session. A final safety check runs before Merge Contacts is clicked.
   - **Use picks from**: Bolt's or Ours (Ours includes the applicant rule).
   - **Dismiss different Coyote IDs and birth dates**: a pair whose School Ids differ, or whose valid birth dates are more than 2 digits or 18 years apart (no matching ID), is dismissed with "Different student IDs" or "Different birth dates" as the reason, after the countdown dialog (Cancel or Esc stops it); not for a pair that is also Forbidden by name (default on). A dismissal can be undone from Element's history.

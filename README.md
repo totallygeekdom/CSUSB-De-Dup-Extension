@@ -17,7 +17,7 @@ chip). Two v2 scripts target it, plus an optional third that merges databases:
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.332` (shown in the settings pane) |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.333` (shown in the settings pane) |
 | Element451 - Database v2 | `database-v2.js` | `@version 2.78` |
 | Element451 - Database Merge v2 (optional, pairs with Database) | `database-merge-v2.js` | `@version 1.17` |
 
@@ -28,18 +28,15 @@ the resolution rules, auto-merge, every website restyle, the database format, li
 ### What they do
 
 - **Dedup analysis**: our own points-based rating replaces Bolt's overview card, with department, Appeal and Bolt's-score chips beside it and a Write-up / Points / Bolt's switch (Full-Documentation-v2.md, section 10.6).
-- **Automation per pair**, controlled by four settings in the gear pane:
-  - **Pairs in range** slider, by our rating (Bolt's score is one input): None, High, Medium, Low, All (each position adds to the one before; an applicant side does not put a pair in range).
+- **Automation per pair**, controlled by these settings in the gear pane:
+  - **What to do, by rating**: three drop-downs, **High**, **Medium** and **Low** (our rating; Bolt's score is one input), each **Stop** (our picks applied, then left for you), **Merge** (after a cancel countdown; a centred dialog with a stepped ring,
+    a short brief (names, Bolt score, how often the script agrees with Bolt, what it chose over Bolt) and a Cancel button; length set by **Countdown**, 2-15 s, or a 4 s "race lights" start signal), **Skip** (Next duplicate) or **Dismiss** (after the same kind of countdown, with the rating as the reason).
+    A blocked pair is never merged or dismissed by its rating: it is skipped (or left on Stop). Merge goes back to Stop in every new browser session. A final safety check runs before Merge Contacts is clicked.
   - **Use picks from**: Bolt's or Ours (Ours includes the applicant rule).
-  - **When done**: Wait for me, or Merge after a cancel countdown (a centred dialog with a stepped ring,
-    a short brief (names, Bolt score, how often the script agrees with Bolt, what it chose over Bolt) and a Cancel button; length set by **Merge countdown**, 2-15 s, or a 4 s "race lights" start signal). This setting
-    resets every browser session. A final safety check runs before Merge Contacts is clicked.
-  - **Auto-Skip**: skips blocked and out-of-range pairs (Next duplicate
-    only, never Dismiss); off = stop on them. There are no popups: an appeal shows as a chip beside our score.
-  - **Dismiss different people**: while When done is on Merge, a pair whose birth dates are more than 2 digits or 18 years apart (no matching ID) is dismissed with "Different birth dates"; and a pair whose School Ids differ is dismissed with "Different student IDs" as the reason, after the countdown dialog (Cancel or Esc stops it); not for a pair that is also Forbidden by name (default on).
+  - **Dismiss different Coyote IDs and birth dates**: a pair whose School Ids differ, or whose valid birth dates are more than 2 digits or 18 years apart (no matching ID), is dismissed with "Different student IDs" or "Different birth dates" as the reason, after the countdown dialog (Cancel or Esc stops it); not for a pair that is also Forbidden by name (default on). A dismissal can be undone from Element's history.
   - **Next after merge**: after a merge, presses "Next duplicate" on the "Merge completed" card (default on).
-  - Slider **None** (or no Allowed department ticked) with Auto-Skip on is a **scan**: every pair is
-    recorded in the database and skipped.
+  - All three ratings on **Skip** (or no Allowed department ticked) is a **scan**: every pair is
+    recorded in the database and skipped. There are no popups: an appeal shows as a chip beside our score.
 - **A Bolt error is not a stop**: when the score chip reads **Error** (Bolt's analysis failed) the pair is rated and handled like any other; the error counts as −5 points in our score and there are just no Bolt picks to compare with.
 - **Blockers**: forbidden names, an `appeal` keyword, wrong department, student-ID mismatch (ignored pairs are already filtered out of the v2 queue).
 - **Field rules**: applicant side first, then personal email (two personal addresses: more email opens, then clicks, then a name / birth-year tiebreak), csusb.major /
@@ -136,13 +133,13 @@ UI Perfection works without the Database script. The Database script needs UI Pe
 
 | Key | Used by | Purpose |
 |---|---|---|
-| `elm_range_level2` | UI Perfection | Pairs-in-range slider (0 None ... 4 All) |
+| `elm_action_high` / `elm_action_medium` / `elm_action_low` | UI Perfection | Action per rating: `stop` / `merge` / `skip` / `dismiss` (Merge resets to Stop each browser session) |
+| `elm_range_level2` | UI Perfection | The old slider, only read once to carry an older install's choice over |
 | `elm_use_picks` | UI Perfection | Use picks from (`ours` / `bolt`) |
-| `elm_when_done` (sessionStorage) | UI Perfection | When done (`wait` / `merge`), reset each browser session |
 | `elm_merge_countdown` | UI Perfection | Cancel-countdown seconds (2-15) or `race` |
-| `elm_auto_skip_blocked` | UI Perfection | Auto-Skip |
+| `elm_auto_skip_blocked` | UI Perfection | The old Auto-Skip, only read once to carry an older install's choice over |
 | `elm_next_after_merge` | UI Perfection | Next after merge (default on) |
-| `elm_dismiss_id_mismatch` | UI Perfection | Dismiss different student IDs (default on) |
+| `elm_dismiss_id_mismatch` | UI Perfection | Dismiss different Coyote IDs and birth dates (default on) |
 | `elm_outcome_toasts` | UI Perfection | Toasts switch |
 | `elm_highlight_rows` | UI Perfection | Highlight Rows |
 | `elm_allowed_department` | UI Perfection | Allowed departments (UnderGrad, Grad/IA checkboxes) |

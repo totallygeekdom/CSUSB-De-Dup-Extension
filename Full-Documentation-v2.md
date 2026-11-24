@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.332`, shown in the settings pane |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.333`, shown in the settings pane |
 | Element451 - Database v2 | `database-v2.js` | `@version 2.78` |
 | Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.17`, see [section 17](#17-database-merge) |
 
@@ -77,7 +77,7 @@ Consequences that shaped the scripts:
 
 - Pairs are identified by contact names plus the queue position (for the review loop) and by the two
   contacts' **Spark IDs** (for the database).
-- **Dismiss is clicked by the script only for two different School Ids** ([4.5b](#45b-auto-dismiss-different-student-ids)). Skipping only ever uses **Next duplicate**.
+- **Dismiss is clicked by the script only for two different School Ids** ([4.5b](#45-auto-dismiss)). Skipping only ever uses **Next duplicate**.
 - Bolt's own picks are the starting point, so the script records Bolt's pick on every row before
   touching anything, and compares its own suggestions against them.
 
@@ -104,7 +104,7 @@ read from the arrow buttons first and the value buttons as a fallback), a stable
 
 ### 3.3 Bolt's picks vs our picks
 
-- Every rule calls `applyScriptPick(row, side)`, which records our suggestion on the row (`data-elm2-script-side`, `data-elm2-rule`) and in `rowMemory`, and only actually clicks the row if the pair is in range and **Use picks from** is **Ours** (or the row is a gap Bolt left unselected, see [4.2](#42-use-picks-from)).
+- Every rule calls `applyScriptPick(row, side)`, which records our suggestion on the row (`data-elm2-script-side`, `data-elm2-rule`) and in `rowMemory`, and only actually clicks the row if the pair's rating is set to Stop or Merge and **Use picks from** is **Ours** (or the row is a gap Bolt left unselected, see [4.2](#42-use-picks-from)).
 - `rowMemory` (a per-pair Map) keeps Bolt's original pick and ours even if Element re-renders a row.
 - "Our" suggestions are always computed, so the comparison bar and hover preview work even when nothing is auto-applied.
 
@@ -112,7 +112,7 @@ read from the arrow buttons first and the value buttons as a fallback), a stable
 
 A capture-phase click listener blocks any **untrusted** (script-generated) click on **Dismiss** and on **Confirm**
 inside the "Not a duplicate?" dialog, and logs a stack trace naming the caller. The only clicks it lets through are the ones
-Auto-Dismiss makes for two different School Ids ([4.5b](#45b-auto-dismiss-different-student-ids)). Other script clicks are allowed
+Auto-Dismiss makes for two different School Ids ([4.5b](#45-auto-dismiss)). Other script clicks are allowed
 and logged (the pager's own First/Next/Previous/Last buttons are not logged).
 
 ### 3.4b Page context
@@ -126,68 +126,50 @@ Because both scripts run with `@grant none`, the main script can read Angular's 
 
 All settings are in the gear (⚙) pane. Settings are stored in `localStorage` unless noted.
 
-### 4.1 Pairs in range (slider)
+### 4.1 What to do, by rating (UI 2.333)
 
-Five positions, chosen by **our rating** (section 10.6; Bolt's score is one input of it), **each adding to the one before**:
+Three drop-downs, **High**, **Medium** and **Low**, set what happens to a pair by **our rating** (section 10.6; Bolt's score is one input of it). Each has four actions. They replace the *Pairs in range* slider, *When done* and *Auto-Skip*.
 
-| Position | Pairs in range |
+| Action | What happens |
 |---|---|
-| **None** | no pair is in range |
-| **High** | rating **High** |
-| **Medium** | **High** and **Medium** |
-| **Low** | **High**, **Medium** and **Low** |
-| **All** | every pair, whatever its rating |
+| **Stop** | our picks are applied (per **Use picks from**), then the pair is left for you |
+| **Merge** | our picks are applied, then the pair is merged after the countdown ([section 9](#9-auto-merge-and-the-cancel-countdown)) |
+| **Skip** | on to the next pair (**Next duplicate**, no popup; *Skip: Rated Low* toast) |
+| **Dismiss** | dismissed after the countdown, with *Rated Low* (or Medium / High) as the reason ([4.5](#45-auto-dismiss)) |
 
-An applicant side does **not** put a pair in range (applicants can have any score); the applicant rule only
-affects *which side is picked* when **Use picks from = Ours** ([section 7](#7-field-resolution-rules)). The script waits up to 3 seconds for the score chip to render; on High, Medium and Low (where the rating decides whether the pair is in range) it waits up to 10 seconds, so a slow Bolt analysis no longer leaves a pair "out of range" for good.
+- **Blocked pairs** (department, Appeal, Forbidden, different student IDs; [section 6](#6-blockers-lockdowns)) are never merged or dismissed by their rating: on **Stop** they stay on screen, on Merge, Skip or Dismiss they are skipped.
+- **No rating yet** (Bolt's overview has not shown): the action all three ratings share, else Stop. When the three actions differ the script waits up to 10 seconds for the rating (4 seconds when they are the same).
+- An applicant side does not change the action (applicants can have any score); the applicant rule only affects *which side is picked* when **Use picks from = Ours** ([section 7](#7-field-resolution-rules)).
+- **Merge goes back to Stop in every new browser session** (a toast says so), as *When done = Merge* did: a merge is permanent. The other actions are kept.
+- **Skip on all three is a scan** ([5.3](#53-scan-mode)).
+- A running countdown is stopped when its rating's action is changed away from Merge or Dismiss.
 
-What "in range" means:
+An install from before this carries its old choice over once: a rating the slider covered becomes **Stop**, one it did not cover becomes **Skip** (with Auto-Skip on) or **Stop** (off). It is never carried over to Merge.
 
-- In range: our picks are applied (if **Use picks from = Ours**), and the pair is eligible for auto-merge.
-- Out of range: with **Auto-Skip on** the pair is skipped (no popup); with Auto-Skip off it is left for you untouched.
-- **None with Auto-Skip on skips every pair** (see [scan mode](#53-scan-mode)).
-
-Storage: `elm_range_level2` (0-4); All until it has been set.
+Storage: `elm_action_high`, `elm_action_medium`, `elm_action_low` (`stop` / `merge` / `skip` / `dismiss`; Stop until set). `sessionStorage` `elm_session_started` marks the session whose Merge has been reset.
 
 ### 4.2 Use picks from
 
-- **Ours** (default): our rules are applied on pairs in range, **including the applicant rule**.
+- **Ours** (default): our rules are applied on pairs set to Stop or Merge, **including the applicant rule**.
 - **Bolt's**: Element's pre-selected picks are kept. Our suggestion only fills a row Bolt left unselected. (Applying "Bolt's picks" changes nothing by itself, since Bolt's picks are already selected.)
 
-Greyed out while the slider is on None. Storage: `elm_use_picks` (`ours` | `bolt`).
+A pair set to Skip or Dismiss gets no picks. Storage: `elm_use_picks` (`ours` | `bolt`).
 
-### 4.3 When done
+### 4.4 Countdown
 
-- **Wait for me** (default): you review and click Merge Contacts.
-- **Merge**: after the pair is decided, a cancel countdown runs, then the script clicks Merge Contacts ([section 9](#9-auto-merge-and-the-cancel-countdown)).
+2, 3, 4 (default), 5, 6, 8, 10 or 15 seconds, or **4 seconds, race lights** (a merge only). Never below 2: the cancel window is required. It sets the countdown of a merge and of a dismissal; dimmed when no rating is on Merge or Dismiss and the Coyote ID / birth date dismissal is off. Storage: `elm_merge_countdown`.
 
-Stored in **`sessionStorage`** (`elm_when_done`), so every new browser session starts on Wait for me. Greyed out while the slider is on None.
+### 4.5 Auto-Dismiss
 
-### 4.4 Merge countdown
+A dismissal counts down in the same dialog as an auto-merge (*Dismissing automatically*: a ring counting your countdown seconds, the two names, the reason, a **Cancel** button; **Escape** works too), then **Dismiss** is clicked and the reason is typed into Element's dialog. A dismissal can be undone from Element's history. It happens for three reasons:
 
-2, 3, 4 (default), 5, 6, 8, 10 or 15 seconds. Never below 2: the cancel window is required. Only active when When done = Merge and the slider is not None. Storage: `elm_merge_countdown`.
+- **Different Coyote IDs** (UI 2.318): the two **School Id** rows hold different numbers, so it is two students. Reason *Different student IDs*.
+- **Different birth dates** (UI 2.322): both dates valid and believable (a real calendar day, age 13 to 100), more than 2 of the 8 digits different or more than 18 years apart, not one typo or a day/month swap, and no matching Coyote ID or CAS ID. Reason *Different birth dates*. The countdown dialog shows the dates it went by. The dates come from the score's reading of the rows, so the decision waits (up to 4 s) for Bolt's overview.
+- **A rating set to Dismiss** (UI 2.333): reason *Rated Low* (or Medium / High). Not for a blocked pair (it is skipped).
 
-### 4.5b Auto-Dismiss: different student IDs
+The first two are controlled by **one switch**, **Dismiss different Coyote IDs and birth dates** (`elm_dismiss_id_mismatch`, default on), whatever the ratings are set to; it no longer depends on auto-merge. Off: such pairs are handled by their rating's action.
 
-A pair whose two **School Id** rows hold different numbers is two students, so while auto-merge is on (**When done** on **Merge**, slider not on None) it is dismissed rather than skipped (UI 2.318; tied to auto-merge in 2.319). With **Wait for me** it is skipped like any blocked pair (or left on screen with Auto-Skip off), and the switch is dimmed in the settings pane.
-
-1. Its rating and database record are saved first (its chips on the list).
-2. The auto-merge countdown dialog opens as *Dismissing automatically* (your auto-merge seconds, the reason, a **Cancel** button). **Escape** or Cancel stops it; the pair then stays on screen for you.
-3. **Dismiss** (in the sidebar) is clicked, *Different student IDs* is typed into the dialog's feedback box, and the dialog's **Dismiss** is clicked. The console says `[elm2] Dismissed: Different student IDs`.
-4. Element normally moves on by itself. If the pair is still on screen 4 s later, it is skipped (Auto-Skip on).
-
-**Different birth dates** (UI 2.322) are dismissed the same way, with *Different birth dates* as the reason: both dates valid, more than 2 of the 8 digits different or more than 18 years apart, not one typo or a day/month swap, and no matching Coyote ID or CAS ID. The dates come from the score's reading of the rows, so the decision waits (up to 4 s) for Bolt's overview.
-
-Not dismissed: a pair that is also Forbidden by name or "test" (only ever skipped), and two IDs that are the same number with and without leading zeros. If a step fails (no Dismiss button, the dialog does not open, the dialog stays open) the console and a notice say `Auto-dismiss stopped: …`, and the pair is skipped when Auto-Skip is on. The **Dismiss different student IDs** switch (`elm_dismiss_id_mismatch`, default on) turns it off: the pair is then skipped like any blocked pair.
-
-### 4.5 Auto-Skip
-
-Skips pairs the script will not handle, with **no popup**, by clicking **Next duplicate** (never Dismiss):
-
-- blocked pairs ([section 6](#6-blockers-lockdowns)),
-- pairs outside the slider range.
-
-Off: the script stops on those pairs and leaves them on screen (no popups: an appeal shows as a chip in the Dedup analysis card, [section 8](#8-warnings-and-popups)). Before every skip the Database script is asked to record the pair first ([11.3](#113-recording)). Storage: `elm_auto_skip_blocked` (default on).
+Steps: the pair's rating and database record are saved first (its chips on the list; the database's Dept. column says *Dismissed*); the countdown runs; at 0 the ring turns green and the script clicks **Dismiss**, types the reason and clicks the dialog's **Dismiss** (`[elm2] Dismissed: …`). Element normally moves on by itself; a pair still on screen 4 s later is skipped. Not dismissed for IDs or dates: a pair that is also Forbidden by name or "test" (only ever skipped), and two IDs that are the same number with and without leading zeros. If the dismissal itself fails (no Dismiss button, the dialog does not open or stays open) the console and a notice say `Auto-dismiss stopped: …` and the pair is skipped; if the pair stops qualifying during the countdown (a setting was changed) it stays on screen.
 
 ### 4.6 Display
 
@@ -196,7 +178,7 @@ Off: the script stops on those pairs and leaves them on screen (no popups: an ap
 
 ### 4.7 Allowed departments
 
-Two checkboxes, **UnderGrad** and **Grad/IA**, in the Automation section right under the *Pairs in range* slider (`elm_allowed_department`, stored as `All` when both are ticked, `UnderGrad` (the default) or `Grad/IA` when one is, and `None` when neither is). A pair whose detected department is not ticked is a blocker. With neither ticked everything is blocked (used for scan runs).
+Two checkboxes, **UnderGrad** and **Grad/IA**, in the Automation section right under the *What to do, by rating* drop-downs (`elm_allowed_department`, stored as `All` when both are ticked, `UnderGrad` (the default) or `Grad/IA` when one is, and `None` when neither is). A pair whose detected department is not ticked is a blocker. With neither ticked everything is blocked (used for scan runs).
 
 Two more checkboxes sit with them, **Appeal** and **Forbidden** (`elm_allow_appeal`, `elm_allow_forbidden`, both off by default). Ticked, that kind of pair is no longer a blocker: it is scored, can be auto-applied and, with auto-merge on, merged like any other. Its chip stays beside the score as a note ("Appeals are allowed in your settings"), and the Database script still records it as an Appeal or Forbidden pair. Forbidden covers both test records and the forbidden-name list, so tick it with care. A student ID mismatch and a department that is not ticked still block.
 
@@ -216,15 +198,14 @@ The pane's **Info** section (last, in a single list container) lists the version
 
 ### 5.1 Order of checks
 
-1. **Blockers** ([section 6](#6-blockers-lockdowns)). If any apply: red lockdown styling; the pair is recorded; then **Auto-Skip on** → skip, **off** → stop (an appeal shows as a chip and a line in the write-up).
-2. Wait for Bolt's defaults to be captured (up to 3 s) and, on Low/Medium/High, the score chip (up to 3 s).
-3. Compute whether the pair is **in range** (by our rating only).
-4. Run field resolution ([section 7](#7-field-resolution-rules)); apply per **Use picks from**.
+0. **Different Coyote IDs or clearly different birth dates** with the **Dismiss different Coyote IDs and birth dates** switch on → the dismiss countdown ([4.5](#45-auto-dismiss)), blocked or not.
+1. **Blockers** ([section 6](#6-blockers-lockdowns)). If any apply: red lockdown styling; the pair is recorded; then its rating's action decides: **Stop** → stay on screen, **Merge, Skip or Dismiss** → skip (an appeal shows as a chip and a line in the write-up).
+2. Wait for Bolt's defaults to be captured (up to 3 s) and the score chip (up to 4 s, or 10 s when the three ratings have different actions).
+3. Work out the pair's action from its rating ([4.1](#41-what-to-do-by-rating-ui-2333)).
+4. Run field resolution ([section 7](#7-field-resolution-rules)); apply per **Use picks from** (Stop and Merge only).
 5. About 0.6 s later, re-check blockers (more rows may have loaded) and run resolution again.
-6. If out of range and Auto-Skip on → skip. (Otherwise continue.)
+6. **Skip** → next pair. **Dismiss** → the dismiss countdown. **Merge** → the merge countdown, then merge ([section 9](#9-auto-merge-and-the-cancel-countdown)). **Stop** → wait for you.
 7. (There is no possible-twins check any more, UI 2.286: our score decides; [section 8](#8-warnings-and-popups).)
-8. If in range and **When done = Merge** → cancel countdown, then merge ([section 9](#9-auto-merge-and-the-cancel-countdown)).
-9. Otherwise stop and wait for you.
 
 ### 5.2 Pair identity
 
@@ -235,9 +216,9 @@ The pane's **Info** section (last, in a single list container) lists the version
 To scan the whole queue and record every pair without acting on any, use either:
 
 - **no department ticked under Allowed departments** (every pair is a wrong-department blocker), or
-- **Slider = None** (nothing is in range),
+- **every rating on Skip** (High, Medium and Low all set to Skip),
 
-with **Auto-Skip on**. Every pair is recorded in the database and skipped with no popups. Skipping is robust against two real-world problems: the **Next duplicate** button can be disabled for a moment while Element loads the next pair (the click is retried every 0.5 s, up to 10 tries, and re-tried once after 3 s if a click did not move on), and consecutive pairs with identical names (handled by the position in the pair key). If it cannot advance, a "no next pair" notice appears.
+Every pair is recorded in the database and skipped with no popups. Skipping is robust against two real-world problems: the **Next duplicate** button can be disabled for a moment while Element loads the next pair (the click is retried every 0.5 s, up to 10 tries, and re-tried once after 3 s if a click did not move on), and consecutive pairs with identical names (handled by the position in the pair key). If it cannot advance, a "no next pair" notice appears.
 
 ---
 
@@ -304,12 +285,12 @@ The classic "Bolt score is Low" popup no longer exists either. The only dialogs 
 
 ## 9. Auto-merge and the cancel countdown
 
-Merging is permanent, so auto-merge is opt-in (**When done = Merge**, which resets every browser session) and gated:
+Merging is permanent, so auto-merge is opt-in (a rating's action set to **Merge**, which goes back to Stop in every new browser session) and gated:
 
-1. The pair must be in range and unblocked.
+1. The pair's rating must be set to Merge, and the pair unblocked.
 2. A **countdown dialog** opens centred in the merge panel; a scrim covers only that panel and blocks stray clicks on it. It shows the headline *Merging automatically*, a red **wavy ring** that steps down once a second with the seconds left in the middle, a short brief, and a full-width **Cancel** pill (**Esc** also cancels; both work until the countdown reaches 0). The brief shows the two names; *Bolt score:* Low / Medium / High; *Script agrees with 2/5* (the share of our picks that match Bolt's); and *Script chose 3 over Bolt: Email, Address, DOB*, or *Script found **applicant** and chose 3 over Bolt* when an applicant side decided. With **Use picks from = Bolt's** it reads *Bolt chose 3 over script: …* or *Script found **applicant** but Bolt chose instead*. At **0** the ring turns green, the headline reads *Merging…* and Merge Contacts is clicked at that moment; Cancel is greyed out once the merge has fired.
 
-   The length is the **Merge countdown** setting (default 4 s, minimum 2 s), and that is the whole wait. The exception is **4 seconds, race lights** (stored as `elm_merge_countdown = race`): a start signal instead of the ring. Three dark lamps (*Get ready…*), red lamps at 3, 2 and 1 seconds left, then all green with *GO!* for 0.3 s before the click; the lamp steps are shortened to 0.925 s so the whole style still takes exactly 4 s.
+   The length is the **Countdown** setting (default 4 s, minimum 2 s), and that is the whole wait. The exception is **4 seconds, race lights** (stored as `elm_merge_countdown = race`): a start signal instead of the ring. Three dark lamps (*Get ready…*), red lamps at 3, 2 and 1 seconds left, then all green with *GO!* for 0.3 s before the click; the lamp steps are shortened to 0.925 s so the whole style still takes exactly 4 s.
 
    **Kart:** with race lights, a pixel-art go-kart with the CSUSB coyote (a 28 × 29 px sprite) waits in the dimmed strip beside the merge panel. It charges like a Mario Kart drift mini-turbo while the lights count down: drift sparks at the wheels, **blue** at 3, **orange and yellow** at 2 and **pink** at 1, with one shake of the kart per colour. The sparks are a trail at each wheel, which grows with each stage (small, medium, large) and is a wave that swells, curls over to the left and crashes into spray (twelve frames), with tongues of fire licking out of its left edge while it builds, plus small plus-shaped sparks that flare, drift back and go out (the first colour throws fewer), and the wheels flicker as they turn. When the lights go green the sparks stop and the borders of the tyres turn pink, two bright pink arcs, on opposite sides, running round each tyre as a circle, and the kart drives off under the panel with six pink speed lines, each 1 px tall, four in front of the kart and two behind it. Each is 11 frames across the whole drawing (the 22 px behind the kart plus its 28 px), taken from a drawn picture: the line grows out of the right edge (1, 2, 4, 6, 10, 17 px long), slides left in bigger and bigger steps while it shrinks (10, 6, 4, 2, 1 px) and dies away; its ends are lighter than its middle. The frames are the `KART_STREAK` table in the script. All six lines run across the same 50 px; they differ only in their row and in when they start. It is drawn as inline SVG (a text bitmap, one path per colour). It is skipped if the strip is narrower than about 200 px or *reduce motion* is on, and it sits above the page dimming and below the toasts.
 3. Cancelling, or the pair changing, aborts and shows a toast.
@@ -318,11 +299,11 @@ Merging is permanent, so auto-merge is opt-in (**When done = Merge**, which rese
 
 **After a merge** (yours or an auto-merge): Element451 shows a **Merge completed** card (`bolt-card.merge-completion-state`) with **View merged contact** and **Next duplicate**. The script detects that card, counts the merge, waits about 1 second and presses **Next duplicate** (absent on the last pair, so nothing is pressed then). The **Next after merge** switch in the settings pane turns this off (`elm_next_after_merge`, default on). While it is on, Element451's own *Skip merge completion screen* and *Skip this screen next time* switches are hidden, because turning either on would remove the card the script reads; a switch that is already on stays visible (so it can be turned off) and the console warns about it. If Merge Contacts was clicked but no card appears within 6 s, the console says so and logs any open dialog.
 
-**Toasts.** The **Toasts** switch (settings pane, *Display*) controls them. It is forced **off** (greyed) when the slider is on **None** (a scan), forced **on** (greyed) while **Auto-Skip** or auto-merge is on, and free otherwise. A skip shows **one reason**, chosen by priority (Range > Forbidden > Student ID > Graduate/IA > Appeal): `Skip: Appeal`, `Skip: Graduate/IA`, `Skip: Student ID`, `Skip: Forbidden`, `Skip: Range`. A pair that needs review is not skipped; it shows `Not merged: needs review (…)`. If Merge Contacts was clicked but no *Merge completed* card appears within 6 s, a toast says so (and whether a dialog is open). Once the *Merge completed* card has appeared you get `Merge: 2/3` (the *Script agrees* figure), `Merge: Applicant`, or `Merge: Bolt` when the script made no picks of its own. Plain scans show none.
+**Toasts.** The **Toasts** switch (settings pane, *Display*) controls them. It is forced **off** (greyed) when every rating is on **Skip** (a scan), forced **on** (greyed) while any rating is on Merge, Skip or Dismiss or the Coyote ID / birth date dismissal is on, and free otherwise. A skip shows **one reason**, chosen by priority (Range > Forbidden > Student ID > Graduate/IA > Appeal): `Skip: Appeal`, `Skip: Graduate/IA`, `Skip: Student ID`, `Skip: Forbidden`, `Skip: Range`. A pair that needs review is not skipped; it shows `Not merged: needs review (…)`. If Merge Contacts was clicked but no *Merge completed* card appears within 6 s, a toast says so (and whether a dialog is open). Once the *Merge completed* card has appeared you get `Merge: 2/3` (the *Script agrees* figure), `Merge: Applicant`, or `Merge: Bolt` when the script made no picks of its own. Plain scans show none.
 
 The console logs each merge (`[elm2] Merged 7/40 | …`) and each skip with its queue position and reason (`[elm2] Skipping to next pair: … (was 8/40)`). The final-check conditions are tested **before** the countdown starts, so a pair that could not merge (for example a field with no pick, named in the console as `[elm2] No pick on: …`) is skipped without showing the dialog.
 
-The script never merges while the slider is on None or When done is on Wait for me, and clicks **Dismiss** only for two different School Ids ([4.5b](#45b-auto-dismiss-different-student-ids)).
+The script merges only a pair whose rating is set to Merge, and clicks **Dismiss** only for the reasons in [4.5](#45-auto-dismiss).
 
 ---
 
@@ -350,7 +331,7 @@ All of these are CSS/DOM additions made by the main script. Colours use a Materi
 
 ### 10.3 Settings pane
 
-A right-hand Material 3 panel with a close button at the top left next to the title, laid out as an **M3 Expressive list**: each setting (and each Database button) is its own light container, with large outer corners on the first and last of a group (`.elm-list` / `.elm-item`). Controls: a discrete Material 3 **slider** (stop dots, value bubble while dragging), two **segmented buttons** (Use picks from, When done), selects for the countdown and department, and Material 3 switches. Descriptions under each control reserve their height so the controls below do not jump. A build line shows `New layout · v2-build-N`.
+A right-hand Material 3 panel with a close button at the top left next to the title, laid out as an **M3 Expressive list**: each setting (and each Database button) is its own light container, with large outer corners on the first and last of a group (`.elm-list` / `.elm-item`). Controls: three selects for the action per rating (Stop, Merge, Skip, Dismiss), a **segmented button** (Use picks from), selects for the countdown, and Material 3 checkboxes (departments) and switches. Descriptions under each control reserve their height so the controls below do not jump. A build line shows `New layout · v2-build-N`.
 
 **Install as an app card** (top of the pane): shown only while Chrome says the page can be installed (the script holds the `beforeinstallprompt` event until you click **Install**, which opens Chrome's own install dialog). It looks like the extension popup's "One setting to turn on" card, and its **X** hides it for good (`elm_install_dismissed`). Element451 ships no web app manifest, so the script adds one itself (a blob `<link rel="manifest">` named *Element451*, a standalone window starting at the site root, and an icon with the white CSUSB logo on the header orange in a rounded square (corners transparent), drawn on a canvas from a small embedded greyscale image of the logo); Chrome then offers the install as it would for any web app. If the page's security policy (`manifest-src` / `default-src`) refuses it, the console says `[elm2] the page's security policy refuses an added web app manifest…` and nothing else changes. The manifest also lists a **Deduplication** shortcut (the item in the installed app's taskbar right-click list on Windows, and in its icon menu), pointing at the Deduplication page: the script learns that page's address (the path only, `elm_dedup_path` in this browser's local storage, never in the script) the first time the list is on screen. Chrome reads an installed app's shortcuts when it installs it and when it re-checks the manifest (about once a day, when the app is opened), so for an app installed earlier it can take a day, or uninstall and install it again. The card does not show when the app is already installed or in browsers without installable web apps (Firefox).
 
@@ -408,7 +389,7 @@ A three-way switch picks the view: **Write-up** (the plain-English write-up), **
 
 **Score chips.** The chips in the review sidebar and on the list show our rating too. A chip reads **Pending**, in Bolt's blue, until the pair has been analysed. The review page remembers each pair it rates (localStorage `elm_pair_ratings`, keyed by the pair's two Spark IDs, the 4000 most recent) **as the list of scoring rules that applied** (for example `address.0,dob.0,first.0,last.0`: a matching address, birth date, first name and last name), never as the finished rating and never with a name, date or contact detail. The list re-rates those rules with the weights in force **now**, so changing a weight changes the chips of every remembered pair at once, with no need to open the pairs again. An entry saved by an older version has no rules to re-rate, so its chip reads Pending until the pair is opened again. A pair is remembered as soon as its rating exists (not only when the analysis card is drawn), so a pair that is skipped within a second still gets a chip and a list row finds it through `data-csv-sparks`, the Spark IDs the Database script sets on a row from the list API. Without the Database script, or when the list API was not captured, list rows stay Pending. A chip that shows Bolt's own *Error* is left alone. **Bolt's score is read only from the chip in the review sidebar**; a chip in a list row behind the sidebar belongs to another pair and is never used (no chip found means no Bolt score). A High chip beside Bolt text that says *different people* is treated as a misread and ignored; the console line `[elm2] analysis:` lists how many Bolt chips were read and their levels.
 
-The slider, the Auto-Apply range check and the merge brief use this rating; the database's Bolt Score column still records Bolt's own chip.
+The action per rating and the merge brief use this rating; the database's Bolt Score column still records Bolt's own chip.
 
 ---
 
@@ -487,11 +468,12 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 
 | Key | Used by | Purpose |
 |---|---|---|
-| `elm_range_level2` | main | Slider position 0–4 (None, High, Medium, Low, All) |
+| `elm_action_high` / `elm_action_medium` / `elm_action_low` | main | The action for each rating: `stop` / `merge` / `skip` / `dismiss` (Stop until set; Merge is reset to Stop in every new browser session) |
+| `elm_range_level2` | main | The old slider (0–4), only read once to carry an older install's choice over |
 | `elm_use_picks` | main | `ours` / `bolt` |
 | `elm_when_done` (**sessionStorage**) | main | `wait` / `merge`, reset every browser session |
 | `elm_merge_countdown` | main | Cancel window seconds (2–15) |
-| `elm_auto_skip_blocked` | main | Auto-Skip |
+| `elm_auto_skip_blocked` | main | The old Auto-Skip, only read once to carry an older install's choice over |
 | `elm_next_after_merge` | main | Next after merge (default on) |
 | `elm_dismiss_id_mismatch` | main | Dismiss different student IDs (default on) |
 | `elm_dedup_path` | main | the path of the Deduplication page, learnt from the list page, for the installed app's shortcut |
@@ -499,7 +481,7 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 | `elm_pair_ratings` | main | per pair (keyed by the two Spark IDs): `[level code, time, the scoring rules that applied]`, for the score chips on the list (re-rated with the current weights) |
 | `elm2_an_view` | main | the Dedup analysis card's view: `ours` (write-up) or `points` |
 | `elm_row_pairs` | main | list rows tied to a pair by the click that opened them: a hash of the row's words (no names stored) → `[the pair's key, time]`, up to 4,000 |
-| `elm_outcome_toasts` | main | Toasts switch (default on; forced off with the slider on None, forced on while Auto-Skip or auto-merge is on) |
+| `elm_outcome_toasts` | main | Toasts switch (default on; forced off when every rating is on Skip, forced on while any rating is on Merge, Skip or Dismiss or the Coyote ID / birth date dismissal is on) |
 | `elm_highlight_rows` | main | Highlight Rows |
 | `elm_allowed_department` | main | Allowed departments (the two checkboxes) |
 | `elm_show_merge_counter` | main | Hidden: show the merge counter |
@@ -555,9 +537,9 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 | Extension installed but a script does not run | Check its switch in the popup (Database needs UI Perfection on; Database Merge needs Database, and so UI Perfection too: a row whose script needs one that is switched off is greyed out and says "needs …"); reload the tab after changing a switch |
 | No "Update available" chip | It appears only after a newer GitHub Release exists and Chrome has been restarted (or the extension reloaded) |
 | Database buttons / badges still blue or old | The Database script on your side is an older copy; check it shows the latest `@version` |
-| Nothing is auto-applied | Slider on None, pair out of range, or **Use picks from = Bolt's** (nothing to apply) |
-| Everything gets skipped | Slider None, or no Allowed department ticked, with Auto-Skip on = scan mode |
-| Auto-merge never runs | When done is Wait for me (it resets every session), slider on None, or the final gate failed (see the toast / `[elm2] Auto-merge not done`) |
+| Nothing is auto-applied | the pair's rating is set to Skip or Dismiss, or **Use picks from = Bolt's** (nothing to apply) |
+| Everything gets skipped | every rating on Skip, or no Allowed department ticked = scan mode |
+| Auto-merge never runs | no rating is set to Merge (it goes back to Stop in every new session), or the final gate failed (see the toast / `[elm2] Auto-merge not done`) |
 | Skips lose database entries | Make sure both scripts are the latest builds (the record-before-skip handshake) |
 | Scan stalls after a few pairs | Fixed in build 81 (queue position in the pair key, retrying Next); update the main script |
 | A selected filter chip is blue | Element's own style won; send the chip's HTML so the selector can be added |
@@ -608,6 +590,7 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 - **The Identities section is read** (UI 2.285): values that name themselves are read wherever they are, so the Identities rows (labelled *Identities* or nothing) count: `School Id: …`, `Cas Id: …`, `Email: …` and `School Email: …`. A **coyote.csusb.edu address is the student's Coyote ID** (`009000001@coyote.csusb.edu`): a side with no School Id takes its Coyote ID from it, so a School Id on one record and the same number in the other's coyote email is the same Coyote ID (+120, enough for High). An ID read from an email only confirms: if it differs from the other record's, it scores nothing (a mistyped email never makes a hard conflict). The Maria Soto pair (School Id 009000001 on one side, 009000001@coyote.csusb.edu on the other) goes to High.
 - **Matching gender +5** (UI 2.284): the same gender on both records is +5, like student type, level and school; a different or missing one is 0. A gender that matches is read from its row like any other (the matching rows are kept on the page).
 - **A cover while a pair is read and scored** (UI 2.311): while the matching rows are shown, read and hidden again (and, for up to 4 s, while Bolt's overview has not shown yet) the fields are covered by a white layer with the Material 3 Expressive loading indicator (contained: a shape that morphs through a soft burst, a 9-sided cookie, a pentagon, a pill, a sunny shape, a 4-sided cookie and an oval while it turns, in a round orange container; UI 2.312, it was a circular progress). It hides the rows appearing and disappearing, and blocks clicks and keys on the fields (Escape still cancels an auto-merge). It never stays longer than 8 s; the console says when it gave up. The Dedup analysis card shows pulsing placeholder lines (a skeleton) in the meantime instead of Bolt's own text, for at most 8 s per pair.
+- **An action per rating** (UI 2.333): the *Pairs in range* slider, *When done* and *Auto-Skip* are replaced by three drop-downs, **High**, **Medium** and **Low**, each **Stop**, **Merge**, **Skip** or **Dismiss** ([4.1](#41-what-to-do-by-rating-ui-2333)), and one switch, **Dismiss different Coyote IDs and birth dates**, which no longer depends on auto-merge ([4.5](#45-auto-dismiss)). A blocked pair is never merged or dismissed by its rating (it is skipped, or stays on Stop). Merge goes back to Stop in every new browser session. An older install's slider and Auto-Skip are carried over once (never to Merge). A pair set to Dismiss is dismissed with *Rated Low* (Medium, High) as the reason.
 - **Above the "Show engagement data" button wherever it sits** (UI 2.332): the placeholder lines and the write-up now go at the top of the card's content, or, when the button sits before the content (in the card, outside its body), right above the part of the card that holds the button.
 - **Placeholder lines sit above the engagement panel** (UI 2.331): the pulsing lines shown while a pair loads were added after the card's content, so they showed below Element's "Show engagement data" panel; the write-up that replaces them goes above it. They are now placed at the top too.
 - **A year like 0009 is no longer read as 2009** (UI 2.330): the date reader expanded a two-digit year (09 to 2009) even when the year was written with four digits as 0009, so a row showing 0009 was scored, written up and compared as 2009. Only a year written with two digits is expanded now; 0009 reads as no date, as the merge rule (which keeps the other side's date) already treats it.
@@ -621,7 +604,7 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 - **Birth dates count only when both are valid** (UI 2.321): a match or a mismatch (and a one-typo-apart date) is scored only when both records hold a real calendar day (no February 30; February 29 only in a leap year), from 1920 on and at least 10 years ago. A date that fails reads as no date: no points either way. The same check covers the other record's date that a birth date in an email address is compared with.
 - **Twin rule** (UI 2.320): when the first names do not match (a nickname, an initial or one name inside the other still matches; rhymes such as Kayla / Layla and typos do not) and no Coyote ID or CAS ID matches, the same last name gives 0 (was +15), the same address -30 (was +25) and the same birth date -30 (was +40). Twins with the same last name, birth date and address go from +50 (Medium) to -90 (Low), and the pair shows a purple **Twins?** chip beside the score. Ratings remembered before this are re-rated under it on the list. See SCORING.md.
 - **Auto-Dismiss is tied to auto-merge** (UI 2.319): different student IDs are only dismissed while When done is on Merge; with Wait for me they are skipped as before, and the **Dismiss different student IDs** switch is dimmed.
-- **Auto-Dismiss for different student IDs** (UI 2.318): a pair whose School Ids differ is dismissed with *Different student IDs* as the reason, after a 3 s notice that Escape cancels ([4.5b](#45b-auto-dismiss-different-student-ids)). The click guard lets only these clicks through. New switch: **Dismiss different student IDs** (default on).
+- **Auto-Dismiss for different student IDs** (UI 2.318): a pair whose School Ids differ is dismissed with *Different student IDs* as the reason, after a 3 s notice that Escape cancels ([4.5b](#45-auto-dismiss)). The click guard lets only these clicks through. New switch: **Dismiss different student IDs** (default on).
 - **The department chip too** (UI 2.317, Database 2.77): the list's department chip comes from the pair's database record, so a skip and a merge now refresh the department and points signal and have the Database script record the pair right then. A skip already waited for the record; Auto-Merge now waits for it as well (and for the rating), up to 3 s, before clicking Merge Contacts (Escape still cancels, and the pair is checked again before the click). If the pair still is not recorded, the console says why: `[elm2] dept chip: skipping without the pair in the database (…)` or `merging without …`.
 - **Auto-Skip and Merge wait for the rating to be saved** (UI 2.316): instead of only asking for the rating, a skip and a merge now save it themselves (worked out afresh, even while the cover is up) and check it is stored under the pair's Spark IDs before moving on. A skip waits up to 6 s for that (was 3 s). If it still can't be saved, the console says why: `[elm2] chips: skipping without saving a rating (no Spark IDs on the form)` or `(no rating yet: Bolt's overview has not shown)`; that pair's chip stays Pending.
 - **Chips no longer missed during Auto-Skip / Auto-Merge** (UI 2.315): a rating worked out while the cover was up was held back, then handed out from a 400 ms cache without being saved, so a pair skipped or merged right after being read could keep a Pending chip on the list. The rating is now saved by the first call after the read (cache or not), and again just before Merge Contacts is clicked.

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.332
+// @version      2.333
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.332'; // keep in sync with @version
+    const VERSION = '2.333'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -100,31 +100,70 @@
         if (val === null) return defaultValue;
         return val === 'true';
     }
-    function rangeLevel() {
+    function rangeLevel() { // the old slider (0 None ... 4 All): only read to carry an older install's choice over (see loadActions)
         const v = parseInt(lsGet('elm_range_level2'), 10);
         return isNaN(v) ? 4 : Math.max(0, Math.min(4, v));
     }
+    // ---- RATING ACTIONS START (pure: no page access, so it can be tested on its own) ----
+    // What happens to a pair is chosen by its rating: High, Medium and Low each have one action.
+    //   Stop    our picks are applied (per "Use picks from"), then the pair is left for you
+    //   Merge   our picks are applied, then it is merged after the countdown
+    //   Skip    on to the next pair
+    //   Dismiss dismissed after the countdown, with the rating as the reason
+    const ACTION_NAMES = ['stop', 'merge', 'skip', 'dismiss'];
+    const RATING_LEVELS = ['high', 'medium', 'low'];
+    const isAction = (v) => ACTION_NAMES.includes(v);
+    // What an older install's settings stood for: the slider (0 None ... 4 All: High, then Medium, then Low in range) and Auto-Skip.
+    // A rating in range was left for you (Stop), one out of range was skipped when Auto-Skip was on. Never Merge: "When done" was a per-session choice.
+    function actionsFromOld(level, autoSkip) {
+        const out = {};
+        RATING_LEVELS.forEach((r, i) => { out[r] = (level >= 4 || level >= i + 1) ? 'stop' : (autoSkip ? 'skip' : 'stop'); });
+        return out;
+    }
+    // The action for a pair rated `level`. With no rating yet (Bolt's overview has not shown), the one action all three ratings share, else Stop.
+    function actionFor(actions, level) {
+        if (level && actions[level]) return actions[level];
+        const all = RATING_LEVELS.map(r => actions[r]);
+        return all.every(a => a === all[0]) ? all[0] : 'stop';
+    }
+    // A blocked pair (department, Appeal, Forbidden, different student IDs) is never merged or dismissed by its rating: Stop stays Stop, the rest skip.
+    const blockedAction = (action) => action === 'stop' ? 'stop' : 'skip';
+    // Every rating on Skip: a scan (the pairs are only recorded as they go by)
+    const isScan = (actions) => RATING_LEVELS.every(r => actions[r] === 'skip');
+    // ---- RATING ACTIONS END ----
+    const ACTION_KEY = (r) => 'elm_action_' + r;
+    function loadActions() {
+        const a = {};
+        let have = false;
+        RATING_LEVELS.forEach(r => { const v = lsGet(ACTION_KEY(r)); if (isAction(v)) { a[r] = v; have = true; } });
+        if (!have) Object.assign(a, actionsFromOld(rangeLevel(), getBoolSetting('elm_auto_skip_blocked', true)));
+        RATING_LEVELS.forEach(r => { if (!isAction(a[r])) a[r] = 'stop'; });
+        return a;
+    }
+    // Merge is a per-browser-session choice (as "When done = Merge" was): a new session starts with every rating set to Merge back on Stop.
+    let mergeResetNotice = false;
+    (function () {
+        try { if (sessionStorage.getItem('elm_session_started')) return; sessionStorage.setItem('elm_session_started', '1'); } catch (e) { return; }
+        RATING_LEVELS.forEach(r => { if (lsGet(ACTION_KEY(r)) === 'merge') { lsSet(ACTION_KEY(r), 'stop'); mergeResetNotice = true; } });
+        if (mergeResetNotice) setTimeout(() => showMergeNotice('Merge was set back to Stop for this new session (Settings > Automation)', true), 3000);
+    })();
     const CFG = Object.defineProperties({}, {
-        // Slider = which pairs are in range, by our rating (Bolt's score is one input) (0 None, 1 High, 2 + Medium, 3 + Low, 4 All).
-        RANGE_LEVEL:              { get() { return rangeLevel(); } },
-        // Whose picks are used on pairs in range: 'ours' (our rules, incl. the applicant rule) or
+        // Action per rating: { high, medium, low } each one of stop / merge / skip / dismiss (see RATING ACTIONS above).
+        ACTIONS:                  { get() { return loadActions(); } },
+        // Whose picks are used on pairs set to Stop or Merge: 'ours' (our rules, incl. the applicant rule) or
         // 'bolt' (leave Bolt's picks; ours only fills rows Bolt left unselected).
         USE_PICKS:                { get() { return lsGet('elm_use_picks') === 'bolt' ? 'bolt' : 'ours'; } },
-        // What happens once a pair in range is decided: 'wait' for you, or 'merge'. Kept per browser
-        // session only, so a new session always starts on 'wait'.
         // Seconds of the auto-merge cancel window (never below 2: the window is required).
         // The countdown drop-down also offers "race lights": a 4 second countdown drawn as a start signal.
         COUNTDOWN_STYLE:          { get() { return lsGet('elm_merge_countdown') === 'race' ? 'race' : 'ring'; } },
         MERGE_COUNTDOWN:          { get() { const raw = lsGet('elm_merge_countdown'); if (raw === 'race') return 4; const v = parseInt(raw, 10); return isNaN(v) ? 4 : Math.max(2, Math.min(15, v)); } },
-        WHEN_DONE:                { get() { try { return sessionStorage.getItem('elm_when_done') === 'merge' ? 'merge' : 'wait'; } catch (e) { return 'wait'; } } },
         HIGHLIGHT_ROWS:           { get() { return getBoolSetting('elm_highlight_rows', true); } },
         SHOW_MERGE_COUNTER:       { get() { return getBoolSetting('elm_show_merge_counter', false); } },
-        AUTO_SKIP_BLOCKED:        { get() { return getBoolSetting('elm_auto_skip_blocked', true); } },
         NEXT_AFTER_MERGE:         { get() { return getBoolSetting('elm_next_after_merge', true); } },
         ALLOWED_DEPARTMENT:       { get() { return lsGet('elm_allowed_department') || 'UnderGrad'; } },
         ALLOW_APPEAL:             { get() { return getBoolSetting('elm_allow_appeal', false); } },
         ALLOW_FORBIDDEN:          { get() { return getBoolSetting('elm_allow_forbidden', false); } },
-        // A pair whose two School Ids differ is two students: it is dismissed ("Different student IDs") instead of skipped.
+        // A pair with different Coyote IDs (School Ids) or clearly different birth dates is dismissed, whatever its rating.
         DISMISS_ID_MISMATCH:      { get() { return getBoolSetting('elm_dismiss_id_mismatch', true); } },
     });
     // =========================================================
@@ -831,12 +870,9 @@
             border: solid var(--md-primary); border-width: 0 2px 2px 0; transform: translate(-50%, -62%) rotate(45deg);
         }
         .elm-toggle-switch input:disabled { cursor: default; }
-        /* M3 discrete slider (Auto-Apply level): 16px rounded track split by a 4px pill handle
-               with a 6px gap either side, stop dots on the track, a value bubble while
-               focused/pressed. The real <input type=range> sits on top, invisible, so
-               dragging, clicking and keyboard use are native. */
-        #elm-settings-pane .elm-slider-head { min-height: 40px; }
         #elm-settings-pane .setting-row.elm-seg-head { min-height: 32px; padding-bottom: 0; }
+        #elm-settings-pane .setting-row.elm-action-row { min-height: 44px; }
+        #elm-settings-pane #elm-merge-countdown { width: 150px; min-width: 0; }
         /* Material 3 checkboxes (Allowed departments) */
         #elm-settings-pane .elm-checks { display: flex; flex-direction: column; align-items: flex-start; gap: 0; padding: 4px 0 2px; } /* listed one under the other */
         #elm-settings-pane .elm-check { position: relative; display: inline-flex; align-items: center; gap: 12px; min-height: 40px; cursor: pointer; font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--md-on-surface); }
@@ -846,29 +882,6 @@
         #elm-settings-pane .elm-check input:checked + .elm-check-box { background: var(--md-primary); border-color: var(--md-primary); }
         #elm-settings-pane .elm-check input:checked + .elm-check-box::after { transform: rotate(45deg) scale(1); }
         #elm-settings-pane .elm-check input:focus-visible + .elm-check-box { outline: 2px solid var(--md-primary); outline-offset: 3px; }
-        #elm-settings-pane .elm-level-label { font-size: 14px; font-weight: 500; letter-spacing: .1px; color: var(--md-primary-text); }
-        #elm-settings-pane .elm-slider { padding: 22px 2px 12px; }
-        #elm-settings-pane .m3s { position: relative; height: 44px; --p: 0; --gap: 6px; }
-        #elm-settings-pane .m3s input[type=range] { -webkit-appearance: none; appearance: none; position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; z-index: 3; }
-        #elm-settings-pane .m3s input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 4px; height: 44px; }
-        #elm-settings-pane .m3s input[type=range]::-moz-range-thumb { width: 4px; height: 44px; border: none; }
-        #elm-settings-pane .m3s-active, #elm-settings-pane .m3s-inactive { position: absolute; top: 14px; height: 16px; transition: width .2s var(--md-ease), left .2s var(--md-ease); }
-        #elm-settings-pane .m3s-active { left: 0; width: max(0px, calc((100% - 4px) * var(--p) - var(--gap))); background: var(--md-primary); border-radius: 8px 2px 2px 8px; }
-        #elm-settings-pane .m3s-inactive { right: 0; left: calc((100% - 4px) * var(--p) + 4px + var(--gap)); background: var(--md-primary-track); border-radius: 2px 8px 8px 2px; }
-        #elm-settings-pane .m3s-dots span { position: absolute; top: 20px; width: 4px; height: 4px; border-radius: 50%; left: calc(6px + (100% - 16px) * var(--i) / 4); }
-        #elm-settings-pane .m3s-dots span.on { background: #fff; }
-        #elm-settings-pane .m3s-dots span.off { background: var(--md-primary); }
-        #elm-settings-pane .m3s-dots span.here { display: none; }
-        #elm-settings-pane .m3s-handle { position: absolute; top: 0; width: 4px; height: 44px; border-radius: 2px; background: var(--md-primary); left: calc((100% - 4px) * var(--p)); pointer-events: none; z-index: 2; transition: left .2s var(--md-ease), width .15s var(--md-ease); }
-        #elm-settings-pane .m3s input[type=range]:active ~ .m3s-handle { width: 2px; margin-left: 1px; }
-        #elm-settings-pane .m3s-bubble { position: absolute; bottom: calc(100% + 4px); left: 50%; transform: translateX(-50%); background: #2f3236; color: #f1f3f7; font-size: 12px; line-height: 16px; letter-spacing: .4px; padding: 6px 12px; border-radius: 16px; white-space: nowrap; opacity: 0; transition: opacity .15s var(--md-ease); }
-        #elm-settings-pane .m3s input[type=range]:focus-visible ~ .m3s-handle .m3s-bubble,
-        #elm-settings-pane .m3s input[type=range]:active ~ .m3s-handle .m3s-bubble { opacity: 1; }
-        #elm-settings-pane .m3s-labels { position: relative; height: 16px; margin-top: 4px; font-size: 12px; line-height: 16px; letter-spacing: .4px; color: var(--md-on-surface-variant); }
-        #elm-settings-pane .m3s-labels span { position: absolute; top: 0; white-space: nowrap; left: calc((100% - 4px) * var(--i) / 4 + 2px); transform: translateX(-50%); transition: color .2s var(--md-ease); }
-        #elm-settings-pane .m3s-labels span:first-child { left: 0; transform: none; }
-        #elm-settings-pane .m3s-labels span:last-child { left: 100%; transform: translateX(-100%); }
-        #elm-settings-pane .m3s-labels span.sel { color: var(--md-primary-text); font-weight: 500; }
         #elm-settings-pane .elm-seg { display: flex; height: 40px; margin: 4px 0 8px; border: 1px solid var(--md-outline); border-radius: 20px; overflow: hidden; }
         #elm-settings-pane .elm-seg button { flex: 1; display: flex; align-items: center; justify-content: center; border: none; border-left: 1px solid var(--md-outline); background: transparent; color: var(--md-on-surface); font-family: inherit; font-weight: 500; font-size: 14px; line-height: 20px; letter-spacing: .1px; cursor: pointer; transition: background-color .2s var(--md-ease); }
         #elm-settings-pane .elm-seg.elm-seg-disabled { opacity: .38; }
@@ -1976,19 +1989,17 @@
     // Every resolution rule below should call this instead of row.selectSide()
     // directly.
     let currentRule = '';
-    // pairInRange: whether the slider covers the pair on screen, by our rating. Cumulative:
-    // 1 High, 2 + Medium, 3 + Low, 4 every pair (even one with no score). An applicant side does
-    // not put a pair in range: applicants can have any score.
+    // pairInRange: the pair on screen is one whose rating is set to Stop or Merge, so our picks are applied (a pair set to Skip or Dismiss is left as it is).
     // autoApplyThisPair: in range AND "Use picks from" is Ours (so our picks get applied).
     let pairInRange = false;
     let autoApplyThisPair = false;
+    // The action chosen for the pair on screen, by its rating (our rating, else Bolt's chip)
+    const pairAction = () => actionFor(CFG.ACTIONS, getScoreChipLevel());
+    // The three ratings do not all have the same action, so which one applies needs the pair's rating
+    const ratingsDiffer = () => { const a = CFG.ACTIONS; return !(a.high === a.medium && a.medium === a.low); };
     function computeAutoApplyForPair() {
-        const level = CFG.RANGE_LEVEL;
-        const score = getScoreChipLevel();
-        pairInRange = level >= 4
-            || (level >= 1 && score === 'high')
-            || (level >= 2 && score === 'medium')
-            || (level >= 3 && score === 'low');
+        const action = pairAction();
+        pairInRange = action === 'stop' || action === 'merge';
         autoApplyThisPair = pairInRange && CFG.USE_PICKS === 'ours';
         return autoApplyThisPair;
     }
@@ -2358,11 +2369,8 @@
     // Appeal and Forbidden are always blockers unless ticked next to Allowed departments in the settings pane
     const isAllowedReason = (b) => (b.type === 'appeal' && CFG.ALLOW_APPEAL) || (b.type === 'forbidden' && CFG.ALLOW_FORBIDDEN);
     function getAllBlockers() { return getAllReasons().filter(b => !isAllowedReason(b)); }
-    // One reason per skipped pair, by priority: Range > Forbidden > Student ID > Grad/IA (wrong department)
-    // > Appeal.
+    // One reason per skipped pair, by priority: Forbidden > Student ID > Grad/IA (wrong department) > Appeal.
     function blockerLabel(blockers) {
-        computeAutoApplyForPair();
-        if (!pairInRange) return 'Range';
         const has = (t) => blockers.find(b => b.type === t);
         if (has('forbidden')) return 'Forbidden';
         if (has('student-id-mismatch')) return 'Student ID';
@@ -3791,7 +3799,7 @@
         else if (differing > 0) msg = `⚠ ${differing} of ${ours.length} suggestions differ from Bolt's picks (${conflicts} conflicting of ${all.length} fields)`;
         else msg = `Our ${ours.length} suggestion(s) match Bolt's picks (${conflicts} conflicting of ${all.length} fields)`;
         if (!blocked && ours.length > 0 && !autoApplyThisPair) {
-            msg += CFG.RANGE_LEVEL === 0 ? ' — no pairs are in range (slider on None)' : CFG.USE_PICKS === 'bolt' ? " — using Bolt's picks" : ' — not auto-applied for this pair (outside the slider range)';
+            msg += (pairAction() === 'skip' || pairAction() === 'dismiss') ? ' — this pair\'s rating is set to ' + (pairAction() === 'skip' ? 'Skip' : 'Dismiss') + ', so no picks are applied' : CFG.USE_PICKS === 'bolt' ? " — using Bolt's picks" : ' — not auto-applied for this pair';
         }
         document.getElementById('elm2-pick-compare-count').textContent = msg;
         document.getElementById('elm2-use-ai-btn').disabled = both.length === 0;
@@ -3822,14 +3830,13 @@
     // =========================================================
     // AUTO-DISMISS: two clearly different people. Two different School Ids ("Different student IDs"), or two valid birth dates that clearly
     // differ ("Different birth dates": more than 2 digits apart, or more than 18 years apart; not one typo or a day/month swap, and not when a
-    // Coyote ID or CAS ID matches). The pair is dismissed with that reason: after a 3 s notice (Escape cancels), Dismiss is clicked, the
-    // reason is typed into the dialog and the dialog's Dismiss is clicked. Not for a pair that is also Forbidden by name (those are only
-    // ever skipped), and not when the two IDs are the same number written with and without leading zeros. Setting: Dismiss different
-    // student IDs / birth dates (on by default), and only while auto-merge is on (When done = Merge).
+    // Coyote ID or CAS ID matches). Also a pair whose rating is set to Dismiss ("Rated Low"). The pair is dismissed with that reason: after the
+    // countdown dialog (Cancel or Escape stops it), Dismiss is clicked, the reason is typed into the dialog and the dialog's Dismiss is
+    // clicked. Not for a pair that is also Forbidden by name (those are only ever skipped), and not when the two IDs are the same number
+    // written with and without leading zeros. Setting for the first two: Dismiss different Coyote IDs and birth dates (on by default).
     // =========================================================
     let allowDismissClick = false; // the click guard above lets through only the clicks made here, while this is true
-    // Tied to auto-merge: only while When done is on Merge (and the slider is not on None); with Wait for me the pair is skipped.
-    const dismissOn = () => CFG.DISMISS_ID_MISMATCH && autoMergeOn();
+    const dismissOn = () => CFG.DISMISS_ID_MISMATCH;
     function idMismatchToDismiss() {
         const m = isStudentIdMismatch();
         if (!m.mismatch || parseInt(m.leftId, 10) === parseInt(m.rightId, 10)) return null;
@@ -3880,9 +3887,10 @@
         dismissState = null;
         if (counting && message) showMergeNotice(message);
     }
-    function startAutoDismiss(key, reason) {
+    // rated: dismissed because its rating is set to Dismiss (reason "Rated Low"), not because the IDs or birth dates differ
+    function startAutoDismiss(key, reason, rated) {
         if (dismissState) return;
-        dismissState = { key, reason, step: 'countdown', timer: null, t0: Date.now() };
+        dismissState = { key, reason, rated: !!rated, step: 'countdown', timer: null, t0: Date.now() };
         saveRatingNow(); recordPairNow(); // its chips on the list (department: Dismissed), before the pair leaves the queue
         console.log('[elm2] ' + reason + ': dismissing this pair after the countdown (' + CFG.MERGE_COUNTDOWN + ' s; Escape or Cancel stops it)');
         startAutoMerge(key, undefined, reason); // the same countdown dialog as an auto-merge
@@ -3892,18 +3900,22 @@
         const st = dismissState;
         if (!st) return;
         const next = (ms) => { st.timer = setTimeout(stepDismiss, ms); };
-        const fail = (why) => {
+        // andSkip: the dismissal itself failed (no button, the dialog did not open): on to the next pair. A pair that no longer qualifies stays on screen.
+        const fail = (why, andSkip) => {
             dismissState = null;
             console.log('[elm2] Auto-dismiss stopped:', why);
             showMergeNotice('Auto-dismiss stopped: ' + why, true);
-            if (CFG.AUTO_SKIP_BLOCKED && getPairKey() === st.key && !feedbackBox()) skipToNext('not dismissed, ' + why, st.reason === 'Different birth dates' ? 'Birth date' : 'Student ID');
+            if (andSkip && getPairKey() === st.key && !feedbackBox()) skipToNext('not dismissed, ' + why, st.rated ? 'Rating' : st.reason === 'Different birth dates' ? 'Birth date' : 'Student ID');
         };
         if (st.step === 'countdown') {
             if (getPairKey() !== st.key) { dismissState = null; return; }
-            if (!dismissOn()) { dismissState = null; showMergeNotice('Auto-dismiss cancelled: auto-merge is off'); return; } // When done went back to Wait for me
-            if (dismissReason() !== st.reason) { fail(st.reason.toLowerCase().replace('different ', 'the ') + ' no longer clearly differ'); return; }
+            if (st.rated) { if (pairAction() !== 'dismiss') { fail('the rating is no longer set to Dismiss'); return; } }
+            else {
+                if (!dismissOn()) { dismissState = null; showMergeNotice('Auto-dismiss cancelled: the Coyote ID / birth date dismissal is off'); return; }
+                if (dismissReason() !== st.reason) { fail(st.reason.toLowerCase().replace('different ', 'the ') + ' no longer clearly differ'); return; }
+            }
             const btn = getSidebarActionButton('Dismiss');
-            if (!btn || btn.disabled) { if (Date.now() - st.t0 < 8000) next(300); else fail('no Dismiss button'); return; }
+            if (!btn || btn.disabled) { if (Date.now() - st.t0 < 8000) next(300); else fail('no Dismiss button', true); return; }
             clickAllowed(btn);
             st.step = 'dialog'; st.t1 = Date.now();
             next(200);
@@ -3911,10 +3923,10 @@
         }
         if (st.step === 'dialog') {
             const t = feedbackBox();
-            if (!t) { if (Date.now() - st.t1 < 5000) next(200); else fail('the Dismiss dialog did not open'); return; }
+            if (!t) { if (Date.now() - st.t1 < 5000) next(200); else fail('the Dismiss dialog did not open', true); return; }
             if (t.value !== st.reason) setFeedback(t, st.reason);
             const ok = dialogDismissButton(t);
-            if (!ok || ok.disabled) { if (Date.now() - st.t1 < 5000) next(200); else fail('no Dismiss button in the dialog'); return; }
+            if (!ok || ok.disabled) { if (Date.now() - st.t1 < 5000) next(200); else fail('no Dismiss button in the dialog', true); return; }
             recordPairNow(); // recorded as Dismissed before the pair goes
             clickAllowed(ok);
             st.step = 'done'; st.t2 = Date.now();
@@ -3923,12 +3935,12 @@
             next(500);
             return;
         }
-        // done: Element normally moves on by itself; a pair still on screen after 4 s is skipped (Auto-Skip on)
+        // done: Element normally moves on by itself; a pair still on screen after 4 s is skipped
         if (getPairKey() !== st.key || completionCardVisible()) { dismissState = null; return; }
-        if (feedbackBox()) { if (Date.now() - st.t2 < 6000) next(300); else fail('the Dismiss dialog stayed open'); return; }
+        if (feedbackBox()) { if (Date.now() - st.t2 < 6000) next(300); else fail('the Dismiss dialog stayed open', true); return; }
         if (Date.now() - st.t2 < 4000) { next(300); return; }
         dismissState = null;
-        if (CFG.AUTO_SKIP_BLOCKED) skipToNext('dismissed, still on screen', 'Dismissed');
+        skipToNext('dismissed, still on screen', 'Dismissed');
     }
 
     // =========================================================
@@ -3943,11 +3955,11 @@
     // The "Merge: 2/3" toast is worked out at the merge click (the rows are gone afterwards) but only shown
     // once Element's "Merge completed" card is seen, so it never announces a merge that did not happen.
     let pendingMergeToast = null;
-    // Toasts ("Merge: 2/3", "Skip: Appeal") follow the Toasts switch, except that they are forced off while the
-    // slider is on None (a scan) and forced on while Auto-Skip or auto-merge (When done = Merge) is on.
-    const autoMergeOn = () => CFG.WHEN_DONE === 'merge' && CFG.RANGE_LEVEL > 0;
-    const toastsForcedOff = () => CFG.RANGE_LEVEL === 0;
-    const toastsForcedOn = () => !toastsForcedOff() && (CFG.AUTO_SKIP_BLOCKED || autoMergeOn());
+    // Toasts ("Merge: 2/3", "Skip: Appeal") follow the Toasts switch, except that they are forced off while every rating is on Skip
+    // (a scan) and forced on while any rating is on Merge, Skip or Dismiss, or the Coyote ID / birth date dismissal is on.
+    const autoMergeOn = () => RATING_LEVELS.some(r => CFG.ACTIONS[r] === 'merge');
+    const toastsForcedOff = () => isScan(CFG.ACTIONS);
+    const toastsForcedOn = () => !toastsForcedOff() && (RATING_LEVELS.some(r => CFG.ACTIONS[r] !== 'stop') || CFG.DISMISS_ID_MISMATCH);
     const toastsEnabled = () => !toastsForcedOff() && (toastsForcedOn() || getBoolSetting('elm_outcome_toasts', true));
     // Notices ("Auto-merge cancelled", "Rows per page ...") use the shared toast stack that
     // database-v2.js also uses for its API toast: bottom-left, newest at the bottom.
@@ -4260,7 +4272,8 @@
             const r = currentRating();
             if (r) line('', 'Birth dates read: ' + (scDate(r.ev.A.dob) || '?') + ' and ' + (scDate(r.ev.B.dob) || '?'));
         }
-        line('', 'They are two different people, so the pair is dismissed, not merged. A dismissal can be undone from the history.');
+        line('', dismissState && dismissState.rated ? 'This rating is set to Dismiss, so the pair is dismissed, not merged. A dismissal can be undone from the history.'
+            : 'They are two different people, so the pair is dismissed, not merged. A dismissal can be undone from the history.');
     }
     function renderMergeBrief(box) {
         const line = (cls) => { const d = document.createElement('div'); d.className = 'brief-line ' + (cls || ''); box.appendChild(d); return d; };
@@ -4329,10 +4342,9 @@
         if (!pre.ok) {
             console.log('[elm2] Auto-merge not started:', pre.reason);
             if (pre.reason === 'the pair changed') return;
-            // A pair that needs a human is never skipped: it stays on screen (whatever Auto-Skip says).
+            // A pair that needs a human is never skipped: it stays on screen.
             if (pre.review) { showMergeNotice('Not merged: needs review (' + pre.review + ')', true); return; } // needs a human: stays on screen
-            if (CFG.AUTO_SKIP_BLOCKED) skipToNext('not merged, ' + pre.reason);
-            else showMergeNotice('Auto-merge stopped: ' + pre.reason + '.');
+            skipToNext('not merged, ' + pre.reason);
             return;
         }
         const ov = mergeModal();
@@ -4457,8 +4469,7 @@
             console.log('[elm2] Auto-merge not done:', ready.reason);
             if (ready.reason === 'the pair changed') return;
             if (ready.review) { showMergeNotice('Not merged: needs review (' + ready.review + ')', true); return; } // needs a human: stays on screen
-            if (CFG.AUTO_SKIP_BLOCKED) { skipToNext('not merged, ' + ready.reason); }
-            else showMergeNotice('Auto-merge stopped: ' + ready.reason + '.');
+            skipToNext('not merged, ' + ready.reason);
         };
         // The pair is recorded in the database (its department chip on the list) and its rating saved (its score chip) before the
         // click: after the merge the form is gone and neither can be done. Waits at most SCORE_WAIT_MS (4 s), then merges anyway.
@@ -4745,10 +4756,13 @@
         }
         if (blockers.length > 0) {
             if (resolutionAttempted) return;
+            // which action applies depends on the rating, so a rating that has not shown yet is waited for (SCORE_WAIT_MS)
+            if (ratingsDiffer() && !getScoreChipLevel() && Date.now() - pairFirstSeenAt < SCORE_WAIT_MS) return;
             resolutionAttempted = true;
+            const act = blockedAction(pairAction());
             console.log('[elm2] Blocked:', blockers.map(b => b.type + (b.reason ? ' (' + b.reason + ')' : '')).join(', '),
-                '| auto-skip', CFG.AUTO_SKIP_BLOCKED ? 'ON' : 'OFF');
-            if (CFG.AUTO_SKIP_BLOCKED) {
+                '| rating action', pairAction(), '->', act === 'skip' ? 'skip' : 'stop');
+            if (act === 'skip') {
                 setTimeout(() => skipToNext('blocked', blockerLabel(blockers)), 1200);
             }
             return;
@@ -4760,12 +4774,12 @@
         // made no picks on this pair).
         const bolt = getDiffRows().filter(r => r.element.dataset.elm2AiSide).length;
         if (bolt === 0 && Date.now() - pairFirstSeenAt < 3000) return;
-        // Bolt's score chip decides, at the High / Medium / Low levels, whether the pair is in range. It can render a moment after the field rows, so wait for it:
-        // SCORE_WAIT_MS (4 s) to see it at all, and where the slider decides by rating, up to 10 s (a slow load used to leave the pair
-        // "out of range" for good, because the pair is only judged once).
-        const lvl = CFG.RANGE_LEVEL;
-        if (!getScoreChips().length && Date.now() - pairFirstSeenAt < (lvl >= 1 && lvl < 4 ? 10000 : SCORE_WAIT_MS)) return;
-        if (lvl >= 1 && lvl < 4 && !getScoreChipLevel() && Date.now() - pairFirstSeenAt < 10000) return;
+        // The rating decides which action applies (Stop, Merge, Skip or Dismiss). Bolt's score chip can render a moment after the field rows, so wait for it:
+        // SCORE_WAIT_MS (4 s) to see it at all, and where the three ratings have different actions, up to 10 s (a slow load used to leave the pair
+        // with the wrong action for good, because the pair is only judged once).
+        const needsRating = ratingsDiffer();
+        if (!getScoreChips().length && Date.now() - pairFirstSeenAt < (needsRating ? 10000 : SCORE_WAIT_MS)) return;
+        if (needsRating && !getScoreChipLevel() && Date.now() - pairFirstSeenAt < 10000) return;
         // Dual personal emails: wait (up to 4s) for the engagement table, which the script opens itself.
         if (waitingForEngagement() && Date.now() - pairFirstSeenAt < 4000) return;
         resolutionAttempted = true;
@@ -4780,7 +4794,7 @@
             const laterWhy = dismissOn() ? dismissReason() : '';
             if (laterWhy && laterWhy !== 'wait') { startAutoDismiss(phaseOnePairKey, laterWhy); return; }
             if (laterBlockers.length > 0) {
-                if (CFG.AUTO_SKIP_BLOCKED) { skipToNext('blocked', blockerLabel(laterBlockers)); }
+                if (blockedAction(pairAction()) === 'skip') { skipToNext('blocked', blockerLabel(laterBlockers)); }
                 return;
             }
             runAutoResolution();
@@ -4793,9 +4807,9 @@
             console.log('[elm2] Suggestions by rule:', JSON.stringify(_byRule));
             computeAutoApplyForPair();
             // Why a pick did / did not land: range inputs now, then each of our rows' state once the clicks have settled.
-            console.log('[elm2] Range check — slider level', CFG.RANGE_LEVEL, '| score chip:', getScoreChipLevel() || '(not read)',
+            console.log('[elm2] Rating action — high', CFG.ACTIONS.high, '| medium', CFG.ACTIONS.medium, '| low', CFG.ACTIONS.low, '| this pair:', pairAction(), '| score chip:', getScoreChipLevel() || '(not read)',
                 '| chips on page:', document.querySelectorAll('elm-deduplication-score-chip').length + ' (' + Array.from(document.querySelectorAll('elm-deduplication-score-chip .bolt-chip')).map(c => chipLevel(c) || '?').join(',') + ')',
-                '| in range:', pairInRange, '| use picks from:', CFG.USE_PICKS, '| applying:', autoApplyThisPair);
+                '| picks applied:', pairInRange, '| use picks from:', CFG.USE_PICKS, '| applying:', autoApplyThisPair);
             setTimeout(() => {
                 if (getPairKey() !== phaseOnePairKey) return;
                 getDiffRows().filter(r => r.element.dataset.elm2ScriptSide).forEach(r => {
@@ -4804,15 +4818,12 @@
                         '| rule:', r.element.dataset.elm2Rule, landed ? '| OK' : '| NOT APPLIED');
                 });
             }, 1200);
-            // Outside the slider range: skipped with Auto-Skip on (no popup), otherwise left for you.
-            // (Slider on None = no pair is in range, so with Auto-Skip on every pair is skipped.)
-            if (!pairInRange && CFG.AUTO_SKIP_BLOCKED) {
-                skipToNext('outside the slider range', 'Range');
-                return;
-            }
-            // "When done" = Merge: start the cancel window (the merge itself is clicked there,
-            // after a final safety re-check).
-            if (pairInRange && CFG.WHEN_DONE === 'merge') setTimeout(() => startAutoMerge(phaseOnePairKey), 500);
+            // The action chosen for this pair's rating. Stop leaves it for you (picks applied); Skip moves on (no popup); Dismiss counts down
+            // to a dismissal; Merge starts the cancel window (the merge itself is clicked there, after a final safety re-check).
+            const act = pairAction(), level = getScoreChipLevel(), name = level ? WRITE_LEVEL[level] : 'Rating';
+            if (act === 'skip') { skipToNext('rated ' + (level || 'unknown') + ', set to Skip', level ? 'Rated ' + name : 'No rating'); return; }
+            if (act === 'dismiss') { startAutoDismiss(phaseOnePairKey, level ? 'Rated ' + name : 'Rating', true); return; }
+            if (act === 'merge') setTimeout(() => startAutoMerge(phaseOnePairKey), 500);
         }, 600);
     }
     // Tracks merges regardless of who clicks "Merge Contacts" (always a
@@ -5022,6 +5033,7 @@
 
         const pane = document.createElement('div');
         pane.id = 'elm-settings-pane';
+        const actionOptions = ACTION_NAMES.map(a => `<option value="${a}">${a.charAt(0).toUpperCase() + a.slice(1)}</option>`).join('');
         pane.innerHTML = `
             <div class="settings-header">
                 <button id="elm-settings-close" aria-label="Close settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>
@@ -5037,18 +5049,11 @@
                 <div class="settings-section-title">Automation</div>
                 <div class="elm-list">
                 <div class="elm-item">
-                <div class="setting-row elm-slider-head"><label>Pairs in range</label><span id="elm-apply-level-label" class="elm-level-label"></span></div>
-                <div class="elm-slider">
-                    <div class="m3s" id="elm-m3s">
-                        <input type="range" id="elm-apply-level" min="0" max="4" step="1" aria-label="Pairs in range">
-                        <div class="m3s-active"></div>
-                        <div class="m3s-inactive"></div>
-                        <div class="m3s-dots"><span style="--i:0"></span><span style="--i:1"></span><span style="--i:2"></span><span style="--i:3"></span><span style="--i:4"></span></div>
-                        <div class="m3s-handle"><span class="m3s-bubble" id="elm-m3s-bubble"></span></div>
-                    </div>
-                    <div class="m3s-labels"><span style="--i:0">None</span><span style="--i:1">High</span><span style="--i:2">Medium</span><span style="--i:3">Low</span><span style="--i:4">All</span></div>
-                </div>
-                <div id="elm-apply-level-desc" class="elm-level-desc elm-desc-2"></div>
+                <div class="setting-row elm-seg-head"><label>What to do, by rating</label></div>
+                <div class="setting-row elm-action-row"><label for="elm-action-high">High</label><select id="elm-action-high" class="elm-action" data-rating="high">${actionOptions}</select></div>
+                <div class="setting-row elm-action-row"><label for="elm-action-medium">Medium</label><select id="elm-action-medium" class="elm-action" data-rating="medium">${actionOptions}</select></div>
+                <div class="setting-row elm-action-row"><label for="elm-action-low">Low</label><select id="elm-action-low" class="elm-action" data-rating="low">${actionOptions}</select></div>
+                <div id="elm-actions-desc" class="elm-level-desc elm-desc-2"></div>
                 </div>
                 <div class="elm-item">
                 <div class="setting-row elm-seg-head"><label>Allowed departments</label></div>
@@ -5070,16 +5075,8 @@
                 <div id="elm-use-picks-desc" class="elm-level-desc elm-desc-2"></div>
                 </div>
                 <div class="elm-item">
-                <div class="setting-row elm-seg-head"><label>When done</label></div>
-                <div class="elm-seg" id="elm-when-done" role="radiogroup" aria-label="When done">
-                    <button type="button" role="radio" data-v="wait">Wait for me</button>
-                    <button type="button" role="radio" data-v="merge">Merge</button>
-                </div>
-                <div id="elm-when-done-desc" class="elm-level-desc elm-desc-2"></div>
-                </div>
-                <div class="elm-item">
                 <div class="setting-row" id="elm-countdown-row">
-                    <label for="elm-merge-countdown">Merge countdown</label>
+                    <label for="elm-merge-countdown">Countdown</label>
                     <select id="elm-merge-countdown">
                         <option value="2">2 seconds</option><option value="3">3 seconds</option><option value="4">4 seconds</option><option value="race">4 seconds, race lights</option>
                         <option value="5">5 seconds</option><option value="6">6 seconds</option><option value="8">8 seconds</option>
@@ -5088,12 +5085,8 @@
                 </div>
                 </div>
                 <div class="elm-item">
-                <div class="setting-row"><label>Auto-Skip</label>${toggleHtml('elm-auto-skip-blocked')}</div>
-                <div class="elm-level-desc elm-skip-desc">Skips blocked and out-of-range pairs with no popup. Off: stops on them instead.</div>
-                </div>
-                <div class="elm-item">
-                <div class="setting-row"><label>Dismiss different people</label>${toggleHtml('elm-dismiss-id-mismatch')}</div>
-                <div class="elm-level-desc">While When done is on Merge: a pair with different School Ids, or with birth dates more than 2 digits or 18 years apart (and no matching ID), is two people, so it is dismissed with "Different student IDs" or "Different birth dates" as the reason, after the countdown dialog (Cancel or Esc stops it). Off, or with Wait for me: it is handled as before.</div>
+                <div class="setting-row"><label>Dismiss different Coyote IDs and birth dates</label>${toggleHtml('elm-dismiss-id-mismatch')}</div>
+                <div class="elm-level-desc">A pair with different Coyote IDs (School Ids), or with valid birth dates more than 2 digits or 18 years apart (and no matching ID), is two people: it is dismissed, whatever its rating, with "Different student IDs" or "Different birth dates" as the reason, after the countdown (Cancel or Esc stops it).</div>
                 </div>
                 <div class="elm-item">
                 <div class="setting-row"><label>Next after merge</label>${toggleHtml('elm-next-after-merge')}</div>
@@ -5130,42 +5123,31 @@
         function toggleHtml(id) {
             return `<label class="elm-toggle-switch"><input type="checkbox" id="${id}"><span class="elm-toggle-slider"></span></label>`;
         }
-        const levelSlider = document.getElementById('elm-apply-level');
-        const levelLabel = document.getElementById('elm-apply-level-label');
-        const levelNames = ['None', 'High', 'Medium', 'Low', 'All'];
-        const levelDescs = [
-            'No pairs in range. With Auto-Skip on, every pair is skipped (a scan).',
-            'Pairs with a High rating.',
-            'Pairs with a High or Medium rating.',
-            'Pairs with a High, Medium or Low rating.',
-            'Every pair, whatever its rating.'
-        ];
-        const syncLevel = () => {
-            levelSlider.value = CFG.RANGE_LEVEL;
-            const idx = parseInt(levelSlider.value, 10);
-            document.getElementById('elm-m3s').style.setProperty('--p', idx / 4);
-            document.querySelectorAll('#elm-m3s .m3s-dots span').forEach((d, i) => {
-                d.className = i < idx ? 'on' : i > idx ? 'off' : 'here';
-            });
-            document.querySelectorAll('#elm-settings-pane .m3s-labels span').forEach((l, i) => l.classList.toggle('sel', i === idx));
-            document.getElementById('elm-m3s-bubble').textContent = levelNames[idx];
-            levelLabel.textContent = levelNames[idx];
-            document.getElementById('elm-apply-level-desc').textContent = levelDescs[idx];
-            // With the slider on None, "Use picks from" and "When done" have nothing to act on.
-            ['elm-use-picks', 'elm-when-done'].forEach(id => {
-                const el = document.getElementById(id);
-                if (!el) return;
-                el.classList.toggle('elm-seg-disabled', idx === 0);
-                el.querySelectorAll('button').forEach(b => { b.disabled = idx === 0; });
-            });
+        // One drop-down per rating: Stop, Merge, Skip or Dismiss (see RATING ACTIONS)
+        const actionSelects = Array.from(document.querySelectorAll('#elm-settings-pane select.elm-action'));
+        const actionsDesc = document.getElementById('elm-actions-desc');
+        const ACTION_DESC = {
+            stop: 'Stop: our picks are applied, then the pair is left for you.',
+            merge: 'Merge: our picks are applied, then it is merged after the countdown.',
+            skip: 'Skip: on to the next pair.',
+            dismiss: 'Dismiss: dismissed after the countdown, with the rating as the reason.'
         };
-        syncLevel();
-        levelSlider.addEventListener('input', () => {
-            lsSet('elm_range_level2', levelSlider.value);
-            syncLevel();
-            if (CFG.RANGE_LEVEL === 0) cancelAutoMerge('Auto-merge cancelled');
+        const syncActions = () => {
+            const a = CFG.ACTIONS;
+            actionSelects.forEach(sel => { sel.value = a[sel.dataset.rating]; });
+            const used = ACTION_NAMES.filter(n => RATING_LEVELS.some(r => a[r] === n));
+            actionsDesc.textContent = used.map(n => ACTION_DESC[n]).join(' ') + ' A blocked pair (department, Appeal, Forbidden) is never merged or dismissed: it is skipped, or left on Stop. Merge goes back to Stop in each new browser session.';
+        };
+        actionSelects.forEach(sel => sel.addEventListener('change', () => {
+            lsSet(ACTION_KEY(sel.dataset.rating), sel.value);
+            syncActions();
+            // a countdown that is running for a pair whose action is no longer Merge / Dismiss is stopped
+            const now = pairAction();
+            if (mergeTimer && !dismissState && now !== 'merge') cancelAutoMerge('Auto-merge cancelled');
+            if (dismissState && dismissState.rated && now !== 'dismiss') cancelAutoMerge('Auto-dismiss cancelled');
+            syncCountdown(); syncToasts();
             reapplyForLevel();
-        });
+        }));
         function setupSegmented(id, get, set, describe, onChange) {
             const el = document.getElementById(id);
             const desc = document.getElementById(id + '-desc');
@@ -5183,43 +5165,30 @@
             });
         }
         setupSegmented('elm-use-picks', () => CFG.USE_PICKS, v => lsSet('elm_use_picks', v),
-            v => v === 'ours' ? 'Our rules are applied on pairs in range, including the applicant rule.' : "Bolt's picks are kept; ours only fills rows Bolt left blank.",
+            v => v === 'ours' ? 'Our rules are applied on pairs set to Stop or Merge, including the applicant rule.' : "Bolt's picks are kept; ours only fills rows Bolt left blank.",
             reapplyForLevel);
-        setupSegmented('elm-when-done', () => CFG.WHEN_DONE, v => { try { sessionStorage.setItem('elm_when_done', v); } catch (e) { /* ignore */ } },
-            v => v === 'merge' ? 'Merges decided pairs after a cancellable countdown. Resets each session.' : 'You review the picks and click Merge Contacts yourself.',
-            () => { if (CFG.WHEN_DONE !== 'merge') cancelAutoMerge('Auto-merge cancelled'); });
         const countdownSelect = document.getElementById('elm-merge-countdown');
         const countdownRow = document.getElementById('elm-countdown-row');
-        const syncCountdown = () => {
-            // only relevant when merging is on and the slider isn't on None
-            const active = CFG.WHEN_DONE === 'merge' && CFG.RANGE_LEVEL > 0;
+        // the countdown is for a merge or a dismissal: dimmed when no rating is on Merge or Dismiss and the Coyote ID / birth date dismissal is off
+        function syncCountdown() {
+            const active = RATING_LEVELS.some(r => CFG.ACTIONS[r] === 'merge' || CFG.ACTIONS[r] === 'dismiss') || CFG.DISMISS_ID_MISMATCH;
             countdownSelect.disabled = !active;
             countdownRow.style.opacity = active ? '' : '.38';
-        };
+        }
         countdownSelect.value = CFG.COUNTDOWN_STYLE === 'race' ? 'race' : String(CFG.MERGE_COUNTDOWN);
         countdownSelect.addEventListener('change', () => lsSet('elm_merge_countdown', countdownSelect.value));
-        document.getElementById('elm-when-done').addEventListener('click', syncCountdown);
-        levelSlider.addEventListener('input', syncCountdown);
-        syncLevel();
-        syncCountdown();
-        // Toasts: the switch is forced off (slider None) or on (Auto-Skip / auto-merge) and greyed out.
+        // Toasts: the switch is forced off (every rating on Skip: a scan) or on (any rating on Merge, Skip or Dismiss) and greyed out.
         const toastsEl = document.getElementById('elm-outcome-toasts');
-        const syncToasts = () => {
+        function syncToasts() {
             const off = toastsForcedOff(), on = toastsForcedOn();
             toastsEl.checked = !off && (on || getBoolSetting('elm_outcome_toasts', true));
             toastsEl.disabled = off || on;
             toastsEl.closest('.setting-row').style.opacity = (off || on) ? '.38' : '';
-            // Dismiss different student IDs only acts with auto-merge on: dimmed (still switchable) otherwise
-            const dismissEl = document.getElementById('elm-dismiss-id-mismatch');
-            if (dismissEl) dismissEl.closest('.setting-row').style.opacity = autoMergeOn() ? '' : '.38';
-        };
+        }
         toastsEl.addEventListener('change', () => lsSet('elm_outcome_toasts', String(toastsEl.checked)));
-        document.getElementById('elm-when-done').addEventListener('click', syncToasts);
-        levelSlider.addEventListener('input', syncToasts);
-        setupToggle('elm-auto-skip-blocked', 'elm_auto_skip_blocked', syncToasts);
-        syncToasts();
+        syncActions(); syncCountdown(); syncToasts();
+        setupToggle('elm-dismiss-id-mismatch', 'elm_dismiss_id_mismatch', () => { syncCountdown(); syncToasts(); });
         setupToggle('elm-next-after-merge', 'elm_next_after_merge');
-        setupToggle('elm-dismiss-id-mismatch', 'elm_dismiss_id_mismatch');
         setupToggle('elm-highlight-rows', 'elm_highlight_rows');
         function setupToggle(elementId, storageKey, onChange, defaultValue = true) {
             const el = document.getElementById(elementId);

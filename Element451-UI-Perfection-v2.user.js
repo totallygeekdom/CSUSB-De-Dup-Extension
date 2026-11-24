@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.333
+// @version      2.334
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.333'; // keep in sync with @version
+    const VERSION = '2.334'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -872,6 +872,7 @@
         .elm-toggle-switch input:disabled { cursor: default; }
         #elm-settings-pane .setting-row.elm-seg-head { min-height: 32px; padding-bottom: 0; }
         #elm-settings-pane .setting-row.elm-action-row { min-height: 44px; }
+        #elm-settings-pane #elm-actions-desc { white-space: pre-line; }
         #elm-settings-pane #elm-merge-countdown { width: 150px; min-width: 0; }
         /* Material 3 checkboxes (Allowed departments) */
         #elm-settings-pane .elm-checks { display: flex; flex-direction: column; align-items: flex-start; gap: 0; padding: 4px 0 2px; } /* listed one under the other */
@@ -5136,7 +5137,8 @@
             const a = CFG.ACTIONS;
             actionSelects.forEach(sel => { sel.value = a[sel.dataset.rating]; });
             const used = ACTION_NAMES.filter(n => RATING_LEVELS.some(r => a[r] === n));
-            actionsDesc.textContent = used.map(n => ACTION_DESC[n]).join(' ') + ' A blocked pair (department, Appeal, Forbidden) is never merged or dismissed: it is skipped, or left on Stop. Merge goes back to Stop in each new browser session.';
+            // one line per action in use, then the notes on their own lines
+            actionsDesc.textContent = used.map(n => ACTION_DESC[n]).join('\n') + '\nA blocked pair (department, Appeal, Forbidden) is never merged or dismissed: it is skipped, or left on Stop.' + (a.high === 'merge' || a.medium === 'merge' || a.low === 'merge' ? '\nMerge goes back to Stop in each new browser session.' : '');
         };
         actionSelects.forEach(sel => sel.addEventListener('change', () => {
             lsSet(ACTION_KEY(sel.dataset.rating), sel.value);

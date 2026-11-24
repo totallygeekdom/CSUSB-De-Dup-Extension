@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.334
+// @version      2.335
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.334'; // keep in sync with @version
+    const VERSION = '2.335'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -5087,11 +5087,11 @@
                 </div>
                 <div class="elm-item">
                 <div class="setting-row"><label>Dismiss different Coyote IDs and birth dates</label>${toggleHtml('elm-dismiss-id-mismatch')}</div>
-                <div class="elm-level-desc">A pair with different Coyote IDs (School Ids), or with valid birth dates more than 2 digits or 18 years apart (and no matching ID), is two people: it is dismissed, whatever its rating, with "Different student IDs" or "Different birth dates" as the reason, after the countdown (Cancel or Esc stops it).</div>
+                <div class="elm-level-desc">Dismisses a pair with different Coyote IDs or clearly different birth dates, whatever its rating. A countdown comes first.</div>
                 </div>
                 <div class="elm-item">
                 <div class="setting-row"><label>Next after merge</label>${toggleHtml('elm-next-after-merge')}</div>
-                <div class="elm-level-desc elm-next-desc">After a merge (yours or an auto-merge), presses "Next duplicate" on the "Merge completed" card, and hides Element\'s own "Skip merge completion screen" switches (which would remove that card).</div>
+                <div class="elm-level-desc elm-next-desc">After a merge, goes to the next pair. Hides Element\'s own "Skip merge completion screen" switches.</div>
                 </div>
                 </div>
                 <div class="settings-section-title">Display</div>
@@ -5101,7 +5101,7 @@
                 </div>
                 <div class="elm-item">
                 <div class="setting-row"><label>Toasts</label>${toggleHtml('elm-outcome-toasts')}</div>
-                <div class="elm-level-desc elm-toast-desc">Short "Merge: 2/3" and "Skip: Appeal" toasts. Always on while Auto-Skip or auto-merge is on; always off when no pairs are in range (slider on None).</div>
+                <div class="elm-level-desc elm-toast-desc">Short messages like "Merge: 2/3" or "Skip: Appeal". Always on when a rating is Merge, Skip or Dismiss; off when every rating is Skip.</div>
                 </div>
                 </div>
                 <div id="elm-settings-info">
@@ -5128,17 +5128,17 @@
         const actionSelects = Array.from(document.querySelectorAll('#elm-settings-pane select.elm-action'));
         const actionsDesc = document.getElementById('elm-actions-desc');
         const ACTION_DESC = {
-            stop: 'Stop: our picks are applied, then the pair is left for you.',
-            merge: 'Merge: our picks are applied, then it is merged after the countdown.',
-            skip: 'Skip: on to the next pair.',
-            dismiss: 'Dismiss: dismissed after the countdown, with the rating as the reason.'
+            stop: 'Stop: apply our picks, then leave it to you.',
+            merge: 'Merge: apply our picks, then merge after a countdown.',
+            skip: 'Skip: go to the next pair.',
+            dismiss: 'Dismiss: dismiss after a countdown.'
         };
         const syncActions = () => {
             const a = CFG.ACTIONS;
             actionSelects.forEach(sel => { sel.value = a[sel.dataset.rating]; });
             const used = ACTION_NAMES.filter(n => RATING_LEVELS.some(r => a[r] === n));
             // one line per action in use, then the notes on their own lines
-            actionsDesc.textContent = used.map(n => ACTION_DESC[n]).join('\n') + '\nA blocked pair (department, Appeal, Forbidden) is never merged or dismissed: it is skipped, or left on Stop.' + (a.high === 'merge' || a.medium === 'merge' || a.low === 'merge' ? '\nMerge goes back to Stop in each new browser session.' : '');
+            actionsDesc.textContent = used.map(n => ACTION_DESC[n]).join('\n') + '\nBlocked pairs are skipped, or stay on Stop.' + (RATING_LEVELS.some(r => a[r] === 'merge') ? '\nMerge resets to Stop each session.' : '');
         };
         actionSelects.forEach(sel => sel.addEventListener('change', () => {
             lsSet(ACTION_KEY(sel.dataset.rating), sel.value);
@@ -5167,7 +5167,7 @@
             });
         }
         setupSegmented('elm-use-picks', () => CFG.USE_PICKS, v => lsSet('elm_use_picks', v),
-            v => v === 'ours' ? 'Our rules are applied on pairs set to Stop or Merge, including the applicant rule.' : "Bolt's picks are kept; ours only fills rows Bolt left blank.",
+            v => v === 'ours' ? 'Our rules choose the side, including the applicant rule.' : "Bolt's picks stay; ours only fill blank rows.",
             reapplyForLevel);
         const countdownSelect = document.getElementById('elm-merge-countdown');
         const countdownRow = document.getElementById('elm-countdown-row');
@@ -5204,10 +5204,10 @@
         // Allowed departments: two checkboxes, stored in the same key and values as the old drop-down (All, UnderGrad, Grad/IA, None)
         const deptUnder = document.getElementById('elm-dept-undergrad'), deptGrad = document.getElementById('elm-dept-gradia'), deptDesc = document.getElementById('elm-dept-desc');
         function showDeptDesc() {
-            deptDesc.textContent = deptUnder.checked && deptGrad.checked ? 'Pairs from both departments are worked on.'
-                : deptUnder.checked ? 'Only UnderGrad pairs are worked on; any other pair is blocked.'
-                : deptGrad.checked ? 'Only Grad/IA pairs are worked on; any other pair is blocked.'
-                : 'No department is allowed: every pair is blocked (a scan, with Auto-Skip on).';
+            deptDesc.textContent = deptUnder.checked && deptGrad.checked ? 'Both departments are worked on.'
+                : deptUnder.checked ? 'Only UnderGrad pairs; others are blocked.'
+                : deptGrad.checked ? 'Only Grad/IA pairs; others are blocked.'
+                : 'No department allowed: every pair is blocked.';
         }
         const deptNow = CFG.ALLOWED_DEPARTMENT;
         deptUnder.checked = deptNow === 'All' || deptNow === 'UnderGrad';
@@ -5221,9 +5221,9 @@
         const allowAppeal = document.getElementById('elm-allow-appeal'), allowForbidden = document.getElementById('elm-allow-forbidden'), allowDesc = document.getElementById('elm-allow-desc');
         function showAllowDesc() {
             const a = allowAppeal.checked, f = allowForbidden.checked;
-            allowDesc.textContent = a && f ? 'Appeal and Forbidden pairs (test records and names on the forbidden list) are worked on, not blocked.'
-                : a ? 'Appeal pairs are worked on, not blocked. Forbidden pairs stay blocked.'
-                : f ? 'Forbidden pairs (test records and names on the forbidden list) are worked on, not blocked. Appeal pairs stay blocked.'
+            allowDesc.textContent = a && f ? 'Appeal and Forbidden pairs are worked on, not blocked.'
+                : a ? 'Appeal pairs are worked on. Forbidden stay blocked.'
+                : f ? 'Forbidden pairs are worked on. Appeal stay blocked.'
                 : 'Appeal and Forbidden pairs stay blocked.';
         }
         allowAppeal.checked = CFG.ALLOW_APPEAL; allowForbidden.checked = CFG.ALLOW_FORBIDDEN;

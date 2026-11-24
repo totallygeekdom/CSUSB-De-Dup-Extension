@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.335
+// @version      2.336
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.335'; // keep in sync with @version
+    const VERSION = '2.336'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -3888,6 +3888,18 @@
         dismissState = null;
         if (counting && message) showMergeNotice(message);
     }
+    // The text typed into Element's feedback box. For a pair dismissed by its rating it is our write-up as shown in the card (the verdict, then
+    // its paragraphs; Element's box holds 2000 characters), so the history says why; otherwise the short reason.
+    function dismissText(st) {
+        if (st.rated) {
+            const r = currentRating();
+            if (r) {
+                const text = [r.write.verdict].concat(r.write.paragraphs).join('\n').trim();
+                if (text) return text.slice(0, 2000);
+            }
+        }
+        return st.reason;
+    }
     // rated: dismissed because its rating is set to Dismiss (reason "Rated Low"), not because the IDs or birth dates differ
     function startAutoDismiss(key, reason, rated) {
         if (dismissState) return;
@@ -3925,7 +3937,8 @@
         if (st.step === 'dialog') {
             const t = feedbackBox();
             if (!t) { if (Date.now() - st.t1 < 5000) next(200); else fail('the Dismiss dialog did not open', true); return; }
-            if (t.value !== st.reason) setFeedback(t, st.reason);
+            if (!st.text) st.text = dismissText(st);
+            if (t.value !== st.text) setFeedback(t, st.text);
             const ok = dialogDismissButton(t);
             if (!ok || ok.disabled) { if (Date.now() - st.t1 < 5000) next(200); else fail('no Dismiss button in the dialog', true); return; }
             recordPairNow(); // recorded as Dismissed before the pair goes
@@ -4273,7 +4286,7 @@
             const r = currentRating();
             if (r) line('', 'Birth dates read: ' + (scDate(r.ev.A.dob) || '?') + ' and ' + (scDate(r.ev.B.dob) || '?'));
         }
-        line('', dismissState && dismissState.rated ? 'This rating is set to Dismiss, so the pair is dismissed, not merged. A dismissal can be undone from the history.'
+        line('', dismissState && dismissState.rated ? 'This rating is set to Dismiss, so the pair is dismissed, not merged. Our write-up is entered as the reason. A dismissal can be undone from the history.'
             : 'They are two different people, so the pair is dismissed, not merged. A dismissal can be undone from the history.');
     }
     function renderMergeBrief(box) {

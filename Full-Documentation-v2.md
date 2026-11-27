@@ -5,7 +5,7 @@ This document covers the two v2 userscripts, which target Element451's redesigne
 
 | Script | File | Current version |
 |---|---|---|
-| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.336`, shown in the settings pane |
+| Element451 - UI Perfection v2 | `Element451-UI-Perfection-v2.user.js` | `@version 2.337`, shown in the settings pane |
 | Element451 - Database v2 | `database-v2.js` | `@version 2.78` |
 | Element451 - Database Merge v2 (optional) | `database-merge-v2.js` | `@version 1.17`, see [section 17](#17-database-merge) |
 
@@ -140,13 +140,13 @@ Three drop-downs, **High**, **Medium** and **Low**, set what happens to a pair b
 - **Blocked pairs** (department, Appeal, Forbidden, different student IDs; [section 6](#6-blockers-lockdowns)) are never merged or dismissed by their rating: on **Stop** they stay on screen, on Merge, Skip or Dismiss they are skipped.
 - **No rating yet** (Bolt's overview has not shown): the action all three ratings share, else Stop. When the three actions differ the script waits up to 10 seconds for the rating (4 seconds when they are the same).
 - An applicant side does not change the action (applicants can have any score); the applicant rule only affects *which side is picked* when **Use picks from = Ours** ([section 7](#7-field-resolution-rules)).
-- **Merge goes back to Stop in every new browser session** (a toast says so), as *When done = Merge* did: a merge is permanent. The other actions are kept.
+- **Merge stays as you set it**, also in a new browser session (it used to go back to Stop each session). Merging is permanent, so check the setting before you leave a queue running.
 - **Skip on all three is a scan** ([5.3](#53-scan-mode)).
 - A running countdown is stopped when its rating's action is changed away from Merge or Dismiss.
 
 An install from before this carries its old choice over once: a rating the slider covered becomes **Stop**, one it did not cover becomes **Skip** (with Auto-Skip on) or **Stop** (off). It is never carried over to Merge.
 
-Storage: `elm_action_high`, `elm_action_medium`, `elm_action_low` (`stop` / `merge` / `skip` / `dismiss`; Stop until set). `sessionStorage` `elm_session_started` marks the session whose Merge has been reset.
+Storage: `elm_action_high`, `elm_action_medium`, `elm_action_low` (`stop` / `merge` / `skip` / `dismiss`; Stop until set).
 
 ### 4.2 Use picks from
 
@@ -170,6 +170,10 @@ A dismissal counts down in the same dialog as an auto-merge (*Dismissing automat
 The first two are controlled by **one switch**, **Dismiss different Coyote IDs and birth dates** (`elm_dismiss_id_mismatch`, default on), whatever the ratings are set to; it no longer depends on auto-merge. Off: such pairs are handled by their rating's action.
 
 Steps: the pair's rating and database record are saved first (its chips on the list; the database's Dept. column says *Dismissed*); the countdown runs; at 0 the ring turns green and the script clicks **Dismiss**, types the reason and clicks the dialog's **Dismiss** (`[elm2] Dismissed: …`). Element normally moves on by itself; a pair still on screen 4 s later is skipped. Not dismissed for IDs or dates: a pair that is also Forbidden by name or "test" (only ever skipped), and two IDs that are the same number with and without leading zeros. If the dismissal itself fails (no Dismiss button, the dialog does not open or stays open) the console and a notice say `Auto-dismiss stopped: …` and the pair is skipped; if the pair stops qualifying during the countdown (a setting was changed) it stays on screen.
+
+### 4.5b Notify when auto-merge stops (UI 2.337)
+
+A run is what the script does by itself, from its first automatic merge on. When the run halts on a pair that needs you, a notice stays at the bottom left until you close it (the **×**), with the reason: the pair's rating is set to Stop, it is blocked, a field needs review, Element asked something, or there was no next pair. A desktop notification is added when the tab is in the background and the browser has already allowed notifications (the script never asks). Cancelling a countdown yourself is not announced. Off: the shorter toasts only. Storage: `elm_notify_stop` (default on).
 
 ### 4.6 Display
 
@@ -285,7 +289,7 @@ The classic "Bolt score is Low" popup no longer exists either. The only dialogs 
 
 ## 9. Auto-merge and the cancel countdown
 
-Merging is permanent, so auto-merge is opt-in (a rating's action set to **Merge**, which goes back to Stop in every new browser session) and gated:
+Merging is permanent, so auto-merge is opt-in (a rating's action set to **Merge**, which stays set until you change it) and gated:
 
 1. The pair's rating must be set to Merge, and the pair unblocked.
 2. A **countdown dialog** opens centred in the merge panel; a scrim covers only that panel and blocks stray clicks on it. It shows the headline *Merging automatically*, a red **wavy ring** that steps down once a second with the seconds left in the middle, a short brief, and a full-width **Cancel** pill (**Esc** also cancels; both work until the countdown reaches 0). The brief shows the two names; *Bolt score:* Low / Medium / High; *Script agrees with 2/5* (the share of our picks that match Bolt's); and *Script chose 3 over Bolt: Email, Address, DOB*, or *Script found **applicant** and chose 3 over Bolt* when an applicant side decided. With **Use picks from = Bolt's** it reads *Bolt chose 3 over script: …* or *Script found **applicant** but Bolt chose instead*. At **0** the ring turns green, the headline reads *Merging…* and Merge Contacts is clicked at that moment; Cancel is greyed out once the merge has fired.
@@ -468,7 +472,8 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 
 | Key | Used by | Purpose |
 |---|---|---|
-| `elm_action_high` / `elm_action_medium` / `elm_action_low` | main | The action for each rating: `stop` / `merge` / `skip` / `dismiss` (Stop until set; Merge is reset to Stop in every new browser session) |
+| `elm_action_high` / `elm_action_medium` / `elm_action_low` | main | The action for each rating: `stop` / `merge` / `skip` / `dismiss` (Stop until set) |
+| `elm_notify_stop` | main | Notice when auto-merge stops (default on) |
 | `elm_range_level2` | main | The old slider (0–4), only read once to carry an older install's choice over |
 | `elm_use_picks` | main | `ours` / `bolt` |
 | `elm_when_done` (**sessionStorage**) | main | `wait` / `merge`, reset every browser session |
@@ -539,7 +544,7 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 | Database buttons / badges still blue or old | The Database script on your side is an older copy; check it shows the latest `@version` |
 | Nothing is auto-applied | the pair's rating is set to Skip or Dismiss, or **Use picks from = Bolt's** (nothing to apply) |
 | Everything gets skipped | every rating on Skip, or no Allowed department ticked = scan mode |
-| Auto-merge never runs | no rating is set to Merge (it goes back to Stop in every new session), or the final gate failed (see the toast / `[elm2] Auto-merge not done`) |
+| Auto-merge never runs | no rating is set to Merge, or the final gate failed (see the toast / `[elm2] Auto-merge not done`) |
 | Skips lose database entries | Make sure both scripts are the latest builds (the record-before-skip handshake) |
 | Scan stalls after a few pairs | Fixed in build 81 (queue position in the pair key, retrying Next); update the main script |
 | A selected filter chip is blue | Element's own style won; send the chip's HTML so the selector can be added |
@@ -590,9 +595,10 @@ Header `Database N` pill (tonal orange, with a database icon in an orange circle
 - **The Identities section is read** (UI 2.285): values that name themselves are read wherever they are, so the Identities rows (labelled *Identities* or nothing) count: `School Id: …`, `Cas Id: …`, `Email: …` and `School Email: …`. A **coyote.csusb.edu address is the student's Coyote ID** (`009000001@coyote.csusb.edu`): a side with no School Id takes its Coyote ID from it, so a School Id on one record and the same number in the other's coyote email is the same Coyote ID (+120, enough for High). An ID read from an email only confirms: if it differs from the other record's, it scores nothing (a mistyped email never makes a hard conflict). The Maria Soto pair (School Id 009000001 on one side, 009000001@coyote.csusb.edu on the other) goes to High.
 - **Matching gender +5** (UI 2.284): the same gender on both records is +5, like student type, level and school; a different or missing one is 0. A gender that matches is read from its row like any other (the matching rows are kept on the page).
 - **A cover while a pair is read and scored** (UI 2.311): while the matching rows are shown, read and hidden again (and, for up to 4 s, while Bolt's overview has not shown yet) the fields are covered by a white layer with the Material 3 Expressive loading indicator (contained: a shape that morphs through a soft burst, a 9-sided cookie, a pentagon, a pill, a sunny shape, a 4-sided cookie and an oval while it turns, in a round orange container; UI 2.312, it was a circular progress). It hides the rows appearing and disappearing, and blocks clicks and keys on the fields (Escape still cancels an auto-merge). It never stays longer than 8 s; the console says when it gave up. The Dedup analysis card shows pulsing placeholder lines (a skeleton) in the meantime instead of Bolt's own text, for at most 8 s per pair.
+- **Auto-merge stops are announced; Merge stays set** (UI 2.337): a notice that stays until closed says why a run of automatic merges stopped ([4.5b](#45b-notify-when-auto-merge-stops-ui-2337)), and a rating set to Merge is no longer put back to Stop in each new browser session. Switch: **Notify when auto-merge stops**.
 - **The write-up is the reason for a dismissal by rating** (UI 2.336): a pair dismissed because its rating is set to Dismiss gets our write-up (the verdict and its paragraphs) pasted into Element's feedback box instead of "Rated Low". Different student IDs and different birth dates keep their short reasons.
 - **Shorter descriptions in the settings pane** (UI 2.335): every description under a setting is cut to a line or two (the Toasts one still named the old slider and Auto-Skip), and the action descriptions list each action on its own line (2.334).
-- **An action per rating** (UI 2.333): the *Pairs in range* slider, *When done* and *Auto-Skip* are replaced by three drop-downs, **High**, **Medium** and **Low**, each **Stop**, **Merge**, **Skip** or **Dismiss** ([4.1](#41-what-to-do-by-rating-ui-2333)), and one switch, **Dismiss different Coyote IDs and birth dates**, which no longer depends on auto-merge ([4.5](#45-auto-dismiss)). A blocked pair is never merged or dismissed by its rating (it is skipped, or stays on Stop). Merge goes back to Stop in every new browser session. An older install's slider and Auto-Skip are carried over once (never to Merge). A pair set to Dismiss is dismissed with *Rated Low* (Medium, High) as the reason.
+- **An action per rating** (UI 2.333): the *Pairs in range* slider, *When done* and *Auto-Skip* are replaced by three drop-downs, **High**, **Medium** and **Low**, each **Stop**, **Merge**, **Skip** or **Dismiss** ([4.1](#41-what-to-do-by-rating-ui-2333)), and one switch, **Dismiss different Coyote IDs and birth dates**, which no longer depends on auto-merge ([4.5](#45-auto-dismiss)). A blocked pair is never merged or dismissed by its rating (it is skipped, or stays on Stop). An older install's slider and Auto-Skip are carried over once (never to Merge). A pair set to Dismiss is dismissed with *Rated Low* (Medium, High) as the reason.
 - **Above the "Show engagement data" button wherever it sits** (UI 2.332): the placeholder lines and the write-up now go at the top of the card's content, or, when the button sits before the content (in the card, outside its body), right above the part of the card that holds the button.
 - **Placeholder lines sit above the engagement panel** (UI 2.331): the pulsing lines shown while a pair loads were added after the card's content, so they showed below Element's "Show engagement data" panel; the write-up that replaces them goes above it. They are now placed at the top too.
 - **A year like 0009 is no longer read as 2009** (UI 2.330): the date reader expanded a two-digit year (09 to 2009) even when the year was written with four digits as 0009, so a row showing 0009 was scored, written up and compared as 2009. Only a year written with two digits is expanded now; 0009 reads as no date, as the merge rule (which keeps the other side's date) already treats it.

@@ -158,7 +158,7 @@
         ALLOW_FORBIDDEN:          { get() { return getBoolSetting('elm_allow_forbidden', false); } },
         // A pair with different Coyote IDs (School Ids) or clearly different birth dates is dismissed, whatever its rating.
         DISMISS_ID_MISMATCH:      { get() { return getBoolSetting('elm_dismiss_id_mismatch', true); } },
-        // A notice that stays until closed when a run of automatic merges, skips and dismissals stops.
+        // A system notification when a run of automatic merges, skips and dismissals stops.
         NOTIFY_STOP:              { get() { return getBoolSetting('elm_notify_stop', true); } },
     });
     // =========================================================
@@ -3998,11 +3998,32 @@
         setTimeout(() => { el.classList.remove('visible'); setTimeout(() => el.remove(), 250); }, keep ? 4500 : 6000);
         while (st.children.length > 4) { const old = Array.from(st.children).find(c => !c.classList.contains('elm2-stop')); if (!old) break; old.remove(); }
     }
-    // ---- Auto-merge stopped: a notice that stays until it is closed ----
+    // ---- Auto-merge stopped: a system (desktop) notification ----
     // A run is what the script does by itself: a merge, then the next pair, and so on. It is "active" from the first automatic merge click.
-    // When it halts on a pair that needs you (rating on Stop, a blocked pair, needs review, no next pair, a dialog), announceStop() says so
-    // and why. A run you cancel yourself (Cancel, Escape) is not announced: you know.
+    // When it halts on a pair that needs you (rating on Stop, a blocked pair, needs review, no next pair, a dialog), announceStop() sends a
+    // system notification that says so and why, and stays until you close it (clicking it brings this tab forward). A run you cancel yourself
+    // (Cancel, Escape) is not announced: you know. The browser must allow notifications for this site: it is asked once, from a click
+    // (the switch, a rating set to Merge, or the first click on the page while Merge is on). Until it is allowed, or if it is blocked,
+    // the notice is shown inside the page instead, so a stop is never silent.
     let autoRunActive = false;
+    const canNotify = () => { try { return !!window.Notification; } catch (e) { return false; } };
+    function askNotifyPermission() {
+        try { if (canNotify() && Notification.permission === 'default') Notification.requestPermission(); } catch (e) { /* not allowed to ask here: the in-page notice is the fallback */ }
+    }
+    // the first click on the page while Merge and the notice are on (a click is what lets the browser ask)
+    document.addEventListener('click', function askOnce() {
+        if (!(CFG.NOTIFY_STOP && autoMergeOn()) || !canNotify()) return;
+        document.removeEventListener('click', askOnce, true);
+        askNotifyPermission();
+    }, true);
+    function systemNotify(reason) {
+        try {
+            if (!canNotify() || Notification.permission !== 'granted') return false;
+            const n = new Notification('Auto-merge stopped', { body: reason, tag: 'elm2-auto-merge-stop', requireInteraction: true });
+            n.onclick = () => { try { window.focus(); n.close(); } catch (e) {} };
+            return true;
+        } catch (e) { return false; }
+    }
     function showStopNotice(reason) {
         const st = toastStack();
         st.querySelectorAll('.elm2-stop').forEach(t => t.remove()); // one at a time
@@ -4022,16 +4043,14 @@
         el.appendChild(text); el.appendChild(close);
         st.appendChild(el);
         requestAnimationFrame(() => el.classList.add('visible'));
-        // seen from another tab: a desktop notification too, but only where the browser has already allowed them (this never asks)
-        try { if (document.hidden && window.Notification && Notification.permission === 'granted') new Notification('Auto-merge stopped', { body: reason }); } catch (e) {}
     }
-    // Returns true when the notice was shown (the shorter toast the caller would show is then not needed).
+    // Returns true when a notice was sent (the shorter toast the caller would show is then not needed).
     function announceStop(reason) {
         if (!autoRunActive) return false;
         autoRunActive = false;
         console.log('[elm2] Auto-merge stopped:', reason);
         if (!CFG.NOTIFY_STOP) return false;
-        showStopNotice(reason);
+        if (!systemNotify(reason)) showStopNotice(reason);
         return true;
     }
     // The countdown itself: a centred dialog over a dimmed page, with a draining ring around the
@@ -5143,7 +5162,7 @@
                 </div>
                 <div class="elm-item">
                 <div class="setting-row"><label>Notify when auto-merge stops</label>${toggleHtml('elm-notify-stop')}</div>
-                <div class="elm-level-desc">A notice that stays until closed when a pair needs you.</div>
+                <div class="elm-level-desc">A system notification when a pair needs you.</div>
                 </div>
                 <div class="elm-item">
                 <div class="setting-row"><label>Next after merge</label>${toggleHtml('elm-next-after-merge')}</div>
@@ -5199,6 +5218,7 @@
         actionSelects.forEach(sel => sel.addEventListener('change', () => {
             lsSet(ACTION_KEY(sel.dataset.rating), sel.value);
             syncActions();
+            if (sel.value === 'merge' && CFG.NOTIFY_STOP) askNotifyPermission(); // the choice is a click: the browser can ask now
             // a countdown that is running for a pair whose action is no longer Merge / Dismiss is stopped
             const now = pairAction();
             if (mergeTimer && !dismissState && now !== 'merge') cancelAutoMerge('Auto-merge cancelled');
@@ -5246,7 +5266,7 @@
         toastsEl.addEventListener('change', () => lsSet('elm_outcome_toasts', String(toastsEl.checked)));
         syncActions(); syncCountdown(); syncToasts();
         setupToggle('elm-dismiss-id-mismatch', 'elm_dismiss_id_mismatch', () => { syncCountdown(); syncToasts(); });
-        setupToggle('elm-notify-stop', 'elm_notify_stop');
+        setupToggle('elm-notify-stop', 'elm_notify_stop', () => { if (CFG.NOTIFY_STOP) askNotifyPermission(); });
         setupToggle('elm-next-after-merge', 'elm_next_after_merge');
         setupToggle('elm-highlight-rows', 'elm_highlight_rows');
         function setupToggle(elementId, storageKey, onChange, defaultValue = true) {

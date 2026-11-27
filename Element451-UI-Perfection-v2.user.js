@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Element451 - UI Perfection v2
 // @namespace    http://tampermonkey.net/
-// @version      2.336
+// @version      2.337
 // @description  Merge workflow automation for Element451's redesigned "Deduplication" review-queue UI (elm-deduplication-index / elm-duplicate-field-diff-form)
 // @author       You
 // @match        https://*.element451.io/*
@@ -14,7 +14,7 @@
     // Runs once per page even if it is installed twice (e.g. in Tampermonkey and in the Chrome extension).
     if (window.__elm451UiPerfectionLoaded) return;
     window.__elm451UiPerfectionLoaded = true;
-    const VERSION = '2.336'; // keep in sync with @version
+    const VERSION = '2.337'; // keep in sync with @version
     // Browser storage can refuse a read (blocked by a policy) or a write (full: the Database script's entries share the same few MB).
     // Neither may stop the script mid-step (a failed counter write used to keep "Next duplicate" from being pressed), so every
     // read and write goes through these: a refused read is "nothing stored", a refused write returns false.
@@ -140,13 +140,6 @@
         RATING_LEVELS.forEach(r => { if (!isAction(a[r])) a[r] = 'stop'; });
         return a;
     }
-    // Merge is a per-browser-session choice (as "When done = Merge" was): a new session starts with every rating set to Merge back on Stop.
-    let mergeResetNotice = false;
-    (function () {
-        try { if (sessionStorage.getItem('elm_session_started')) return; sessionStorage.setItem('elm_session_started', '1'); } catch (e) { return; }
-        RATING_LEVELS.forEach(r => { if (lsGet(ACTION_KEY(r)) === 'merge') { lsSet(ACTION_KEY(r), 'stop'); mergeResetNotice = true; } });
-        if (mergeResetNotice) setTimeout(() => showMergeNotice('Merge was set back to Stop for this new session (Settings > Automation)', true), 3000);
-    })();
     const CFG = Object.defineProperties({}, {
         // Action per rating: { high, medium, low } each one of stop / merge / skip / dismiss (see RATING ACTIONS above).
         ACTIONS:                  { get() { return loadActions(); } },
@@ -165,6 +158,8 @@
         ALLOW_FORBIDDEN:          { get() { return getBoolSetting('elm_allow_forbidden', false); } },
         // A pair with different Coyote IDs (School Ids) or clearly different birth dates is dismissed, whatever its rating.
         DISMISS_ID_MISMATCH:      { get() { return getBoolSetting('elm_dismiss_id_mismatch', true); } },
+        // A system notification when a run of automatic merges, skips and dismissals stops.
+        NOTIFY_STOP:              { get() { return getBoolSetting('elm_notify_stop', true); } },
     });
     // =========================================================
     // CSS
@@ -229,6 +224,11 @@
         .elm2-toast { display: flex; align-items: center; gap: 12px; box-sizing: border-box; min-height: 48px; max-width: 340px; padding: 8px 16px 8px 12px; border-radius: 4px; background: #2f3236; color: #f1f3f7; font: 400 14px/20px 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .25px; box-shadow: var(--md-elev-3); opacity: 0; transform: translateY(8px); transition: opacity .25s var(--md-ease), transform .25s var(--md-ease); }
         .elm2-toast.visible { opacity: 1; transform: none; }
         .elm2-toast.elm2-notice, .elm2-toast.elm2-result { padding-left: 16px; }
+        .elm2-toast.elm2-stop { pointer-events: auto; align-items: flex-start; border-left: 4px solid var(--md-primary, #ef6c00); padding: 10px 8px 10px 14px; }
+        .elm2-stop-text { flex: 1; min-width: 0; }
+        .elm2-stop-text strong { font-weight: 600; }
+        .elm2-stop-close { flex: none; width: 28px; height: 28px; margin: -2px 0 0 0; border: 0; border-radius: 50%; background: transparent; color: inherit; font: 400 20px/28px Arial, sans-serif; cursor: pointer; }
+        .elm2-stop-close:hover { background: rgba(255,255,255,.14); }
         /* Material 3 dialog: 32% scrim, tonal container, hero indicator, headline + supporting text,
            filled error button. Container radius = button radius (24) + gap (16) so the corners nest. */
         #elm2-merge-overlay {
@@ -2135,7 +2135,7 @@
             if (clicks >= 10) {
                 skipInFlightKey = '';
                 console.warn('[elm2] Could not move to the next pair after', clicks, 'tries');
-                showMergeNotice('Auto-skip stopped: there is no next pair to move to.');
+                if (!announceStop('there is no next pair to move to.')) showMergeNotice('Auto-skip stopped: there is no next pair to move to.');
                 return;
             }
             const ok = clickNextDuplicate();
@@ -3917,7 +3917,7 @@
         const fail = (why, andSkip) => {
             dismissState = null;
             console.log('[elm2] Auto-dismiss stopped:', why);
-            showMergeNotice('Auto-dismiss stopped: ' + why, true);
+            if (!announceStop('the dismissal did not go through (' + why + ').')) showMergeNotice('Auto-dismiss stopped: ' + why, true);
             if (andSkip && getPairKey() === st.key && !feedbackBox()) skipToNext('not dismissed, ' + why, st.rated ? 'Rating' : st.reason === 'Different birth dates' ? 'Birth date' : 'Student ID');
         };
         if (st.step === 'countdown') {
@@ -3996,7 +3996,62 @@
         st.appendChild(el);
         requestAnimationFrame(() => el.classList.add('visible'));
         setTimeout(() => { el.classList.remove('visible'); setTimeout(() => el.remove(), 250); }, keep ? 4500 : 6000);
-        while (st.children.length > 4) st.firstChild.remove();
+        while (st.children.length > 4) { const old = Array.from(st.children).find(c => !c.classList.contains('elm2-stop')); if (!old) break; old.remove(); }
+    }
+    // ---- Auto-merge stopped: a system (desktop) notification ----
+    // A run is what the script does by itself: a merge, then the next pair, and so on. It is "active" from the first automatic merge click.
+    // When it halts on a pair that needs you (rating on Stop, a blocked pair, needs review, no next pair, a dialog), announceStop() sends a
+    // system notification that says so and why, and stays until you close it (clicking it brings this tab forward). A run you cancel yourself
+    // (Cancel, Escape) is not announced: you know. The browser must allow notifications for this site: it is asked once, from a click
+    // (the switch, a rating set to Merge, or the first click on the page while Merge is on). Until it is allowed, or if it is blocked,
+    // the notice is shown inside the page instead, so a stop is never silent.
+    let autoRunActive = false;
+    const canNotify = () => { try { return !!window.Notification; } catch (e) { return false; } };
+    function askNotifyPermission() {
+        try { if (canNotify() && Notification.permission === 'default') Notification.requestPermission(); } catch (e) { /* not allowed to ask here: the in-page notice is the fallback */ }
+    }
+    // the first click on the page while Merge and the notice are on (a click is what lets the browser ask)
+    document.addEventListener('click', function askOnce() {
+        if (!(CFG.NOTIFY_STOP && autoMergeOn()) || !canNotify()) return;
+        document.removeEventListener('click', askOnce, true);
+        askNotifyPermission();
+    }, true);
+    function systemNotify(reason) {
+        try {
+            if (!canNotify() || Notification.permission !== 'granted') return false;
+            const n = new Notification('Auto-merge stopped', { body: reason, tag: 'elm2-auto-merge-stop', requireInteraction: true });
+            n.onclick = () => { try { window.focus(); n.close(); } catch (e) {} };
+            return true;
+        } catch (e) { return false; }
+    }
+    function showStopNotice(reason) {
+        const st = toastStack();
+        st.querySelectorAll('.elm2-stop').forEach(t => t.remove()); // one at a time
+        const el = document.createElement('div');
+        el.className = 'elm2-toast elm2-stop';
+        el.setAttribute('role', 'alert');
+        const text = document.createElement('div');
+        text.className = 'elm2-stop-text';
+        const title = document.createElement('strong');
+        title.textContent = 'Auto-merge stopped';
+        text.appendChild(title);
+        text.appendChild(document.createElement('br'));
+        text.appendChild(document.createTextNode(reason));
+        const close = document.createElement('button');
+        close.type = 'button'; close.className = 'elm2-stop-close'; close.setAttribute('aria-label', 'Close'); close.textContent = '×';
+        close.addEventListener('click', () => { el.classList.remove('visible'); setTimeout(() => el.remove(), 250); });
+        el.appendChild(text); el.appendChild(close);
+        st.appendChild(el);
+        requestAnimationFrame(() => el.classList.add('visible'));
+    }
+    // Returns true when a notice was sent (the shorter toast the caller would show is then not needed).
+    function announceStop(reason) {
+        if (!autoRunActive) return false;
+        autoRunActive = false;
+        console.log('[elm2] Auto-merge stopped:', reason);
+        if (!CFG.NOTIFY_STOP) return false;
+        if (!systemNotify(reason)) showStopNotice(reason);
+        return true;
     }
     // The countdown itself: a centred dialog over a dimmed page, with a draining ring around the
     // seconds left, a plain-language summary and a Cancel button. The overlay also stops stray
@@ -4018,7 +4073,7 @@
                     <button type="button" id="elm2-merge-cancel">Cancel</button>
                 </div>`;
             document.body.appendChild(ov);
-            document.getElementById('elm2-merge-cancel').addEventListener('click', () => cancelAutoMerge('Auto-merge cancelled'));
+            document.getElementById('elm2-merge-cancel').addEventListener('click', () => { autoRunActive = false; cancelAutoMerge('Auto-merge cancelled'); });
         }
         return ov;
     }
@@ -4357,7 +4412,7 @@
             console.log('[elm2] Auto-merge not started:', pre.reason);
             if (pre.reason === 'the pair changed') return;
             // A pair that needs a human is never skipped: it stays on screen.
-            if (pre.review) { showMergeNotice('Not merged: needs review (' + pre.review + ')', true); return; } // needs a human: stays on screen
+            if (pre.review) { if (!announceStop('this pair needs review (' + pre.review + ').')) showMergeNotice('Not merged: needs review (' + pre.review + ')', true); return; } // needs a human: stays on screen
             skipToNext('not merged, ' + pre.reason);
             return;
         }
@@ -4482,7 +4537,7 @@
             hideMergeModal();
             console.log('[elm2] Auto-merge not done:', ready.reason);
             if (ready.reason === 'the pair changed') return;
-            if (ready.review) { showMergeNotice('Not merged: needs review (' + ready.review + ')', true); return; } // needs a human: stays on screen
+            if (ready.review) { if (!announceStop('this pair needs review (' + ready.review + ').')) showMergeNotice('Not merged: needs review (' + ready.review + ')', true); return; } // needs a human: stays on screen
             skipToNext('not merged, ' + ready.reason);
         };
         // The pair is recorded in the database (its department chip on the list) and its rating saved (its score chip) before the
@@ -4497,6 +4552,7 @@
             card.classList.add('fired');
             mergedPairKey = key;
             console.log('[elm2] Auto-merging pair');
+            autoRunActive = true;
             btn.click();
             setTimeout(hideMergeModal, LINGER);
             // Watchdog: a merge shows a "Merge completed" card. If it never comes (for example a
@@ -4505,7 +4561,7 @@
                 if (getPairKey() !== key || completionCardVisible()) return;
                 const dlg = document.querySelector('bolt-dialog');
                 console.log('[elm2] Merge Contacts clicked but no "Merge completed" card;', dlg ? 'dialog open: ' + dlg.textContent.replace(/\s+/g, ' ').trim().slice(0, 160) : 'no dialog open');
-                showMergeNotice(dlg ? 'Auto-merge stopped: Element is asking something (see the dialog)' : 'Auto-merge stopped: no "Merge completed" card after 6 s', true);
+                if (!announceStop(dlg ? 'Element is asking something (see the dialog).' : 'no "Merge completed" card appeared after 6 s.')) showMergeNotice(dlg ? 'Auto-merge stopped: Element is asking something (see the dialog)' : 'Auto-merge stopped: no "Merge completed" card after 6 s', true);
             }, 6000);
         };
         // At 0 the button was still disabled: hold the dialog and check again until it is enabled (or BTN_WAIT_MS pass).
@@ -4557,7 +4613,7 @@
             }, RACE_GO);
         }, TICK);
     }
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && mergeTimer) cancelAutoMerge('Auto-merge cancelled'); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && mergeTimer) { autoRunActive = false; cancelAutoMerge('Auto-merge cancelled'); } });
 
     // =========================================================
     // MAIN AUTOMATION LOOP
@@ -4778,7 +4834,7 @@
                 '| rating action', pairAction(), '->', act === 'skip' ? 'skip' : 'stop');
             if (act === 'skip') {
                 setTimeout(() => skipToNext('blocked', blockerLabel(blockers)), 1200);
-            }
+            } else announceStop('this pair is blocked (' + blockerLabel(blockers) + ') and its rating is set to Stop.');
             return;
         }
         if (!resolutionAttempted) console.log('[elm2] Not blocked — allowed dept:', CFG.ALLOWED_DEPARTMENT, '| detected:', detectActualDepartment().dept);
@@ -4809,6 +4865,7 @@
             if (laterWhy && laterWhy !== 'wait') { startAutoDismiss(phaseOnePairKey, laterWhy); return; }
             if (laterBlockers.length > 0) {
                 if (blockedAction(pairAction()) === 'skip') { skipToNext('blocked', blockerLabel(laterBlockers)); }
+                else announceStop('this pair is blocked (' + blockerLabel(laterBlockers) + ') and its rating is set to Stop.');
                 return;
             }
             runAutoResolution();
@@ -4838,6 +4895,7 @@
             if (act === 'skip') { skipToNext('rated ' + (level || 'unknown') + ', set to Skip', level ? 'Rated ' + name : 'No rating'); return; }
             if (act === 'dismiss') { startAutoDismiss(phaseOnePairKey, level ? 'Rated ' + name : 'Rating', true); return; }
             if (act === 'merge') setTimeout(() => startAutoMerge(phaseOnePairKey), 500);
+            else if (act === 'stop') announceStop(level ? 'this pair is rated ' + name + ', which is set to Stop.' : 'this pair has no rating yet and is set to Stop.');
         }, 600);
     }
     // Tracks merges regardless of who clicks "Merge Contacts" (always a
@@ -4908,7 +4966,7 @@
                 .find(b => /^next duplicate$/i.test(b.textContent.trim()));
             if (!card.isConnected) return;
             if (btn && !btn.disabled) { console.log('[elm2] Next duplicate after merge'); btn.click(); }
-            else console.log('[elm2] No "Next duplicate" button after merge (last pair?)');
+            else { console.log('[elm2] No "Next duplicate" button after merge (last pair?)'); announceStop('that was the last pair (no "Next duplicate" button).'); }
         }, 900);
     }
     function checkForMergeResult() {
@@ -5103,6 +5161,10 @@
                 <div class="elm-level-desc">Dismisses a pair with different Coyote IDs or clearly different birth dates, whatever its rating. A countdown comes first.</div>
                 </div>
                 <div class="elm-item">
+                <div class="setting-row"><label>Notify when auto-merge stops</label>${toggleHtml('elm-notify-stop')}</div>
+                <div class="elm-level-desc">A system notification when a pair needs you.</div>
+                </div>
+                <div class="elm-item">
                 <div class="setting-row"><label>Next after merge</label>${toggleHtml('elm-next-after-merge')}</div>
                 <div class="elm-level-desc elm-next-desc">After a merge, goes to the next pair. Hides Element\'s own "Skip merge completion screen" switches.</div>
                 </div>
@@ -5151,11 +5213,12 @@
             actionSelects.forEach(sel => { sel.value = a[sel.dataset.rating]; });
             const used = ACTION_NAMES.filter(n => RATING_LEVELS.some(r => a[r] === n));
             // one line per action in use, then the notes on their own lines
-            actionsDesc.textContent = used.map(n => ACTION_DESC[n]).join('\n') + '\nBlocked pairs are skipped, or stay on Stop.' + (RATING_LEVELS.some(r => a[r] === 'merge') ? '\nMerge resets to Stop each session.' : '');
+            actionsDesc.textContent = used.map(n => ACTION_DESC[n]).join('\n') + '\nBlocked pairs are skipped, or stay on Stop.';
         };
         actionSelects.forEach(sel => sel.addEventListener('change', () => {
             lsSet(ACTION_KEY(sel.dataset.rating), sel.value);
             syncActions();
+            if (sel.value === 'merge' && CFG.NOTIFY_STOP) askNotifyPermission(); // the choice is a click: the browser can ask now
             // a countdown that is running for a pair whose action is no longer Merge / Dismiss is stopped
             const now = pairAction();
             if (mergeTimer && !dismissState && now !== 'merge') cancelAutoMerge('Auto-merge cancelled');
@@ -5203,6 +5266,7 @@
         toastsEl.addEventListener('change', () => lsSet('elm_outcome_toasts', String(toastsEl.checked)));
         syncActions(); syncCountdown(); syncToasts();
         setupToggle('elm-dismiss-id-mismatch', 'elm_dismiss_id_mismatch', () => { syncCountdown(); syncToasts(); });
+        setupToggle('elm-notify-stop', 'elm_notify_stop', () => { if (CFG.NOTIFY_STOP) askNotifyPermission(); });
         setupToggle('elm-next-after-merge', 'elm_next_after_merge');
         setupToggle('elm-highlight-rows', 'elm_highlight_rows');
         function setupToggle(elementId, storageKey, onChange, defaultValue = true) {
